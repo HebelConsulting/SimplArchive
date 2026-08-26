@@ -154,13 +154,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [ObservableProperty][NotifyPropertyChangedFor(nameof(ContentsTotalWidth))] private double _colDateWidth = DefaultColDate;
     [ObservableProperty][NotifyPropertyChangedFor(nameof(ContentsTotalWidth))] private double _colSizeWidth = DefaultColSize;
     [ObservableProperty][NotifyPropertyChangedFor(nameof(ContentsTotalWidth))] private double _colTagsWidth = DefaultColTags;
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(ContentsTotalWidth))] private double _colOwnerWidth = DefaultColOwner;
 
-    private const double DefaultColName = 260, DefaultColType = 130, DefaultColDate = 96, DefaultColSize = 72, DefaultColTags = 160;
+    private const double DefaultColName = 260, DefaultColType = 130, DefaultColDate = 96, DefaultColSize = 72, DefaultColTags = 160, DefaultColOwner = 140;
     private const double MinColumnWidth = 48;
 
     // The total pixel width of all five columns — the fixed width of the scrollable header+rows region, so a
     // horizontal scrollbar kicks in once the columns don't fit the pane.
-    public double ContentsTotalWidth => ColNameWidth + ColTypeWidth + ColDateWidth + ColSizeWidth + ColTagsWidth;
+    public double ContentsTotalWidth => ColNameWidth + ColTypeWidth + ColDateWidth + ColSizeWidth + ColTagsWidth + ColOwnerWidth;
 
     // Resize column `index` (0 Name … 4 Tags) by a pixel delta (from the header's drag handle), clamped to a
     // sensible minimum. Persisting is deferred to the drag's completion / window close.
@@ -173,6 +174,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             case 2: ColDateWidth = Math.Max(MinColumnWidth, ColDateWidth + delta); break;
             case 3: ColSizeWidth = Math.Max(MinColumnWidth, ColSizeWidth + delta); break;
             case 4: ColTagsWidth = Math.Max(MinColumnWidth, ColTagsWidth + delta); break;
+            case 5: ColOwnerWidth = Math.Max(MinColumnWidth, ColOwnerWidth + delta); break;
         }
     }
 
@@ -254,6 +256,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         ColDateWidth = DefaultColDate;
         ColSizeWidth = DefaultColSize;
         ColTagsWidth = DefaultColTags;
+        ColOwnerWidth = DefaultColOwner;
 
         SaveLayout();
         Status = Strings.Get("StLayoutReset");
@@ -299,6 +302,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         ColDateWidth = ParseDouble(settings.ColDate, DefaultColDate);
         ColSizeWidth = ParseDouble(settings.ColSize, DefaultColSize);
         ColTagsWidth = ParseDouble(settings.ColTags, DefaultColTags);
+        ColOwnerWidth = ParseDouble(settings.ColOwner, DefaultColOwner);
     }
 
     // Persists the current sizes + collapsed state. Called on each toggle and when the window closes (to
@@ -330,6 +334,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             ColDate = ColDateWidth.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ColSize = ColSizeWidth.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ColTags = ColTagsWidth.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ColOwner = ColOwnerWidth.ToString(System.Globalization.CultureInfo.InvariantCulture),
         });
     }
 
@@ -1288,6 +1293,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                     DocumentDate = child.DocumentDate,
                     SizeBytes = child.SizeBytes,
                     Tags = child.Tags ?? [],
+                    CreatedBy = child.CreatedBy,
                     SensitivityLabelName = child.SensitivityLabelName,
                     SensitivityLabelColor = child.SensitivityLabelColor,
                     VersionCount = child.VersionCount,
@@ -1314,6 +1320,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
                     ReferenceId = reference.ReferenceId,
                     ReferenceDeleteHref = reference.DeleteHref,
                     RealParentId = reference.RealParentId,
+
+                    // The target's columns, so a shortcut row reads like the real row beside it (#768).
+                    DocumentType = reference.DocumentType,
+                    DocumentDate = reference.DocumentDate,
+                    SizeBytes = reference.SizeBytes,
+                    Tags = reference.Tags ?? [],
+                    CreatedBy = reference.CreatedBy,
+                    SensitivityLabelName = reference.SensitivityLabelName,
+                    SensitivityLabelColor = reference.SensitivityLabelColor,
+                    VersionCount = reference.VersionCount,
+                    VersionCreatedAt = reference.VersionCreatedAt,
+                    MaskIconToken = reference.Icon,
                 });
             }
 
@@ -1360,6 +1378,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public string DateHeader => ColumnHeader("date", "Doc date");
     public string SizeHeader => ColumnHeader("size", "Size");
     public string TagsHeader => ColumnHeader("tags", "Tags");
+    public string OwnerHeader => ColumnHeader("owner", Strings.Get("SortOwner"));
     private string ColumnHeader(string col, string label) => _headerSortActive && _contentSortColumn == col ? $"{label} {(_contentSortAscending ? "▲" : "▼")}" : label;
 
     [RelayCommand]
@@ -1381,6 +1400,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(DateHeader));
         OnPropertyChanged(nameof(SizeHeader));
         OnPropertyChanged(nameof(TagsHeader));
+        OnPropertyChanged(nameof(OwnerHeader));
         ApplyContentSort();
     }
 
@@ -1420,6 +1440,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             "date" => items.OrderBy(n => n.DocumentDate ?? DateOnly.MinValue),
             "size" => items.OrderBy(n => n.SizeBytes ?? -1),
             "tags" => items.OrderBy(n => n.TagsText, StringComparer.OrdinalIgnoreCase),
+            "owner" => items.OrderBy(n => n.CreatedBy, StringComparer.OrdinalIgnoreCase),
             _ => items.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
         };
         return _contentSortAscending ? ordered : ordered.Reverse();

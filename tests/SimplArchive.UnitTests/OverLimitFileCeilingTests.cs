@@ -93,7 +93,12 @@ public class OverLimitFileCeilingTests
         // the reasoning, the tree walk and the folder-as-row construction went to OpenFolderMark — which turned
         // a +67 change into +16. What is left cannot move: a bindable ClearListSelection command, the
         // nothing-selected branch of the selection handler, and two call sites in the contents load.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 7_020,
+        // 7,020 → 7,041 for #768 (owner-confirmed 2026-08-26, the second raise on this file today): the owner
+        // column, and the target's list-row columns on a REFERENCE row. A referenced row was drawing blank
+        // Type / Doc date / Size / Tags cells beside a real row that filled them, on both clients, because a
+        // reference was projected as a stub. Assigning the columns is what a row costs; the projection itself
+        // became one shared definition (DocumentSummaryQueries) rather than a second copy.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 7_041,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
         // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —
@@ -108,7 +113,12 @@ public class OverLimitFileCeilingTests
         // Lowered rather than left with headroom, as always.
         // 1,469 → 1,438 for #704: the duplicate probe moved to IndexDataWrites when the guard caught it
         // growing here — the second method to leave by that door, which is the door working.
-        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1_438,
+        // 1,438 → 1,456 for #768 (owner-confirmed 2026-08-26, the second raise on this file today): the owner
+        // column, and the target's list-row columns on a REFERENCE row. A referenced row was drawing blank
+        // Type / Doc date / Size / Tags cells beside a real row that filled them, on both clients, because a
+        // reference was projected as a stub. Assigning the columns is what a row costs; the projection itself
+        // became one shared definition (DocumentSummaryQueries) rather than a second copy.
+        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1_456,
 
         // Re-entered 2026-08-17 (ADR 0613): burned down to 967 in an earlier pass, back to 1,156 since — the
         // handlers here are what #519 moves into per-tab UserControls, which is what takes it under again.
@@ -177,7 +187,12 @@ public class OverLimitFileCeilingTests
         // UserControl per tab; eleven lines of markup is not the moment to start that.
         // 1,993 → 1,994 for #686 (owner-confirmed 2026-08-26): one attribute — the contents list's
         // PointerPressed, which is how a click on its empty area deselects.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 1_994,
+        // 1,994 → 2,000 for #768 (owner-confirmed 2026-08-26, the second raise on this file today): the owner
+        // column, and the target's list-row columns on a REFERENCE row. A referenced row was drawing blank
+        // Type / Doc date / Size / Tags cells beside a real row that filled them, on both clients, because a
+        // reference was projected as a stub. Assigning the columns is what a row costs; the projection itself
+        // became one shared definition (DocumentSummaryQueries) rather than a second copy.
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 2_000,
 
         // Entered 2026-08-20 (#673, ADR 0655) — over the line since well before it was noticed, and never on
         // the list, so nothing was watching it. It enters ON THE WAY DOWN: the containment port took it 1,041 →

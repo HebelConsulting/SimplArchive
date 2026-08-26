@@ -110,7 +110,7 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
             {
                 nodes.Add(new BrowseNode(c.Id, c.Name, c.HasChildren, c.HasVersions, c.HasSubfolders, c.HasReferences, RepositoryId: repositoryId, FileExtension: c.FileExtension, OnLegalHold: c.OnLegalHold,
                     CheckedOut: c.CheckedOut, CheckedOutByMe: c.CheckedOutByMe, CheckedOutByName: c.CheckedOutByName,
-                    DocumentType: c.DocumentType, DocumentDate: c.DocumentDate, SizeBytes: c.SizeBytes, Tags: c.Tags, SensitivityLabelName: c.SensitivityLabelName, SensitivityLabelColor: c.SensitivityLabelColor, VersionCount: c.VersionCount, VersionCreatedAt: c.VersionCreatedAt,
+                    DocumentType: c.DocumentType, DocumentDate: c.DocumentDate, SizeBytes: c.SizeBytes, Tags: c.Tags, CreatedBy: c.CreatedBy, SensitivityLabelName: c.SensitivityLabelName, SensitivityLabelColor: c.SensitivityLabelColor, VersionCount: c.VersionCount, VersionCreatedAt: c.VersionCreatedAt,
                     ChatHref: Links.Href(c.Links, "chat"),
                     Links: Links.RelMap(c.Links),
                     Admits: c.Admits,
@@ -125,9 +125,17 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
             var page = await http.GetFromJsonAsync<ReferenceListResponse>(refUrl);
             foreach (var r in page?.References ?? [])
             {
+                // The TARGET's list-row columns travel with the reference (#768). Omitting them here was the
+                // client half of blank Type / Doc date / Size / Tags cells on every referenced row — the pane
+                // rendered exactly what it was given, which was nothing.
                 nodes.Add(new BrowseNode(r.Id, r.Name, r.HasChildren, r.HasVersions, r.HasSubfolders, r.HasReferences, true, r.ReferenceId, r.RealParentId, repositoryId,
+                    FileExtension: r.FileExtension,
+                    DocumentType: r.DocumentType, DocumentDate: r.DocumentDate, SizeBytes: r.SizeBytes, Tags: r.Tags, CreatedBy: r.CreatedBy,
+                    SensitivityLabelName: r.SensitivityLabelName, SensitivityLabelColor: r.SensitivityLabelColor,
+                    VersionCount: r.VersionCount, VersionCreatedAt: r.VersionCreatedAt,
                     ChatHref: Links.Href(r.Links, "chat"), // reference rows now carry the target's sub-resources
-                    Links: Links.RelMap(r.Links)));
+                    Links: Links.RelMap(r.Links),
+                    Icon: r.Icon));
             }
             refUrl = Links.Href(page?.Links, "next");
         }

@@ -20,6 +20,14 @@ internal sealed class WebDavNode
     public DateTimeOffset Created { get; init; }
     public DateTimeOffset Modified { get; init; }
 
+    /// <summary>Set when this node was reached through a REFERENCE filed in the folder (#769).</summary>
+    /// <remarks>
+    /// The Document is the TARGET either way — that is what a reference is — so reading and writing act on the
+    /// document itself, which is what makes a reference useful. DELETE is the exception and the reason this is
+    /// carried at all: it must remove the appearance, never the document.
+    /// </remarks>
+    public Guid? ViaReferenceId { get; init; }
+
     // The single mounted resource is named "SimplArchive" and its children mirror the Repositories tree-pane
     // exactly (ADR 0509): the Personal space, then the shared repositories the caller can see.
     public static WebDavNode Root() => new() { IsRoot = true, IsCollection = true, WebDavName = "SimplArchive", Created = DateTimeOffset.UnixEpoch, Modified = DateTimeOffset.UnixEpoch };
@@ -65,18 +73,41 @@ internal static class WebDavPathResolver
         }
 
         var current = repo;
+        Guid? viaReference = null;
         for (var i = 1; i < segments.Count; i++)
         {
+            viaReference = null;
             var child = await ChildByWebDavNameAsync(db, current.Id, segments[i]);
             if (child is null)
             {
-                return null;
+                // Not a real child — but it may be a document REFERENCED into this folder (#769), which the
+                // listing now shows and which must therefore also be addressable. A real child is looked up
+                // first, so a name clash resolves to the child, exactly as the listing shows it.
+                if (await ReferencedDocumentByWebDavNameAsync(db, current.Id, segments[i]) is not { } referenced)
+                {
+                    return null;
+                }
+
+                viaReference = referenced.Reference.Id;
+                child = referenced.Target;
             }
 
             current = child;
         }
 
-        return await NodeForAsync(db, current);
+        var node = await NodeForAsync(db, current);
+        return viaReference is null ? node : new WebDavNode
+        {
+            Document = node.Document,
+            IsCollection = node.IsCollection,
+            WebDavName = node.WebDavName,
+            ObjectKey = node.ObjectKey,
+            Length = node.Length,
+            ContentType = node.ContentType,
+            Created = node.Created,
+            Modified = node.Modified,
+            ViaReferenceId = viaReference,
+        };
     }
 
     internal static async Task<Document?> ChildByWebDavNameAsync(SimplArchiveDbContext db, Guid parentId, string webDavName)
@@ -104,7 +135,8 @@ internal static class WebDavPathResolver
         return roots.OrderByDescending(d => d.PersonalOfUserId == user.Id).ToList();
     }
 
-    internal static async Task<List<WebDavNode>> ChildrenAsync(SimplArchiveDbContext db, User user, WebDavNode node, IEffectiveRightsCalculator calc)
+    internal static async Task<List<WebDavNode>> ChildrenAsync(
+        SimplArchiveDbContext db, User user, WebDavNode node, IEffectiveRightsCalculator calc, ILogger? logger = null)
     {
         if (node.IsRoot)
         {
@@ -142,7 +174,91 @@ internal static class WebDavPathResolver
             }
         }
 
+        // …and the DOCUMENTS referenced into this folder (#769). A reference is another appearance of a
+        // document, and ADR 0509 binds this mount to the Repositories tree — which shows them. Without this the
+        // same archive presented two shapes: the workbench listed a referenced invoice in the folder its owner
+        // filed it into, and the mounted drive listed that folder without it.
+        foreach (var (reference, target) in await ReferencedDocumentsAsync(db, node.Document!.Id))
+        {
+            // Its rights are its OWN: the target lives elsewhere and inherits from its real parent, not from
+            // the folder it is referenced into. A reference the caller may not follow is simply not there,
+            // rather than there and failing on access.
+            if (!(await calc.GetEffectiveRightsAsync(user.Id, target.Id)).CanSee)
+            {
+                continue;
+            }
+
+            var projected = await NodeForAsync(db, target);
+
+            // One wire name can only mean one thing. A real child wins and the reference is dropped — the same
+            // rule IMAP applies to a clashing referenced folder — because the alternative is two entries a
+            // client cannot tell apart, and a save-by-name that lands on whichever the server picked.
+            if (result.Any(existing => string.Equals(existing.WebDavName, projected.WebDavName, StringComparison.OrdinalIgnoreCase)))
+            {
+                logger?.LogWarning(
+                    "WebDAV: {Name} in folder {FolderId} is claimed by both a child and a reference; the "
+                    + "reference is not listed, so it is invisible on the mounted drive while the app shows it",
+                    projected.WebDavName, node.Document!.Id);
+                continue;
+            }
+
+            result.Add(new WebDavNode
+            {
+                Document = projected.Document,
+                IsCollection = projected.IsCollection,
+                WebDavName = projected.WebDavName,
+                ObjectKey = projected.ObjectKey,
+                Length = projected.Length,
+                ContentType = projected.ContentType,
+                Created = projected.Created,
+                Modified = projected.Modified,
+                ViaReferenceId = reference.Id,
+            });
+        }
+
         return result;
+    }
+
+    /// <summary>One referenced document in a folder, matched by its WebDAV name (stem + extension).</summary>
+    internal static async Task<(DocumentReference Reference, Document Target)?> ReferencedDocumentByWebDavNameAsync(
+        SimplArchiveDbContext db, Guid folderId, string webDavName)
+    {
+        foreach (var candidate in await ReferencedDocumentsAsync(db, folderId))
+        {
+            var node = await NodeForAsync(db, candidate.Target);
+            if (string.Equals(node.WebDavName, webDavName, StringComparison.OrdinalIgnoreCase))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The DOCUMENTS referenced into a folder — targets that have content, paired with the reference.</summary>
+    /// <remarks>
+    /// Documents only: a referenced FOLDER is #615's half and is not projected here yet, so a folder reference
+    /// stays absent from the mount rather than appearing without its subtree.
+    /// </remarks>
+    internal static async Task<List<(DocumentReference Reference, Document Target)>> ReferencedDocumentsAsync(
+        SimplArchiveDbContext db, Guid folderId)
+    {
+        var references = await db.DocumentReferences.Where(r => r.ParentFolderId == folderId).ToListAsync();
+        if (references.Count == 0)
+        {
+            return [];
+        }
+
+        var targetIds = references.Select(r => r.TargetDocumentId).ToList();
+        var targets = (await db.Documents
+                .Where(d => targetIds.Contains(d.Id)
+                    && db.DocumentVersions.Any(v => v.DocumentId == d.Id && v.Status == DocumentVersionStatus.Confirmed))
+                .ToListAsync())
+            .ToDictionary(d => d.Id);
+
+        return [.. references
+            .Where(r => targets.ContainsKey(r.TargetDocumentId))
+            .Select(r => (r, targets[r.TargetDocumentId]))];
     }
 
     internal static async Task<WebDavNode> NodeForAsync(SimplArchiveDbContext db, Document document)

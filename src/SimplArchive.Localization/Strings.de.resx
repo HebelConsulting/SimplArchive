@@ -2031,6 +2031,9 @@
   <data name="SortDocDate" xml:space="preserve">
     <value>Dok.-Datum</value>
   </data>
+  <data name="SortOwner" xml:space="preserve">
+    <value>Besitzer</value>
+  </data>
   <data name="SortSize" xml:space="preserve">
     <value>Größe</value>
   </data>

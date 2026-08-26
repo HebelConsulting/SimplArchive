@@ -10,6 +10,9 @@ using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Documents;
 using SimplArchive.Infrastructure.Persistence;
 
+using SimplArchive.Api.Documents;
+using SimplArchive.Infrastructure.Masks;
+
 namespace SimplArchive.Api.Controllers;
 
 /// <summary>
@@ -31,18 +34,24 @@ public class DocumentReferencesController : ControllerBase
     private readonly IEffectiveRightsCalculator _effectiveRightsCalculator;
     private readonly ICurrentServiceAccountAccessor _currentServiceAccountAccessor;
     private readonly ICurrentUserAccessor _currentUserAccessor;
+    private readonly ICurrentTenantAccessor _currentTenantAccessor;
+    private readonly IMaskContainmentProvider _containment;
 
     public DocumentReferencesController(
         SimplArchiveDbContext dbContext,
         IEffectiveRightsCalculator effectiveRightsCalculator,
         ICurrentServiceAccountAccessor currentServiceAccountAccessor,
         ICurrentUserAccessor currentUserAccessor,
+        ICurrentTenantAccessor currentTenantAccessor,
+        IMaskContainmentProvider containment,
         IAuditRecorder audit)
     {
         _dbContext = dbContext;
         _effectiveRightsCalculator = effectiveRightsCalculator;
         _currentServiceAccountAccessor = currentServiceAccountAccessor;
         _currentUserAccessor = currentUserAccessor;
+        _currentTenantAccessor = currentTenantAccessor;
+        _containment = containment;
         _audit = audit;
     }
 
@@ -77,6 +86,33 @@ public class DocumentReferencesController : ControllerBase
         // Always true — lets the client render the shortcut icon and reference-specific context menu without
         // inferring it from the endpoint.
         public bool IsReference { get; set; } = true;
+
+        // The TARGET's list-row columns, exactly as a child row carries them (#768). A reference is another
+        // appearance of a document, so its row is the same row — these were absent, and the contents list drew
+        // blank Type / Doc date / Size / Tags cells for every referenced item while its columns worked
+        // perfectly for children.
+        public string FileExtension { get; set; } = "";
+
+        public string DocumentType { get; set; } = "";
+
+        public DateOnly? DocumentDate { get; set; }
+
+        public long? SizeBytes { get; set; }
+
+        public List<string> Tags { get; set; } = [];
+
+        public string SensitivityLabelName { get; set; } = "";
+
+        public string? SensitivityLabelColor { get; set; }
+
+        public int VersionCount { get; set; }
+
+        public DateTimeOffset? VersionCreatedAt { get; set; }
+
+        public string? Icon { get; set; }
+
+        /// <inheritdoc cref="DocumentChildrenController.DocumentSummaryResource.CreatedBy"/>
+        public string CreatedBy { get; set; } = "";
     }
 
     public class ReferenceListResource : HypermediaResource
@@ -148,9 +184,22 @@ public class DocumentReferencesController : ControllerBase
             links.Add(new Link("next", Url.Action(nameof(List), new { folderId, cursor = nextCursor, limit = pageSize })!, "GET"));
         }
 
+        // The TARGETS' list-row columns, from the SAME projection a child row uses (#768). One batched query
+        // for the page rather than a correlated set per row, and — the point — one definition of what a list
+        // row carries, so a column added to children cannot silently skip references.
+        var targetIds = page.Select(p => p.TargetId).ToList();
+        var columns = (await _dbContext.Documents
+                .Where(d => targetIds.Contains(d.Id))
+                .AsSummaryRows(_dbContext)
+                .ToListAsync(cancellationToken))
+            .ToDictionary(r => r.Id);
+
+        var tagsByDoc = await DocumentSummaryQueries.TagsForAsync(_dbContext, targetIds, cancellationToken);
+        var rules = await _containment.ForAsync(_dbContext, _currentTenantAccessor.TenantId!.Value, cancellationToken);
+
         return Ok(new ReferenceListResource
         {
-            References = page.Select(row => BuildResource(folderId, row)).ToList(),
+            References = page.Select(row => BuildResource(folderId, row, columns.GetValueOrDefault(row.TargetId), tagsByDoc, rules)).ToList(),
             Links = links,
         });
     }
@@ -242,7 +291,19 @@ public class DocumentReferencesController : ControllerBase
             await _dbContext.DocumentReferences.AnyAsync(other => other.TargetDocumentId == request.TargetId, cancellationToken),
             target.ParentId);
 
-        return CreatedAtAction(nameof(List), new { folderId }, BuildResource(folderId, row));
+        // The created reference answers with the same row shape the listing does — a client that files a
+        // reference and renders the response must not get a stub where a listed row would have columns.
+        var created = (await _dbContext.Documents
+            .Where(d => d.Id == request.TargetId)
+            .AsSummaryRows(_dbContext)
+            .ToListAsync(cancellationToken)).FirstOrDefault();
+
+        return CreatedAtAction(nameof(List), new { folderId }, BuildResource(
+            folderId,
+            row,
+            created,
+            await DocumentSummaryQueries.TagsForAsync(_dbContext, [request.TargetId], cancellationToken),
+            await _containment.ForAsync(_dbContext, _currentTenantAccessor.TenantId!.Value, cancellationToken)));
     }
 
     // Removes only the shortcut, never the target. Requires CanCreateSubItems on the containing folder (the
@@ -277,7 +338,8 @@ public class DocumentReferencesController : ControllerBase
         return NoContent();
     }
 
-    private static ReferenceResource BuildResource(Guid folderId, ReferenceRow row)
+    private static ReferenceResource BuildResource(
+        Guid folderId, ReferenceRow row, DocumentSummaryRow? columns, IReadOnlyDictionary<Guid, List<string>> tagsByDoc, MaskContainmentRules rules)
     {
         // A reference row stands for a REAL document, so it advertises the same unconditional target
         // sub-resources a children row does (issue #416) — without them, a client that selects a reference has
@@ -314,6 +376,20 @@ public class DocumentReferencesController : ControllerBase
             HasReferences = row.HasReferences,
             RealParentId = row.RealParentId,
             IsReference = true,
+
+            // The target's columns. Absent only if the target vanished between the two queries, in which case
+            // the row keeps its defaults rather than failing the whole listing.
+            FileExtension = Path.GetExtension(columns?.LatestObjectKey ?? ""),
+            DocumentType = columns?.DocumentType ?? "",
+            DocumentDate = columns?.DocumentDate,
+            SizeBytes = columns?.SizeBytes,
+            Tags = tagsByDoc.TryGetValue(row.TargetId, out var tags) ? tags : [],
+            SensitivityLabelName = columns?.SensitivityLabelName ?? "",
+            SensitivityLabelColor = columns?.SensitivityLabelColor,
+            VersionCount = columns?.VersionCount ?? 0,
+            VersionCreatedAt = columns?.VersionCreatedAt,
+            Icon = columns is null ? null : rules.IconOf(columns.MaskId),
+            CreatedBy = columns?.CreatedByName ?? "",
             Links = links,
         };
     }

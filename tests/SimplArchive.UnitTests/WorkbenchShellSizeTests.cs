@@ -111,7 +111,15 @@ public class WorkbenchShellSizeTests
     // coordination and nothing else: the shell owns the selection, so clearing it, and describing the folder
     // when nothing is selected, are its own work. The gesture that reports it went to ContentsListPane, and
     // the choice of node went to the desktop's OpenFolderMark.
-    private const int Ceiling = 3_392;
+    // 3,392 → 3,398 for #768 (owner-confirmed 2026-08-26): six lines, and all six are the grid TRACKS and the
+    // breakpoint that collapses the new Owner column first. The column itself — header, cell, sort — went to
+    // ContentsListPane, which is where a list row belongs; what the shell is charged for is the layout, which
+    // is what the shell owns.
+    // 3,398 → 3,417 for the selection-survives-its-load fix found while finishing #768/#769: a row selected
+    // while a folder was still loading was silently discarded when the rows arrived, emptying the detail and
+    // preview panes with no error. Shell-level by definition — the shell owns the selection and owns the load
+    // that was clobbering it.
+    private const int Ceiling = 3_417;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()

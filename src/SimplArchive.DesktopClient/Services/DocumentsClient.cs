@@ -93,7 +93,14 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     // it are still here because the tree needs them, but nothing composes a URL out of them any more.
     public sealed record Reference(
         Guid ReferenceId, Guid TargetId, string Name, bool HasChildren, bool HasVersions, bool HasSubfolders, bool HasReferences, Guid? RealParentId,
-        string? DeleteHref = null, IReadOnlyDictionary<string, string>? Links = null);
+        string? DeleteHref = null, IReadOnlyDictionary<string, string>? Links = null,
+        // The TARGET's list-row columns, exactly as a children row carries them (#768). Without these a
+        // shortcut row drew blank Type / Doc date / Size / Tags / Owner cells beside a real row that filled
+        // them — the same defect on both clients, from the same missing projection.
+        string DocumentType = "", DateOnly? DocumentDate = null, long? SizeBytes = null,
+        IReadOnlyList<string>? Tags = null, string CreatedBy = "", string SensitivityLabelName = "",
+        string? SensitivityLabelColor = null, int VersionCount = 0, DateTimeOffset? VersionCreatedAt = null,
+        string? Icon = null);
 
     public async Task<List<Node>> GetRepositoriesAsync(CancellationToken cancellationToken = default) =>
         await _core.LoadPagedAsync(await _core.RootHrefAsync("repositories", cancellationToken), "repositories", ParseNode, cancellationToken);
@@ -770,6 +777,7 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
         item.TryGetProperty("sensitivityLabelName", out var sln) ? sln.GetString() ?? "" : "",
         item.TryGetProperty("sensitivityLabelColor", out var slc) && slc.ValueKind == JsonValueKind.String ? slc.GetString() : null,
         item.TryGetProperty("versionCount", out var vc) && vc.ValueKind == JsonValueKind.Number ? vc.GetInt32() : 0,
+        item.TryGetProperty("createdBy", out var cb) ? cb.GetString() ?? "" : "",
         item.TryGetProperty("versionCreatedAt", out var vca) && vca.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(vca.GetString(), out var vcaDt) ? vcaDt : null,
         // The row's advertised addresses. WITHOUT this every Node.Links is null and Href() throws — which
         // is exactly what shipped in 2aeaae0, because the edit that added it silently did not apply.
@@ -922,7 +930,17 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
         ApiCore.RelHref(item, "delete"),
         // A reference row stands for a REAL document, and the server advertises the same target sub-resources
         // a children row gets (#416) — carry them so the row is not quietly less capable than its neighbour.
-        ApiCore.ParseLinks(item));
+        ApiCore.ParseLinks(item),
+        item.TryGetProperty("documentType", out var dt) ? dt.GetString() ?? "" : "",
+        item.TryGetProperty("documentDate", out var dd) && dd.ValueKind == JsonValueKind.String && DateOnly.TryParse(dd.GetString(), out var date) ? date : null,
+        item.TryGetProperty("sizeBytes", out var sz) && sz.ValueKind == JsonValueKind.Number ? sz.GetInt64() : null,
+        item.TryGetProperty("tags", out var tg) && tg.ValueKind == JsonValueKind.Array ? tg.EnumerateArray().Select(x => x.GetString() ?? "").Where(v => v.Length > 0).ToList() : [],
+        item.TryGetProperty("createdBy", out var cb) ? cb.GetString() ?? "" : "",
+        item.TryGetProperty("sensitivityLabelName", out var sln) ? sln.GetString() ?? "" : "",
+        item.TryGetProperty("sensitivityLabelColor", out var slc) && slc.ValueKind == JsonValueKind.String ? slc.GetString() : null,
+        item.TryGetProperty("versionCount", out var vc) && vc.ValueKind == JsonValueKind.Number ? vc.GetInt32() : 0,
+        item.TryGetProperty("versionCreatedAt", out var vca) && vca.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(vca.GetString(), out var vcaDt) ? vcaDt : null,
+        item.TryGetProperty("icon", out var ic) && ic.ValueKind == JsonValueKind.String ? ic.GetString() : null);
 
     private static RecycleBinItem ParseRecycleBinItem(JsonElement item) => new(
         item.GetProperty("id").GetGuid(),

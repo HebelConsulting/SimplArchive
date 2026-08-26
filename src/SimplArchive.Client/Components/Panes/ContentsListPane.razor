@@ -41,6 +41,7 @@
             <span @onclick="() => SortBy(ContentSort.Date)">@Strings.Get("SortDocDate") @SortArrow(ContentSort.Date)</span>
             <span @onclick="() => SortBy(ContentSort.Size)">@Strings.Get("SortSize") @SortArrow(ContentSort.Size)</span>
             <span @onclick="() => SortBy(ContentSort.Tags)">@Strings.Get("TagsLabel") @SortArrow(ContentSort.Tags)</span>
+            <span @onclick="() => SortBy(ContentSort.Owner)">@Strings.Get("SortOwner") @SortArrow(ContentSort.Owner)</span>
             <span></span>
         </div>
         @foreach (var node in SortedContents())
@@ -75,6 +76,7 @@
                 <span class="wb-ccell" title="@(node.DocumentDate?.ToString("yyyy-MM-dd") ?? "")">@(node.DocumentDate?.ToString("yyyy-MM-dd") ?? "")</span>
                 <span class="wb-ccell" title="@ByteSize.Format(node.SizeBytes)">@ByteSize.Format(node.SizeBytes)</span>
                 <span class="wb-ccell" title="@string.Join(", ", node.TagList)">@string.Join(", ", node.TagList)</span>
+                <span class="wb-ccell" title="@node.CreatedBy">@node.CreatedBy</span>
                 <div @onclick:stopPropagation="true">
                     <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomLeft">
                         @RowMenu?.Invoke(node)
@@ -148,7 +150,7 @@
     // Folders are ALWAYS listed on top; within each group the default is the open folder's persisted order
     // (FolderSortOrder). Clicking a column header is an EPHEMERAL override that lasts until another folder is
     // opened — which the shell signals by calling ResetHeaderSort. Client-side over the fully-loaded rows.
-    private enum ContentSort { Name, Type, Date, Size, Tags }
+    private enum ContentSort { Name, Type, Date, Size, Tags, Owner }
     private ContentSort _contentSort = ContentSort.Name;
     private bool _contentSortAsc = true;
     private bool _headerSortActive;
@@ -200,6 +202,7 @@
             ContentSort.Date => items.OrderBy(n => n.DocumentDate ?? DateOnly.MinValue),
             ContentSort.Size => items.OrderBy(n => n.SizeBytes ?? -1),
             ContentSort.Tags => items.OrderBy(n => string.Join(",", n.TagList), StringComparer.OrdinalIgnoreCase),
+            ContentSort.Owner => items.OrderBy(n => n.CreatedBy, StringComparer.OrdinalIgnoreCase),
             _ => items.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
         };
         return _contentSortAsc ? ordered : ordered.Reverse();

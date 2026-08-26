@@ -48,6 +48,9 @@ public record DocumentSummary
     /// <summary>The mask's icon token, or null for the generic glyph.</summary>
     public string? Icon { get; set; }
 
+    /// <summary>Who filed the current version, falling back to who created the document (#768).</summary>
+    public string CreatedBy { get; set; } = "";
+
     public List<LinkResponse> Links { get; set; } = [];
 }
 
@@ -72,6 +75,23 @@ public record ReferenceSummary
     public bool HasSubfolders { get; set; }
     public bool HasReferences { get; set; }
     public Guid? RealParentId { get; set; }
+
+    // The TARGET's list-row columns, exactly as a child row carries them (#768) — a reference is another
+    // appearance of a document, so its row is the same row.
+    public string FileExtension { get; set; } = "";
+    public string DocumentType { get; set; } = "";
+    public DateOnly? DocumentDate { get; set; }
+    public long? SizeBytes { get; set; }
+    public List<string> Tags { get; set; } = [];
+    public string SensitivityLabelName { get; set; } = "";
+    public string? SensitivityLabelColor { get; set; }
+    public int VersionCount { get; set; }
+    public DateTimeOffset? VersionCreatedAt { get; set; }
+    public string? Icon { get; set; }
+
+    /// <inheritdoc cref="DocumentSummary.CreatedBy"/>
+    public string CreatedBy { get; set; } = "";
+
     public List<LinkResponse> Links { get; set; } = [];
 }
 

@@ -297,6 +297,11 @@
                                 <Button Content="{Binding TagsHeader}" Command="{Binding SortContentsCommand}" CommandParameter="tags" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="4,1" Background="Transparent" BorderThickness="0" FontSize="11" FontWeight="SemiBold" />
                                 <Thumb Tag="4" DragDelta="OnColumnResize" DragCompleted="OnColumnResizeDone" Width="6" HorizontalAlignment="Right" Background="Transparent" Cursor="SizeWestEast" />
                             </Grid>
+                            <!-- Owner: who filed the current version, falling back to who created the document (#768). -->
+                            <Grid Width="{Binding ColOwnerWidth}">
+                                <Button Content="{Binding OwnerHeader}" Command="{Binding SortContentsCommand}" CommandParameter="owner" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="4,1" Background="Transparent" BorderThickness="0" FontSize="11" FontWeight="SemiBold" />
+                                <Thumb Tag="5" DragDelta="OnColumnResize" DragCompleted="OnColumnResizeDone" Width="6" HorizontalAlignment="Right" Background="Transparent" Cursor="SizeWestEast" />
+                            </Grid>
                         </StackPanel>
                         <ListBox x:Name="ContentsList" AutomationProperties.AutomationId="tour:pane-list" DragDrop.AllowDrop="True" SelectionMode="Multiple"
                                  ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}" DoubleTapped="OnListDoubleTapped"
@@ -392,6 +397,7 @@
                                         <TextBlock Width="{Binding $parent[ListBox].DataContext.ColDateWidth}" Text="{Binding DocumentDateText}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" />
                                         <TextBlock Width="{Binding $parent[ListBox].DataContext.ColSizeWidth}" Text="{Binding SizeText}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" />
                                         <TextBlock Width="{Binding $parent[ListBox].DataContext.ColTagsWidth}" Text="{Binding TagsText}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding TagsText}" />
+                                        <TextBlock Width="{Binding $parent[ListBox].DataContext.ColOwnerWidth}" Text="{Binding CreatedBy}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding CreatedBy}" />
                                     </StackPanel>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>

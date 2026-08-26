@@ -36,6 +36,8 @@ public sealed class LayoutSettings
     public string ColSize { get; set; } = "72";
     public string ColTags { get; set; } = "160";
 
+    public string ColOwner { get; set; } = "140";
+
     // Light / Dark / System (ADR 0578). A string rather than the enum so an unknown value from a future version
     // degrades to "follow the OS" instead of throwing while deserialising the whole layout — losing the pane
     // widths would be a much bigger surprise than losing a theme choice.

@@ -120,6 +120,9 @@ public sealed class NodeViewModel
     public string TypeText => IsFolder ? "Folder" : DocumentType;
     public string DocumentDateText => DocumentDate?.ToString("yyyy-MM-dd") ?? "";
     public string TagsText => string.Join(", ", Tags);
+
+    /// <summary>Who filed the current version, falling back to who created the document (#768).</summary>
+    public string CreatedBy { get; init; } = string.Empty;
     public string SizeText => SizeBytes switch
     {
         null => "",

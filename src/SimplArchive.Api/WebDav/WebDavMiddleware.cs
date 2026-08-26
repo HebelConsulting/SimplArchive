@@ -229,7 +229,7 @@ public sealed class WebDavMiddleware
         var responses = new List<PropStatXml> { PropFor(node, segments, basePath) };
         if (depth != "0" && node.IsCollection)
         {
-            foreach (var child in await WebDavPathResolver.ChildrenAsync(db, user, node, calc))
+            foreach (var child in await WebDavPathResolver.ChildrenAsync(db, user, node, calc, services.GetRequiredService<ILogger<WebDavMiddleware>>()))
             {
                 responses.Add(PropFor(child, [.. segments, child.WebDavName], basePath));
             }
@@ -709,6 +709,32 @@ public sealed class WebDavMiddleware
         if (node?.Document is not { } document)
         {
             context.Response.StatusCode = node is null ? StatusCodes.Status404NotFound : StatusCodes.Status403Forbidden; // can't delete a virtual root/repository listing
+            return;
+        }
+
+        // Reached through a REFERENCE: delete the APPEARANCE, never the document (#769). This is the one that
+        // loses data if guessed wrong — a user tidying a working folder on a mounted drive would otherwise
+        // destroy the document itself, which is still filed somewhere they were not looking.
+        //
+        // Gated on the FOLDER's right, not the target's, for the same reason the API gates it there: removing
+        // a shortcut changes the contents of the folder holding it and nothing about the document.
+        if (node.ViaReferenceId is { } referenceId)
+        {
+            var folder = await WebDavPathResolver.ResolveAsync(db, user, segments[..^1]);
+            if (folder?.Document is not { } holder || !(await RightsAsync(services, user, holder.Id)).CanCreateSubItems)
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return;
+            }
+
+            var reference = await db.DocumentReferences.FirstOrDefaultAsync(r => r.Id == referenceId, context.RequestAborted);
+            if (reference is not null)
+            {
+                db.DocumentReferences.Remove(reference);
+                await db.SaveChangesAsync(context.RequestAborted);
+            }
+
+            context.Response.StatusCode = StatusCodes.Status204NoContent;
             return;
         }
 

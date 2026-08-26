@@ -259,16 +259,22 @@
        visible column, so the menu can never be clipped/scrolled off. The `.wb-list` pane is an inline-size query
        container (above), so the breakpoints below react to the *pane's own width*, not the viewport — collapsing
        lower-priority columns as the user narrows the split, uniformly on computer/tablet/phone. */
-    .wb-list-row.wb-cols, .wb-chead { display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 92px) minmax(0, 70px) minmax(0, 1.3fr) auto; align-items: center; gap: 8px; }
+    .wb-list-row.wb-cols, .wb-chead { display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 92px) minmax(0, 70px) minmax(0, 1.3fr) minmax(0, 1.1fr) auto; align-items: center; gap: 8px; }
     .wb-chead { padding: 4px 12px; font-size: .72rem; font-weight: 600; color: var(--mud-palette-text-secondary); border-bottom: 1px solid var(--mud-palette-lines-default); position: sticky; top: 0; background: var(--mud-palette-surface); z-index: 1; }
     .wb-chead > span { cursor: pointer; user-select: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .wb-ccell { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; color: var(--mud-palette-text-secondary); }
     .wb-cname { display: flex; align-items: center; gap: 6px; color: var(--mud-palette-text-primary); font-size: unset; }
+    /* Wide-but-not-wide-enough: drop Owner (6th) first — it is the newest column and the least often the
+       reason someone widened the pane. */
+    @@container (max-width: 739px) {
+        .wb-list-row.wb-cols, .wb-chead { grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 92px) minmax(0, 70px) minmax(0, 1.3fr) auto; }
+        .wb-list-row.wb-cols > :nth-child(6), .wb-chead > :nth-child(6) { display: none; }
+    }
     /* Medium pane: drop Size (4th) + Tags (5th), keeping Name · Type · Doc date · ⋮. */
     @@container (max-width: 519px) {
         .wb-list-row.wb-cols, .wb-chead { grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 92px) auto; }
-        .wb-list-row.wb-cols > :nth-child(4), .wb-list-row.wb-cols > :nth-child(5),
-        .wb-chead > :nth-child(4), .wb-chead > :nth-child(5) { display: none; }
+        .wb-list-row.wb-cols > :nth-child(4), .wb-list-row.wb-cols > :nth-child(5), .wb-list-row.wb-cols > :nth-child(6),
+        .wb-chead > :nth-child(4), .wb-chead > :nth-child(5), .wb-chead > :nth-child(6) { display: none; }
     }
     /* Narrow pane: Name + ⋮ only (the menu stays — it isn't a .wb-ccell). */
     @@container (max-width: 399px) {
@@ -1812,6 +1818,25 @@
         _currentRepositoryId = folder?.RepositoryId ?? Guid.Empty;
         ClearDetail();
         _folderContents = folder is null ? [] : (await Browse.LoadContentsAsync(folder.Id, folder.RepositoryId, BrowseService.ChildrenHrefOf(folder), BrowseService.ReferencesHrefOf(folder))).Nodes;
+
+        // A row selected WHILE this load was in flight survives it.
+        //
+        // The load is asynchronous and the list stays clickable throughout — so a user can select a row, and
+        // then have the arriving rows replace the list under them. The selection pointed at a row object that
+        // is no longer in `_folderContents`, so it silently became nothing: the detail and preview panes
+        // emptied and stayed empty, with no error and no way to tell why. It is the ADR 0559 window again,
+        // seen from the other side — there the action outran the load, here the load outran the action.
+        //
+        // Re-pointed BY ID at the freshly-loaded row, because the row object is new even when the document is
+        // the same. Gone from the folder (deleted, moved, filtered away) means the selection is genuinely
+        // over, and the pane falls back to the folder below.
+        if (_selectedNode is { } wasSelected && !wasSelected.IsFolder
+            && _folderContents.FirstOrDefault(n => n.Id == wasSelected.Id && n.IsReference == wasSelected.IsReference) is { } stillListed)
+        {
+            _selectedNode = stillListed;
+            await LoadDetailForAsync(stillListed);
+            return;
+        }
 
         // A folder has its own comment thread, and — since issue #408 — its own detail pane: the same one a
         // document gets, because a folder is a Document with a mask and index data of its own.
