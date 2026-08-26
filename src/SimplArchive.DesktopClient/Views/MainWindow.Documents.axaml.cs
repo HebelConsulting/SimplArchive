@@ -472,7 +472,9 @@ public partial class MainWindow
     // the Intray tab; landing them in the archive root and making them navigate is answering a question they did
     // not ask.
     //
-    // The button's Tag names the folder within the single mount ("Personal/Intray", "Personal/Check-out").
+    // The button's Tag names the LEAF inside the personal space ("Intray", "Check-out") — not a whole path. It
+    // used to spell out "Personal/Intray", and a personal space is named after its owner (ADR 0671), so the
+    // button addressed a folder that does not exist and silently did nothing.
     internal void OnWebDavTabButton(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel { Api: { } api } vm)
@@ -480,7 +482,7 @@ public partial class MainWindow
             return;
         }
 
-        await OpenWebDavAtAsync(vm, api, ((sender as Control)?.Tag as string ?? string.Empty).Trim('/'));
+        await OpenWebDavAtAsync(vm, api, ViewModels.PersonalSpaceTree.WebDavPath(vm.Tree, ((sender as Control)?.Tag as string ?? string.Empty).Trim('/')));
     });
 
     // Set up credentials, else mount, else open — landing in `subFolder` within the one mount. Shared by the

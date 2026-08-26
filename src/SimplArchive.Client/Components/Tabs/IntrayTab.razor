@@ -47,7 +47,7 @@
                    title="@Strings.Get("RibbonRefresh")" aria-label="@Strings.Get("RibbonRefresh")">
             <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRefresh")</span>
         </MudButton>
-        <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="@(() => WebDavLink.CopyAsync(WebDavFolder))"
+        <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="@(() => WebDavLink.CopyPersonalFolderAsync(WebDavFolder))"
                    title="@Strings.Get("IntrayCopyDav")" aria-label="@Strings.Get("IntrayCopyDav")">
             <MudIcon Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntrayCopyDav")</span>
         </MudButton>
@@ -355,7 +355,13 @@
     /// is stateless — a candidate for a small shared service when the shell is finally thinned (PR 4).
     /// </summary>
     /// <summary>This tab's folder inside the WebDAV mount — the desktop's button opens it; the web copies it.</summary>
-    private const string WebDavFolder = "Personal/Intray";
+    /// <summary>The folder inside the caller's personal space this tab links to.</summary>
+    /// <remarks>
+    /// The LEAF only. It used to spell out "Personal/…", and a personal space is named after its owner
+    /// (ADR 0671), so that addressed a folder which does not exist. The mount link resolves the owner's
+    /// name for itself — one place, rather than each tab learning to ask.
+    /// </remarks>
+    private const string WebDavFolder = "Intray";
 
     /// <summary>
     /// The document selected on the Repositories tab, offered as "file as a new version of it" (ADR 0286).

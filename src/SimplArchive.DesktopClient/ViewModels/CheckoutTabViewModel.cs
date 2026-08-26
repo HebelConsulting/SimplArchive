@@ -272,7 +272,19 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
             }
 
             var fileName = MainWindowViewModel.WithExtension(row.Name, row.FileExtension);
-            var result = await OsFileManager.OpenWebDavFileAsync(webdav.Url, $"Personal/Check-out/{fileName}");
+
+            // The personal space's OWN name (ADR 0671) — the literal "Personal" that used to be spelled out here
+            // addressed a folder that does not exist, so Edit opened nothing. Asked of the server rather than
+            // guessed, and only on this explicit action.
+            var personal = await _api.Profile.GetPersonalRepositoryAsync();
+            var folder = SimplArchive.Presentation.WebDavPaths.InPersonalSpace(personal?.Name, "Check-out");
+            if (folder.Length == 0)
+            {
+                Report(Strings.Get("CoEditNeedsWebDav"));
+                return;
+            }
+
+            var result = await OsFileManager.OpenWebDavFileAsync(webdav.Url, $"{folder}/{fileName}");
             Report(result.Success
                 ? string.Format(Strings.Get("CoEditing"), row.Name)
                 : result.Error ?? $"Could not open '{row.Name}'.");

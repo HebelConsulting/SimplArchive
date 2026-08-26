@@ -408,8 +408,48 @@ internal static class ImapMailboxes
         // toggle shows everything (#562). Ordered by (CreatedAt, Id) — the stable sequence-number order.
         var docs = await db.Documents
             .Where(d => d.ParentId == entry.FolderId && db.DocumentVersions.Any(v => v.DocumentId == d.Id && v.Status == DocumentVersionStatus.Confirmed))
-            .OrderBy(d => d.CreatedAt).ThenBy(d => d.Id)
             .ToListAsync();
+
+        // …and the documents REFERENCED into this folder. A reference is another appearance of a document, so
+        // it projects as a message exactly as a child does. The mailbox walk has taken referenced FOLDERS since
+        // #596; leaving documents out meant a mail client listed a folder's children and silently omitted
+        // everything a user had filed there by reference — reported as "only PDFs are shown, not document
+        // links" (#766).
+        var referencedIds = await db.DocumentReferences
+            .Where(r => r.ParentFolderId == entry.FolderId)
+            .Select(r => r.TargetDocumentId)
+            .ToListAsync();
+
+        var referenced = await db.Documents
+            .Where(d => referencedIds.Contains(d.Id)
+                // Not also a child here: the UID table is keyed by (folder, document), so one document
+                // appearing twice in a mailbox would carry the SAME uid twice, which no client can hold.
+                && d.ParentId != entry.FolderId
+                && db.DocumentVersions.Any(v => v.DocumentId == d.Id && v.Status == DocumentVersionStatus.Confirmed))
+            .ToListAsync();
+
+        if (referenced.Count > 0)
+        {
+            // A referenced document lives somewhere ELSE, so its rights are its own — inherited from its real
+            // parent, not from the folder it is referenced into. Children can be taken on the folder's own
+            // CanSee, which the catalog already checked; these cannot, and serving one unchecked would hand a
+            // mail client a document its owner never shared.
+            var calculator = scope.ServiceProvider.GetRequiredService<IEffectiveRightsCalculator>();
+            var visible = new List<Document>();
+            foreach (var candidate in referenced)
+            {
+                if ((await calculator.GetEffectiveRightsAsync(session.UserId, candidate.Id)).CanSee)
+                {
+                    visible.Add(candidate);
+                }
+            }
+
+            docs.AddRange(visible);
+        }
+
+        // Ordered by (CreatedAt, Id) — the stable sequence-number order — AFTER the two sources are joined, so
+        // a referenced document sits where its age puts it rather than after every child.
+        docs = docs.OrderBy(d => d.CreatedAt).ThenBy(d => d.Id).ToList();
 
         var mailbox = await db.ImapMailboxes.FirstOrDefaultAsync(m => m.FolderId == entry.FolderId);
         if (mailbox is null)

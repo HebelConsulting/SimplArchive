@@ -100,7 +100,7 @@
         @* One WebDAV control, deep-linked to the Check-out folder — the desktop's button mounts and opens; a
            browser is not allowed to mount a drive, so the nearest web-native equivalent is to hand over the
            address of that same folder (ADR 0560: a capability the browser lacks is a divergence, not a gap). *@
-        <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="() => WebDavLink.CopyAsync(WebDavFolder)"
+        <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="() => WebDavLink.CopyPersonalFolderAsync(WebDavFolder)"
                    title="@Strings.Get("IntrayCopyDav")" aria-label="@Strings.Get("IntrayCopyDav")">
             <MudIcon Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntrayCopyDav")</span>
         </MudButton>
@@ -207,7 +207,13 @@
     public EventCallback<(Guid DocumentId, Guid? ParentId)> OpenRequested { get; set; }
 
     /// <summary>This tab's folder inside the WebDAV mount — the desktop's button opens it; the web copies it.</summary>
-    private const string WebDavFolder = "Personal/Check-out";
+    /// <summary>The folder inside the caller's personal space this tab links to.</summary>
+    /// <remarks>
+    /// The LEAF only. It used to spell out "Personal/…", and a personal space is named after its owner
+    /// (ADR 0671), so that addressed a folder which does not exist. The mount link resolves the owner's
+    /// name for itself — one place, rather than each tab learning to ask.
+    /// </remarks>
+    private const string WebDavFolder = "Check-out";
 
     private CheckoutDto? _selected;
 

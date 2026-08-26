@@ -175,7 +175,7 @@ internal static class ImapFetch
                     {
                         var open = item.IndexOf('[');
                         var section = item[(open + 1)..item.LastIndexOf(']')];
-                        var payload = await SectionAsync(section, BytesAsync, MimeAsync);
+                        var payload = await SectionAsync(session, section, BytesAsync, MimeAsync);
                         literals.Add(($"BODY[{section.ToUpperInvariant()}] {{{payload.Length}}}", payload));
                     }
                     else
@@ -194,19 +194,26 @@ internal static class ImapFetch
             return;
         }
 
+        // Every data item after the first is separated by a SPACE, and that includes the one that follows a
+        // literal's octets — the response is ONE line with binary spliced into it, not a sequence of lines.
+        // Emitting the next item's prefix on its own left `<octets>BODY[TEXT] {45}` on the wire with nothing
+        // between them, which a strict parser reads as one malformed atom. It only shows with TWO or more
+        // sections in one FETCH, which is what a client asking for headers and body together does.
         var separator = parts.Count > 0 ? " " : string.Empty;
         foreach (var (prefix, payload) in literals)
         {
             await session.WriteLineAsync(head + separator + prefix);
             await session.WriteRawAsync(payload);
             head = string.Empty;
-            separator = string.Empty;
+            separator = " ";
         }
 
+        // No space before the closing paren — it may follow the octets directly.
         await session.WriteLineAsync(")");
     }
 
-    private static async Task<byte[]> SectionAsync(string section, Func<Task<byte[]>> bytesAsync, Func<Task<MimeMessage>> mimeAsync)
+    private static async Task<byte[]> SectionAsync(
+        ImapSession session, string section, Func<Task<byte[]>> bytesAsync, Func<Task<MimeMessage>> mimeAsync)
     {
         var upper = section.ToUpperInvariant();
         if (upper.Length == 0)
@@ -238,8 +245,110 @@ internal static class ImapFetch
             return headerEnd < 0 ? raw : raw[headerEnd..];
         }
 
-        // Numbered part sections are rare from the clients this slice targets; answer with the full body.
+        // A NUMBERED section — "2", "2.1", "2.MIME", "1.TEXT". This is how a mail client downloads ONE part,
+        // and an attachment is always a part: it is the path taken to save a PDF, where BODY[] is the path
+        // taken to read a message. This used to answer with the WHOLE message, on the reasoning that numbered
+        // sections were "rare from the clients this slice targets". They are not rare — they are how every
+        // client saves an attachment — and the answer was not an error the client could report, so it wrote
+        // the entire RFC-822 message to disk under the attachment's name and the user got a corrupt PDF
+        // (#766). Serving it wrongly and silently is worse than refusing it.
+        if (Numbered(upper, message) is { } part)
+        {
+            return part;
+        }
+
+        session.WarnSubstituted($"BODY[{section}]", "the whole message");
         return await bytesAsync();
+    }
+
+    /// <summary>
+    /// One numbered body section, or <c>null</c> when the message has no such part.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Returns the part's content in the transfer encoding it is STORED in, not decoded: BODYSTRUCTURE
+    /// announces the encoding and the encoded octet count, and the client decodes what it is given. Decoding
+    /// here would corrupt the file just as thoroughly as the old answer did, only less obviously — the client
+    /// would base64-decode plain bytes.
+    /// </para>
+    /// <para>
+    /// RFC 3501's numbering, so section "1" of a NON-multipart message is the message's own body rather than a
+    /// child that does not exist.
+    /// </para>
+    /// </remarks>
+    private static byte[]? Numbered(string section, MimeMessage message)
+    {
+        var segments = section.Split('.', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0)
+        {
+            return null;
+        }
+
+        // A trailing keyword — MIME, HEADER, TEXT — qualifies the part the digits located.
+        var suffix = char.IsAsciiDigit(segments[^1][0]) ? string.Empty : segments[^1];
+        var path = suffix.Length == 0 ? segments : segments[..^1];
+
+        MimeEntity? entity = message.Body;
+        foreach (var segment in path)
+        {
+            if (!int.TryParse(segment, out var index) || index < 1)
+            {
+                return null;
+            }
+
+            entity = Child(entity, index);
+            if (entity is null)
+            {
+                return null;
+            }
+        }
+
+        if (entity is null)
+        {
+            return null;
+        }
+
+        return suffix switch
+        {
+            "MIME" => Encoding.Latin1.GetBytes(string.Concat(entity.Headers.Select(h => $"{h.Field}: {h.Value}\r\n")) + "\r\n"),
+            "HEADER" when entity is MessagePart { Message: { } inner } =>
+                Encoding.Latin1.GetBytes(string.Concat(inner.Headers.Select(h => $"{h.Field}: {h.Value}\r\n")) + "\r\n"),
+            "TEXT" when entity is MessagePart { Message: { } inner } => Body(inner.Body),
+            "" => Body(entity),
+            _ => null,
+        };
+    }
+
+    // The child a section number names: within a multipart, within a nested message, or — for a leaf — the
+    // leaf itself, which is what "1" means when the message is not multipart at all.
+    private static MimeEntity? Child(MimeEntity? entity, int index) => entity switch
+    {
+        Multipart multipart => index <= multipart.Count ? multipart[index - 1] : null,
+        MessagePart { Message: { } inner } => Child(inner.Body, index),
+        not null when index == 1 => entity,
+        _ => null,
+    };
+
+    // A part's BODY — its content without its own MIME headers, exactly as stored.
+    private static byte[]? Body(MimeEntity? entity)
+    {
+        using var buffer = new MemoryStream();
+        switch (entity)
+        {
+            case MimePart { Content: { } content }:
+                content.WriteTo(buffer);
+                return buffer.ToArray();
+
+            // A multipart's body is its children and their boundaries — everything after its own headers.
+            case Multipart or MessagePart:
+                entity!.WriteTo(buffer);
+                var raw = buffer.ToArray();
+                var headerEnd = FindHeaderEnd(raw);
+                return headerEnd < 0 ? raw : raw[headerEnd..];
+
+            default:
+                return null;
+        }
     }
 
     private static int FindHeaderEnd(byte[] raw)

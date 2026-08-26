@@ -315,6 +315,25 @@ public sealed class ImapSession
     /// <summary>
     /// Answers a command we do not serve, and says so in the log at <b>Warning</b>.
     /// </summary>
+    /// <summary>
+    /// Something the client asked for that we answered with SOMETHING ELSE rather than with an error.
+    /// </summary>
+    /// <remarks>
+    /// The sibling of <see cref="RefuseAsync"/>, for the case that is worse than a refusal: a refusal reaches
+    /// the client, a substitution does not. The client believes it has what it asked for, and the user sees a
+    /// corrupt file rather than an error — which is exactly how BODY[&lt;part&gt;] came to be reported as
+    /// "the PDF downloads corrupted" (#766) after silently answering with the whole message for months.
+    /// Warning, and it names the switch, for the reasons ADR 0626 gives.
+    /// </remarks>
+    internal void WarnSubstituted(string asked, string served)
+    {
+        _logger.LogWarning(
+            "IMAP {Email}: asked for {Asked} and served {Served} instead — the client cannot tell, and will "
+            + "present the result as though it were what it requested; set Serilog:MinimumLevel:Override:{LogSource} "
+            + "to Trace to see the exchange",
+            _email, asked, served, TraceSource);
+    }
+
     /// <remarks>
     /// Warning rather than Debug because this is the definition of it: an administrator very likely needs to
     /// act. A refusal here is not the client's mistake — we advertise <c>IMAP4rev1</c>, whose mandatory command

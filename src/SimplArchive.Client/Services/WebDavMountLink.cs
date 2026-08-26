@@ -26,16 +26,33 @@ public sealed class WebDavMountLink
     private readonly ApiRoot _apiRoot;
     private readonly IJSRuntime _js;
     private readonly ISnackbar _snackbar;
+    private readonly BrowseService _browse;
 
-    public WebDavMountLink(HttpClient http, ApiRoot apiRoot, IJSRuntime js, ISnackbar snackbar)
+    public WebDavMountLink(HttpClient http, ApiRoot apiRoot, IJSRuntime js, ISnackbar snackbar, BrowseService browse)
     {
         _http = http;
         _apiRoot = apiRoot;
         _js = js;
         _snackbar = snackbar;
+        _browse = browse;
     }
 
-    /// <param name="subFolder">The folder within the single mount ("Personal/Intray"), or empty for the whole tree.</param>
+    /// <summary>Copies the address of a folder inside the caller's PERSONAL SPACE — "Intray", "Check-out".</summary>
+    /// <remarks>
+    /// The caller passes the leaf, and this resolves the space's own name (ADR 0671). Both tabs used to spell
+    /// out "Personal/…" as a constant, which addressed a folder that does not exist — the link was copied
+    /// happily and simply did not resolve. Resolved here rather than in each tab so there is one place that
+    /// knows how that path is built, and one round trip that can be cached.
+    /// </remarks>
+    public async Task CopyPersonalFolderAsync(string leaf)
+    {
+        _personalSpaceName ??= (await _browse.EnsurePersonalRepositoryAsync())?.Name;
+        await CopyAsync(SimplArchive.Presentation.WebDavPaths.InPersonalSpace(_personalSpaceName, leaf));
+    }
+
+    private string? _personalSpaceName;
+
+    /// <param name="subFolder">The folder within the single mount, or empty for the whole tree.</param>
     public async Task CopyAsync(string subFolder)
     {
         try
