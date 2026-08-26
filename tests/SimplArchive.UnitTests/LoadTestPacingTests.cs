@@ -67,5 +67,5 @@ public class LoadTestPacingTests
         new("steady10", "http://target", 10, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(16),
             new Dictionary<string, TimeSpan> { ["search"] = TimeSpan.FromMilliseconds(400) },
             new Dictionary<string, TimeSpan> { ["search"] = TimeSpan.FromMilliseconds(420) },
-            pacing, 0, new Dictionary<string, int>(), 0, [], 10, true);
+            pacing, 0, new Dictionary<string, int>(), WarmUpFailures: 0, 0, [], 10, true);
 }

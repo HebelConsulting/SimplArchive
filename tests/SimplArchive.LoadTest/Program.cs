@@ -182,7 +182,10 @@ var steady = log.Actions()
     .ToDictionary(x => x.Action, x => x.P95!.Value);
 var result = new ScenarioResult(
     scenario, app.BaseUrl, users, startedAt, runClock.Elapsed, baseline, steady, pacing,
-    log.Failures(steadyFrom), log.FailuresByAction(steadyFrom), log.UsersAffected(steadyFrom),
+    log.Failures(steadyFrom), log.FailuresByAction(steadyFrom),
+    // Everything that failed before steady state began — total minus steady, so it needs no second predicate.
+    log.Failures() - log.Failures(steadyFrom),
+    log.UsersAffected(steadyFrom),
     [.. log.Samples.Where(s => s.Failed && s.StartedAt >= steadyFrom).Select(s => $"{s.Action}: {s.Error}").Distinct()],
     generator.PeakPercent, generator.RunIsValid);
 

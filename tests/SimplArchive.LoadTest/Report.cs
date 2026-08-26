@@ -20,6 +20,14 @@ public sealed record ScenarioResult(
     Pacing Pacing,
     int Failures,
     IReadOnlyDictionary<string, int> FailuresByAction,
+    /// <summary>
+    /// Failures BEFORE steady state. Reported rather than dropped: excluding a warm-up sample from a
+    /// percentile is right (cold start is not latency), but excluding a warm-up FAILURE discards evidence —
+    /// and in #754 it discarded the most telling evidence there was. Every user failed within the first 50
+    /// seconds, at almost no load, which is what most cleanly rules out saturation; the report said 70 while
+    /// its own CSV held 80, and the ten it withheld were the interesting ones.
+    /// </summary>
+    int WarmUpFailures,
     int UsersAffected,
     IReadOnlyList<string> FailureExamples,
     double GeneratorPeakCpu,
@@ -87,8 +95,26 @@ public static class Report
             sb.AppendLine();
         }
 
+        // Named, not hidden. The window is stated on the line itself, so this number can no longer be compared
+        // against the CSV's total and read as a discrepancy (#754).
+        var affected = r.Failures > 0
+            ? string.Create(CultureInfo.InvariantCulture, $" — across {r.UsersAffected} of {r.Users} users")
+            : string.Empty;
+        var warmUp = r.WarmUpFailures > 0
+            ? string.Create(CultureInfo.InvariantCulture, $", plus {r.WarmUpFailures} during warm-up")
+            : string.Empty;
         sb.AppendLine(CultureInfo.InvariantCulture,
-            $"- **Failed actions**: {r.Failures}{(r.Failures > 0 ? $" — across {r.UsersAffected} of {r.Users} users" : string.Empty)}");
+            $"- **Failed actions**: {r.Failures} in steady state{affected}{warmUp}");
+
+        if (r.WarmUpFailures > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine(
+                $"> {r.WarmUpFailures} action(s) also failed BEFORE steady state and are excluded from the "
+                + "verdict above. That exclusion is deliberate for percentiles and questionable for failures: "
+                + "something failing at warm-up load is failing when the target is least busy, which argues "
+                + "against saturation rather than for it. The CSV carries them.");
+        }
         foreach (var example in r.FailureExamples.Take(5))
         {
             sb.AppendLine(CultureInfo.InvariantCulture, $"  - {example}");

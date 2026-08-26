@@ -115,8 +115,9 @@ public sealed class BrowserUser(
         {
             // A row with a version, so the preview pane genuinely renders something — clicking a folder would
             // time a cheaper action and flatter the result.
-            var row = page.Locator("[data-pane='list'] .wb-list-row").First;
-            var name = ((await row.InnerTextAsync()) ?? string.Empty).Split('\n')[0].Trim();
+            var name = ((await page.Locator("[data-pane='list'] .wb-list-row").First.InnerTextAsync()) ?? string.Empty)
+                .Split('\n')[0]
+                .Trim();
             if (name.Length == 0)
             {
                 // Refuse to time a vacuous wait. HasText = "" matches everything, so an empty name would
@@ -124,13 +125,72 @@ public sealed class BrowserUser(
                 throw new InvalidOperationException("the first list row had no name to wait for");
             }
 
-            await row.ClickAsync();
+            // ADDRESSED BY NAME, NOT BY POSITION — and that is the whole fix (#754).
+            //
+            // Reading `.First`, then clicking `.First`, is two resolutions of a moving target. Ten users upload
+            // concurrently and the workbench re-renders on the SignalR notification, so the row that was first
+            // when the name was read need not be first when the click lands. The click then opens a DIFFERENT
+            // document, the pane correctly shows that document, and the wait for the old name can never be
+            // satisfied — 120 s, every time, with the server having done nothing wrong.
+            //
+            // This is ADR 0559's rule ("an action is addressed from the row, never from the pane's loaded
+            // state") applied to the harness that measures the client: re-resolving by name means a re-render
+            // finds the same document again, and a document that genuinely vanished fails FAST on the click
+            // rather than hanging on a wait that has become unsatisfiable.
+            var row = page.Locator("[data-pane='list'] .wb-list-row").Filter(new() { HasText = name }).First;
 
             // The pane CARRYING THIS DOCUMENT'S NAME, not merely the pane. `[data-pane='index']` is part of the
             // workbench layout and exists before the click, so waiting for it was a condition ALREADY TRUE —
             // this row timed a click and nothing else, reporting 0.04 s against a REMOTE host, which is what
             // gave it away. A wait satisfiable by the previous state measures nothing and reads as a fast action.
-            await page.Locator("[data-pane='index']").Filter(new() { HasText = name }).First.WaitForAsync();
+            // TWO try blocks, not one, because a single one MISATTRIBUTES its own failure. Wrapping both in
+            // one block produced "waited … for the index pane to show 'Business Years', but it shows 'Demo
+            // Repository'" — which reads as the pane failing to update, and sent the investigation at the
+            // workbench. The pane was fine: clicking that folder updates it immediately, verified by hand in a
+            // real browser. It was the CLICK that never completed, so the pane was still showing the previous
+            // selection exactly as it should. A message that names the wrong step is worse than none.
+            try
+            {
+                // BOUNDED, and much shorter than the default. Playwright will not click an element until it is
+                // STABLE — the same bounding box across two animation frames — and during a run the workbench
+                // re-renders on every SignalR notification from the other nine users' uploads, so a row can
+                // simply never hold still. A person clicks a moving row without noticing; Playwright waits for
+                // it to stop. Left at the default that wait costs 120 s per occurrence, which is most of what
+                // the old runs spent their time on: eight timeouts per user filled the window and starved the
+                // measurement of the iterations it was there to take.
+                await row.ClickAsync(new() { Timeout = ClickTimeoutMs });
+            }
+            catch (TimeoutException timeout)
+            {
+                throw new InvalidOperationException(
+                    $"open document: could not click the row '{name}' within {ClickTimeoutMs} ms "
+                    + $"({timeout.Message.Split('\n')[0]}) — the row is present but never held still long enough "
+                    + $"for a click. First row is now '{await DescribeFirstRowAsync(page)}'.");
+            }
+
+            try
+            {
+                await page.Locator("[data-pane='index']").Filter(new() { HasText = name }).First.WaitForAsync();
+            }
+            // System.TimeoutException — VERIFIED, not reasoned. Microsoft.Playwright defines no TimeoutException
+            // of its own, from which it is tempting to conclude that the name binds to a type Playwright never
+            // throws and the catch is dead. That conclusion is WRONG: Playwright .NET throws
+            // System.TimeoutException for waits and clicks alike (probed against a real browser — a missing
+            // locator, a click on it, and a Filter that matches nothing all produced System.TimeoutException).
+            // The tempting reasoning was followed once, "fixed" to PlaywrightException, and silently disabled
+            // the whole block for a full 18-minute run.
+            catch (TimeoutException timeout)
+            {
+                // SAY WHAT WAS EXPECTED AND WHAT IS THERE. A bare "Timeout 120000ms exceeded" cost two runs and
+                // three wrong hypotheses — server saturation, a stalled object-storage transfer, generator
+                // contention — none of which the message could distinguish, because it named neither the
+                // document nor the pane. The report keeps only the first line of this message, so everything
+                // that matters has to be on it.
+                throw new InvalidOperationException(
+                    $"open document: the row '{name}' WAS clicked, but the index pane never showed it "
+                    + $"({timeout.Message.Split('\n')[0]}); it shows '{await DescribePaneAsync(page)}' "
+                    + $"(first row is now '{await DescribeFirstRowAsync(page)}')");
+            }
         });
 
         await ThinkAsync(cancellationToken);
@@ -186,5 +246,32 @@ public sealed class BrowserUser(
         await ThinkAsync(cancellationToken);
     }
 
+    // Long enough that a merely-busy page still gets clicked, short enough that a row which never stabilises
+    // costs one iteration rather than an eighth of the run.
+    private const int ClickTimeoutMs = 15000;
+
     private static readonly string[] SearchTerms = ["invoice", "contract", "report", "demo", "concert"];
+
+    /// <summary>What the index pane actually shows, for a failure message. Never throws.</summary>
+    /// <remarks>
+    /// Deliberately short-timeout and swallowing: this runs only when the action has ALREADY failed, and a
+    /// diagnostic that can itself hang would replace one 120 s mystery with two.
+    /// </remarks>
+    private static Task<string> DescribePaneAsync(IPage page) => DescribeAsync(page, "[data-pane='index']");
+
+    private static Task<string> DescribeFirstRowAsync(IPage page) => DescribeAsync(page, "[data-pane='list'] .wb-list-row");
+
+    private static async Task<string> DescribeAsync(IPage page, string selector)
+    {
+        try
+        {
+            var text = await page.Locator(selector).First.InnerTextAsync(new() { Timeout = 2000 }) ?? string.Empty;
+            var firstLine = text.Split('\n').FirstOrDefault(l => l.Trim().Length > 0)?.Trim() ?? "(empty)";
+            return firstLine.Length > 80 ? $"{firstLine[..80]}…" : firstLine;
+        }
+        catch (Exception e)
+        {
+            return $"(unreadable: {e.GetType().Name})";
+        }
+    }
 }
