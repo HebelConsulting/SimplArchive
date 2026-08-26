@@ -105,7 +105,13 @@ public class WorkbenchShellSizeTests
     // ask-and-retry it reports on lives in DetailEditor.
     // 3,353 → 3,360 for #704 (owner-confirmed 2026-08-23): PrepareUploadAsync takes the .eml header text
     // from JS and puts the shared-extracted Message-ID onto the duplicate probe. Seven lines, half comment.
-    private const int Ceiling = 3_360;
+    // 3,360 → 3,392 for #686 (ADR 0703, owner-confirmed 2026-08-26): the ring marks the open folder, and
+    // deselecting exists. The same interaction as every raise above — it was +49, and the trim took it to +32
+    // by moving the reasoning into the ADR and leaving only the code. What is charged here is shell
+    // coordination and nothing else: the shell owns the selection, so clearing it, and describing the folder
+    // when nothing is selected, are its own work. The gesture that reports it went to ContentsListPane, and
+    // the choice of node went to the desktop's OpenFolderMark.
+    private const int Ceiling = 3_392;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()

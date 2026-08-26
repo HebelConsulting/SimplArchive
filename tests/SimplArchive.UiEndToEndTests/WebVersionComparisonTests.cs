@@ -50,7 +50,11 @@ public class WebVersionComparisonTests
 
         await dialog.GetByRole(AriaRole.Button, new() { Name = "Compare", Exact = true }).ClickAsync();
 
-        // The diff shows the added line (with its "+" marker) and the removed line.
+        // The diff shows the added line (with its "+" marker) and the removed line. The result panel is also
+        // asserted BY ITS TEST ID, because the manual's capture waits on that id to know the comparison has
+        // finished — a hook nothing asserts is one that gets renamed, and the figure would go back to being a
+        // picture of the spinner.
+        await Expect(dialog.Locator("[data-testid='compare-diff']")).ToBeVisibleAsync();
         await Expect(dialog.GetByText("+ BANANA split")).ToBeVisibleAsync();
         await Expect(dialog.GetByText("- banana")).ToBeVisibleAsync();
         await Expect(hint).ToBeHiddenAsync();

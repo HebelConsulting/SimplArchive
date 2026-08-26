@@ -46,7 +46,8 @@
             }
             else if (_result is { } r)
             {
-                <div style="max-height:52vh; overflow:auto; border:1px solid var(--mud-palette-lines-default); border-radius:4px;">
+                <div data-testid="compare-diff"
+                     style="max-height:52vh; overflow:auto; border:1px solid var(--mud-palette-lines-default); border-radius:4px;">
                     <pre style="margin:0; font-size:12.5px; line-height:1.5; font-family:var(--mud-typography-monospace-family, monospace);">@foreach (var line in r.Lines)
 {<span style="display:block; padding:0 8px; white-space:pre-wrap; @LineStyle(line.Op)">@Prefix(line.Op)@line.Text</span>}</pre>
                 </div>

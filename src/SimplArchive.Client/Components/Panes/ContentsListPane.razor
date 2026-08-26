@@ -1,3 +1,4 @@
+@using Microsoft.AspNetCore.Components.Web
 @using SimplArchive.Client.Models
 @using SimplArchive.Client.Services
 
@@ -5,7 +6,15 @@
    column-header ordering; WHAT a row offers, and what the bulk bar does, are the shell's (ADR 0558). The rows
    themselves stay in the shell — `_folderContents` answers "what is currently listed" for the drag handler, the
    bulk operations and the post-rename refresh, so it is not this pane's state to hold. *@
-<div class="wb-pane wb-list" data-pane="list" data-tour="pane-list" data-tour-rows="@Rows.Count" @attributes="PaneDropAttributes()">
+@* Clicking the pane's EMPTY area clears the selection, so the detail pane falls back to the folder you are
+   standing in. Without it a selection could be made but never unmade: the only way back to the folder's own
+   details was to re-open the folder, and on desktop there was no gesture at all — the fallback existed in the
+   model and was unreachable in the UI. Rows stop propagation, so this fires only for the background. *@
+@* tabindex so the pane can receive Esc at all: a click on a row focuses it, which is where a user's Esc
+   goes. The detail pane has its own Esc (cancel edit, ADR 0550) and this does not compete with it — they are
+   different panes, and whichever holds focus is the one the key was meant for. *@
+<div class="wb-pane wb-list" data-pane="list" data-tour="pane-list" data-tour-rows="@Rows.Count" tabindex="0"
+     @onclick="() => BackgroundClick.InvokeAsync()" @onkeydown="OnKeyDownAsync" @attributes="PaneDropAttributes()">
     @BulkBar
 
     @if (ShowArchive)
@@ -38,7 +47,8 @@
         {
             var attrs = BrowseService.DropAttributes(node);
             <div class="wb-list-row wb-cols @(BulkIds.Contains(node.Id) || ReferenceEquals(node, SelectedNode) ? "wb-list-row-selected" : "")"
-                 @onclick="(e) => RowClick.InvokeAsync((node, e))" @ondblclick="() => RowDoubleClick.InvokeAsync(node)" @attributes="attrs">
+                 @onclick="(e) => RowClick.InvokeAsync((node, e))" @onclick:stopPropagation="true"
+                 @ondblclick="() => RowDoubleClick.InvokeAsync(node)" @attributes="attrs">
                 <span class="wb-ccell wb-cname" title="@node.DisplayName">
                     <MudIcon Icon="@BrowseService.TreeIcon(node)" Size="Size.Small"
                              Class="@(node.IsFolder ? (node.IsEmptyFolder ? "wb-glyph-empty" : "wb-glyph-folder") : "")" />
@@ -96,6 +106,17 @@
 
     /// <summary>A row double-click: drill into a folder, open a document.</summary>
     [Parameter] public EventCallback<BrowseNode> RowDoubleClick { get; set; }
+
+    /// <summary>Raised when the pane's empty area is clicked — "nothing is selected any more".</summary>
+    [Parameter] public EventCallback BackgroundClick { get; set; }
+
+    /// <summary>Raised on Esc in this pane. The SHELL decides what it means; the pane only reports the gesture.</summary>
+    [Parameter] public EventCallback EscapePressed { get; set; }
+
+    // No preventDefault: Escape has nothing worth suppressing, and suppressing keys wholesale in a pane is what
+    // broke text entry elsewhere in this workbench.
+    private Task OnKeyDownAsync(KeyboardEventArgs e)
+        => e.Key == "Escape" ? EscapePressed.InvokeAsync() : Task.CompletedTask;
 
     /// <summary>The context-menu items for one row — shell operations, so supplied rather than owned here.</summary>
     [Parameter] public RenderFragment<BrowseNode>? RowMenu { get; set; }

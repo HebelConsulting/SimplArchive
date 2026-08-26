@@ -451,13 +451,13 @@
             return;
         }
 
-        var images = new List<string>();
+        var images = new List<Dialogs.SortPagesDialog.PageThumbnail>();
         try
         {
             var module = await JS.InvokeAsync<IJSObjectReference>("import", "./preview.js");
             await using (module)
             {
-                images = (await module.InvokeAsync<string[]>("pageThumbnails", c.StashDownloadUrl ?? c.DownloadUrl, 260)).ToList();
+                images = (await module.InvokeAsync<Dialogs.SortPagesDialog.PageThumbnail[]>("pageThumbnails", c.StashDownloadUrl ?? c.DownloadUrl, 260)).ToList();
             }
         }
         catch (Exception)

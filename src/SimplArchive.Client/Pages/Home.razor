@@ -534,7 +534,8 @@
                     @* The tree pane (ADR 0558). Its nodes live in the injected TreeState, not in the
                        component — this whole tab is torn down on a tab switch. The menu items are the
                        SHELL's operations, so they are supplied here rather than owned by the pane. *@
-                    <TreePane @ref="_treePane" SelectedFolder="_selectedFolder" SelectedId="_selectedNode?.Id" FolderSelected="SelectFolderAsync">
+                    @* The ring marks the OPEN folder — where you are — not what the list has selected (ADR 0703). *@
+                    <TreePane @ref="_treePane" SelectedFolder="_selectedFolder" SelectedId="_selectedFolder?.Id" FolderSelected="SelectFolderAsync">
                         <NodeMenu Context="tn">
                             @* Gated on the rel like every other create here, which it was NOT until #634: it
                                showed everywhere, so it appeared on a notebook (which holds sections, not
@@ -620,7 +621,9 @@
                        owns is how a row is drawn and the ephemeral header ordering. *@
                     <ContentsListPane @ref="_listPane" Rows="_folderContents" SelectedFolder="_selectedFolder"
                                       FolderSortOrder="_folderSortOrder" BulkIds="_bulkIds" SelectedNode="_selectedNode"
-                                      RowClick="@(t => OnRowClickAsync(t.Node, t.Args))" RowDoubleClick="OnRowDoubleClickAsync" ShowArchive="@(_archiveDocument is not null)">
+                                      RowClick="@(t => OnRowClickAsync(t.Node, t.Args))" RowDoubleClick="OnRowDoubleClickAsync"
+                                      BackgroundClick="ClearListSelectionAsync" EscapePressed="ClearListSelectionAsync"
+                                      ShowArchive="@(_archiveDocument is not null)">
                         <BulkBar>
                             @* Bulk-action bar (ADR "Bulk actions on selected documents") — shows when ≥2 rows are Ctrl/Shift-selected. *@
                             @if (_bulkIds.Count >= 2 && _archiveDocument is null)
@@ -1396,8 +1399,9 @@
         }
     }
 
-    // Set when a reveal has just marked a node; acted on after the NEXT render, because the marked element
-    // does not exist until the class has been rendered (#692).
+    // Set when the OPEN folder changes; acted on after the NEXT render, because the marked element does not
+    // exist until the class has been rendered (#692). A folder opened from elsewhere — "Go to" from a search
+    // hit — can land below the fold, where a correct mark is indistinguishable from no mark at all.
     private bool _scrollTreeCurrent;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -1803,6 +1807,7 @@
         }
 
         _archiveDocument = null; // leave any archive-browsing view
+        var cameFrom = _selectedFolder?.Id;
         _selectedFolder = folder;
         _currentRepositoryId = folder?.RepositoryId ?? Guid.Empty;
         ClearDetail();
@@ -1812,10 +1817,41 @@
         // document gets, because a folder is a Document with a mask and index data of its own.
         if (folder is not null)
         {
-            _selectedNode = folder;
-            await LoadDetailForAsync(folder);
-            await LoadFolderSubscriptionAsync(folder);
-            await LoadCommentsAsync(folder);
+            // MOVING reveals, so the tree has a node to mark at all (ADR 0703) — a folder drilled into from the
+            // list is a child of an unexpanded node, where nothing is loaded to mark. Without a parent first: a
+            // node already in the tree is found directly, and naming a parent that is not one would expand an
+            // unrelated node in front of the user.
+            _scrollTreeCurrent = await Tree.RevealAsync(folder.Id) || await Tree.RevealAsync(folder.Id, cameFrom);
+            await ShowFolderDetailAsync(folder);
+        }
+    }
+
+    /// <summary>Describes the folder the user is standing in — the pane's subject with nothing selected.</summary>
+    /// <remarks>Shared with the deselect path: "no selection" and "just opened" are one situation (ADR 0703).</remarks>
+    private async Task ShowFolderDetailAsync(BrowseNode folder)
+    {
+        _selectedNode = folder;
+        await LoadDetailForAsync(folder);
+        await LoadFolderSubscriptionAsync(folder);
+        await LoadCommentsAsync(folder);
+    }
+
+    /// <summary>Nothing is selected any more: the detail pane falls back to the open folder (ADR 0703).</summary>
+    /// <remarks>Esc, or a click on the list's empty area. Before this a selection could be made but never unmade.</remarks>
+    private async Task ClearListSelectionAsync()
+    {
+        if (Detail.IsEditing)
+        {
+            // Esc while editing means "cancel the edit" (ADR 0550), not "change the subject".
+            return;
+        }
+
+        _bulkIds.Clear();
+        _bulkAnchorId = null;
+        ClearDetail();
+        if (_selectedFolder is { } folder)
+        {
+            await ShowFolderDetailAsync(folder);
         }
     }
 
@@ -1963,15 +1999,13 @@
     {
         ClearDetail();
         _selectedNode = folder;
-        // The tree follows the selection (#686): ancestors expanded, the node marked as current — but NOT
-        // opened. Revealing is not navigating, so the list keeps showing the folder the user is standing in.
-        // Best-effort by design: a folder whose ancestors the tree has never loaded simply is not revealed,
-        // and the highlight stays where it was rather than the selection being refused.
-        // Revealed AND brought into view (#692): expanding a deep chain can push the marked node below the
-        // fold, where a correct mark is indistinguishable from no mark at all.
-        _scrollTreeCurrent = await Tree.RevealAsync(folder.Id, _selectedFolder?.Id);
-        // The selected folder WINS over the open one: the pane follows the selection exactly as it does for a
-        // document row, so a child folder's metadata is editable without navigating into it (issue #408).
+        // No reveal, and no mark. Selecting a row in the list does not move you, so the tree has nothing to
+        // say about it — the ring stays on the folder you are standing in. Revealing on selection made the
+        // tree answer two questions at once and gave the ring a meaning that changed with the row type.
+        // (Reveal is still right where the user genuinely goes somewhere — "Go to" from a search hit.)
+        //
+        // The detail pane still follows the selection: a child folder's metadata is editable without
+        // navigating into it (issue #408).
         await LoadDetailForAsync(folder);
         await LoadFolderSubscriptionAsync(folder);
         await LoadCommentsAsync(folder);

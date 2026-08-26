@@ -6,7 +6,7 @@ using static Microsoft.Playwright.Assertions;
 
 namespace SimplArchive.UiEndToEndTests;
 
-// Revealing a folder brings it into view (#692).
+// Opening a folder brings it into view (#692, retriggered by ADR 0703 — moving reveals, selecting does not).
 //
 // This builds a DEEP chain on purpose. The issue's own reason for deferring the behaviour was that the demo
 // data is two or three levels down, so the expanded branch still fits and the bad case cannot be produced —
@@ -48,7 +48,10 @@ public class WebTreeRevealScrollTests
         var tree = page.Locator("[data-pane='tree']");
         var list = page.Locator("[data-pane='list']");
 
-        // Walk down to the deepest folder so the LIST holds the leaf, then select it — the reveal path.
+        // Walk down by OPENING each level. Moving is what reveals now (ADR 0703): the ring marks the folder
+        // being stood in, so by the last double-click it sits fifteen levels down, well below the fold. This
+        // test used to end by SELECTING the leaf and expecting the ring to follow it — the behaviour #696
+        // shipped and 0703 replaced. The scroll it guards is unchanged; only what triggers it moved.
         await page.GetByText("Demo Repository").First.ClickAsync();
         await Expect(list.Locator(".wb-list-row").First).ToBeVisibleAsync();
         for (var i = 0; i < Depth; i++)
@@ -57,11 +60,12 @@ public class WebTreeRevealScrollTests
             await page.WaitForTimeoutAsync(500);
         }
 
-        await list.Locator(".wb-list-row").Filter(new() { HasText = leafName }).First.ClickAsync();
+        // The deepest folder opened — and the leaf it contains proves we are standing IN it rather than beside it.
+        await Expect(list.Locator(".wb-list-row").Filter(new() { HasText = leafName })).ToHaveCountAsync(1);
 
         var marked = tree.Locator(".wb-tree-current");
         await Expect(marked).ToHaveCountAsync(1);
-        await Expect(marked).ToContainTextAsync(leafName);
+        await Expect(marked).ToContainTextAsync($"{prefix}-{Depth - 1:00}");
 
         // The point of the issue: marked is not the same as SEEN. Compare the node's box against the pane's,
         // because "visible" in Playwright's sense is true for an element scrolled out of its own container.

@@ -614,7 +614,10 @@ export async function pageThumbnails(url, width) {
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-        thumbnails.push(canvas.toDataURL('image/png'));
+        // The size travels with the picture: the sort dialog draws each page as a SHEET with the page's own
+        // proportions, and the browser cannot be asked for a data URL's natural size without waiting for it to
+        // load. Here it is already known — this is the viewport we just rendered.
+        thumbnails.push({ src: canvas.toDataURL('image/png'), width: viewport.width, height: viewport.height });
     }
 
     return thumbnails;

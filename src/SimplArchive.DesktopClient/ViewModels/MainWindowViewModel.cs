@@ -877,12 +877,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // The web has described a selected folder since #408; this is that behaviour promoted across (ADR 0511).
         if (value is { IsArchiveEntry: false, IsArchiveBack: false })
         {
-            // The tree marks the SELECTED subject too (#696), so the three panes agree about what they are
-            // describing. Started before the detail load and not awaited with it: marking is local work on
-            // nodes already in the tree, and making it wait behind a document's fields would leave the tree
-            // pointing at the previous subject for as long as that took.
-            await MarkInTreeAsync(value);
+            // The tree is NOT touched here any more. Selecting a row does not move you, so the tree has
+            // nothing to say about it — the mark stays on the folder you are standing in. Marking the selected
+            // row made the tree answer two questions at once, and gave the mark a meaning that changed with
+            // the row type: a folder row moved it, a document row cleared it. Supersedes #696's behaviour.
             await LoadDetailAsync(value);
+        }
+        else if (value is null)
+        {
+            // Nothing selected: the pane falls back to the folder the user is standing in, rather than going
+            // blank. "No selection" and "just opened this folder" are the same situation and must look it.
+            ClearDetail();
+            await ShowOpenFolderDetailAsync();
         }
         else
         {
@@ -891,38 +897,47 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    /// <summary>Marks a selected row's folder in the tree — expanding to it, WITHOUT opening it (#696).</summary>
+    /// <summary>Clears the contents-list selection — the detail pane falls back to the open folder.</summary>
     /// <remarks>
-    /// <para>
-    /// Revealing is not navigating. Setting <c>SelectedTreeNode</c> would load that folder's contents and take
-    /// the user out of the listing they are standing in, which is what <c>RevealFolderInTreeAsync</c> is for
-    /// and why it cannot serve here.
-    /// </para>
-    /// <para>
-    /// The selected row is always a child of the OPEN folder, so the search starts there rather than walking
-    /// the archive: the open folder's node is the one place its children can be. A row whose folder the tree
-    /// does not hold — reached by "Go to", or a document rather than a folder — simply clears the mark, which
-    /// is the honest answer: nothing in the tree is the subject.
-    /// </para>
+    /// Bound to Esc and to a click on the list's empty area. Before this a selection could be made but never
+    /// unmade: the pane could only move from one subject to another, so the folder's own details were
+    /// unreachable again without re-opening the folder.
     /// </remarks>
-    private async Task MarkInTreeAsync(NodeViewModel? row)
+    [RelayCommand]
+    private void ClearListSelection()
     {
-        foreach (var node in AllTreeNodes(Tree).Where(n => n.IsMarked))
+        if (IsEditing)
         {
-            node.IsMarked = false;
+            // Esc while editing means "cancel the edit" (ADR 0550), not "change the subject".
+            return;
         }
 
-        if (row is not { IsFolder: true } || SelectedTreeNode is not { } parent)
+        SelectedItem = null;
+    }
+
+    /// <summary>Describes the folder the user is standing in — what the detail pane shows with nothing selected.</summary>
+    private async Task ShowOpenFolderDetailAsync()
+    {
+        if (_currentFolderId is not { } id || _currentFolderLinks is not { } links)
         {
             return;
         }
 
-        // The parent has to be open for its children to exist in the tree at all — an unexpanded node has none
-        // loaded, so the target could not be found however hard we looked.
-        await parent.EnsureExpandedAsync();
-        if (parent.Children.FirstOrDefault(c => c.Id == row.Id) is { } marked)
+        await LoadDetailAsync(OpenFolderMark.AsRow(id, CurrentFolderName, links, Items.Count > 0));
+    }
+
+    /// <summary>Moves the tree's "you are here" mark to the open folder (OpenFolderMark).</summary>
+    private async Task MarkOpenFolderInTreeAsync()
+    {
+        // The selected node has to be expanded for its children to exist in the tree at all — an unexpanded
+        // node has none loaded, so a folder drilled into from the list could not be found however hard we look.
+        if (SelectedTreeNode is { } parent)
         {
-            marked.IsMarked = true;
+            await parent.EnsureExpandedAsync();
+        }
+
+        if (OpenFolderMark.Move(Tree, _currentFolderId) is { } marked)
+        {
             MarkedNodeChanged?.Invoke(marked);
         }
     }
@@ -934,17 +949,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// </remarks>
     public event Action<TreeNodeViewModel>? MarkedNodeChanged;
 
-    private static IEnumerable<TreeNodeViewModel> AllTreeNodes(IEnumerable<TreeNodeViewModel> nodes)
-    {
-        foreach (var node in nodes)
-        {
-            yield return node;
-            foreach (var child in AllTreeNodes(node.Children))
-            {
-                yield return child;
-            }
-        }
-    }
 
     // ---- Login ----------------------------------------------------------------------------------------
 
@@ -1315,6 +1319,20 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
             ApplyContentSort(); // keep the chosen column sort across folder navigation
             Status = string.Format(Strings.Get("StItems"), Items.Count);
+
+            // Where you are, said in the tree — after the load, because the folder is only definitely open once
+            // its contents are.
+            await MarkOpenFolderInTreeAsync();
+
+            // With nothing selected, the detail pane describes the folder you are standing in. Without this the
+            // pane simply went blank on every folder change, so a folder's own mask and index fields were
+            // reachable only by selecting its ROW from the parent — and not at all for a repository root, which
+            // has no parent to be listed in. The web has described a selected folder since #408; this is the
+            // same subject rule, for the open folder (ADR 0511 keeps the two clients one surface).
+            if (SelectedItem is null && !isReload)
+            {
+                await ShowOpenFolderDetailAsync();
+            }
         }
         catch (Exception e)
         {
@@ -6693,10 +6711,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
             sub = Items.First(n => n.IsFolder && !n.IsReference);
         }
 
-        // Populate the detail (as selecting a document does), then navigate to a DIFFERENT folder — must clear.
+        // Populate the detail (as selecting a document does), then navigate to a DIFFERENT folder: the previous
+        // subject must not survive the move. The sentinel being GONE, not the pane being empty — emptiness is
+        // what ADR 0703 replaced. See DesktopFolderPaneResetTests for why the positive half is asserted there.
         DetailTitle = "sentinel-A";
         await LoadFolderContentsAsync(sub.Id, sub.Links);
-        var clearedOnFolderChange = string.IsNullOrEmpty(DetailTitle);
+        var clearedOnFolderChange = DetailTitle != "sentinel-A";
 
         // A same-folder reload (e.g. after an in-place operation) must KEEP the current detail.
         DetailTitle = "sentinel-B";

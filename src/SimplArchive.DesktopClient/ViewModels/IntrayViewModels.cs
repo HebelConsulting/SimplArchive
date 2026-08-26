@@ -2,6 +2,7 @@ using System.Globalization;
 using SimplArchive.Localization;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
+using SimplArchive.Presentation;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -102,7 +103,32 @@ public sealed partial class IntrayPageViewModel(int originalNumber, Bitmap? imag
     /// writes the whole arrangement in one request, exactly like the order itself.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SheetWidth))]
+    [NotifyPropertyChangedFor(nameof(SheetHeight))]
+    [NotifyPropertyChangedFor(nameof(PictureWidth))]
+    [NotifyPropertyChangedFor(nameof(PictureHeight))]
     private int _rotationDegrees;
+
+    /// <summary>How wide to draw the sheet — the page's own proportions, turned with it.</summary>
+    /// <remarks>
+    /// The picture's pixel size IS the page's proportions: PDFium rasterises a page at a uniform scale, so a
+    /// portrait page comes back a portrait bitmap. A page that failed to render has no size, and
+    /// <see cref="PageTile"/> falls back to A4 rather than to a square.
+    /// </remarks>
+    public double SheetWidth => PageTile.Sheet(PixelWidth, PixelHeight, RotationDegrees).Width;
+
+    /// <inheritdoc cref="SheetWidth"/>
+    public double SheetHeight => PageTile.Sheet(PixelWidth, PixelHeight, RotationDegrees).Height;
+
+    /// <summary>The picture's box before the turn — the sheet with its axes put back.</summary>
+    public double PictureWidth => PageTile.Picture(PixelWidth, PixelHeight, RotationDegrees).Width;
+
+    /// <inheritdoc cref="PictureWidth"/>
+    public double PictureHeight => PageTile.Picture(PixelWidth, PixelHeight, RotationDegrees).Height;
+
+    private double PixelWidth => Image?.PixelSize.Width ?? 0;
+
+    private double PixelHeight => Image?.PixelSize.Height ?? 0;
 
     public void RotateLeft() => RotationDegrees = (RotationDegrees + 270) % 360;
 

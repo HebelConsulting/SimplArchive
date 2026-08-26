@@ -88,7 +88,12 @@ public class OverLimitFileCeilingTests
         // 6,996 → 7,002 for #704 (owner-confirmed 2026-08-23): the .eml gate + the shared Message-ID
         // extraction joining the duplicate probe. The extraction itself lives in Presentation; this is the
         // upload flow's six-line share until #517's per-tab burn-down reaches it.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 7_002,
+        // 7,002 → 7,020 for #686 (owner-confirmed 2026-08-26): the mark now follows the OPEN folder rather than
+        // the selected row, superseding #696's behaviour above. The owner chose extraction over a bare bump, so
+        // the reasoning, the tree walk and the folder-as-row construction went to OpenFolderMark — which turned
+        // a +67 change into +16. What is left cannot move: a bindable ClearListSelection command, the
+        // nothing-selected branch of the selection handler, and two call sites in the contents load.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 7_020,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
         // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —
@@ -142,7 +147,11 @@ public class OverLimitFileCeilingTests
         // leave the code-behind.
         // 1,194 → 1,199 for #703 (owner-confirmed 2026-08-23): wiring the duplicate-claim ConfirmDialog to
         // the view-model's delegate — dialogs live in code-behind by standing pattern.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_199,
+        // 1,199 → 1,216 for #686 (owner-confirmed 2026-08-26): deselecting. An Escape case in the list's
+        // EXISTING key handler, and a tunnel-phase pointer handler for a press that landed outside any row.
+        // Both are input plumbing for a control this file already handles; an attached behaviour would scatter
+        // one list's input across two places for the sake of the number.
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_216,
 
         // The four that crossed the line AFTER #466's list was written — proof the debt grows invisibly
         // without a guard, which is why they enter it the moment they were noticed (full sweep, 2026-08-13).
@@ -166,7 +175,9 @@ public class OverLimitFileCeilingTests
         // 1_976 -> 1_987 for #691 (owner-confirmed): the detail pane's workflow slot became an ItemsControl over
         // the advertised transitions where it was one Button. #519 will take this file down by extracting a
         // UserControl per tab; eleven lines of markup is not the moment to start that.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 1_993,
+        // 1,993 → 1,994 for #686 (owner-confirmed 2026-08-26): one attribute — the contents list's
+        // PointerPressed, which is how a click on its empty area deselects.
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 1_994,
 
         // Entered 2026-08-20 (#673, ADR 0655) — over the line since well before it was noticed, and never on
         // the list, so nothing was watching it. It enters ON THE WAY DOWN: the containment port took it 1,041 →

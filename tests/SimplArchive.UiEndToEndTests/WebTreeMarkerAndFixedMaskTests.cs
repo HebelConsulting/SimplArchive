@@ -6,7 +6,7 @@ namespace SimplArchive.UiEndToEndTests;
 // Two defects found by looking at the built thing, both invisible to an assertion that only asked whether
 // something EXISTED.
 //
-//  1. The selected-node ring (#686) marked a whole SUBTREE. The class is applied to exactly one node, so
+//  1. The open-folder ring (#686) marked a whole SUBTREE. The class is applied to exactly one node, so
 //     counting it proves nothing — the bug was a CSS combinator, and only the computed outline shows it.
 //  2. A document wearing a mask the catalogue does not carry (#671) rendered its mask as a bare GUID, because
 //     MudSelect falls back to its raw value when the value is absent from the items.
@@ -31,10 +31,12 @@ public class WebTreeMarkerAndFixedMaskTests
         await tree.Locator(".mud-treeview-item-content")
             .Filter(new() { HasText = SelfHostedAppFixture.AdminDisplayName }).First.ClickAsync();
 
-        // Marked by selecting the folder in the CONTENTS LIST, which is the feature (#686) and also leaves the
-        // tree node unfocused — clicking the node itself paints a focus outline that would satisfy the check
-        // below without the rule under test contributing anything.
-        await list.Locator(".wb-list-row").Filter(new() { HasText = "My Documents" }).First.ClickAsync();
+        // Marked by DRILLING INTO the folder from the contents list, which is the feature (#686 as revised: the
+        // ring follows the folder you are standing in, not the row you have selected). Double-click rather than
+        // click for two reasons — selecting a row deliberately no longer moves the ring at all, and drilling in
+        // leaves the tree node unfocused, where clicking the node itself would paint a focus outline that
+        // satisfies the check below without the rule under test contributing anything.
+        await list.Locator(".wb-list-row").Filter(new() { HasText = "My Documents" }).First.DblClickAsync();
 
         await Expect(tree.Locator(".wb-tree-current")).ToHaveCountAsync(1);
 

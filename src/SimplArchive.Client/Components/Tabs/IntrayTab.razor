@@ -958,13 +958,13 @@
         // Thumbnails come from pdf.js, which this client already loads for the preview — the same trade the
         // desktop makes with PDFium. A failure here costs the pictures, not the dialog: it falls back to
         // numbered tiles rather than refusing to open.
-        var images = new List<string>();
+        var images = new List<Dialogs.SortPagesDialog.PageThumbnail>();
         try
         {
             var module = await JS.InvokeAsync<IJSObjectReference>("import", "./preview.js");
             await using (module)
             {
-                images = (await module.InvokeAsync<string[]>("pageThumbnails", item.DownloadHref, 260)).ToList();
+                images = (await module.InvokeAsync<Dialogs.SortPagesDialog.PageThumbnail[]>("pageThumbnails", item.DownloadHref, 260)).ToList();
             }
         }
         catch (Exception)

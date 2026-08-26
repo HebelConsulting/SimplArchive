@@ -87,9 +87,9 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
     /// <remarks>
     /// <para>
     /// Revealing is NOT navigating (#686): this changes what the tree SHOWS, never what the list is listing.
-    /// The two are separate facts — a folder selected in the contents list is marked in the tree while the list
-    /// keeps showing its parent's contents, which is what lets a user read a folder's metadata without losing
-    /// the listing they are standing in.
+    /// It is called when the user MOVES — so that the folder they are now standing in exists in the loaded tree
+    /// and can be marked. Selecting a row no longer reveals anything: the tree answers "where am I", and
+    /// selecting is not moving.
     /// </para>
     /// <para>
     /// Lives here rather than in the shell because the tree's SHAPE is this service's — it owns the roots, the

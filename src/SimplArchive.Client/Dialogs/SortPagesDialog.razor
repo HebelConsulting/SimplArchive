@@ -1,3 +1,4 @@
+@using SimplArchive.Presentation
 @inject IDialogService DialogService
 
 @* Sort the pages of a staged intray item (#487, ADR 0575) — the web half of the desktop's SortPagesDialog,
@@ -28,27 +29,40 @@
                          data-page="@tile.OriginalNumber"
                          class="@(selected ? "wb-page-tile wb-page-tile-on" : "wb-page-tile")"
                          style="width:130px; cursor:pointer; border:2px solid @(selected ? "var(--mud-palette-primary)" : "transparent"); border-radius:4px; padding:4px;">
-                        @* The bin sits ON the page it removes rather than in the toolbar: a delete that acts on
-                           "the selection" is one the user has to double-check before pressing (#487). *@
-                        <div style="position:relative; height:150px; background:#fff; border:1px solid var(--mud-palette-lines-default); display:flex; align-items:center; justify-content:center; overflow:hidden;">
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
-                                           Style="position:absolute; top:2px; right:2px; background:rgba(255,255,255,0.85);"
-                                           title="@Strings.Get("IntrayPageRemove")"
-                                           OnClick="@(() => Remove(tile))" data-remove="@tile.OriginalNumber" />
-                            @if (tile.Image is { Length: > 0 })
-                            {
-                                @* The turn shows immediately, or the user cannot tell whether the click
-                                   registered (#522). A quarter-turned portrait must re-fit the box, so the
-                                   constraints swap axes with the turn. *@
-                                <img src="@tile.Image" alt="@tile.OriginalNumber"
-                                     style="@(tile.RotationDegrees is 90 or 270
-                                              ? $"max-width:146px; max-height:126px; transform:rotate({tile.RotationDegrees}deg);"
-                                              : $"max-width:100%; max-height:100%; transform:rotate({tile.RotationDegrees}deg);")" />
-                            }
-                            else
-                            {
-                                <MudText Typo="Typo.h6" Class="mud-text-secondary">@tile.OriginalNumber</MudText>
-                            }
+                        @* A fixed cell so the rows stay even, with the sheet centred inside it at whatever size
+                           the page actually is. *@
+                        <div style="height:150px; display:flex; align-items:center; justify-content:center;">
+                            @* The sheet is the PAGE: it takes the page's own proportions and turns with it, so an
+                               A4 page looks like A4 and a quarter-turned page looks landscape. It used to be a
+                               fixed 130x150 box, which is neither — so a turned page was drawn as a landscape
+                               picture inside a portrait sheet. *@
+                            <div data-sheet="@tile.OriginalNumber"
+                                 style="position:relative; overflow:hidden; background:#fff; border:1px solid var(--mud-palette-lines-default);
+                                        width:@(Px(tile.Sheet.Width)); height:@(Px(tile.Sheet.Height));">
+                                @* The bin sits ON the page it removes rather than in the toolbar: a delete that
+                                   acts on "the selection" is one the user has to double-check before pressing
+                                   (#487). Outside the turn, so it stays upright while the page turns under it. *@
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                               Style="position:absolute; top:2px; right:2px; z-index:1; background:rgba(255,255,255,0.85);"
+                                               title="@Strings.Get("IntrayPageRemove")"
+                                               OnClick="@(() => Remove(tile))" data-remove="@tile.OriginalNumber" />
+                                @if (tile.Image is { Length: > 0 })
+                                {
+                                    @* The turn shows immediately, or the user cannot tell whether the click
+                                       registered (#522). Centred by its own transform, because a rotated
+                                       element's LAYOUT box does not turn with it — only its painting does. *@
+                                    <img src="@tile.Image" alt="@tile.OriginalNumber"
+                                         style="position:absolute; left:50%; top:50%;
+                                                width:@(Px(tile.Picture.Width)); height:@(Px(tile.Picture.Height));
+                                                transform:translate(-50%,-50%) rotate(@(tile.RotationDegrees)deg);" />
+                                }
+                                else
+                                {
+                                    <div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center;">
+                                        <MudText Typo="Typo.h6" Class="mud-text-secondary">@tile.OriginalNumber</MudText>
+                                    </div>
+                                }
+                            </div>
                         </div>
                         @* The turn controls sit UNDER the page they turn, one per direction (#522) — the same
                            per-tile scope as the bin. *@
@@ -93,20 +107,36 @@
 
     /// <summary>One data-URL per page, in page order. Empty entries render as a bare page number.</summary>
     [Parameter]
-    public IReadOnlyList<string> PageImages { get; set; } = [];
+    public IReadOnlyList<PageThumbnail> PageImages { get; set; } = [];
+
+    /// <summary>One rendered page: its picture, and the size it was rendered at.</summary>
+    /// <remarks>
+    /// The size comes along because the tile draws each page as a SHEET with the page's own proportions
+    /// (SimplArchive.Presentation.PageTile), and a data URL's natural size is not knowable until the browser
+    /// has loaded it — while pdf.js knew it at the moment it rendered.
+    /// </remarks>
+    public sealed record PageThumbnail(string Src, double Width, double Height);
 
     /// <summary>How many pages the item has, when no images could be produced.</summary>
     [Parameter]
     public int PageCount { get; set; }
 
-    private sealed class Page(int originalNumber, string? image)
+    private sealed class Page(int originalNumber, PageThumbnail? thumbnail)
     {
         public int OriginalNumber { get; } = originalNumber;
 
-        public string? Image { get; } = image;
+        public string? Image { get; } = thumbnail?.Src;
 
         /// <summary>Clockwise degrees the user turned this page by (#522) — preview state until Apply.</summary>
         public int RotationDegrees { get; set; }
+
+        /// <summary>The sheet to draw — the page's own proportions, turned with it.</summary>
+        public (double Width, double Height) Sheet =>
+            PageTile.Sheet(thumbnail?.Width ?? 0, thumbnail?.Height ?? 0, RotationDegrees);
+
+        /// <summary>The picture's box before the turn — the sheet with its axes put back.</summary>
+        public (double Width, double Height) Picture =>
+            PageTile.Picture(thumbnail?.Width ?? 0, thumbnail?.Height ?? 0, RotationDegrees);
     }
 
     /// <summary>What Apply hands back: the whole arrangement, written by ONE request after the dialog closes.</summary>
@@ -128,6 +158,10 @@
 
         _selected = _pages.FirstOrDefault();
     }
+
+    // Invariant, because CSS does not read "106,06px" — and a German or Italian browser is exactly where that
+    // would have been found, by the layout silently collapsing.
+    private static string Px(double value) => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{value:0.##}px");
 
     private void RotateLeft(Page tile) => tile.RotationDegrees = (tile.RotationDegrees + 270) % 360;
 

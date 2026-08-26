@@ -19,7 +19,7 @@ public class WebPaneSelectionTests
     public WebPaneSelectionTests(SelfHostedAppFixture app) => _app = app;
 
     [Fact]
-    public async Task Selecting_a_folder_reveals_it_in_the_tree_without_opening_it()
+    public async Task Selecting_a_folder_describes_it_without_opening_it_or_moving_the_mark()
     {
         var page = await Ui.LoginAsync(_app);
         var tree = page.Locator("[data-pane='tree']");
@@ -28,29 +28,26 @@ public class WebPaneSelectionTests
         await page.GetByText("Demo Repository").First.ClickAsync();
         await Expect(list.Locator(".wb-list-row").First).ToBeVisibleAsync();
 
-        // The repository is what is marked to begin with — clicking it in the tree both opened and selected it.
-        // Establishing that first is what makes the assertion below about the mark MOVING rather than merely
-        // existing, which a tree that marked everything would also satisfy.
-        await Expect(tree.Locator(".wb-tree-current")).ToContainTextAsync("Demo Repository");
+        // The repository is the OPEN folder, so it is what the ring marks — clicking it in the tree both opened
+        // and selected it. Establishing that first is what makes the assertion below about the mark STAYING
+        // rather than about it never having been anywhere.
+        var marked = tree.Locator(".wb-tree-current");
+        await Expect(marked).ToContainTextAsync("Demo Repository");
 
         await list.Locator(".wb-list-row").Filter(new() { HasText = "Contracts" }).First.ClickAsync();
 
-        // Revealed: the branch above it opened, and the node itself is marked as current. Visibility is asserted
-        // separately from the class, because the first attempt at this set the class on a node inside a branch
-        // that stayed shut — present in the DOM, and invisible.
-        var marked = tree.Locator(".wb-tree-current");
+        // The mark does not follow the selection (ADR 0703, superseding #696). The list already shows which of
+        // its own rows is selected; a second marker in the tree was a state competing with a state, and it
+        // changed meaning with the row type.
         await Expect(marked).ToHaveCountAsync(1);
-        await Expect(marked).ToContainTextAsync("Contracts");
-        // Exactly one, and it moved OFF the repository — two marked nodes would be two claims about which
-        // subject the panes describe.
-        await Expect(marked).Not.ToHaveTextAsync(new System.Text.RegularExpressions.Regex("^Demo Repository"));
-        await Expect(tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = "Contracts" }).First).ToBeVisibleAsync();
+        await Expect(marked).ToContainTextAsync("Demo Repository");
 
         // NOT opened: the list still shows the folder the user is standing in. This is the half that would be
-        // lost by making selection navigate, and it is why reveal and open are separate acts.
+        // lost by making selection navigate, and it is why selecting and opening are separate acts.
         await Expect(list.Locator(".wb-list-row").Filter(new() { HasText = "Departments" })).ToHaveCountAsync(1);
 
-        // ...and the detail pane describes the SELECTED folder, not the open one.
+        // ...and the detail pane describes the SELECTED folder. Selecting still has a visible effect — the ring
+        // standing still must not be the panes failing to follow.
         await Expect(page.Locator(".wb-index")).ToContainTextAsync("Contracts");
     }
 

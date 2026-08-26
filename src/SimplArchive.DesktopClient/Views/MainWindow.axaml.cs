@@ -827,8 +827,29 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 await DeleteSelectedAsync(vm);
                 break;
+            case Key.Escape:
+                // Deselect: the detail pane falls back to the folder being stood in. The view-model refuses
+                // while editing, where Esc already means "cancel the edit" (ADR 0550).
+                e.Handled = true;
+                vm.ClearListSelectionCommand.Execute(null);
+                break;
         }
     });
+
+    // A click on the list's EMPTY area deselects. Without it a selection could be made and never unmade — the
+    // pane could only move from one subject to another. Tunnel phase so it is seen before the ListBox turns the
+    // press into a selection, and only when the press landed outside any row.
+    private void OnContentsBackgroundPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel vm
+            || e.Source is not Visual source
+            || source.FindAncestorOfType<ListBoxItem>() is not null)
+        {
+            return;
+        }
+
+        vm.ClearListSelectionCommand.Execute(null);
+    }
 
     // Enter in the search box runs the search.
     private void OnSearchKeyDown(object? sender, KeyEventArgs e)

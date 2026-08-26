@@ -48,8 +48,22 @@ public class WebIntraySortRotationTests
         // Turn page 4 a quarter right: the thumbnail must show the turn immediately.
         var tile = dialog.Locator("[data-page='4']");
         await Expect(tile).ToBeVisibleAsync();
+
+        // The SHEET starts portrait, because that is what the page is.
+        var sheet = tile.Locator("[data-sheet='4']");
+        var upright = await sheet.BoundingBoxAsync();
+        Assert.NotNull(upright);
+        Assert.True(upright!.Height > upright.Width, $"the untouched sheet is {upright.Width}x{upright.Height}, not portrait");
+
         await dialog.Locator("[data-rotate-right='4']").ClickAsync();
         await Expect(tile.Locator("img")).ToHaveAttributeAsync("style", new System.Text.RegularExpressions.Regex("rotate\\(90deg\\)"));
+
+        // …and the sheet turns WITH it. It used to be a fixed 130x150 box, so a quarter-turned page was drawn
+        // as a landscape picture inside a portrait sheet — reported against the manual's figure for exactly
+        // this feature, which is a picture of the feature contradicting itself.
+        var turned = await sheet.BoundingBoxAsync();
+        Assert.NotNull(turned);
+        Assert.True(turned!.Width > turned.Height, $"the turned sheet is {turned.Width}x{turned.Height}, still portrait");
 
         // And a left turn from there lands back at 0 — the state machine, driven the way a user drives it.
         await dialog.Locator("[data-rotate-left='4']").ClickAsync();

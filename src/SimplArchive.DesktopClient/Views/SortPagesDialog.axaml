@@ -22,25 +22,38 @@
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:IntrayPageViewModel">
                             <StackPanel Width="130" Margin="4" Spacing="4">
-                                <Panel>
-                                    <Border Background="White" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" Height="150">
-                                        <!-- LayoutTransform, not RenderTransform: the rotated page must be
-                                             RE-FIT into the tile (a quarter-turned portrait becomes landscape),
-                                             and a render transform rotates the already-laid-out pixels so the
-                                             corners clip (#522). -->
+                                <!-- A fixed cell so the rows stay even, with the sheet centred inside it at
+                                     whatever size the page actually is. -->
+                                <Panel Height="150">
+                                    <!-- The sheet is the PAGE: it takes the page's own proportions and turns
+                                         with it, so an A4 page looks like A4 and a quarter-turned page looks
+                                         landscape. It used to be a fixed 130x150 frame, which is neither — so
+                                         the one tile demonstrating the rotate feature showed a landscape page
+                                         inside a portrait sheet. -->
+                                    <Border Background="White" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1"
+                                            Width="{Binding SheetWidth}" Height="{Binding SheetHeight}"
+                                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <!-- LayoutTransform, not RenderTransform: the turned page must be RE-FIT
+                                             into the sheet, and a render transform turns the already-laid-out
+                                             pixels so the corners clip (#522). -->
                                         <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
                                             <LayoutTransformControl.LayoutTransform>
                                                 <RotateTransform Angle="{Binding RotationDegrees}" />
                                             </LayoutTransformControl.LayoutTransform>
-                                            <Image Source="{Binding Image}" Stretch="Uniform" MaxWidth="126" MaxHeight="146" />
+                                            <Image Source="{Binding Image}" Stretch="Uniform"
+                                                   MaxWidth="{Binding PictureWidth}" MaxHeight="{Binding PictureHeight}" />
                                         </LayoutTransformControl>
                                     </Border>
                                     <!-- The bin sits ON the page it removes, top-right, rather than in the
                                          toolbar: a delete that acts on "the selection" is one the user has to
-                                         double-check before pressing (#487). -->
-                                    <Button Click="OnRemovePage" Tag="{Binding}" ToolTip.Tip="{loc:Tr IntrayPageRemove}"
-                                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,4,0"
-                                            Padding="4,2"><i:Icon Value="mdi-delete-outline" FontSize="12" /></Button>
+                                         double-check before pressing (#487). Outside the sheet's transform, so
+                                         it stays upright while the page turns under it. -->
+                                    <Panel Width="{Binding SheetWidth}" Height="{Binding SheetHeight}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <Button Click="OnRemovePage" Tag="{Binding}" ToolTip.Tip="{loc:Tr IntrayPageRemove}"
+                                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,4,0"
+                                                Padding="4,2"><i:Icon Value="mdi-delete-outline" FontSize="12" /></Button>
+                                    </Panel>
                                 </Panel>
                                 <!-- The turn controls sit UNDER the page they turn, one per direction (#522) —
                                      the same per-tile scope as the bin, and the thumbnail turns immediately, or

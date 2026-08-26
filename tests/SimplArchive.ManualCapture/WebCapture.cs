@@ -353,7 +353,13 @@ public static partial class WebCapture
             var dialog = page.Locator(".mud-dialog");
             await dialog.First.WaitForAsync(new() { Timeout = 10000 });
             await dialog.GetByRole(AriaRole.Button, new() { Name = "Compare", Exact = true }).ClickAsync();
-            await page.WaitForTimeoutAsync(1800); // let the diff render
+
+            // Wait for the DIFF, not for a duration. A fixed pause is a guess about how long the comparison
+            // takes, and on the machine that regenerates the manual the guess was wrong: the published figure
+            // for the versioning chapter was a dialog with a spinner in it, which is a picture of the feature
+            // not having happened yet. The comparison is the only thing this figure exists to show, so its
+            // absence must fail the step rather than be captured.
+            await dialog.Locator("[data-testid='compare-diff']").WaitForAsync(new() { Timeout = 30000 });
             await ShotAsync(page, outDir, "version-compare");
         }
         catch (Exception ex)

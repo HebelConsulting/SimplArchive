@@ -301,7 +301,8 @@
                         <ListBox x:Name="ContentsList" AutomationProperties.AutomationId="tour:pane-list" DragDrop.AllowDrop="True" SelectionMode="Multiple"
                                  ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}" DoubleTapped="OnListDoubleTapped"
                                  SelectionChanged="OnContentsSelectionChanged"
-                                 ContextRequested="OnContentsContextRequested" KeyDown="OnListKeyDown">
+                                 ContextRequested="OnContentsContextRequested" KeyDown="OnListKeyDown"
+                                 PointerPressed="OnContentsBackgroundPressed">
                             <ListBox.ContextMenu>
                                 <ContextMenu>
                                     <!-- InputGesture is set in code-behind, not here: the chord is ⌘ on macOS and
