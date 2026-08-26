@@ -55,11 +55,7 @@ public class AuthorizationController : ControllerBase
         if (result.Succeeded && request.HasPromptValue(OpenIddictConstants.PromptValues.Login))
         {
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            var stripped = QueryHelpers.ParseQuery(Request.QueryString.Value ?? string.Empty);
-            stripped.Remove("prompt");
-            var forcedReturnUrl = Request.PathBase + Request.Path + QueryString.Create(
-                stripped.SelectMany(kv => kv.Value.Select(v => new KeyValuePair<string, string?>(kv.Key, v))));
-            return LocalRedirect($"/Account/Login?ReturnUrl={Uri.EscapeDataString(forcedReturnUrl)}");
+            return LocalRedirect($"/Account/Login?ReturnUrl={Uri.EscapeDataString(ReturnUrlWithoutPrompt())}");
         }
 
         if (!result.Succeeded || result.Principal is null)
@@ -81,9 +77,15 @@ public class AuthorizationController : ControllerBase
                     OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
             }
 
-            var returnUrl = Request.PathBase + Request.Path + Request.QueryString;
-
-            return LocalRedirect($"/Account/Login?ReturnUrl={Uri.EscapeDataString(returnUrl)}");
+            // prompt=login is STRIPPED here too, and that is the fix for a double login (#754's neighbour).
+            //
+            // The branch above strips it when a cookie already exists. This one runs when there is NONE — a
+            // fresh browser, or one that has just been signed out — and it used to carry the whole query
+            // through, prompt included. So the user authenticated, the re-authorize arrived with a valid
+            // cookie AND prompt=login, took the branch above, signed that brand-new cookie straight out and
+            // asked for credentials a second time. Sending them to the login page IS the re-authentication
+            // prompt=login asks for; once they are on it, the demand has been met.
+            return LocalRedirect($"/Account/Login?ReturnUrl={Uri.EscapeDataString(ReturnUrlWithoutPrompt())}");
         }
 
         var userId = Guid.Parse(result.Principal.FindFirst(OpenIddictConstants.Claims.Subject)!.Value);
@@ -125,5 +127,20 @@ public class AuthorizationController : ControllerBase
         });
 
         return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+    }
+
+    /// <summary>This authorize request's URL with <c>prompt</c> removed, for a redirect to the login page.</summary>
+    /// <remarks>
+    /// Both redirects to <c>/Account/Login</c> use it, and they must: sending the user to the login page IS the
+    /// re-authentication that <c>prompt=login</c> demands, so carrying the parameter past that point asks for it
+    /// a second time. Leaving it on ONE of the two paths produced exactly that — a user who signed in, and was
+    /// immediately shown the sign-in form again, on any browser that did not already hold a cookie.
+    /// </remarks>
+    private string ReturnUrlWithoutPrompt()
+    {
+        var query = QueryHelpers.ParseQuery(Request.QueryString.Value ?? string.Empty);
+        query.Remove("prompt");
+        return Request.PathBase + Request.Path + QueryString.Create(
+            query.SelectMany(kv => kv.Value.Select(v => new KeyValuePair<string, string?>(kv.Key, v))));
     }
 }

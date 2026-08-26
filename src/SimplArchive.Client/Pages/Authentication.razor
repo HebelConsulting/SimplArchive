@@ -1,9 +1,36 @@
 @page "/authentication/{action}"
 @using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
 
-<RemoteAuthenticatorView Action="@Action" />
+<RemoteAuthenticatorView Action="@Action" OnLogOutSucceeded="EndServerSessionAsync" />
 
 @code {
     [Parameter]
     public string? Action { get; set; }
+
+    // Logging out has TWO halves, and each one alone leaves the user signed in.
+    //
+    // The SERVER half: the interim cookie that /connect/authorize authenticates against lives in the browser,
+    // not here. Until it is gone the SPA's silent sign-in restores the session on the very next page load —
+    // "You are logged out" over a workbench that comes straight back — and the cookie also authorizes
+    // /Account/Passkeys, so the next person at that browser could enrol a credential on the account.
+    //
+    // The CLIENT half: the cached oidc user. Measured, not assumed — after logout, sessionStorage still held
+    // `oidc.user:<authority>:blazor-client`, so the app restored itself from that token (good for up to its
+    // hour) without needing the cookie at all. Navigating away in this callback pre-empts the library's own
+    // clearing, so the clearing is done here explicitly and BEFORE the navigation, rather than hoped for.
+    //
+    // Prefix-scoped, not a blanket sessionStorage.clear(): the auth cache is what logout owns; other panes'
+    // state is not logout's to discard.
+    private async Task EndServerSessionAsync()
+    {
+        await JS.InvokeVoidAsync("eval", "Object.keys(sessionStorage).filter(k => k.startsWith('oidc.')).forEach(k => sessionStorage.removeItem(k))");
+
+        // forceLoad: a SERVER endpoint, not a route in this app.
+        // Back to the LOGGED-OUT page, not the app root: the confirmation this app already shows is part of
+        // logging out, and returning past it would replace a clear "you are logged out" with a silent bounce to
+        // a login prompt. Local URL, so the endpoint's LocalRedirect accepts it.
+        Navigation.NavigateTo("/Account/Logout?returnUrl=/authentication/logged-out", forceLoad: true);
+    }
 }
