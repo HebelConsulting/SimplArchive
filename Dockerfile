@@ -71,7 +71,18 @@ WORKDIR /app
 #   the app logs a harmless "Error loading shared library libgssapi_krb5.so.2" on every boot even though we use
 #   password auth. Adding it silences that noise.
 # Non-root 'app' user/group already exist in this base image; no addgroup/adduser needed.
-RUN apk add --no-cache icu-libs curl krb5-libs
+#
+# `apk upgrade` FIRST, and it is not belt-and-braces: the base image is rebuilt on its own schedule, so between
+# rebuilds it carries whatever its packages were at that moment. When an advisory lands against one of them —
+# CVE-2026-14456 in libcrypto3/libssl3, HIGH, fixed in 3.5.8-r0 while the base still had 3.5.7-r0 — the image
+# scan fails for a package we never chose and cannot bump, and it blocks EVERY pull request until the base
+# happens to be refreshed. Upgrading at build time takes the patched package as soon as Alpine publishes it,
+# which is both the real fix and one that keeps working for the next advisory of this kind rather than needing
+# a fresh .trivyignore entry each time.
+#
+# The build and clients stages are deliberately left alone: they are SDK images that never ship, and only this
+# final stage is published and scanned.
+RUN apk upgrade --no-cache && apk add --no-cache icu-libs curl krb5-libs
 
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false \
     ASPNETCORE_HTTP_PORTS=8080
