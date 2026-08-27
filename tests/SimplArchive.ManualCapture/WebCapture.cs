@@ -16,8 +16,21 @@ public static partial class WebCapture
     private static readonly int ViewportWidth = 1680;
     private static readonly int ViewportHeight = 900;
 
+    /// <summary>Figures whose capture was skipped — reported at the end, and non-empty means a STALE figure.</summary>
+    /// <remarks>
+    /// Each capture swallows its own failure so one bad step does not cost the other thirty shots. The cost of
+    /// that is invisible staleness: a skipped capture leaves the PREVIOUS PNG in place, so the manual keeps
+    /// shipping a picture of an older app with nothing failing anywhere. That is how the personal-space figure
+    /// went on being published after the space stopped being called "Personal" (ADR 0671) — the capture timed
+    /// out looking for a node by its old name, printed one line among hundreds, and the stale figure shipped.
+    ///
+    /// So the swallow stays and the SILENCE goes: every skip is collected and named together at the end.
+    /// </remarks>
+    private static readonly List<string> Skipped = [];
+
     public static async Task RunAsync(string outDir)
     {
+        Skipped.Clear();
         // Freeze the app's demo clock so the audit / tasks / my-work screens are byte-stable run-to-run (ADR 0510).
         // Matches the desktop capture's fixed clock (MainWindowViewModel.ScreenshotClock) so both halves of the
         // manual read the same date.
@@ -80,6 +93,14 @@ public static partial class WebCapture
         await CaptureWebDavAsync(page, outDir);
         await CaptureExternalLinksAsync(context, page, outDir);
         await CaptureMobileTiersAsync(context, app.BaseUrl, outDir);
+
+        // Named together, at the end, where they cannot be lost among the hundreds of lines above. A skipped
+        // figure is a STALE figure — the previous PNG is still on disk and still ships.
+        if (Skipped.Count > 0)
+        {
+            Console.WriteLine($"[web] {Skipped.Count} FIGURE(S) NOT REGENERATED — the manual will ship the "
+                + $"PREVIOUS picture for each: {string.Join(", ", Skipped)}");
+        }
     }
 
     /// <summary>The phone and tablet tiers (#684) — captured from the real app, in a TOUCH context.</summary>
@@ -212,8 +233,13 @@ public static partial class WebCapture
         try
         {
             await page.Locator(".wb-tab[aria-label='Repositories']").First.ClickAsync();
+            // The personal space is named after its OWNER (ADR 0671), not the literal "Personal" it used to be.
+            // Filtering on the old name matched nothing, so this capture timed out and was SKIPPED — and because
+            // a skip only prints a line and leaves the previous PNG in place, the manual kept shipping a figure
+            // of an older app with nothing failing. A screenshot that silently does not regenerate is the same
+            // class of defect as a test that silently does not assert.
             var personal = page.Locator("[data-pane='tree'] .mud-treeview-item-content")
-                .Filter(new() { HasText = "Personal" }).First;
+                .Filter(new() { HasText = SelfHostedApp.AdminDisplayName }).First;
             await personal.WaitForAsync(new() { Timeout = 10000 });
 
             // Expanding is the arrow, not the node — clicking the node SELECTS it (and a launcher click would
@@ -227,6 +253,7 @@ public static partial class WebCapture
         catch (Exception e)
         {
             // A missing figure is better than a failed regeneration: the script also refreshes 30 other shots.
+            Skipped.Add("personal-launchers");
             Console.WriteLine($"[web] personal-launchers skipped: {e.Message}");
         }
     }
@@ -265,6 +292,7 @@ public static partial class WebCapture
         catch (Exception e)
         {
             // A missing figure is better than a failed regeneration: the script also refreshes 30 other shots.
+            Skipped.Add("webdav");
             Console.WriteLine($"[web] webdav skipped: {e.Message.Split('\n')[0]}");
         }
     }
@@ -309,6 +337,7 @@ public static partial class WebCapture
         }
         catch (Exception ex)
         {
+            Skipped.Add("versions");
             Console.WriteLine($"[web] versions skipped: {ex.Message.Split('\n')[0]}");
         }
         finally
@@ -338,6 +367,7 @@ public static partial class WebCapture
         }
         catch (Exception ex)
         {
+            Skipped.Add("chat");
             Console.WriteLine($"[web] chat skipped: {ex.Message.Split('\n')[0]}");
         }
     }
@@ -364,6 +394,7 @@ public static partial class WebCapture
         }
         catch (Exception ex)
         {
+            Skipped.Add("version-compare");
             Console.WriteLine($"[web] version-compare skipped: {ex.Message}");
         }
         finally
@@ -592,6 +623,7 @@ public static partial class WebCapture
         }
         catch (Exception ex)
         {
+            Skipped.Add($"enrich:{name}");
             Console.WriteLine($"[web] enrich '{name}' skipped: {ex.Message}");
         }
     }

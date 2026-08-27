@@ -145,12 +145,12 @@ belongs to something already filed, and how many you have. They all end in the s
   [*Drag onto empty space* in the contents list], [Same as above for the folder you are already in.],
   [*Drag onto a document*], [The file is a newer copy of that document — it is added as a *version*, not as a
    second document, and the history is kept.],
-  [*Drag onto Personal ▸ Intray*#idx("Intray")], [It is not ready to file, or you do not yet know where it belongs. It waits in
+  [*Drag onto your own space ▸ Intray*#idx("Intray")], [It is not ready to file, or you do not yet know where it belongs. It waits in
    the Intray until you classify and file it.],
-  [*Drag a document onto Personal ▸ Intray*], [You want to start from an existing document as a *template*. A
+  [*Drag a document onto your own space ▸ Intray*], [You want to start from an existing document as a *template*. A
    copy lands in your Intray carrying that document's document type and index data, so you edit what differs.
    Nothing is created in the archive until you file it.],
-  [*Drag onto Personal ▸ Check-out*#idx("Check-out")], [You checked a document out, edited it on your computer, and are bringing
+  [*Drag onto your own space ▸ Check-out*#idx("Check-out")], [You checked a document out, edited it on your computer, and are bringing
    it back. The file must still carry the document's name — that is what says which document it belongs to.],
   [*WebDAV*], [You would rather work in Finder, Explorer or Files. Mount the archive as a drive and copy
    documents in like any other folder.],
@@ -159,7 +159,7 @@ belongs to something already filed, and how many you have. They all end in the s
 )
 
 #shot("screenshots/web-personal-launchers.png",
-  [The *Personal* space expanded: *Intray* and *Check-out* sit above your own folders. Drop files on *Intray* to
+  [Your own space expanded — it carries *your name* at the top of the tree: *Intray* and *Check-out* sit above your own folders. Drop files on *Intray* to
    stage them, or drop an edited working copy on *Check-out* to bring it back — and drag a document onto *Intray*
    to start new work from it as a template.])
 
