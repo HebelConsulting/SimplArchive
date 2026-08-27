@@ -273,34 +273,34 @@
                              the header + the ListBox live in one horizontal ScrollViewer with a fixed total width
                              (ContentsTotalWidth), so they stay aligned when scrolled and a scrollbar appears once the
                              columns don't fit the pane. Each header cell carries a drag Thumb at its right edge. -->
-                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" SizeChanged="OnContentsPaneSizeChanged">
                         <DockPanel Width="{Binding ContentsTotalWidth}">
                         <!-- Sortable column header (ADR "List-row columns and sorting") — click a header to sort the loaded rows. -->
                         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="6,2,0,0" Background="{DynamicResource WbChrome}">
                             <Grid Width="{Binding ColNameWidth}">
                                 <Button Content="{Binding NameHeader}" Command="{Binding SortContentsCommand}" CommandParameter="name" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="4,1" Background="Transparent" BorderThickness="0" FontSize="11" FontWeight="SemiBold" />
-                                <Thumb Tag="0" DragDelta="OnColumnResize" DragCompleted="OnColumnResizeDone" Width="6" HorizontalAlignment="Right" Background="Transparent" Cursor="SizeWestEast" />
+                                <Thumb Classes="colgrip" Tag="0" DragDelta="OnColumnResize" DragCompleted="OnColumnResizeDone" Width="6" HorizontalAlignment="Right" Background="Transparent" Cursor="SizeWestEast" />
                             </Grid>
                             <Grid Width="{Binding ColTypeWidth}">
                                 <Button Content="{Binding TypeHeader}" Command="{Binding SortContentsCommand}" CommandParameter="type" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="4,1" Background="Transparent" BorderThickness="0" FontSize="11" FontWeight="SemiBold" />
-                                <Thumb Tag="1" DragDelta="OnColumnResize" DragCompleted="OnColumnResizeDone" Width="6" HorizontalAlignment="Right" Background="Transparent" Cursor="SizeWestEast" />
+                                <Thumb Classes="colgrip" Tag="1" DragDelta="OnColumnResize" DragCompleted="OnColumnResizeDone" Width="6" HorizontalAlignment="Right" Background="Transparent" Cursor="SizeWestEast" />
                             </Grid>
                             <Grid Width="{Binding ColDateWidth}">
                                 <Button Content="{Binding DateHeader}" Command="{Binding SortContentsCommand}" CommandParameter="date" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="4,1" Background="Transparent" BorderThickness="0" FontSize="11" FontWeight="SemiBold" />
-                                <Thumb Tag="2" DragDelta="OnColumnResize" DragCompleted="OnColumnResizeDone" Width="6" HorizontalAlignment="Right" Background="Transparent" Cursor="SizeWestEast" />
+                                <Thumb Classes="colgrip" Tag="2" DragDelta="OnColumnResize" DragCompleted="OnColumnResizeDone" Width="6" HorizontalAlignment="Right" Background="Transparent" Cursor="SizeWestEast" />
                             </Grid>
                             <Grid Width="{Binding ColSizeWidth}">
                                 <Button Content="{Binding SizeHeader}" Command="{Binding SortContentsCommand}" CommandParameter="size" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="4,1" Background="Transparent" BorderThickness="0" FontSize="11" FontWeight="SemiBold" />
-                                <Thumb Tag="3" DragDelta="OnColumnResize" DragCompleted="OnColumnResizeDone" Width="6" HorizontalAlignment="Right" Background="Transparent" Cursor="SizeWestEast" />
+                                <Thumb Classes="colgrip" Tag="3" DragDelta="OnColumnResize" DragCompleted="OnColumnResizeDone" Width="6" HorizontalAlignment="Right" Background="Transparent" Cursor="SizeWestEast" />
                             </Grid>
                             <Grid Width="{Binding ColTagsWidth}">
                                 <Button Content="{Binding TagsHeader}" Command="{Binding SortContentsCommand}" CommandParameter="tags" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="4,1" Background="Transparent" BorderThickness="0" FontSize="11" FontWeight="SemiBold" />
-                                <Thumb Tag="4" DragDelta="OnColumnResize" DragCompleted="OnColumnResizeDone" Width="6" HorizontalAlignment="Right" Background="Transparent" Cursor="SizeWestEast" />
+                                <Thumb Classes="colgrip" Tag="4" DragDelta="OnColumnResize" DragCompleted="OnColumnResizeDone" Width="6" HorizontalAlignment="Right" Background="Transparent" Cursor="SizeWestEast" />
                             </Grid>
                             <!-- Owner: who filed the current version, falling back to who created the document (#768). -->
                             <Grid Width="{Binding ColOwnerWidth}">
                                 <Button Content="{Binding OwnerHeader}" Command="{Binding SortContentsCommand}" CommandParameter="owner" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="4,1" Background="Transparent" BorderThickness="0" FontSize="11" FontWeight="SemiBold" />
-                                <Thumb Tag="5" DragDelta="OnColumnResize" DragCompleted="OnColumnResizeDone" Width="6" HorizontalAlignment="Right" Background="Transparent" Cursor="SizeWestEast" />
+                                <Thumb Classes="colgrip" Tag="5" DragDelta="OnColumnResize" DragCompleted="OnColumnResizeDone" Width="6" HorizontalAlignment="Right" Background="Transparent" Cursor="SizeWestEast" />
                             </Grid>
                         </StackPanel>
                         <ListBox x:Name="ContentsList" AutomationProperties.AutomationId="tour:pane-list" DragDrop.AllowDrop="True" SelectionMode="Multiple"

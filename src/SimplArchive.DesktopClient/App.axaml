@@ -76,5 +76,20 @@
         <Style Selector="i|Icon.wbMutedGlyph">
             <Setter Property="Foreground" Value="{DynamicResource WbMuted}" />
         </Style>
+        <!-- The contents-header column grips (#786). A bare <Thumb/> has NO ControlTemplate, so it renders no
+             geometry — and Avalonia hit-tests geometry, not handlers. Measured before the fix: the Thumb was in
+             the tree and arranged at 6x16, and InputHitTest at its centre returned the ScrollContentPresenter,
+             so DragDelta could never fire and the columns had never once been resizable.
+
+             A Border with Background="Transparent" is the fix: transparent is NOT null in Avalonia — it paints
+             nothing and still takes the pointer. Defined once here rather than as six inline templates, and
+             carried by a class so the grips stay one thing to change. -->
+        <Style Selector="Thumb.colgrip">
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="Transparent" />
+                </ControlTemplate>
+            </Setter>
+        </Style>
     </Application.Styles>
 </Application>

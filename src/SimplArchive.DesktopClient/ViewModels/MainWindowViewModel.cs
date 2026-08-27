@@ -146,38 +146,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // Default pane proportions (star units) — the reset target and the load-time fallback.
     private const double DefaultTree = 1.4, DefaultList = 2, DefaultChat = 2;
 
-    // Repositories contents-list column widths in pixels (ADR "Desktop list-pane resizable columns"): the
-    // header and every row bind their cell widths to these, a horizontal scrollbar appears once the total
-    // exceeds the pane, and the header's drag handles call ResizeColumn. Persisted in the layout file.
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(ContentsTotalWidth))] private double _colNameWidth = DefaultColName;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(ContentsTotalWidth))] private double _colTypeWidth = DefaultColType;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(ContentsTotalWidth))] private double _colDateWidth = DefaultColDate;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(ContentsTotalWidth))] private double _colSizeWidth = DefaultColSize;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(ContentsTotalWidth))] private double _colTagsWidth = DefaultColTags;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(ContentsTotalWidth))] private double _colOwnerWidth = DefaultColOwner;
-
-    private const double DefaultColName = 260, DefaultColType = 130, DefaultColDate = 96, DefaultColSize = 72, DefaultColTags = 160, DefaultColOwner = 140;
-    private const double MinColumnWidth = 48;
-
-    // The total pixel width of all five columns — the fixed width of the scrollable header+rows region, so a
-    // horizontal scrollbar kicks in once the columns don't fit the pane.
-    public double ContentsTotalWidth => ColNameWidth + ColTypeWidth + ColDateWidth + ColSizeWidth + ColTagsWidth + ColOwnerWidth;
-
-    // Resize column `index` (0 Name … 4 Tags) by a pixel delta (from the header's drag handle), clamped to a
-    // sensible minimum. Persisting is deferred to the drag's completion / window close.
-    public void ResizeColumn(int index, double delta)
-    {
-        switch (index)
-        {
-            case 0: ColNameWidth = Math.Max(MinColumnWidth, ColNameWidth + delta); break;
-            case 1: ColTypeWidth = Math.Max(MinColumnWidth, ColTypeWidth + delta); break;
-            case 2: ColDateWidth = Math.Max(MinColumnWidth, ColDateWidth + delta); break;
-            case 3: ColSizeWidth = Math.Max(MinColumnWidth, ColSizeWidth + delta); break;
-            case 4: ColTagsWidth = Math.Max(MinColumnWidth, ColTagsWidth + delta); break;
-            case 5: ColOwnerWidth = Math.Max(MinColumnWidth, ColOwnerWidth + delta); break;
-        }
-    }
-
     // Caret glyph for each gutter's collapse toggle (points the way it collapses; flips when collapsed).
     public string TreeCaret => TreeCollapsed ? "mdi-chevron-right" : "mdi-chevron-left";
     public string ListCaret => ListCollapsed ? "mdi-chevron-right" : "mdi-chevron-left";
@@ -251,7 +219,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         IntrayMaskHeight = _intrayMaskSaved;
         IntrayPreviewHeight = _intrayPreviewSaved;
 
-        ColNameWidth = DefaultColName;
+        StoredColNameWidth = DefaultColName;
         ColTypeWidth = DefaultColType;
         ColDateWidth = DefaultColDate;
         ColSizeWidth = DefaultColSize;
@@ -297,7 +265,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         IntrayMaskHeight = IntrayMaskCollapsed ? new GridLength(0) : _intrayMaskSaved;
         IntrayPreviewHeight = IntrayPreviewCollapsed ? new GridLength(0) : _intrayPreviewSaved;
 
-        ColNameWidth = ParseDouble(settings.ColName, DefaultColName);
+        StoredColNameWidth = ParseDouble(settings.ColName, DefaultColName);
         ColTypeWidth = ParseDouble(settings.ColType, DefaultColType);
         ColDateWidth = ParseDouble(settings.ColDate, DefaultColDate);
         ColSizeWidth = ParseDouble(settings.ColSize, DefaultColSize);
@@ -329,7 +297,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
             IntrayLocalCollapsed = IntrayLocalCollapsed,
             IntrayMaskCollapsed = IntrayMaskCollapsed,
             IntrayPreviewCollapsed = IntrayPreviewCollapsed,
-            ColName = ColNameWidth.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            // The STORED width, not the drawn one: persisting the computed value would bake one pane width
+            // into the layout file and make the next session open with a Name column sized for the last
+            // session's window (#786).
+            ColName = StoredColNameWidth.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ColType = ColTypeWidth.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ColDate = ColDateWidth.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ColSize = ColSizeWidth.ToString(System.Globalization.CultureInfo.InvariantCulture),

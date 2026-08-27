@@ -710,19 +710,6 @@ public partial class MainWindow : Window
         }
     }
 
-    // Dragging a contents-list header column's right-edge Thumb resizes that column (ADR "Desktop list-pane
-    // resizable columns"); the Thumb's Tag carries the 0-based column index. Persisted on drag completion.
-    private void OnColumnResize(object? sender, VectorEventArgs e)
-    {
-        if (DataContext is MainWindowViewModel vm && sender is Control { Tag: { } tag }
-            && int.TryParse(tag.ToString(), out var index))
-        {
-            vm.ResizeColumn(index, e.Vector.X);
-        }
-    }
-
-    private void OnColumnResizeDone(object? sender, VectorEventArgs e) => (DataContext as MainWindowViewModel)?.SaveLayout();
-
     private void OnBulkMove(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.CreateMoveTargetPickerViewModel() is not { } picker)

@@ -1,6 +1,9 @@
 using System.Buffers.Binary;
 using System.Text;
 using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using SimplArchive.Theming;
 
@@ -33,6 +36,14 @@ public static class IconWriter
 {
     private const int Source = 1024;
 
+    // Apple's macOS app-icon grid (#787): on a 1024 canvas the rounded tile is 824 square and centred, with the
+    // remaining ~100px of padding carrying the drop shadow. Every other platform is full-bleed, so this applies
+    // to the .icns ALONE — see RenderMacOs.
+    private const double MacTile = 824;
+
+    // IconArt draws a 224px corner on a 1024 tile; the shadow must follow the same squircle, not a plain box.
+    private const double TileRadiusRatio = 224.0 / 1024.0;
+
     // Windows: the sizes Explorer picks between, from the tray to the 256px "extra large" view.
     private static readonly int[] IcoSizes = [16, 32, 48, 64, 96, 128, 256];
 
@@ -45,9 +56,21 @@ public static class IconWriter
 
     // macOS: (chunk type, pixel size). The duplicated sizes are not a mistake — ic11..ic14 are the Retina
     // variants of 16/32/128/256pt, and a .icns without them is upscaled by the system on a Retina display.
+    // ICNS chunk types, each a PNG at the size given.
+    //
+    // `icp4` (16) and `icp5` (32) are DELIBERATELY ABSENT (#787), and this is not a size the icon lacks — it is
+    // one it used to carry corrupted. Those two type codes predate PNG-in-ICNS and overlap the legacy raw-pixel
+    // formats, so readers interpret their payload as raw ARGB: our perfectly valid PNG bytes were drawn as
+    // PIXEL data, which is why the 16px and 32px representations rendered as random colour noise with alpha 1.0
+    // at every pixel while every larger size was fine. Verified by dumping both, and by the control that proves
+    // the reader innocent — Apple's own Notes 16px dumps as clean colours with graded alpha.
+    //
+    // Apple's own icons do not use them either: Notes.icns carries ic13/ic11/ic04/ic07 and no icp*. macOS is
+    // content to downscale, so 16px now comes from `ic11` (32px) — an exact 2:1 reduction, which is the
+    // cleanest scale there is. Carrying every size was never the requirement; carrying correct ones is.
     private static readonly (string Type, int Size)[] IcnsChunks =
     [
-        ("icp4", 16), ("icp5", 32), ("ic11", 32), ("ic12", 64),
+        ("ic11", 32), ("ic12", 64),
         ("ic07", 128), ("ic13", 256), ("ic08", 256), ("ic14", 512), ("ic09", 512), ("ic10", 1024),
     ];
 
@@ -98,8 +121,14 @@ public static class IconWriter
         File.WriteAllBytes(ico, BuildIco(master));
         written.Add(ico);
 
+        // The macOS icon is composed on Apple's grid, from its OWN master (#787) — everything else above and
+        // below stays full-bleed, which is the convention on every other platform.
         var icns = Path.Combine(assetsDirectory, "SimplArchive.icns");
-        File.WriteAllBytes(icns, BuildIcns(master));
+        using (var macMaster = RenderMacOs())
+        {
+            File.WriteAllBytes(icns, BuildIcns(macMaster));
+        }
+
         written.Add(icns);
 
         // The browsers' icon, from the same art (ADR 0578). It lives in the WEB client's wwwroot rather than
@@ -178,6 +207,70 @@ public static class IconWriter
         // a window capture would bake an opaque background behind them.
         using var target = new RenderTargetBitmap(new PixelSize(Source, Source), new Vector(96, 96));
         target.Render(visual);
+
+        using var stream = new MemoryStream();
+        target.Save(stream);
+        stream.Position = 0;
+        return new Bitmap(stream);
+    }
+
+    /// <summary>The macOS master: the same art, composed onto Apple's icon grid.</summary>
+    /// <remarks>
+    /// <para>
+    /// macOS is the only platform that expects an app icon to be INSET rather than full-bleed. Measured against
+    /// real icons on a Mac, the tile occupies ~80% of the canvas — Apple's 824/1024 — with the shadow hanging
+    /// into the padding below (Notes and Reminders: 214/256 art, inset T24 B18; Affinity Designer: 850/1024,
+    /// inset T97 B77). Ours filled the canvas edge to edge, so in /Applications it drew at roughly 1.5x the AREA
+    /// of every neighbour, square to the bounds and flat where the others have depth. That is what "distorted"
+    /// meant: not a wrong aspect ratio, a broken grid rhythm.
+    /// </para>
+    /// <para>
+    /// <b>Why this is a second render rather than a change to <see cref="IconArt.BuildTile"/>.</b> One master
+    /// feeds five artefacts — the .icns, the Windows .ico, the in-app window icon, cabinet-1024.png and the WEB
+    /// client's favicons. Padding the shared art would shrink the favicon in every browser tab and the taskbar
+    /// icon with it, to satisfy a convention only macOS has. The inset belongs here and nowhere else.
+    /// </para>
+    /// <para>
+    /// A <see cref="Viewbox"/> rather than a smaller tile: <c>BuildTile</c> lays its drawers out in absolute
+    /// pixels against a 1024 canvas, so shrinking the frame alone would leave them proportionally oversized.
+    /// Scaling the finished art keeps every ratio — corner radius included — exactly as designed.
+    /// </para>
+    /// </remarks>
+    private static Bitmap RenderMacOs(AccentTokens? accent = null)
+    {
+        var scaled = new Viewbox
+        {
+            Width = MacTile,
+            Height = MacTile,
+            Child = IconArt.BuildTile(accent),
+        };
+
+        // The shadow is a Border BOX-SHADOW, not a DropShadowEffect. An Effect is applied by the COMPOSITION
+        // renderer and never reaches `RenderTargetBitmap`, which draws immediately — measured twice, on the tile
+        // and on the canvas: alpha went 1.000 at y=920 to 0.000 at y=930, a hard cutoff, where a real icon reads
+        // 1.000 → 0.192 → 0.078 → 0 across the same span. Nothing failed and nothing warned; the shadow simply
+        // was not there. BoxShadow draws in the immediate path, so it survives the render-to-bitmap.
+        //
+        // Offset DOWN, which is why real icons measure more padding above than below (Affinity: T97 B77), and
+        // sized to stay inside the 100px margin (16 offset + 32 blur) so nothing clips at the canvas edge. The
+        // corner radius is the tile's own ratio, so the shadow follows the squircle rather than a plain box.
+        var shadowed = new Border
+        {
+            Width = MacTile,
+            Height = MacTile,
+            CornerRadius = new CornerRadius(MacTile * TileRadiusRatio),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            BoxShadow = BoxShadows.Parse("0 16 32 0 #47000000"),
+            Child = scaled,
+        };
+
+        var canvas = new Panel { Width = Source, Height = Source, Children = { shadowed } };
+        canvas.Measure(new Size(Source, Source));
+        canvas.Arrange(new Rect(0, 0, Source, Source));
+
+        using var target = new RenderTargetBitmap(new PixelSize(Source, Source), new Vector(96, 96));
+        target.Render(canvas);
 
         using var stream = new MemoryStream();
         target.Save(stream);

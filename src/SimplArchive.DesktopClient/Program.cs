@@ -116,26 +116,58 @@ internal static class Program
             return;
         }
 
-        // VM-level check that the contents-list columns resize (clamped to a minimum), the total width sums,
-        // the widths round-trip through the persisted layout, and Reset restores defaults: `--columns-test`
-        // (ADR "Desktop list-pane resizable columns"). The header Thumb drag itself needs a real desktop.
+        // End-to-end check that a header edge DRAG resizes a column — the half `--columns-test` below cannot
+        // reach, and the half that was broken (#786). Lives in ColumnDragCheck: this file is on the 1000-line
+        // standing-debt list and may only get smaller.
+        if (args.Contains("--column-drag-test"))
+        {
+            Views.ColumnDragCheck.Run();
+            return;
+        }
+
+        // VM-level check of the contents-list column model: `--columns-test` (ADR "Desktop list-pane
+        // resizable columns", reworked for #786). Covers the arithmetic only — the header edge DRAG that
+        // reaches it is `--column-drag-test` above, and the two are separate because the arithmetic passed for
+        // months while the drag had never once worked.
         if (args.Contains("--columns-test"))
         {
             var vm = new MainWindowViewModel();
-            var total0 = vm.ContentsTotalWidth;
-            vm.ResizeColumn(0, 40);            // widen Name
-            vm.ResizeColumn(2, -1000);         // shrink Date past the minimum → clamps
-            var widened = vm.ColNameWidth == 300;
-            var clamped = vm.ColDateWidth == 48;
-            var totalOk = Math.Abs(vm.ContentsTotalWidth - (total0 + 40 - (96 - 48))) < 0.001;
-            vm.SaveLayout();
 
+            // A fixed column resizes itself, and clamps rather than collapsing.
+            vm.ResizeColumn(2, -1000);
+            var clamped = vm.ColDateWidth == 48;
+
+            // Name is the FLEXIBLE column: given a pane, it is exactly the remainder, and the table fills the
+            // pane rather than being a fixed block inside it.
+            vm.ContentsPaneWidth = 1000;
+            var others = vm.ContentsTotalWidth - vm.ColNameWidth;
+            var fills = Math.Abs(vm.ContentsTotalWidth - 1000) < 0.001 && Math.Abs(vm.ColNameWidth - (1000 - others)) < 0.001;
+
+            // …and below the threshold Name holds its DEFAULT width rather than the generic 48px minimum, so the
+            // region overflows the pane and the horizontal scrollbar comes back. This is the half that keeps
+            // "fills the pane" from meaning "unreadable when narrow": the other five columns total more than a
+            // default pane is wide, so a 48px floor here collapsed Name to a stub at every ordinary width.
+            vm.ContentsPaneWidth = 100;
+            var scrolls = vm.ColNameWidth == 260 && vm.ContentsTotalWidth > 100;
+
+            // Dragging NAME's edge moves width to its right neighbour: Name grows by the drag, Type gives it up,
+            // and every edge further right stays put.
+            vm.ContentsPaneWidth = 1000;
+            var nameBefore = vm.ColNameWidth;
+            var typeBefore = vm.ColTypeWidth;
+            vm.ResizeColumn(0, 40);
+            var neighbour = Math.Abs(vm.ColTypeWidth - (typeBefore - 40)) < 0.001
+                && Math.Abs(vm.ColNameWidth - (nameBefore + 40)) < 0.001
+                && Math.Abs(vm.ContentsTotalWidth - 1000) < 0.001;   // the total is unchanged: width MOVED
+
+            vm.SaveLayout();
             var reloaded = new MainWindowViewModel();
-            var persisted = reloaded.ColNameWidth == 300 && reloaded.ColDateWidth == 48;
+            var persisted = reloaded.ColTypeWidth == typeBefore - 40 && reloaded.ColDateWidth == 48;
             reloaded.ResetLayoutCommand.Execute(null); // leave defaults behind
-            var reset = reloaded.ColNameWidth == 260 && reloaded.ColDateWidth == 96;
-            Console.WriteLine($"widened={widened} clamped={clamped} totalOk={totalOk} persisted={persisted} reset={reset}");
-            Console.WriteLine(widened && clamped && totalOk && persisted && reset ? "OK" : "FAILED");
+            var reset = reloaded.ColTypeWidth == 130 && reloaded.ColDateWidth == 96;
+
+            Console.WriteLine($"clamped={clamped} fills={fills} scrolls={scrolls} neighbour={neighbour} persisted={persisted} reset={reset}");
+            Console.WriteLine(clamped && fills && scrolls && neighbour && persisted && reset ? "OK" : "FAILED");
             return;
         }
 
