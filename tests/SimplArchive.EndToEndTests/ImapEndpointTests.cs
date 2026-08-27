@@ -257,7 +257,18 @@ public class ImapEndpointTests
 
         // A second identical Subject auto-suffixes instead of clashing. Both messages carry the SAME
         // envelope subject — the archive names differ — so the APPENDUIDs are what tells them apart.
-        var appendedSecond = await repo.AppendAsync(message);
+        //
+        // It must be a DIFFERENT message, not the same object appended twice. MimeKit auto-generates one
+        // Message-ID per MimeMessage, so re-appending the same object sends the same Message-ID — which the
+        // .eml correlation (#780) reads as a re-filing and answers with a new VERSION rather than a sibling.
+        // That is the decided behaviour, so exercising the NAME-clash path needs two genuinely distinct mails
+        // that happen to share a subject, which is also the only shape a user ever actually produces.
+        var other = new MimeKit.MimeMessage { Subject = message.Subject, MessageId = $"other-{Guid.NewGuid():N}@example.test" };
+        other.From.Add(new MimeKit.MailboxAddress("Carol", "carol@example.test"));
+        other.To.Add(new MimeKit.MailboxAddress("Bob", "bob@example.test"));
+        other.Body = new MimeKit.TextPart("plain") { Text = "a different mail that happens to share a subject" };
+
+        var appendedSecond = await repo.AppendAsync(other);
         children = (await TestJson.Get(owner, $"/api/documents/{repoId}/children")).GetProperty("children").EnumerateArray().ToList();
         Assert.Contains(children, c => c.GetProperty("name").GetString() == "Filed from the mail client (2)");
 

@@ -135,6 +135,15 @@ internal static class ImapMailboxes
             items.Add("RECENT 0");
         }
 
+        // RFC 8474 §5 adds MAILBOXID to STATUS — the way a client learns a mailbox's identity WITHOUT selecting
+        // it, which is what makes "did this folder get renamed, or replaced?" answerable during a LIST sweep.
+        // Deliberately absent from the default set above: RFC 3501 §6.3.10 says STATUS echoes what was asked
+        // for, and a client that omits the list predates OBJECTID and would not know what to do with it.
+        if (requested.Contains("MAILBOXID"))
+        {
+            items.Add($"MAILBOXID ({ImapObjectId.ForMailbox(mailbox.FolderId)})");
+        }
+
         await session.WriteLineAsync(
             $"* STATUS {ImapProtocol.QuoteMailbox(tokens[0])} ({string.Join(' ', items)})");
         await session.OkAsync(tag, "STATUS");
@@ -165,6 +174,10 @@ internal static class ImapMailboxes
         await session.WriteLineAsync("* FLAGS (\\Seen \\Deleted)");
         await session.WriteLineAsync($"* OK [UIDVALIDITY {mailbox.UidValidity}] UIDs valid");
         await session.WriteLineAsync($"* OK [UIDNEXT {mailbox.NextUid}] predicted next UID");
+        // RFC 8474 §5: the mailbox's stable identity, which UIDVALIDITY is NOT — that is a cache-invalidation
+        // counter. Renaming a folder in the workbench keeps this id, so a client re-labels rather than
+        // re-downloading (#780).
+        await session.WriteLineAsync($"* OK [MAILBOXID ({ImapObjectId.ForMailbox(mailbox.FolderId)})] mailbox identity");
         // \Seen persists per user + document (#562 slice 2) — the one storable flag; everything else stays
         // read-only until the write slice.
         // \Seen persists (slice 2). \Deleted is session-transient by design (#562) — strictly it is not

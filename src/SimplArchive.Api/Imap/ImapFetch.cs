@@ -166,6 +166,20 @@ internal static class ImapFetch
                 case "ENVELOPE":
                     parts.Add($"ENVELOPE {Envelope(await MimeAsync())}");
                     break;
+                case "EMAILID":
+                    // RFC 8474 §4 (#780). The DOCUMENT's id, so the same document reached through its home
+                    // folder and through a folder it is referenced into answers identically — which the RFC
+                    // requires of a COPY, and our COPY files a reference.
+                    parts.Add($"EMAILID ({ImapObjectId.ForMessage(message.DocumentId)})");
+                    break;
+                case "THREADID":
+                    // RFC 8474 §6: "if the server ... is unable to calculate relationships between messages, it
+                    // MUST return NIL". We have no threading model — the eMail mask's "Conversation ID" field
+                    // exists but only the interop import fills it, and a synthetic message (a PDF served as mail)
+                    // has no thread at all. NIL is both the conforming answer and the true one; inventing a
+                    // per-message thread would be worse than saying nothing, because a client would BELIEVE it.
+                    parts.Add("THREADID NIL");
+                    break;
                 case "BODY":
                 case "BODYSTRUCTURE":
                     parts.Add($"{upper} {BodyStructure((await MimeAsync()).Body, extended: upper == "BODYSTRUCTURE")}");

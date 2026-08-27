@@ -58,9 +58,14 @@ internal static class ImapWrites
         // Name = the Subject (the workbench's display name for an email), sanitized of the characters the
         // path-addressed surfaces refuse, sibling-conflict auto-suffixed (#562).
         string subject;
+        string? messageId;
         try
         {
-            subject = MimeMessage.Load(new MemoryStream(bytes)).Subject ?? "";
+            var parsed = MimeMessage.Load(new MemoryStream(bytes));
+            subject = parsed.Subject ?? string.Empty;
+            // The SAME normalizer that stores the Entry ID at finalize (#704). A second one here is exactly how
+            // the stored form and the queried form drift and the correlation below silently never fires.
+            messageId = Infrastructure.Storage.EmailMetadataExtractor.NormalizeMessageId(parsed.MessageId);
         }
         catch (Exception)
         {
@@ -84,31 +89,65 @@ internal static class ImapWrites
             return;
         }
 
-        var siblings = await db.Documents.Where(d => d.ParentId == folder.Id).Select(d => d.Name).ToListAsync();
-        var name = stem;
-        for (var i = 2; siblings.Contains(name, StringComparer.OrdinalIgnoreCase); i++)
-        {
-            name = $"{stem} ({i})";
-        }
+        // An .eml ALREADY IN THIS FOLDER carrying the same Message-ID: the append is a re-filing of one message,
+        // so it becomes a new VERSION of that document rather than a sibling (#780). Same shape as the Notes
+        // correlation above, and for the same reason — a client that re-uploads (a resync, a second drag, a
+        // rule that fires twice) otherwise multiplies documents silently.
+        //
+        // Deliberately scoped to THIS FOLDER. Tenant-wide correlation was considered and rejected: an APPEND
+        // into folder B would attach a version to a document living in folder A, where the caller may hold
+        // different rights and will not see the result — surprising, and impossible to phrase in a refusal.
+        // Cross-folder sameness is the duplicates probe's job (#704), and filing one mail into two folders is
+        // legitimately two documents (IMAP COPY is how a client asks for one).
+        //
+        // Identity is the eMail mask's "Entry ID" field, matched by NAME — the same key the seeder, the
+        // finalizer and DuplicatesController use.
+        var existingId = messageId is null
+            ? null
+            : await db.FieldValues
+                .Where(v => v.Value == messageId)
+                .Join(db.FieldDefinitions, v => v.FieldDefinitionId, f => f.Id, (v, f) => new { v.DocumentId, f.Name, f.MaskVersionId })
+                .Where(x => x.Name == "Entry ID")
+                .Join(db.MaskVersions, x => x.MaskVersionId, mv => mv.Id, (x, mv) => new { x.DocumentId, mv.MaskId })
+                .Where(x => x.MaskId == SimplArchive.Domain.Masks.WellKnownMaskIds.EMail)
+                .Where(x => db.Documents.Any(d => d.Id == x.DocumentId && d.ParentId == folder.Id))
+                .Select(x => (Guid?)x.DocumentId)
+                .FirstOrDefaultAsync();
 
-        // The WebDAV PUT's exact create shape (ADR 0530 keys; Pending version -> shared finalizer).
         var now = DateTimeOffset.UtcNow;
         var versionId = Guid.NewGuid();
-        var storageFolderId = Guid.NewGuid();
-        var objectKey = ObjectKeyBuilder.Build(tenantId, now, storageFolderId, versionId, ".eml");
-        await storage.PutObjectAsync(objectKey, new MemoryStream(bytes), "message/rfc822");
+        Document document;
+        if (existingId is { } matchedId)
+        {
+            // The version lands under the document's OWN storage folder, so a version's artifacts stay nested
+            // with its siblings rather than starting a second tree for the same document.
+            document = await db.Documents.FirstAsync(d => d.Id == matchedId);
+        }
+        else
+        {
+            var siblings = await db.Documents.Where(d => d.ParentId == folder.Id).Select(d => d.Name).ToListAsync();
+            var name = stem;
+            for (var i = 2; siblings.Contains(name, StringComparer.OrdinalIgnoreCase); i++)
+            {
+                name = $"{stem} ({i})";
+            }
 
-        var document = new Document { Id = Guid.NewGuid(), TenantId = tenantId, ParentId = folder.Id, Name = name, CreatedByUserId = userId, CreatedAt = now, StorageFolderId = storageFolderId };
-        db.Documents.Add(document);
-        try
-        {
-            await db.SaveChangesAsync();
+            // The WebDAV PUT's exact create shape (ADR 0530 keys; Pending version -> shared finalizer).
+            document = new Document { Id = Guid.NewGuid(), TenantId = tenantId, ParentId = folder.Id, Name = name, CreatedByUserId = userId, CreatedAt = now, StorageFolderId = Guid.NewGuid() };
+            db.Documents.Add(document);
+            try
+            {
+                await db.SaveChangesAsync();
+            }
+            catch (InvalidOperationException)
+            {
+                await session.WriteLineAsync($"{tag} NO a sibling with that name appeared concurrently");
+                return;
+            }
         }
-        catch (InvalidOperationException)
-        {
-            await session.WriteLineAsync($"{tag} NO a sibling with that name appeared concurrently");
-            return;
-        }
+
+        var objectKey = ObjectKeyBuilder.Build(tenantId, document.CreatedAt, document.StorageFolderId, versionId, ".eml");
+        await storage.PutObjectAsync(objectKey, new MemoryStream(bytes), "message/rfc822");
 
         var version = new DocumentVersion
         {
@@ -130,23 +169,43 @@ internal static class ImapWrites
         try
         {
             await scope.ServiceProvider.GetRequiredService<IDocumentPreviewService>()
-                .GetPreviewUrlAsync(objectKey, TimeSpan.FromMinutes(1), name + ".eml");
+                .GetPreviewUrlAsync(objectKey, TimeSpan.FromMinutes(1), document.Name + ".eml");
         }
         catch (Exception)
         {
             // The preview stays on-demand; the document is filed either way.
         }
 
-        // Hand the new UID back (APPENDUID, RFC 4315) — clients use it to adopt the appended message without
-        // a refetch.
-        var uid = mailbox.NextUid;
-        mailbox.NextUid++;
-        db.ImapMessageUids.Add(new Domain.Imap.ImapMessageUid { FolderId = folder.Id, DocumentId = document.Id, TenantId = tenantId, Uid = uid });
+        // Hand the UID back (APPENDUID, RFC 4315) — clients use it to adopt the appended message without a
+        // refetch.
+        //
+        // A correlated re-append KEEPS the document's existing UID, which is where this deliberately parts from
+        // the Notes path above. Notes bumps the UID because an edit there is append-then-DELETE, so the old
+        // message must stop being listed. An .eml re-append has no paired delete: bumping would make the
+        // message vanish and reappear in every connected client, churning caches to say nothing had changed.
+        int uid;
+        var uidRow = existingId is null
+            ? null
+            : await db.ImapMessageUids.FirstOrDefaultAsync(u => u.FolderId == folder.Id && u.DocumentId == document.Id);
+        if (uidRow is not null)
+        {
+            uid = uidRow.Uid;
+        }
+        else
+        {
+            uid = mailbox.NextUid;
+            mailbox.NextUid++;
+            db.ImapMessageUids.Add(new Domain.Imap.ImapMessageUid { FolderId = folder.Id, DocumentId = document.Id, TenantId = tenantId, Uid = uid });
+        }
+
         await db.SaveChangesAsync();
 
-        // Every user-facing mutation is audited (#562 slice 4) — same action the workbench filing records.
+        // Every user-facing mutation is audited (#562 slice 4) — same action the workbench filing records. The
+        // note says WHICH of the two happened: an administrator reading the log must be able to tell a filing
+        // from a re-filing that added a version, since only the second leaves the document count unchanged.
         await scope.ServiceProvider.GetRequiredService<IAuditRecorder>()
-            .RecordAsync(AuditActions.DocumentFiled, "Document", document.Id, document.Name, "Filed over IMAP");
+            .RecordAsync(AuditActions.DocumentFiled, "Document", document.Id, document.Name,
+                existingId is null ? "Filed over IMAP" : "Re-filed over IMAP (same Message-ID — new version)");
         await session.WriteLineAsync($"{tag} OK [APPENDUID {mailbox.UidValidity} {uid}] APPEND completed");
     }
 
@@ -587,9 +646,10 @@ internal static class ImapWrites
         var maskVersionId = await FolderMask.CurrentVersionIdAsync(
             db, tenantId, SimplArchive.Domain.Masks.WellKnownMaskIds.NotebookSection, CancellationToken.None);
 
+        var sectionId = Guid.NewGuid();
         db.Documents.Add(new Document
         {
-            Id = Guid.NewGuid(),
+            Id = sectionId,
             TenantId = tenantId,
             ParentId = parent.Value.Mailbox.FolderId,
             Name = leaf,
@@ -610,7 +670,8 @@ internal static class ImapWrites
             return;
         }
 
-        await session.WriteLineAsync($"{tag} OK CREATE completed");
+        // RFC 8474 §5 (#780) — the id is the section's own, handed back without a round trip to fetch it.
+        await session.WriteLineAsync($"{tag} OK [MAILBOXID ({ImapObjectId.ForMailbox(sectionId)})] CREATE completed");
     }
 
     // The notebook itself, as opposed to a section inside it. Separate from the path above because there is no
@@ -622,9 +683,10 @@ internal static class ImapWrites
         var tenantId = scope.ServiceProvider.GetRequiredService<ICurrentTenantAccessor>().TenantId!.Value;
         var mailbox = scope.ServiceProvider.GetRequiredService<SimplArchive.Api.Documents.PersonalMailboxProvisioner>();
 
+        Guid notebookId;
         try
         {
-            await mailbox.EnsureNotebookAsync(tenantId, userId, CancellationToken.None);
+            notebookId = await mailbox.EnsureNotebookAsync(tenantId, userId, CancellationToken.None);
         }
         catch (InvalidOperationException)
         {
@@ -634,7 +696,10 @@ internal static class ImapWrites
             return;
         }
 
-        await session.WriteLineAsync($"{tag} OK CREATE completed");
+        // RFC 8474 §5 returns the new mailbox's id on CREATE, saving the client a SELECT purely to learn it.
+        // Re-issuing CREATE is harmless AND now informative: an existing notebook answers with the SAME id,
+        // which is how a client confirms the notebook it already knows is the one it just asked for (#780).
+        await session.WriteLineAsync($"{tag} OK [MAILBOXID ({ImapObjectId.ForMailbox(notebookId)})] CREATE completed");
     }
 
 }
