@@ -22,7 +22,7 @@ public partial class WebDavTreeParityTests
     public WebDavTreeParityTests(E2EApiFactory factory) => _factory = factory;
 
     [Fact]
-    public async Task SimplArchive_resource_mirrors_the_repositories_tree_and_webdav_stays_a_working_alias()
+    public async Task SimplArchive_is_the_single_mount_and_mirrors_the_repositories_tree()
     {
         var (clientId, secret, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
         using var owner = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
@@ -53,17 +53,13 @@ public partial class WebDavTreeParityTests
         Assert.Contains("SimplArchive", names);
         Assert.Equal(expectedTopLevel, names.Where(n => n != "SimplArchive").ToHashSet());
 
-        // /webdav stays a working alias for existing mounts — same content, resource still named "SimplArchive".
-        var aliasNames = await PropFindNamesAsync(dav, basic, "/webdav");
-        Assert.Contains("SimplArchive", aliasNames);
-        Assert.Equal(expectedTopLevel, aliasNames.Where(n => n != "SimplArchive").ToHashSet());
-
-        // A plain browser GET of the legacy root 301-redirects to /SimplArchive (WebDAV clients PROPFIND, so
-        // real mounts are untouched).
-        using var noRedirect = _factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
-        var redirect = await noRedirect.GetAsync("/webdav");
-        Assert.Equal(HttpStatusCode.MovedPermanently, redirect.StatusCode);
-        Assert.Equal("/SimplArchive", redirect.Headers.Location?.ToString());
+        // The legacy `/webdav` alias is RETIRED (#794): one mount, one path. It answers like any unknown route,
+        // which is what makes "two ways in" stop being a thing anyone has to reason about — including the tests,
+        // which had been exercising the alias while every real client used /SimplArchive.
+        using var legacy = _factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        using var legacyProbe = new HttpRequestMessage(new HttpMethod("PROPFIND"), "/webdav") { Headers = { Authorization = basic } };
+        legacyProbe.Headers.TryAddWithoutValidation("Depth", "1");
+        Assert.NotEqual(HttpStatusCode.MultiStatus, (await legacy.SendAsync(legacyProbe)).StatusCode);
     }
 
     private static async Task<List<string>> PropFindNamesAsync(HttpClient dav, AuthenticationHeaderValue basic, string path)

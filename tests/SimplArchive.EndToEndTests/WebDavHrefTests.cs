@@ -10,6 +10,8 @@ namespace SimplArchive.EndToEndTests;
 [Collection(E2ECollection.Name)]
 public partial class WebDavHrefTests
 {
+    private const string WebDavMountPath = "/SimplArchive";
+
     // The personal space is named after its owner (ADR 0671), so its WebDAV/IMAP path segment is
     // whatever this test seeded as the display name — not the constant "Personal" it used to be.
     private const string Personal = "Href User";
@@ -33,14 +35,14 @@ public partial class WebDavHrefTests
     /// mounted drive draw the tree wrongly, with the repositories appearing to hang UNDER the mount's own root
     /// rather than beside it.
     ///
-    /// Run for BOTH prefixes, because the legacy alias is where the two can disagree: the gateway answers on
-    /// `/webdav` but composes its hrefs from a constant `/SimplArchive`.
+    /// This ran for BOTH prefixes while the legacy `/webdav` alias existed, because that is where the two could
+    /// disagree — the gateway answered on one path and composed its hrefs from a constant. With the alias
+    /// retired there is one mount, so the theory's second case would be the first one repeated (#794).
     /// </remarks>
-    [Theory]
-    [InlineData("/SimplArchive")]
-    [InlineData("/webdav")]
-    public async Task Every_member_href_sits_under_the_collection_that_was_asked_for(string mount)
+    [Fact]
+    public async Task Every_member_href_sits_under_the_collection_that_was_asked_for()
     {
+        const string mount = WebDavMountPath;
         var (dav, basic, repository) = await MountAsync();
         using var _d = dav;
 
@@ -65,11 +67,10 @@ public partial class WebDavHrefTests
     /// rather than on its text: `/SimplArchive/{Personal}/Demo/` would satisfy a `Contains("Personal")` check and
     /// still be exactly the bug.
     /// </remarks>
-    [Theory]
-    [InlineData("/SimplArchive")]
-    [InlineData("/webdav")]
-    public async Task The_personal_space_and_a_repository_are_siblings_not_nested(string mount)
+    [Fact]
+    public async Task The_personal_space_and_a_repository_are_siblings_not_nested()
     {
+        const string mount = WebDavMountPath;
         var (dav, basic, repository) = await MountAsync();
         using var _d = dav;
 

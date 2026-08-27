@@ -3,7 +3,11 @@ using SimplArchive.Domain.Tenants;
 namespace SimplArchive.Application.Abstractions;
 
 // One object listed under a prefix (ADR "S3-backed inbox") — its full key, byte size, and last-modified time.
-public sealed record StorageObject(string Key, long Size, DateTimeOffset LastModified);
+/// <param name="ETag">
+/// The store's own entity tag for these bytes, when it gave one — a CONTENT validator, unlike the other two.
+/// Optional because not every implementation has one, and null is the honest answer where it does not.
+/// </param>
+public sealed record StorageObject(string Key, long Size, DateTimeOffset LastModified, string? ETag = null);
 
 // The S3 Object Lock state of an object (ADR "WORM / immutable document versions"): a retain-until date (null
 // = no retention lock) and whether an object legal hold is on. An object is immutable while RetainUntil is in

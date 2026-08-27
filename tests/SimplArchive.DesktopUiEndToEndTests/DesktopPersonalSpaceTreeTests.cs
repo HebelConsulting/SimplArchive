@@ -4,7 +4,7 @@ using SimplArchive.DesktopClient.ViewModels;
 namespace SimplArchive.UiEndToEndTests;
 
 // The GUI-tree Personal space grouping (ADR "GUI-tree Personal space grouping"): the desktop Personal node nests
-// the Intray + Check-out launcher nodes above its real subfolders (mirroring /webdav/Personal), and selecting a
+// the Intray + Check-out launcher nodes above its real subfolders (mirroring /SimplArchive/Personal), and selecting a
 // launcher switches to the matching bottom tab — driven through the real VM against the running Api.
 [Collection(UiCollection.Name)]
 public class DesktopPersonalSpaceTreeTests

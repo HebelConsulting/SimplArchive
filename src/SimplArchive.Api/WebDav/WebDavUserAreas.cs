@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Users;
 using SimplArchive.Infrastructure.Persistence;
@@ -6,7 +7,10 @@ using SimplArchive.Infrastructure.Persistence;
 namespace SimplArchive.Api.WebDav;
 
 // ---- Special Intray / Check-out areas -----------------------------------------------------------------
-internal sealed record SpecialFile(string Name, long Size, DateTimeOffset Modified, Guid DocumentId, string Key);
+// `Created` is separate from `Modified` because the tree reports both and the special areas have to answer
+// the same way (#794). An object store keeps no creation time, so for a staged object the two are the same
+// value — truthfully, since the write that created it IS its last modification.
+internal sealed record SpecialFile(string Name, long Size, DateTimeOffset Modified, Guid DocumentId, string Key, DateTimeOffset Created);
 
 // The per-user S3-backed special areas the WebDAV tree nests under Personal (issue #466 moved this out of
 // the middleware): the Intray staging prefix, the Check-out working copies, and the temp/scratch tiers for
@@ -38,10 +42,53 @@ internal static class WebDavUserAreas
                 continue; // the prefix placeholder, a nested key, a litter artifact, OS clutter, or a lock file
             }
 
-            result.Add(new SpecialFile(name, obj.Size, obj.LastModified, Guid.Empty, obj.Key));
+            result.Add(new SpecialFile(name, obj.Size, obj.LastModified, Guid.Empty, obj.Key, obj.LastModified));
         }
 
         return result;
+    }
+
+    /// <summary>Where the bytes an Intray write is about to replace are kept.</summary>
+    /// <remarks>
+    /// An Intray item is a bare object: no Document, no versions, no soft-delete — so an overwrite is final in a
+    /// way nothing else in this system is. That was not a theoretical concern. A word processor saved correctly,
+    /// then six seconds later rolled its own save back by MOVEing an EMPTY backup slot over the file, and 13 KB
+    /// of the user's work ceased to exist (#794). Every other surface would have survived this: the tree keeps
+    /// version history, and a deleted document is soft-deleted.
+    /// </remarks>
+    internal static string IntrayPreviousPrefix(User user) => $"tenants/{user.TenantId}/users/{user.Id}/inbox-previous/";
+
+    /// <summary>Copy aside whatever an Intray write is about to replace, so the replacement cannot be final.</summary>
+    /// <remarks>
+    /// <para>
+    /// Called before every write that can replace an Intray item, and deliberately NOT a refusal: truncating a
+    /// file to nothing is legitimate, and a gateway that second-guesses its client's writes trades one defect
+    /// for another. What it must not do is make the client's mistake unrecoverable.
+    /// </para>
+    /// <para>
+    /// Only NON-EMPTY outgoing bytes are kept, and only under the item's own name — so a run of overwrites keeps
+    /// the last real content rather than accumulating a copy per keystroke-triggered autosave.
+    /// </para>
+    /// </remarks>
+    internal static async Task PreserveIntrayBytesAsync(
+        IObjectStorageClient storage, ILogger logger, User user, string name, CancellationToken cancellationToken)
+    {
+        var key = IntrayPrefix(user) + name;
+        if (!await storage.ExistsAsync(key, cancellationToken) || await storage.GetObjectSizeAsync(key) == 0)
+        {
+            return; // nothing to lose
+        }
+
+        var previous = IntrayPreviousPrefix(user) + name;
+        await storage.CopyObjectAsync(key, previous, cancellationToken);
+
+        // The user cannot see that this happened, and if the write turns out to be a rollback they will see only
+        // that their work is gone (ADR 0626: name what we did silently, and where the evidence is).
+        logger.LogWarning(
+            "Intray item {Item} is being overwritten; the previous bytes were copied to {PreviousKey}. "
+            + "The Intray has no version history, so this copy is the only way back. Turn Trace on for "
+            + "SimplArchive.Api.WebDav to see the exchange that caused it.",
+            name, previous);
     }
 
     internal static string CheckoutScratchPrefix(User user) => $"tenants/{user.TenantId}/users/{user.Id}/checkout-scratch/";
@@ -58,7 +105,7 @@ internal static class WebDavUserAreas
                 continue; // the prefix placeholder, a nested key, or a hidden lock/owner file
             }
 
-            result.Add(new SpecialFile(name, obj.Size, obj.LastModified, Guid.Empty, obj.Key));
+            result.Add(new SpecialFile(name, obj.Size, obj.LastModified, Guid.Empty, obj.Key, obj.LastModified));
         }
 
         return result;
@@ -96,7 +143,7 @@ internal static class WebDavUserAreas
             var key = hasStash ? stashKey : version.ObjectKey;
             var size = hasStash ? await storage.GetObjectSizeAsync(stashKey) : version.SizeBytes ?? 0;
             var name = doc.Name + Path.GetExtension(version.ObjectKey);
-            result.Add(new SpecialFile(name, size, doc.CheckedOutAt ?? doc.CreatedAt, doc.Id, key));
+            result.Add(new SpecialFile(name, size, doc.CheckedOutAt ?? doc.CreatedAt, doc.Id, key, doc.CreatedAt));
         }
 
         return result;
@@ -107,7 +154,11 @@ internal static class WebDavUserAreas
     // files, this also resolves the hidden lock/owner sidecars (.~lock.name# / ~$name) directly from the store —
     // they're kept out of the folder LISTING (so they don't clutter the view) but MUST round-trip, or LibreOffice /
     // Office read back their own just-PUT lock file, get 404, and revert the document to read-only (ADR 0513).
-    internal static async Task<SpecialFile?> ResolveSpecialFileAsync(IObjectStorageClient storage, SimplArchiveDbContext db, User user, string folder, string name)
+    /// <param name="segments">
+    /// The full request path, needed only to find a remembered write in the shadow area (#794). Optional so
+    /// callers that cannot have it still resolve everything else.
+    /// </param>
+    internal static async Task<SpecialFile?> ResolveSpecialFileAsync(IObjectStorageClient storage, SimplArchiveDbContext db, User user, string folder, string name, IReadOnlyList<string>? segments = null)
     {
         var files = await SpecialFolderFilesAsync(storage, db, user, folder);
         if (files.FirstOrDefault(f => f.Name == name) is { } listed)
@@ -120,7 +171,19 @@ internal static class WebDavUserAreas
             var key = folder == WebDavMiddleware.IntrayName ? IntrayPrefix(user) + name : CheckoutScratchPrefix(user) + name;
             if (await storage.ExistsAsync(key))
             {
-                return new SpecialFile(name, await storage.GetObjectSizeAsync(key), DateTimeOffset.UtcNow, Guid.Empty, key);
+                return new SpecialFile(name, await storage.GetObjectSizeAsync(key), DateTimeOffset.UtcNow, Guid.Empty, key, DateTimeOffset.UtcNow);
+            }
+        }
+
+        // OS clutter never becomes an item here, but it is REMEMBERED (#794) — and a write we answered 201 to
+        // must be readable back, or accepting it was a lie. Storing it on PUT while GET and PROPFIND still
+        // answered 404 is what left an editor rewriting its sidecar and never reaching the document at all.
+        if (segments is { Count: > 0 } && WebDavClutter.IsOsClutter(name))
+        {
+            var shadow = WebDavSafeSave.ShadowKey(user, segments);
+            if (await storage.ExistsAsync(shadow))
+            {
+                return new SpecialFile(name, await storage.GetObjectSizeAsync(shadow), DateTimeOffset.UtcNow, Guid.Empty, shadow, DateTimeOffset.UtcNow);
             }
         }
 

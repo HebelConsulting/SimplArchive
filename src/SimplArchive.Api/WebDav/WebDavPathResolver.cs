@@ -110,18 +110,34 @@ internal static class WebDavPathResolver
         };
     }
 
+    /// <summary>The child of <paramref name="parentId"/> whose WebDAV name IS <paramref name="webDavName"/>.</summary>
+    /// <remarks>
+    /// A folder's WebDAV name is its Name; a file's is Name + the current version's extension. Both candidates
+    /// are looked up by Name (unique per parent) and then CONFIRMED against the name the mount actually shows —
+    /// which is the whole point, and what the earlier two-step lookup skipped.
+    ///
+    /// It matched <c>d.Name == webDavName</c> first, for folders, and a FILE's Name is its stem — so a document
+    /// called <c>Testing My Test</c> answered at the extension-less path <c>…/Testing My Test</c> as well as at
+    /// its real <c>…/Testing My Test.docx</c>. Measured (#794): a 207 whose <c>href</c> and <c>displayname</c>
+    /// disagreed, which is already wrong under RFC 4918, and worse in context — an editor probes exactly that
+    /// name to find out whether it is FREE, and was told the name was taken by a resource that does not have it.
+    /// </remarks>
     internal static async Task<Document?> ChildByWebDavNameAsync(SimplArchiveDbContext db, Guid parentId, string webDavName)
     {
-        // A folder's WebDAV name is its Name; a file's is Name + extension. Name (the stem) is unique per parent,
-        // so match the folder name first, else the file stem.
-        var byName = await db.Documents.SingleOrDefaultAsync(d => d.ParentId == parentId && d.Name == webDavName);
-        if (byName is not null)
+        var stem = Path.GetFileNameWithoutExtension(webDavName);
+        var candidates = await db.Documents
+            .Where(d => d.ParentId == parentId && (d.Name == webDavName || d.Name == stem))
+            .ToListAsync();
+
+        foreach (var candidate in candidates)
         {
-            return byName;
+            if (string.Equals((await NodeForAsync(db, candidate)).WebDavName, webDavName, StringComparison.Ordinal))
+            {
+                return candidate;
+            }
         }
 
-        var stem = Path.GetFileNameWithoutExtension(webDavName);
-        return await db.Documents.SingleOrDefaultAsync(d => d.ParentId == parentId && d.Name == stem);
+        return null;
     }
 
     internal static async Task<List<Document>> RootsAsync(SimplArchiveDbContext db, User user)

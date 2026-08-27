@@ -37,9 +37,17 @@ internal static partial class WebDavLockHandling
         if (segments.Count > 0 && ShadowableLeaf(segments))
         {
             var storage = services.GetRequiredService<IObjectStorageClient>();
+
+            // ONE key per name, the same one PUT uses — this selector's third clause was missing, and the wire
+            // named the cost precisely (#794): `LOCK …/~$xyz.docx → 201` wrote a lock-null under the SHADOW key
+            // while the PUT that followed stored the real owner file in the tree scratch. Two keys for one path
+            // meant the shadow fed the folder listing forever and DELETE — which knew about neither — answered
+            // 404, so the editor's own cleanup on close could not remove its own lock file.
             var key = WebDavClutter.IsUnderSafeSaveTemp(segments)
                 ? WebDavSafeSave.FileKey(user, segments)
-                : WebDavSafeSave.ShadowKey(user, segments);
+                : WebDavClutter.IsTransientClutter(segments[^1])
+                    ? WebDavUserAreas.CheckoutScratchPrefix(user) + segments[^1]
+                    : WebDavSafeSave.ShadowKey(user, segments);
 
             if (!await storage.ExistsAsync(key, context.RequestAborted))
             {

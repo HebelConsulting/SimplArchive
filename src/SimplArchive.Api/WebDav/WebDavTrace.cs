@@ -59,6 +59,54 @@ internal static class WebDavTrace
             context.Response.StatusCode, method, path, Format(context.Response.Headers, ResponseHeaders));
     }
 
+    /// <summary>The verbs whose MEANING is carried in an XML body rather than in headers.</summary>
+    /// <remarks>
+    /// A <c>PUT</c> body is the user's document and is never logged. A <c>PROPFIND</c> body is the list of
+    /// property NAMES the client is asking for, and the answer is a list of names and values — metadata the
+    /// path already reveals. So the whitelist here is by VERB, and it stays a whitelist: a verb is traceable
+    /// because it was named, never because it was not excluded.
+    /// </remarks>
+    private static readonly string[] XmlBodyMethods = ["PROPFIND", "PROPPATCH", "LOCK"];
+
+    internal static bool TracesBody(ILogger logger, string method) =>
+        logger.IsEnabled(LogLevel.Trace) && XmlBodyMethods.Contains(method, StringComparer.Ordinal);
+
+    /// <summary>What the client ASKED FOR — the half of a PROPFIND that headers cannot show.</summary>
+    /// <remarks>
+    /// Worth its own line because the gateway currently ignores it: it answers with a fixed property set no
+    /// matter which properties were requested, and never emits the <c>404</c> propstat RFC 4918 §9.1 requires
+    /// for ones it does not have. Whether a client minds is exactly the sort of interop question that must be
+    /// answerable from a log rather than from a packet capture (ADR 0626).
+    /// </remarks>
+    internal static void RequestBody(ILogger logger, string method, string path, string body)
+    {
+        if (!logger.IsEnabled(LogLevel.Trace))
+        {
+            return;
+        }
+
+        logger.LogTrace("WebDAV → {Method} {Path} asked: {Body}",
+            method, path, body.Length == 0 ? "(empty — treat as allprop)" : body);
+    }
+
+    /// <summary>What we ANSWERED — for the XML verbs, the answer IS the body.</summary>
+    /// <remarks>
+    /// The status line is not the answer to a PROPFIND, and treating it as one hid a real defect for months:
+    /// every special folder reported <c>getlastmodified</c> as the UNIX EPOCH while returning a perfectly
+    /// healthy <c>207</c>, so a status-only trace — and a suite of status-only assertions — showed a working
+    /// server talking to a client that could not use it (#794).
+    /// </remarks>
+    internal static void ResponseBody(ILogger logger, HttpContext context, string body)
+    {
+        if (!logger.IsEnabled(LogLevel.Trace))
+        {
+            return;
+        }
+
+        logger.LogTrace("WebDAV ← {Status} for {Method} {Path} answered: {Body}",
+            context.Response.StatusCode, context.Request.Method, context.Request.Path, body);
+    }
+
     private static string Format(IHeaderDictionary headers, string[] whitelist)
     {
         var parts = new StringBuilder();

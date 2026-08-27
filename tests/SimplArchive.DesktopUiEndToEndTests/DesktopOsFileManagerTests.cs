@@ -7,7 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // function — assert it for each OS.
 public class DesktopOsFileManagerTests
 {
-    private const string Url = "https://archive.example.com:8443/webdav/Intray";
+    private const string Url = "https://archive.example.com:8443/SimplArchive/Intray";
 
     [Fact]
     public void MacOs_only_mounts_and_names_no_volume_path()
@@ -77,7 +77,7 @@ public class DesktopOsFileManagerTests
     {
         var (file, args) = OsFileManager.BuildOpenCommand(Url, OsFileManager.Platform.Linux);
         Assert.Equal("xdg-open", file);
-        Assert.Contains("davs://archive.example.com:8443/webdav/Intray", args);
+        Assert.Contains("davs://archive.example.com:8443/SimplArchive/Intray", args);
     }
 
     [Fact]
@@ -85,14 +85,15 @@ public class DesktopOsFileManagerTests
     {
         var (file, args) = OsFileManager.BuildOpenCommand(Url, OsFileManager.Platform.Windows);
         Assert.Equal("explorer.exe", file);
-        Assert.Contains(@"\\archive.example.com@SSL@8443\DavWWWRoot\webdav\Intray", args);
+        // The canonical mount path — the /webdav alias is retired (#794), and this pinned it for months after.
+        Assert.Contains(@"\\archive.example.com@SSL@8443\DavWWWRoot\SimplArchive\Intray", args);
     }
 
     [Fact]
     public void Http_url_uses_the_plain_dav_scheme_on_linux()
     {
-        var (_, args) = OsFileManager.BuildOpenCommand("http://localhost:8080/webdav/Intray", OsFileManager.Platform.Linux);
-        Assert.Contains("dav://localhost:8080/webdav/Intray", args);
+        var (_, args) = OsFileManager.BuildOpenCommand("http://localhost:8080/SimplArchive/Intray", OsFileManager.Platform.Linux);
+        Assert.Contains("dav://localhost:8080/SimplArchive/Intray", args);
         Assert.DoesNotContain(args, a => a.Contains("davs://"));
     }
 

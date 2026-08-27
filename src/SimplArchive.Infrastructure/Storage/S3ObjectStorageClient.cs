@@ -322,7 +322,7 @@ public class S3ObjectStorageClient : IObjectStorageClient
 
             foreach (var s3Object in response.S3Objects ?? [])
             {
-                objects.Add(new StorageObject(s3Object.Key, s3Object.Size ?? 0, s3Object.LastModified ?? default));
+                objects.Add(new StorageObject(s3Object.Key, s3Object.Size ?? 0, s3Object.LastModified ?? default, s3Object.ETag));
             }
 
             continuationToken = response.IsTruncated == true ? response.NextContinuationToken : null;

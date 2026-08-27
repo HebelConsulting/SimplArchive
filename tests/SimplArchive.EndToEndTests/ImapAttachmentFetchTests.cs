@@ -52,7 +52,7 @@ public class ImapAttachmentFetchTests
             pdf[i] = (byte)(i * 31 % 256);
         }
 
-        using (var put = new HttpRequestMessage(HttpMethod.Put, $"/webdav/{repoName}/statement.pdf")
+        using (var put = new HttpRequestMessage(HttpMethod.Put, $"/SimplArchive/{repoName}/statement.pdf")
         {
             Content = new ByteArrayContent(pdf),
             Headers = { Authorization = basic },

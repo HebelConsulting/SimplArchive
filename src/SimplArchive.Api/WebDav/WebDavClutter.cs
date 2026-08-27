@@ -49,7 +49,25 @@ internal static partial class WebDavClutter
     [GeneratedRegex(@"\.sb-[0-9a-fA-F]+-[A-Za-z0-9]+$", RegexOptions.CultureInvariant)]
     private static partial Regex SafeSaveTempSuffix();
 
-    internal static bool IsSafeSaveTemp(string name) => SafeSaveTempSuffix().IsMatch(name);
+    /// <summary>True when the name IS a safe-save collection — not merely something named after one.</summary>
+    /// <remarks>
+    /// The OS-clutter test comes FIRST, and it is the whole point of this method having a body. macOS writes an
+    /// AppleDouble sidecar carrying the DIRECTORY's metadata beside the collection it just made, named after it:
+    /// <c>._Report.docx.sb-43a5b669-v1NoSa</c>. The suffix regex matches on the ENDING, so the <c>._</c> prefix
+    /// changed nothing and that sidecar was classified as the collection itself.
+    ///
+    /// The cost was a path the server answered two ways. PUT stored it as a file; PROPFIND looked for the
+    /// collection marker and found none — measured on the wire as <c>PUT 4096B → 204</c> ("updated, it exists")
+    /// followed immediately by <c>PROPFIND → 404</c> ("there is no such thing"). macOS abandoned that scratch
+    /// collection and opened another, having already written the real 13 KB of document into the abandoned one,
+    /// and the Intray kept the zero-byte placeholder from the first <c>PUT … Content-Length: 0</c> (#794).
+    ///
+    /// A sidecar is always a FILE. Excluding it here rather than at each of the four call sites is deliberate:
+    /// the misclassification has to be impossible to reproduce by forgetting a guard, which is exactly how it
+    /// arrived. The path then routes to the ordinary OS-clutter handling, which already remembers and serves
+    /// what it swallows — so PUT, GET and PROPFIND reach one answer instead of two.
+    /// </remarks>
+    internal static bool IsSafeSaveTemp(string name) => !IsOsClutter(name) && SafeSaveTempSuffix().IsMatch(name);
 
     /// <summary>True when the path IS a safe-save collection, or lies inside one.</summary>
     /// <remarks>

@@ -61,7 +61,7 @@ public class ImapEndpointTests
             + "Message-ID: <q1@example.test>\r\nDate: Mon, 06 Jul 2026 10:00:00 +0000\r\n\r\nThe numbers look fine.\r\n");
         foreach (var (name, bytes) in new[] { ("report.eml", eml), ("summary.pdf", Encoding.ASCII.GetBytes("%PDF-1.4 fake")) })
         {
-            using var put = new HttpRequestMessage(HttpMethod.Put, $"/webdav/{repoName}/{name}")
+            using var put = new HttpRequestMessage(HttpMethod.Put, $"/SimplArchive/{repoName}/{name}")
             {
                 Content = new ByteArrayContent(bytes),
                 Headers = { Authorization = basic },
@@ -173,7 +173,7 @@ public class ImapEndpointTests
         var davPw = (await TestJson.Post(api, "/api/me/webdav-password", new { })).GetProperty("password").GetString()!;
         var basic = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{email}:{davPw}")));
         using var dav = _factory.CreateClient();
-        using var put = new HttpRequestMessage(HttpMethod.Put, $"/webdav/{repoName}/note.eml")
+        using var put = new HttpRequestMessage(HttpMethod.Put, $"/SimplArchive/{repoName}/note.eml")
         {
             Content = new ByteArrayContent(Encoding.ASCII.GetBytes("From: a@b.test\r\nSubject: Mark me\r\n\r\nbody\r\n")),
             Headers = { Authorization = basic },

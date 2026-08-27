@@ -22,11 +22,29 @@ internal static class WebDavSpecialHandlers
         if (segments.Count == 2)
         {
             // The Intray / Check-out collection itself, plus (Depth 1) its files (lock/owner sidecars stay hidden).
+            // Listed unconditionally — the members are needed even at Depth 0, because the folder's own modified
+            // time IS the newest of them (#794). So reporting a truthful mtime costs no extra round trip here.
             var files = await WebDavUserAreas.SpecialFolderFilesAsync(storage, db, user, folder);
-            var responses = new List<PropStatXml> { WebDavMiddleware.CollectionProp(basePath, [segments[0], folder], folder) };
+            var responses = new List<PropStatXml>
+            {
+                WebDavMiddleware.CollectionProp(basePath, [segments[0], folder], folder, WebDavMiddleware.NewestOf(files.Select(f => f.Modified))),
+            };
             if (depth != "0")
             {
-                responses.AddRange(files.Select(f => WebDavMiddleware.FileProp(basePath, [segments[0], folder, f.Name], f.Size, f.Modified, ContentTypes.ForExtension(Path.GetExtension(f.Name)))));
+                responses.AddRange(files.Select(f => WebDavMiddleware.FileProp(basePath, [segments[0], folder, f.Name], f.Size, f.Modified, ContentTypes.ForExtension(Path.GetExtension(f.Name)), f.Created)));
+
+                // The caller's own in-flight scratch entries, same as the tree's listing (#794): every one
+                // answers a direct request, so a listing that omits them is the server contradicting itself,
+                // and the OS drops its cache of whatever the listing denies. This is the surface the issue was
+                // REPORTED on — the original Intray save died the same way the tree save did.
+                foreach (var member in await WebDavSafeSave.ScratchMembersAsync(storage, user, [segments[0], folder]))
+                {
+                    List<string> memberSegments = [segments[0], folder, member.Name];
+                    responses.Add(member.IsCollection
+                        ? WebDavMiddleware.CollectionProp(basePath, memberSegments, member.Name, member.Modified)
+                        : WebDavMiddleware.FileProp(basePath, memberSegments, member.Size, member.Modified,
+                            ContentTypes.ForExtension(Path.GetExtension(member.Name))));
+                }
             }
 
             await WebDavXml.WriteMultiStatusAsync(context, responses);
@@ -34,9 +52,9 @@ internal static class WebDavSpecialHandlers
         }
 
         // A single file inside the folder (flat — no deeper nesting), including a hidden lock/owner sidecar.
-        if (segments.Count == 3 && await WebDavUserAreas.ResolveSpecialFileAsync(storage, db, user, folder, segments[2]) is { } file)
+        if (segments.Count == 3 && await WebDavUserAreas.ResolveSpecialFileAsync(storage, db, user, folder, segments[2], segments) is { } file)
         {
-            await WebDavXml.WriteMultiStatusAsync(context, [WebDavMiddleware.FileProp(basePath, segments, file.Size, file.Modified, ContentTypes.ForExtension(Path.GetExtension(file.Name)))]);
+            await WebDavXml.WriteMultiStatusAsync(context, [WebDavMiddleware.FileProp(basePath, segments, file.Size, file.Modified, ContentTypes.ForExtension(Path.GetExtension(file.Name)), file.Created)]);
             return;
         }
 
@@ -53,11 +71,13 @@ internal static class WebDavSpecialHandlers
 
         var name = segments[2];
 
-        // OS metadata junk is discarded even in the staging areas; transient files (.crdownload etc.) are allowed
-        // here (unlike the repository) — ADR "WebDAV clutter filter".
+        // OS metadata junk never becomes an Intray item (ADR "WebDAV clutter filter") — but it is REMEMBERED
+        // rather than discarded, exactly as in the tree. Discarding it means the second write of the same path
+        // answers 201 again instead of 204, and a client told "created" twice concludes nothing is being kept:
+        // measured in the Intray trace as `PUT ._X → 201` followed by `PUT ._X → 201` (#794).
         if (WebDavClutter.IsOsClutter(name))
         {
-            context.Response.StatusCode = StatusCodes.Status201Created;
+            await StageShadowAsync(context, services, user, segments);
             return;
         }
 
@@ -79,6 +99,8 @@ internal static class WebDavSpecialHandlers
 
             var key = WebDavUserAreas.IntrayPrefix(user) + name;
             var existed = await storage.ExistsAsync(key, context.RequestAborted);
+            await WebDavUserAreas.PreserveIntrayBytesAsync(
+                storage, services.GetRequiredService<ILogger<WebDavMiddleware>>(), user, name, context.RequestAborted);
             await storage.PutObjectAsync(key, buffered, contentType, context.RequestAborted);
             context.Response.StatusCode = existed ? StatusCodes.Status204NoContent : StatusCodes.Status201Created;
             return;
@@ -91,6 +113,8 @@ internal static class WebDavSpecialHandlers
         var files = await WebDavUserAreas.CheckoutFilesAsync(storage, db, user);
         if (files.FirstOrDefault(f => f.Name == name) is { } file)
         {
+            await WebDavSafeSave.PreserveWorkingCopyAsync(
+                storage, services.GetRequiredService<ILogger<WebDavMiddleware>>(), user, file.DocumentId, file.Name, context.RequestAborted);
             await storage.PutObjectAsync(CheckoutStashKey.Build(user.TenantId, user.Id, file.DocumentId), buffered, contentType, context.RequestAborted);
             context.Response.StatusCode = StatusCodes.Status204NoContent;
             return;
@@ -136,6 +160,8 @@ internal static class WebDavSpecialHandlers
 
             var destKey = WebDavUserAreas.IntrayPrefix(user) + destName;
             var intrayDestExisted = await storage.ExistsAsync(destKey, context.RequestAborted);
+            await WebDavUserAreas.PreserveIntrayBytesAsync(
+                storage, services.GetRequiredService<ILogger<WebDavMiddleware>>(), user, destName, context.RequestAborted);
             await storage.CopyObjectAsync(srcKey, destKey, context.RequestAborted);
             if (!keepSource) await storage.DeleteObjectAsync(srcKey, context.RequestAborted);
             context.Response.StatusCode = intrayDestExisted ? StatusCodes.Status204NoContent : StatusCodes.Status201Created;
@@ -175,6 +201,8 @@ internal static class WebDavSpecialHandlers
             }
 
             buffered.Position = 0;
+            await WebDavSafeSave.PreserveWorkingCopyAsync(
+                storage, services.GetRequiredService<ILogger<WebDavMiddleware>>(), user, targetDoc.DocumentId, targetDoc.Name, context.RequestAborted);
             await storage.PutObjectAsync(
                 CheckoutStashKey.Build(user.TenantId, user.Id, targetDoc.DocumentId),
                 buffered, ContentTypes.ForExtension(Path.GetExtension(destName)), context.RequestAborted);
@@ -389,6 +417,11 @@ internal static class WebDavSpecialHandlers
 
         // The bytes land in the same stash an explicit check-out uses, so check-in, discard, the Check-out tab
         // and the stale sweep all work on this exactly as they already do.
+        //
+        // Whatever is already in that stash is kept first: this same verb carries both a COMMIT and a ROLLBACK,
+        // and a rollback naming an empty backup is what destroys an in-flight edit (#794).
+        await WebDavSafeSave.PreserveWorkingCopyAsync(
+            storage, services.GetRequiredService<ILogger<WebDavMiddleware>>(), user, document.Id, document.Name, context.RequestAborted);
         await storage.CopyObjectAsync(scratchKey, CheckoutStashKey.Build(user.TenantId, user.Id, document.Id), context.RequestAborted);
         await storage.DeleteObjectAsync(scratchKey, context.RequestAborted);
         await db.SaveChangesAsync(context.RequestAborted);
@@ -413,6 +446,101 @@ internal static class WebDavSpecialHandlers
     // two people editing different documents cannot collide unless they use the same temp name at the same
     // moment — in which case the loser's buffer is overwritten and their editor's rename fails, which is the
     // same outcome it would get from a local disk.
+    /// <summary>The two halves of an atomic save in the Intray, which the flat-folder handler cannot express.</summary>
+    /// <remarks>
+    /// <para>
+    /// An Intray item is a blob under the user's prefix — no Document, no versions, no check-out — so the
+    /// commit helpers the tree reuses have nothing to act on. What is left is genuinely simple: the SET-ASIDE
+    /// copies the item into the scratch collection as a backup, and the SWAP writes the staged bytes back over
+    /// the item.
+    /// </para>
+    /// <para>
+    /// The backup is <b>kept</b> until the editor deletes the collection. It costs nothing — the copy is made
+    /// either way — and the Intray has <b>no soft-delete</b>, so a save that is abandoned or dies mid-flight
+    /// would otherwise leave the previous bytes nowhere. That is not hypothetical: refusing this sequence is
+    /// what destroyed an Intray file in #762, one a GET had served seconds earlier.
+    /// </para>
+    /// </remarks>
+    internal static async Task<bool> TryIntraySafeSaveMoveAsync(
+        HttpContext context, IServiceProvider services, SimplArchiveDbContext db, User user, List<string> segments)
+    {
+        var destination = WebDavMiddleware.ParseDestination(context);
+        if (destination is not { Count: > 0 })
+        {
+            return false;
+        }
+
+        var storage = services.GetRequiredService<IObjectStorageClient>();
+        var sourceInScratch = WebDavClutter.IsUnderSafeSaveTemp(segments);
+        var destInScratch = WebDavClutter.IsUnderSafeSaveTemp(destination);
+
+        // SET-ASIDE: an item moves into the scratch collection as a backup. The item STAYS — the swap that
+        // follows writes over it, and keeping it is what makes an abandoned save harmless.
+        //
+        // The source is EITHER a real Intray item or an AppleDouble sidecar, which lives in the shadow area
+        // rather than the Intray prefix — macOS sets both aside, and recognising only the first left the
+        // sidecar's move falling through to the flat-folder handler and refused with 403 (#794).
+        if (!sourceInScratch && destInScratch
+            && (WebDavClutter.IsOsClutter(segments[^1])
+                ? WebDavSafeSave.ShadowKey(user, segments)
+                : IntrayItemKey(context, user, segments)) is { } asideSource)
+        {
+            if (!await storage.ExistsAsync(asideSource, context.RequestAborted))
+            {
+                return false;
+            }
+
+            // The backup must CONTAIN the item: an editor reads it back before overwriting and refuses on an
+            // empty one, which is what stopped the tree's version of this dead until it was measured.
+            await storage.CopyObjectAsync(asideSource, WebDavSafeSave.FileKey(user, destination), context.RequestAborted);
+            context.Response.StatusCode = StatusCodes.Status201Created;
+            return true;
+        }
+
+        // SWAP: the staged content is renamed back out of the collection.
+        //
+        // Clutter goes to the SHADOW, never to the Intray. macOS moves its sidecar out alongside the document,
+        // and writing that as an Intray item would file 4 KB of resource-fork metadata as though it were the
+        // user's work — the same defect the tree hit on this exact verb. What may become an item is the clutter
+        // filter's decision, and it has to hold on every path in.
+        if (sourceInScratch && !destInScratch
+            && (WebDavClutter.IsOsClutter(destination[^1])
+                ? WebDavSafeSave.ShadowKey(user, destination)
+                : IntrayItemKey(context, user, destination)) is { } target)
+        {
+            var staged = WebDavSafeSave.FileKey(user, segments);
+            if (!await storage.ExistsAsync(staged, context.RequestAborted))
+            {
+                return false;
+            }
+
+            // THE measured loss (#794): this is the verb an editor uses both to COMMIT a save and to ROLL ONE
+            // BACK, and the two are indistinguishable here — the rollback simply names an empty backup slot as
+            // its source. So the outgoing bytes are kept before the swap, whichever of the two this turns out
+            // to be.
+            if (!WebDavClutter.IsOsClutter(destination[^1]))
+            {
+                await WebDavUserAreas.PreserveIntrayBytesAsync(
+                    storage, services.GetRequiredService<ILogger<WebDavMiddleware>>(), user, destination[^1], context.RequestAborted);
+            }
+
+            await storage.CopyObjectAsync(staged, target, context.RequestAborted);
+            await storage.DeleteObjectAsync(staged, context.RequestAborted);
+            context.Response.StatusCode = StatusCodes.Status204NoContent;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>The storage key of a flat Intray item, or null when the path is not one.</summary>
+    private static string? IntrayItemKey(HttpContext context, User user, IReadOnlyList<string> segments) =>
+        segments.Count == 3
+        && segments[0] == WebDavMiddleware.PersonalNameFor(context)
+        && segments[1] == WebDavMiddleware.IntrayName
+            ? WebDavUserAreas.IntrayPrefix(user) + segments[2]
+            : null;
+
     /// <summary>A direct write over a document that already has content: a working copy, not a version.</summary>
     /// <remarks>
     /// The same outcome the save-by-rename and scratch-collection routes reach (ADR 0562), for applications
@@ -447,7 +575,10 @@ internal static class WebDavSpecialHandlers
         }
 
         content.Position = 0;
-        await services.GetRequiredService<IObjectStorageClient>().PutObjectAsync(
+        var directStorage = services.GetRequiredService<IObjectStorageClient>();
+        await WebDavSafeSave.PreserveWorkingCopyAsync(
+            directStorage, services.GetRequiredService<ILogger<WebDavMiddleware>>(), user, document.Id, document.Name, context.RequestAborted);
+        await directStorage.PutObjectAsync(
             CheckoutStashKey.Build(user.TenantId, user.Id, document.Id), content,
             context.Request.ContentType ?? "application/octet-stream", context.RequestAborted);
         await db.SaveChangesAsync(context.RequestAborted);

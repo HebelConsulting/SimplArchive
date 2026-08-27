@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using SimplArchive.Application.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace SimplArchive.EndToEndTests;
 
@@ -45,7 +47,7 @@ public class WebDavImplicitCheckoutTests
 
         // 2. The edit is the working copy, readable from the Check-out folder — the same stash an explicit
         //    check-out uses, which is what makes check-in, discard and the idle sweep work unchanged.
-        var stash = await DavAsync(ctx, "GET", $"/webdav/{Personal}/Check-out/{docName}");
+        var stash = await DavAsync(ctx, "GET", $"/SimplArchive/{Personal}/Check-out/{docName}");
         Assert.Equal(HttpStatusCode.OK, stash.StatusCode);
         Assert.Equal(edited, await stash.Content.ReadAsByteArrayAsync());
 
@@ -74,7 +76,7 @@ public class WebDavImplicitCheckoutTests
         // The lock is not re-taken (which would restart the idle clock on every keystroke-triggered autosave) and
         // the stash simply carries the newer bytes.
         Assert.Equal(first, await CheckedOutAtAsync(ctx, docId));
-        var stash = await DavAsync(ctx, "GET", $"/webdav/{Personal}/Check-out/{docName}");
+        var stash = await DavAsync(ctx, "GET", $"/SimplArchive/{Personal}/Check-out/{docName}");
         Assert.Equal("second", await stash.Content.ReadAsStringAsync());
     }
 
@@ -133,7 +135,7 @@ public class WebDavImplicitCheckoutTests
         var ctx = await SetupAsync();
         var (docId, docName) = await SeedDocumentAsync(ctx, ".docx", "original");
 
-        var basePath = $"/webdav/{ctx.RepoName}";
+        var basePath = $"/SimplArchive/{ctx.RepoName}";
         // The real shape: named after the file being replaced, hex and a random tail.
         var collection = $"{docName}.sb-a1b2c3d4-Xy9";
 
@@ -203,7 +205,7 @@ public class WebDavImplicitCheckoutTests
         var ctx = await SetupAsync();
         await SeedDocumentAsync(ctx, ".docx", "original");
 
-        var response = await DavAsync(ctx, "PROPFIND", $"/webdav{trailing}", null, ("Depth", "1"));
+        var response = await DavAsync(ctx, "PROPFIND", $"/SimplArchive{trailing}", null, ("Depth", "1"));
         Assert.True(response.IsSuccessStatusCode, $"PROPFIND on the mount root returned {(int)response.StatusCode}");
 
         var body = await response.Content.ReadAsStringAsync();
@@ -225,7 +227,7 @@ public class WebDavImplicitCheckoutTests
     public async Task The_macos_atomic_save_sequence_files_the_document()
     {
         var ctx = await SetupAsync();
-        var basePath = $"/webdav/{ctx.RepoName}";
+        var basePath = $"/SimplArchive/{ctx.RepoName}";
         const string name = "Replayed.docx";
         var collection = $"{name}.sb-43a5b669-1eNpWh";
 
@@ -266,9 +268,12 @@ public class WebDavImplicitCheckoutTests
             ("Destination", $"{basePath}/{collection}/~WRL0328"), ("Overwrite", "T"));
         Assert.True(setAside.IsSuccessStatusCode, $"the set-aside returned {(int)setAside.StatusCode}");
 
-        // The document must SURVIVE it. This is the assertion the whole issue turns on.
-        Assert.True((await DavAsync(ctx, "GET", $"{basePath}/{name}")).IsSuccessStatusCode,
-            "the original was lost when it was moved aside");
+        // The document must SURVIVE it — and survival is not the same as staying put. The path it moved FROM is
+        // vacated, because that is what a MOVE means and the editor is about to rename the new content into it.
+        // Answering 201 and leaving the document there was measured (#794) to end the save: the editor's own
+        // identity followed the move it was told had happened, the name never came free, and it wrote nothing
+        // more. What must not happen is LOSS, and the two assertions after this are what say so.
+        Assert.Equal(HttpStatusCode.NotFound, (await DavAsync(ctx, "GET", $"{basePath}/{name}")).StatusCode);
 
         // …and the backup we said we created must be READABLE, not merely listable. macOS reads back
         // everything it writes: four consecutive GETs on this path returned 404 after we answered 201 to the
@@ -345,7 +350,7 @@ public class WebDavImplicitCheckoutTests
         var ctx = await SetupAsync();
         var (_, docName) = await SeedDocumentAsync(ctx, ".docx", "the original content");
 
-        var basePath = $"/webdav/{ctx.RepoName}";
+        var basePath = $"/SimplArchive/{ctx.RepoName}";
         var collection = $"{docName}.sb-43a5b669-EdIt01";
         (await DavAsync(ctx, "MKCOL", $"{basePath}/{collection}")).EnsureSuccessStatusCode();
 
@@ -358,9 +363,17 @@ public class WebDavImplicitCheckoutTests
         Assert.True(backup.IsSuccessStatusCode, $"reading the backup returned {(int)backup.StatusCode}");
         Assert.Equal("the original content", await backup.Content.ReadAsStringAsync());
 
-        // …and the document itself is untouched where it lives, because version history is the real backup.
-        var still = await DavAsync(ctx, "GET", $"{basePath}/{docName}");
-        Assert.True(still.IsSuccessStatusCode, "the original was lost when it was moved aside");
+        // …the path it left is vacated, which is the half that makes the 201 true (#794) …
+        Assert.Equal(HttpStatusCode.NotFound, (await DavAsync(ctx, "GET", $"{basePath}/{docName}")).StatusCode);
+
+        // …and the ARCHIVE kept the document regardless. The set-aside is a claim about the mounted path, not
+        // about the document: the row, its name and its confirmed version are untouched, so nothing outside
+        // this mount — the tree, the search index, the other client — sees a gap at all.
+        var children = (await TestJson.Get(ctx.Owner, $"/api/documents/{ctx.RepoId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Select(c => c.GetProperty("name").GetString() ?? string.Empty)
+            .ToList();
+        Assert.Contains(Path.GetFileNameWithoutExtension(docName), children);
     }
 
     // A zero-byte write over a document that HAS content changes nothing. macOS opens a file for writing by
@@ -377,16 +390,474 @@ public class WebDavImplicitCheckoutTests
         var ctx = await SetupAsync();
         var (docId, docName) = await SeedDocumentAsync(ctx, ".docx", "content that must survive");
 
-        var truncate = await DavAsync(ctx, "PUT", $"/webdav/{ctx.RepoName}/{docName}", []);
+        var truncate = await DavAsync(ctx, "PUT", $"/SimplArchive/{ctx.RepoName}/{docName}", []);
         Assert.True(truncate.IsSuccessStatusCode, $"the create/truncate returned {(int)truncate.StatusCode}");
 
         // Reading it back gives the content, not nothing.
-        var read = await DavAsync(ctx, "GET", $"/webdav/{ctx.RepoName}/{docName}");
+        var read = await DavAsync(ctx, "GET", $"/SimplArchive/{ctx.RepoName}/{docName}");
         Assert.Equal("content that must survive", await read.Content.ReadAsStringAsync());
 
         // …and it did not take a working copy: there was no edit to take one of.
         Assert.DoesNotContain((await TestJson.Get(ctx.Api, "/api/checkouts")).GetProperty("items").EnumerateArray(),
             c => c.GetProperty("id").GetGuid() == docId);
+    }
+
+    // The macOS Intray sequence as CAPTURED, not as reasoned about (#794). Rebuilt from a WebDAV Trace of a
+    // real save after the hand-written version below passed while the actual client failed — a replay built by
+    // analogy with the tree is a replay of my assumptions.
+    //
+    // It asserts a property rather than a script: every request a filesystem client makes must get a COHERENT
+    // answer. A probe for a free name may 404; a read of something we accepted may not. The first incoherent
+    // answer is the defect, and listing them all in one run beats discovering them one save at a time.
+    [Fact]
+    public async Task Every_request_in_the_captured_intray_sequence_is_answered_coherently()
+    {
+        var ctx = await SetupAsync();
+        var intray = $"/SimplArchive/{Personal}/Intray";
+        const string doc = "Captured.docx";
+        var col = $"{doc}.sb-43a5b669-OjK7I6";
+        var content = Encoding.UTF8.GetBytes("the captured content");
+        var sidecar = new byte[4096];
+
+        // The captured order. Probes that legitimately 404 are marked; everything else must succeed.
+        var steps = new (string Verb, string Path, byte[]? Body, string? Dest, bool MayBeMissing)[]
+        {
+            ("PROPFIND", $"{intray}/{doc}", null, null, true),          // does it exist yet? no
+            ("PUT",      $"{intray}/{doc}", [], null, false),           // create it empty FIRST
+            ("PROPFIND", $"{intray}/{doc}", null, null, false),         // …and it must exist now
+            ("PUT",      $"{intray}/._{doc}", sidecar, null, false),    // the sidecar
+            ("GET",      $"{intray}/._{doc}", null, null, false),       // …read back
+            ("LOCK",     $"{intray}/{doc}", null, null, false),
+            ("UNLOCK",   $"{intray}/{doc}", null, null, false),
+            ("PROPFIND", $"{intray}/{col}", null, null, true),          // free-name probe
+            ("MKCOL",    $"{intray}/{col}", null, null, false),
+            ("PROPFIND", $"{intray}/{col}", null, null, false),         // …now it exists
+            ("PUT",      $"{intray}/._{col}", sidecar, null, false),
+            ("PROPFIND", $"{intray}/{col}/Contents", null, null, true), // macOS bundle probe
+            ("PUT",      $"{intray}/{col}/.~WRD3279", [], null, false), // the temp, created EMPTY first
+            ("PUT",      $"{intray}/{col}/._.~WRD3279", sidecar, null, false),
+            ("LOCK",     $"{intray}/{col}/.~WRD3279", null, null, false),
+            ("PUT",      $"{intray}/{col}/.~WRD3279", content, null, false),   // …then the content
+            ("UNLOCK",   $"{intray}/{col}/.~WRD3279", null, null, false),
+            ("GET",      $"{intray}/{col}/.~WRD3279", null, null, false),      // …readable
+            ("GET",      $"{intray}/{doc}", null, null, false),                // the item, still empty
+            ("MOVE",     $"{intray}/{doc}", null, $"{intray}/{col}/~WRL1263", false),      // set-aside
+            ("GET",      $"{intray}/{col}/~WRL1263", null, null, false),                   // …backup readable
+            ("MOVE",     $"{intray}/._{doc}", null, $"{intray}/{col}/._~WRL1263", false),  // sidecar aside
+            ("MOVE",     $"{intray}/{col}/.~WRD3279", null, $"{intray}/{doc}", false),     // THE SWAP
+            ("GET",      $"{intray}/{doc}", null, null, false),                            // …the saved bytes
+            ("DELETE",   $"{intray}/{col}", null, null, false),
+        };
+
+        var incoherent = new List<string>();
+        var heldTokens = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (verb, path, body, dest, mayBeMissing) in steps)
+        {
+            var headers = new List<(string, string)> { ("Depth", "0"), ("Timeout", "Second-600") };
+            if (dest is not null)
+            {
+                headers.Add(("Destination", dest));
+                headers.Add(("Overwrite", "T"));
+            }
+
+            // UNLOCK carries the token its LOCK returned. Omitting it is a 409 the SERVER is right to give —
+            // the first run of this replay reported two, and both were the test's omission rather than a
+            // defect. A replay that does not speak the protocol correctly manufactures its own findings.
+            if (verb == "UNLOCK" && heldTokens.TryGetValue(path, out var token))
+            {
+                headers.Add(("Lock-Token", $"<{token}>"));
+            }
+
+            var response = await DavAsync(ctx, verb, path, body, [.. headers]);
+            if (verb == "LOCK" && response.Headers.TryGetValues("Lock-Token", out var issued))
+            {
+                heldTokens[path] = issued.First().Trim('<', '>');
+            }
+
+            var ok = response.IsSuccessStatusCode
+                || (mayBeMissing && response.StatusCode == System.Net.HttpStatusCode.NotFound);
+            if (!ok)
+            {
+                incoherent.Add($"{verb} {path.Replace(intray, "…")} → {(int)response.StatusCode}");
+            }
+        }
+
+        Assert.True(incoherent.Count == 0,
+            "the client would have been given an incoherent answer:\n  " + string.Join("\n  ", incoherent));
+
+        // …and the save actually landed.
+        Assert.Equal(content, await (await DavAsync(ctx, "GET", $"{intray}/{doc}")).Content.ReadAsByteArrayAsync());
+    }
+
+    // The macOS atomic save, replayed against the INTRAY (#794). Same client, same sequence, different surface:
+    // the Intray is flat object-storage keys with no Documents, no versions and — the part that matters — no
+    // soft-delete, which is where #762's original 403 destroyed a file a GET had served seconds earlier.
+    //
+    // Written BEFORE the implementation this time. In #762 the same sequence was discovered one verb at a time
+    // over ten rounds of asking a person to save a document, because the editor only reaches a verb once the
+    // previous one stops lying to it — so a trace shows what fails FIRST, never what is broken.
+    [Fact]
+    public async Task The_macos_atomic_save_sequence_works_in_the_intray()
+    {
+        var ctx = await SetupAsync();
+        var intray = $"/SimplArchive/{Personal}/Intray";
+        const string name = "Replayed.docx";
+        var collection = $"{name}.sb-43a5b669-InTr01";
+        var original = Encoding.UTF8.GetBytes("the original intray content");
+        var edited = Encoding.UTF8.GetBytes("the edited intray content");
+
+        // An item already staged in the Intray, as if dropped there earlier.
+        (await DavAsync(ctx, "PUT", $"{intray}/{name}", original)).EnsureSuccessStatusCode();
+
+        // 1. The scratch collection: probed for a free name, then created.
+        Assert.Equal(System.Net.HttpStatusCode.NotFound,
+            (await DavAsync(ctx, "PROPFIND", $"{intray}/{collection}", null, ("Depth", "0"))).StatusCode);
+        (await DavAsync(ctx, "MKCOL", $"{intray}/{collection}")).EnsureSuccessStatusCode();
+        Assert.True((await DavAsync(ctx, "PROPFIND", $"{intray}/{collection}", null, ("Depth", "0"))).IsSuccessStatusCode,
+            "the created collection must exist");
+
+        // 2. The AppleDouble sidecar beside it — a SECOND write of the same path must answer 204, not 201: a
+        //    client told "created" twice concludes nothing is kept. Measured in the Intray trace as 201/201.
+        Assert.Equal(System.Net.HttpStatusCode.Created, (await DavAsync(ctx, "PUT", $"{intray}/._{collection}", [])).StatusCode);
+        Assert.Equal(System.Net.HttpStatusCode.NoContent, (await DavAsync(ctx, "PUT", $"{intray}/._{collection}", new byte[4096])).StatusCode);
+
+        // 3. A lock on an unmapped path inside the collection creates it: 201, per RFC 4918 §9.10.4.
+        Assert.Equal(System.Net.HttpStatusCode.Created,
+            (await DavAsync(ctx, "LOCK", $"{intray}/{collection}/.~WRD0001", null, ("Depth", "0"), ("Timeout", "Second-600"))).StatusCode);
+
+        // 4. The content, written inside the collection, and readable back.
+        Assert.True((await DavAsync(ctx, "PUT", $"{intray}/{collection}/.~WRD0001", edited)).IsSuccessStatusCode);
+        Assert.Equal(edited, await (await DavAsync(ctx, "GET", $"{intray}/{collection}/.~WRD0001")).Content.ReadAsByteArrayAsync());
+
+        // 5. The SET-ASIDE: the ORIGINAL moves into the collection as a backup, which must CONTAIN it — Word
+        //    reads its backup before overwriting and refuses on an empty one.
+        var setAside = await DavAsync(ctx, "MOVE", $"{intray}/{name}", null,
+            ("Destination", $"{intray}/{collection}/~WRL0001"), ("Overwrite", "T"));
+        Assert.True(setAside.IsSuccessStatusCode, $"the set-aside returned {(int)setAside.StatusCode}");
+        Assert.Equal(original, await (await DavAsync(ctx, "GET", $"{intray}/{collection}/~WRL0001")).Content.ReadAsByteArrayAsync());
+
+        // 6. The SIDECAR is set aside too, and moved back out afterwards. macOS does this for the AppleDouble
+        //    beside the item — and it lives in the shadow area, not the Intray prefix, so a handler that only
+        //    recognised real Intray items refused it with 403 and the whole save restarted (measured).
+        (await DavAsync(ctx, "PUT", $"{intray}/._{name}", new byte[4096])).EnsureSuccessStatusCode();
+
+        // A remembered write must be READABLE and DELETABLE here too, not just accepted. Storing it on PUT
+        // while GET, PROPFIND and DELETE all answered 404 is what left the editor rewriting its sidecar and
+        // never reaching the document — the write half alone is not the fix.
+        Assert.True((await DavAsync(ctx, "GET", $"{intray}/._{name}")).IsSuccessStatusCode,
+            "the remembered sidecar could not be read back");
+        Assert.True((await DavAsync(ctx, "PROPFIND", $"{intray}/._{name}", null, ("Depth", "0"))).IsSuccessStatusCode,
+            "the remembered sidecar was not listed");
+        var sidecarAside = await DavAsync(ctx, "MOVE", $"{intray}/._{name}", null,
+            ("Destination", $"{intray}/{collection}/._~WRL0001"), ("Overwrite", "T"));
+        Assert.True(sidecarAside.IsSuccessStatusCode, $"the sidecar set-aside returned {(int)sidecarAside.StatusCode}");
+
+        // 7. The swap, then the editor tidies up.
+        var move = await DavAsync(ctx, "MOVE", $"{intray}/{collection}/.~WRD0001", null,
+            ("Destination", $"{intray}/{name}"), ("Overwrite", "T"));
+        Assert.True(move.IsSuccessStatusCode, $"the swap returned {(int)move.StatusCode}");
+
+        // …and the sidecar comes back out WITHOUT becoming an Intray item: 4 KB of resource-fork metadata must
+        // never be filed as though it were the user's work.
+        var sidecarBack = await DavAsync(ctx, "MOVE", $"{intray}/{collection}/._~WRL0001", null,
+            ("Destination", $"{intray}/._{name}"), ("Overwrite", "T"));
+        Assert.True(sidecarBack.IsSuccessStatusCode, $"the sidecar move-out returned {(int)sidecarBack.StatusCode}");
+
+        // The editor deletes its sidecar as part of tidying up; a 404 there reads as the save having failed.
+        Assert.True((await DavAsync(ctx, "DELETE", $"{intray}/._{name}")).IsSuccessStatusCode,
+            "deleting the remembered sidecar returned an error");
+        (await DavAsync(ctx, "DELETE", $"{intray}/{collection}")).EnsureSuccessStatusCode();
+
+        // The saved bytes come back — asserted as CONTENT, because every step above can answer 2xx while the
+        // file reads as zero bytes.
+        Assert.Equal(edited, await (await DavAsync(ctx, "GET", $"{intray}/{name}")).Content.ReadAsByteArrayAsync());
+
+        // …and the DELETEd collection is gone from the listing. Its `._` sidecar legitimately remains listed
+        // to its writer — the client wrote it beside the collection and never deleted it, and a listing that
+        // omits what a direct request finds is the defect this issue is made of (#794). The sidecar's name
+        // CONTAINS the collection's, so the absence is asserted on the collection's own href, not a substring.
+        var listing = await (await DavAsync(ctx, "PROPFIND", intray, null, ("Depth", "1"))).Content.ReadAsStringAsync();
+        Assert.Contains(name, listing, StringComparison.Ordinal);
+        Assert.DoesNotContain($"Intray/{collection}", listing, StringComparison.Ordinal);
+    }
+
+    /// <summary>An AppleDouble sidecar FOR a scratch collection is a file, not the collection.</summary>
+    /// <remarks>
+    /// Taken from the wire, not reasoned about (#794). macOS writes `._&lt;name&gt;.sb-&lt;hex&gt;-&lt;rand&gt;`
+    /// beside the scratch collection it just made — the sidecar carrying the DIRECTORY's metadata. Its name ends
+    /// with the safe-save suffix because it is named after the collection, and `IsSafeSaveTemp` matches on the
+    /// SUFFIX, so the `._` prefix changed nothing and the sidecar was classified as the collection itself.
+    ///
+    /// PUT then stored a file while PROPFIND looked for a collection marker, and the server gave two different
+    /// answers about one path — measured as `PUT 4096B → 204` (updated: it exists) followed immediately by
+    /// `PROPFIND → 404` (there is no such thing). macOS abandoned that collection and started another; the real
+    /// 13 KB of content had already been written into the abandoned one, and the Intray kept the zero-byte
+    /// placeholder from the very first `PUT … Content-Length: 0`.
+    ///
+    /// The assertion is the ADR 0707 promise, not a status code in isolation: what we ACCEPT must be readable
+    /// back, and the listing must agree with the download.
+    /// </remarks>
+    [Fact]
+    public async Task A_sidecar_named_after_a_scratch_collection_is_stored_and_served_as_a_file()
+    {
+        var ctx = await SetupAsync();
+        var intray = $"/SimplArchive/{Personal}/Intray";
+
+        // The exact shape from the trace: the sidecar is named after the collection, so it ENDS with the suffix.
+        var collection = $"More testing.docx.sb-43a5b669-{Guid.NewGuid().ToString("N")[..6]}";
+        var sidecar = $"{intray}/._{collection}";
+
+        // macOS creates it empty first, then writes the 4 KB resource fork over it.
+        Assert.Equal(HttpStatusCode.Created, (await DavAsync(ctx, "PUT", sidecar, [])).StatusCode);
+
+        var fork = Enumerable.Range(0, 4096).Select(i => (byte)(i % 251)).ToArray();
+        var rewritten = await DavAsync(ctx, "PUT", sidecar, fork);
+        Assert.True(rewritten.IsSuccessStatusCode, $"rewriting the sidecar returned {(int)rewritten.StatusCode}");
+
+        // THE DEFECT: answered 204 above and 404 here. A path cannot be both.
+        var props = await DavAsync(ctx, "PROPFIND", sidecar, null, ("Depth", "0"));
+        Assert.True(props.IsSuccessStatusCode,
+            $"PROPFIND on the sidecar we had just accepted returned {(int)props.StatusCode}");
+
+        // …and it must come back as the bytes we took, not as an empty or absent resource.
+        var read = await DavAsync(ctx, "GET", sidecar);
+        Assert.True(read.IsSuccessStatusCode, $"GET on the sidecar returned {(int)read.StatusCode}");
+        Assert.Equal(fork, await read.Content.ReadAsByteArrayAsync());
+
+        // It is a SIDECAR, so it must never become an Intray ITEM — a staged object under the inbox prefix,
+        // which is what the misclassification minted. It now legitimately appears in its writer's LISTING as a
+        // remembered write (#794), so the assertion is on the store, where the two are distinguishable.
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var storage = scope.ServiceProvider.GetRequiredService<IObjectStorageClient>();
+            var inbox = $"tenants/{ctx.TenantId}/users/{await UserIdAsync(ctx)}/inbox/";
+            Assert.DoesNotContain(
+                await storage.ListObjectsAsync(inbox),
+                o => o.Key[inbox.Length..].StartsWith("._", StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>An Intray overwrite keeps the bytes it replaces, because nothing else here can.</summary>
+    /// <remarks>
+    /// Measured, in full (#794). A word processor saved into the Intray correctly — the swap landed, and the
+    /// document read back at its true length for six seconds. Then it rolled its own save back by MOVEing an
+    /// EMPTY backup slot over the file, and the user's work ceased to exist.
+    ///
+    /// The rollback is the SAME verb as the commit: an editor swaps a staged file onto the item either way, and
+    /// the only difference is what happens to be in the staged file. So this cannot be decided by inspecting the
+    /// request, and refusing the empty case would trade one defect for another — truncating a file is legitimate.
+    /// What the gateway must not do is make the client's mistake FINAL, and in the Intray it uniquely could:
+    /// a bare object with no version history and no soft-delete.
+    ///
+    /// Asserted against object storage rather than through the API, because there is deliberately no restore
+    /// affordance yet — the bytes being recoverable is the whole claim, so the test verifies exactly that and
+    /// nothing it cannot see.
+    /// </remarks>
+    [Fact]
+    public async Task An_emptying_rollback_in_the_intray_keeps_the_bytes_it_replaced()
+    {
+        var ctx = await SetupAsync();
+        var intray = $"/SimplArchive/{Personal}/Intray";
+        var name = $"work{Guid.NewGuid().ToString("N")[..8]}.docx";
+        var work = Encoding.UTF8.GetBytes("thirteen thousand bytes of somebody's afternoon");
+
+        // The item, saved correctly — exactly as the trace showed it before the rollback.
+        (await DavAsync(ctx, "PUT", $"{intray}/{name}", work)).EnsureSuccessStatusCode();
+        Assert.Equal(work, await (await DavAsync(ctx, "GET", $"{intray}/{name}")).Content.ReadAsByteArrayAsync());
+
+        // The rollback: a scratch collection holding an EMPTY backup slot, moved over the item.
+        var collection = $"{name}.sb-43a5b669-{Guid.NewGuid().ToString("N")[..6]}";
+        (await DavAsync(ctx, "MKCOL", $"{intray}/{collection}")).EnsureSuccessStatusCode();
+        (await DavAsync(ctx, "PUT", $"{intray}/{collection}/~WRL2067", [])).EnsureSuccessStatusCode();
+        var rollback = await DavAsync(ctx, "MOVE", $"{intray}/{collection}/~WRL2067", null, ("Destination", $"{intray}/{name}"));
+        Assert.True(rollback.IsSuccessStatusCode, $"the rollback MOVE returned {(int)rollback.StatusCode}");
+
+        // It is NOT refused — the client got what it asked for, and the item is now empty…
+        Assert.Empty(await (await DavAsync(ctx, "GET", $"{intray}/{name}")).Content.ReadAsByteArrayAsync());
+
+        // …but the work still exists. Without this the 13 KB were simply gone, with no version to fall back to.
+        using var scope = _factory.Services.CreateScope();
+        var storage = scope.ServiceProvider.GetRequiredService<IObjectStorageClient>();
+        var previous = $"tenants/{ctx.TenantId}/users/{await UserIdAsync(ctx)}/inbox-previous/{name}";
+        Assert.True(await storage.ExistsAsync(previous), "the bytes the rollback replaced were not kept");
+
+        await using var kept = await storage.GetObjectAsync(previous);
+        using var buffer = new MemoryStream();
+        await kept.CopyToAsync(buffer);
+        Assert.Equal(work, buffer.ToArray());
+    }
+
+    private static async Task<Guid> UserIdAsync(Context ctx) =>
+        (await TestJson.Get(ctx.Api, "/api/diagnostics/whoami")).GetProperty("userId").GetGuid();
+
+    /// <summary>Editing in place changes the ETag, even when the new bytes are the same LENGTH.</summary>
+    /// <remarks>
+    /// The Intray taught this the expensive way (#794): an editor writes, then asks for `getetag` to confirm the
+    /// write landed, and retries the whole save when it cannot. A tag that does not move is worse than an absent
+    /// one — it is a positive claim that the file is unchanged.
+    ///
+    /// In the tree the tag is derived from the working copy's LENGTH but the DOCUMENT's modified time, and a
+    /// save-in-place deliberately does not create a version (ADR 0562), so the document's timestamp need not
+    /// move at all. Two saves of equal length therefore looked identical. Asserted with same-length content
+    /// precisely because a differing length would hide it.
+    /// </remarks>
+    [Fact]
+    public async Task Saving_in_place_changes_the_etag_even_when_the_length_is_unchanged()
+    {
+        var ctx = await SetupAsync();
+        var (_, docName) = await SeedDocumentAsync(ctx, ".docx", "AAAA");
+        var path = $"/SimplArchive/{ctx.RepoName}/{docName}";
+
+        var before = await ETagAsync(ctx, path);
+        Assert.False(string.IsNullOrWhiteSpace(before), "the document reported no getetag");
+
+        await SaveByRenameAsync(ctx, docName, Encoding.UTF8.GetBytes("BBBB")); // same length, different bytes
+
+        var after = await ETagAsync(ctx, path);
+        Assert.NotEqual(before, after);
+
+        // …and the download must agree with the listing, or a client validating by header sees something else.
+        Assert.Equal(after, (await DavAsync(ctx, "GET", path)).Headers.ETag?.ToString());
+    }
+
+    private async Task<string?> ETagAsync(Context ctx, string path)
+    {
+        var response = await DavAsync(ctx, "PROPFIND", path, null, ("Depth", "0"));
+        Assert.True(response.IsSuccessStatusCode, $"PROPFIND {path} returned {(int)response.StatusCode}");
+        var xml = await response.Content.ReadAsStringAsync();
+        var match = System.Text.RegularExpressions.Regex.Match(xml, "<D:getetag>(.*?)</D:getetag>");
+        return match.Success ? match.Groups[1].Value : null;
+    }
+
+    /// <summary>A rollback in the TREE keeps the in-flight edit it overwrites.</summary>
+    /// <remarks>
+    /// The same net as the Intray's, for a sequence measured on BOTH this branch and on main — so a standing
+    /// hazard rather than a regression. An editor rolls its own save back by MOVEing an EMPTY backup slot onto
+    /// the document (<c>MOVE …/~WRL2558 → the document</c>), and the commit and the rollback are the SAME verb
+    /// carrying different bytes, so neither can be refused on inspection.
+    ///
+    /// Version history is not the answer, which is the trap this guards. A save in place writes the STASH and
+    /// deliberately creates no version (ADR 0562): the confirmed version survives untouched while everything the
+    /// user has done since their last check-in is what the empty write destroys.
+    /// </remarks>
+    [Fact]
+    public async Task An_emptying_rollback_in_the_tree_keeps_the_working_copy_it_replaced()
+    {
+        var ctx = await SetupAsync();
+        var (docId, docName) = await SeedDocumentAsync(ctx, ".docx", "original");
+        var edit = Encoding.UTF8.GetBytes("an afternoon of edits nobody wants to retype");
+
+        // A real save in place: the working copy now holds the user's edit.
+        await SaveByRenameAsync(ctx, docName, edit);
+        Assert.Equal(edit, await (await DavAsync(ctx, "GET", $"/SimplArchive/{Personal}/Check-out/{docName}")).Content.ReadAsByteArrayAsync());
+
+        // The rollback: an empty scratch file moved onto the document, exactly as measured.
+        var basePath = $"/SimplArchive/{ctx.RepoName}";
+        var collection = $"{docName}.sb-43a5b669-{Guid.NewGuid().ToString("N")[..6]}";
+        (await DavAsync(ctx, "MKCOL", $"{basePath}/{collection}")).EnsureSuccessStatusCode();
+        (await DavAsync(ctx, "PUT", $"{basePath}/{collection}/~WRL2558", [])).EnsureSuccessStatusCode();
+        var rollback = await DavAsync(ctx, "MOVE", $"{basePath}/{collection}/~WRL2558", null, ("Destination", $"{basePath}/{docName}"));
+        Assert.True(rollback.IsSuccessStatusCode, $"the rollback MOVE returned {(int)rollback.StatusCode}");
+
+        // Not refused — the working copy is now empty, which is what the client asked for…
+        Assert.Empty(await (await DavAsync(ctx, "GET", $"/SimplArchive/{Personal}/Check-out/{docName}")).Content.ReadAsByteArrayAsync());
+
+        // …but the edit still exists. No version was ever written, so nothing else could have kept it.
+        using var scope = _factory.Services.CreateScope();
+        var storage = scope.ServiceProvider.GetRequiredService<IObjectStorageClient>();
+        var previous = $"tenants/{ctx.TenantId}/users/{await UserIdAsync(ctx)}/stash-previous/{docId:D}";
+        Assert.True(await storage.ExistsAsync(previous), "the in-flight edit the rollback replaced was not kept");
+
+        await using var kept = await storage.GetObjectAsync(previous);
+        using var buffer = new MemoryStream();
+        await kept.CopyToAsync(buffer);
+        Assert.Equal(edit, buffer.ToArray());
+    }
+
+    // The same captured sequence, against a REPOSITORY FOLDER rather than the Intray (#794).
+    //
+    // Written after the location hypothesis was refuted on the live mount: saving a fresh document straight into
+    // a shared repository fails exactly as it does in the personal space, and fails identically on `main`. So the
+    // surface is not the variable and neither is any recent change — the tree has never served this sequence.
+    //
+    // It asserts the same PROPERTY as its Intray twin rather than a script: every request a filesystem client
+    // makes gets a COHERENT answer. That matters more here than the final bytes, because the editor only reaches
+    // a verb once the previous one stops lying to it — so a live trace shows what fails FIRST, never what is
+    // broken, and ten rounds of asking a person to press Save is how #762 was found one verb at a time.
+    [Fact]
+    public async Task Every_request_in_the_captured_sequence_is_answered_coherently_in_the_tree()
+    {
+        var ctx = await SetupAsync();
+        var repo = $"/SimplArchive/{ctx.RepoName}";
+        const string doc = "Testing My Test.docx";
+        var col = $"{doc}.sb-43a5b669-TrEe01";
+        var content = Encoding.UTF8.GetBytes("the captured content, saved into the tree");
+        var sidecar = new byte[4096];
+
+        var steps = new (string Verb, string Path, byte[]? Body, string? Dest, bool MayBeMissing)[]
+        {
+            ("PROPFIND", $"{repo}/{doc}", null, null, true),           // does it exist yet? no
+            ("PUT",      $"{repo}/{doc}", [], null, false),            // create it empty FIRST
+            ("PROPFIND", $"{repo}/{doc}", null, null, false),          // …and it must exist now
+            ("PUT",      $"{repo}/._{doc}", sidecar, null, false),     // the sidecar
+            ("GET",      $"{repo}/._{doc}", null, null, false),        // …read back
+            ("LOCK",     $"{repo}/{doc}", null, null, false),
+            ("UNLOCK",   $"{repo}/{doc}", null, null, false),
+            ("PROPFIND", $"{repo}/{col}", null, null, true),           // free-name probe
+            ("MKCOL",    $"{repo}/{col}", null, null, false),
+            ("PROPFIND", $"{repo}/{col}", null, null, false),          // …now it exists
+            ("PUT",      $"{repo}/._{col}", sidecar, null, false),
+            ("PROPFIND", $"{repo}/{col}/Contents", null, null, true),  // macOS bundle probe
+            ("PUT",      $"{repo}/{col}/.~WRD3279", [], null, false),  // the temp, created EMPTY first
+            ("PUT",      $"{repo}/{col}/._.~WRD3279", sidecar, null, false),
+            ("LOCK",     $"{repo}/{col}/.~WRD3279", null, null, false),
+            ("PUT",      $"{repo}/{col}/.~WRD3279", content, null, false),   // …then the content
+            ("UNLOCK",   $"{repo}/{col}/.~WRD3279", null, null, false),
+            ("GET",      $"{repo}/{col}/.~WRD3279", null, null, false),      // …readable
+            ("GET",      $"{repo}/{doc}", null, null, false),                // the document, still empty
+            ("MOVE",     $"{repo}/{doc}", null, $"{repo}/{col}/~WRL1263", false),      // set-aside
+            ("GET",      $"{repo}/{col}/~WRL1263", null, null, false),                 // …backup readable
+            ("MOVE",     $"{repo}/._{doc}", null, $"{repo}/{col}/._~WRL1263", false),  // sidecar aside
+            ("MOVE",     $"{repo}/{col}/.~WRD3279", null, $"{repo}/{doc}", false),     // THE SWAP
+            ("GET",      $"{repo}/{doc}", null, null, false),                          // …the saved bytes
+            ("DELETE",   $"{repo}/{col}", null, null, false),
+        };
+
+        var incoherent = new List<string>();
+        var heldTokens = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (verb, path, body, dest, mayBeMissing) in steps)
+        {
+            var headers = new List<(string, string)> { ("Depth", "0"), ("Timeout", "Second-600") };
+            if (dest is not null)
+            {
+                headers.Add(("Destination", dest));
+                headers.Add(("Overwrite", "T"));
+            }
+
+            if (verb == "UNLOCK" && heldTokens.TryGetValue(path, out var token))
+            {
+                headers.Add(("Lock-Token", $"<{token}>"));
+            }
+
+            var response = await DavAsync(ctx, verb, path, body, [.. headers]);
+            if (verb == "LOCK" && response.Headers.TryGetValues("Lock-Token", out var issued))
+            {
+                heldTokens[path] = issued.First().Trim('<', '>');
+            }
+
+            var ok = response.IsSuccessStatusCode || (mayBeMissing && response.StatusCode == HttpStatusCode.NotFound);
+            if (!ok)
+            {
+                incoherent.Add($"{verb} {path.Replace(repo, "…", StringComparison.Ordinal)} → {(int)response.StatusCode}");
+            }
+        }
+
+        Assert.True(incoherent.Count == 0,
+            "the client would have been given an incoherent answer:\n  " + string.Join("\n  ", incoherent));
+
+        // …and the save actually landed. The Intray keeps bytes; the tree keeps a WORKING COPY (ADR 0562), so
+        // the document reads back through the mount while its confirmed version is deliberately untouched.
+        Assert.Equal(content, await (await DavAsync(ctx, "GET", $"{repo}/{doc}")).Content.ReadAsByteArrayAsync());
     }
 
     private sealed record Context(HttpClient Owner, HttpClient Api, Guid TenantId, Guid RepoId, string RepoName, AuthenticationHeaderValue Basic, HttpClient Dav);
@@ -450,7 +921,7 @@ public class WebDavImplicitCheckoutTests
 
     private async Task<HttpResponseMessage> CommitRenameAsync(Context ctx, string docName, byte[] content)
     {
-        var basePath = $"/webdav/{ctx.RepoName}";
+        var basePath = $"/SimplArchive/{ctx.RepoName}";
         var temp = $"{Guid.NewGuid().ToString("N")[..8]}.tmp";
 
         (await DavAsync(ctx, "PUT", $"{basePath}/~${docName}", Encoding.UTF8.GetBytes("owner"))).EnsureSuccessStatusCode();

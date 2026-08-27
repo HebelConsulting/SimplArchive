@@ -25,6 +25,12 @@ internal static class WebDavXml
         sb.Append("</D:multistatus>");
         context.Response.StatusCode = 207;
         context.Response.ContentType = "application/xml; charset=utf-8";
+
+        // Traced HERE rather than by wrapping the response stream: this is the one place a multistatus is
+        // composed, so the body is already in hand as a string and no plumbing has to be threaded through the
+        // pipeline to recover it (ADR 0626).
+        WebDavTrace.ResponseBody(context.RequestServices.GetRequiredService<ILogger<WebDavMiddleware>>(), context, sb.ToString());
+
         await context.Response.WriteAsync(sb.ToString(), context.RequestAborted);
     }
 

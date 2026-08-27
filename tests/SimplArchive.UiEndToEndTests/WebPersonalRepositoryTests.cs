@@ -75,7 +75,7 @@ public class WebPersonalRepositoryTests
         var page = await Ui.LoginAsync(_app);
         var tree = page.Locator("[data-pane='tree']");
 
-        // Expanding the Personal node reveals the Intray + Check-out launcher nodes (mirroring /webdav/Personal).
+        // Expanding the Personal node reveals the Intray + Check-out launcher nodes (mirroring /SimplArchive/Personal).
         var personal = tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = SelfHostedAppFixture.AdminDisplayName }).First;
         await Expect(personal).ToBeVisibleAsync();
         await personal.Locator(".mud-treeview-item-arrow").ClickAsync();

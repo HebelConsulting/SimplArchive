@@ -249,7 +249,7 @@ public static class OsFileManager
         return RunAsync(fileName, arguments, macOsChecksExit: Current == Platform.MacOs);
     }
 
-    // https://host:443/webdav/Intray → davs://host:443/webdav/Intray ; http → dav.
+    // https://host:443/SimplArchive/Intray → davs://host:443/SimplArchive/Intray ; http → dav.
 
     // ---- Already mounted? and mapping a persistent drive letter (issue #461) ---------------------------
 
@@ -434,7 +434,7 @@ public static class OsFileManager
     private static string ToDavScheme(Uri uri) =>
         (uri.Scheme == "https" ? "davs://" : "dav://") + uri.Authority + uri.AbsolutePath;
 
-    // https://host:443/webdav/Intray → \\host@SSL@443\DavWWWRoot\webdav\Intray ; http → \\host@80\...
+    // https://host:443/SimplArchive/Intray → \\host@SSL@443\DavWWWRoot\SimplArchive\Intray ; http → \\host@80\...
     private static string ToWindowsUnc(Uri uri)
     {
         var port = uri.IsDefaultPort ? (uri.Scheme == "https" ? 443 : 80) : uri.Port;

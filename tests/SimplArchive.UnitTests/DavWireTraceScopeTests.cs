@@ -37,7 +37,7 @@ public class DavWireTraceScopeTests
     [InlineData("LOCK", "/SimplArchive/Personal/report.pdf")]
     [InlineData("OPTIONS", "/SimplArchive")]
     // The legacy mount path still answers, so it must still be traced.
-    [InlineData("GET", "/webdav/Personal/report.pdf")]
+    [InlineData("GET", "/SimplArchive/Personal/report.pdf")]
     public void The_trace_covers_every_dav_surface(string method, string path) =>
         Assert.True(DavWireTraceMiddleware.IsDav(Request(method, path)),
             $"{method} {path} is served by a DAV surface but would not be traced");
@@ -57,7 +57,6 @@ public class DavWireTraceScopeTests
     [InlineData("GET", "/SimplArchive/Personal/scan.pdf", true)]
     [InlineData("HEAD", "/SimplArchive/Personal/scan.pdf", true)]
     [InlineData("PUT", "/SimplArchive/Personal/scan.pdf", true)]
-    [InlineData("GET", "/webdav/Personal/scan.pdf", true)]
     // Protocol on the same gateway: captured, because the body is XML and that is the diagnosis.
     [InlineData("PROPFIND", "/SimplArchive/Personal", false)]
     [InlineData("PROPPATCH", "/SimplArchive/Personal", false)]
