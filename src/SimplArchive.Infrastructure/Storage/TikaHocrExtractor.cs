@@ -85,7 +85,9 @@ public sealed partial class TikaHocrExtractor : IImageTextLayoutExtractor
                 continue; // a word before any page-open — skip
             }
 
-            var text = WebUtility.HtmlDecode(Tags().Replace(m.Groups["t"].Value, "")).Trim();
+            // Trimmed BEFORE the empty check, so a token that is only punctuation drops out entirely rather
+            // than becoming a clickable box that copies nothing (#788).
+            var text = TextLayoutValue.Trim(WebUtility.HtmlDecode(Tags().Replace(m.Groups["t"].Value, "")));
             if (text.Length == 0)
             {
                 continue;

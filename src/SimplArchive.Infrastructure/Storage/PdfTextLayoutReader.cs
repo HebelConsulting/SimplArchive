@@ -25,7 +25,9 @@ public static class PdfTextLayoutReader
             {
                 foreach (var word in page.GetWords())
                 {
-                    var text = word.Text;
+                    // Trimmed BEFORE the empty check, so a token that is only punctuation drops out entirely
+                    // rather than becoming a clickable box that copies nothing (#788).
+                    var text = TextLayoutValue.Trim(word.Text);
                     if (string.IsNullOrWhiteSpace(text))
                     {
                         continue;
