@@ -51,6 +51,40 @@ internal static partial class WebDavClutter
 
     internal static bool IsSafeSaveTemp(string name) => SafeSaveTempSuffix().IsMatch(name);
 
+    /// <summary>True when the path IS a safe-save collection, or lies inside one.</summary>
+    /// <remarks>
+    /// Takes the whole path rather than a name, so no caller has to index it. That is not tidiness: the first
+    /// version of this fix asked <c>IsSafeSaveTemp(segments[^1])</c> at three call sites, and on the MOUNT ROOT
+    /// — where the segment list is EMPTY — that threw, so every client's first PROPFIND returned 500 and the
+    /// volume could not be mounted at all. A helper that cannot be handed an empty list wrongly is the fix;
+    /// three guards that each have to remember are not.
+    /// </remarks>
+    internal static bool IsSafeSaveScope(IReadOnlyList<string> segments) =>
+        segments.Count > 0 && (IsSafeSaveTemp(segments[^1]) || IsUnderSafeSaveTemp(segments));
+
+    /// <summary>True when any ANCESTOR segment of a path is a safe-save collection.</summary>
+    /// <remarks>
+    /// The leaf is the wrong thing to test here, and testing it is what left the fix half-done (#762). With a
+    /// browser download temp the FILE carries the marker; with a safe-save the marker is on the PARENT
+    /// DIRECTORY, and the file inside usually has the original's exact name. So `IsSafeSaveTemp(segments[^1])`
+    /// never matches the write that actually happens, which is the one inside the collection.
+    ///
+    /// The ancestors, not the whole path: a request FOR the collection itself is about the collection, while a
+    /// request for something inside it is a write that has to be staged.
+    /// </remarks>
+    internal static bool IsUnderSafeSaveTemp(IReadOnlyList<string> segments)
+    {
+        for (var i = 0; i < segments.Count - 1; i++)
+        {
+            if (IsSafeSaveTemp(segments[i]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     // Transient / partial-download / editor-temp files. Legitimate in the Intray / Check-out staging areas (e.g. an
     // in-progress download), but should NOT land in the permanent repository. ADR "WebDAV clutter filter".
     internal static readonly HashSet<string> TransientExtensions = new(StringComparer.OrdinalIgnoreCase)

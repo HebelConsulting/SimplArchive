@@ -126,13 +126,24 @@ public class DavGatewayTests
         var dlId = (await TestJson.Get(owner, $"/api/documents/{repoId}/children")).GetProperty("children")
             .EnumerateArray().Single(c => c.GetProperty("name").GetString() == "dl").GetProperty("id").GetGuid();
 
-        // The browser's zero-byte placeholder at the real name creates NO document (the bug was an empty doc here).
+        // The browser's zero-byte placeholder at the real name creates the document EMPTY, and that is a
+        // deliberate reversal (#762). It used to be discarded, on the reasoning that an empty document is
+        // clutter — but discarding it means the file the OS just created answers 404 to the next read, and for
+        // macOS's atomic save that is fatal: the editor writes its content to a scratch collection, finds no
+        // original to swap over, and abandons without ever issuing the MOVE. A created-but-unwritten file is an
+        // empty file on any filesystem; the honest representation is an empty document.
         Assert.Equal(HttpStatusCode.Created, (await DavAsync("PUT", $"/webdav/{repoName}/dl/report.txt", [])).StatusCode);
         // The bytes stream into a sibling .crdownload — staged, still NO document; the real name doesn't exist yet.
         var payload = Encoding.UTF8.GetBytes("the real downloaded content");
         Assert.Equal(HttpStatusCode.Created, (await DavAsync("PUT", $"/webdav/{repoName}/dl/report.txt{tempExt}", payload)).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await DavAsync("GET", $"/webdav/{repoName}/dl/report.txt")).StatusCode);
-        Assert.Empty((await TestJson.Get(owner, $"/api/documents/{dlId}/children")).GetProperty("children").EnumerateArray());
+        // The placeholder is READABLE while the download is in flight — empty, but there. Answering 404 to a
+        // name we returned 201 for is the defect this whole change is about.
+        var placeholder = await DavAsync("GET", $"/webdav/{repoName}/dl/report.txt");
+        Assert.Equal(HttpStatusCode.OK, placeholder.StatusCode);
+        Assert.Empty(await placeholder.Content.ReadAsByteArrayAsync());
+
+        // …and it is ONE document, not one per step.
+        Assert.Single((await TestJson.Get(owner, $"/api/documents/{dlId}/children")).GetProperty("children").EnumerateArray());
 
         // Download completes: the .crdownload is renamed to the final name → the real document is materialized.
         var move = await DavAsync("MOVE", $"/webdav/{repoName}/dl/report.txt{tempExt}",

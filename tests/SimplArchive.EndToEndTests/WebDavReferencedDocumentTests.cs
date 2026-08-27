@@ -91,8 +91,15 @@ public class WebDavReferencedDocumentTests
                 $"PUT through the reference answered {response.StatusCode}");
         }
 
-        var versions = await TestJson.Get(api, $"/api/documents/{docId}/versions");
-        Assert.True(versions.GetProperty("versions").GetArrayLength() >= 2, "the write should have versioned the TARGET");
+        // The write lands on the TARGET — which is the claim this test exists to make, a reference being another
+        // appearance of one document rather than a copy. It arrives as a WORKING COPY rather than a version,
+        // because every write over a document that already has content does (ADR 0562, extended for #762 so the
+        // outcome does not depend on which application saved). Check-in is what mints the next version.
+        var checkedOut = (await TestJson.Get(api, "/api/checkouts")).GetProperty("items").EnumerateArray()
+            .SingleOrDefault(c => c.GetProperty("id").GetGuid() == docId);
+        Assert.True(checkedOut.ValueKind is not JsonValueKind.Undefined,
+            "the write should have taken a working copy of the TARGET");
+        Assert.True(checkedOut.GetProperty("isModified").GetBoolean(), "the working copy should hold the edit");
 
         // UNPLACEABLE, and this is the one that loses data if guessed wrong: DELETE removes the appearance,
         // never the document. A user tidying a working folder on a mounted drive must not destroy something

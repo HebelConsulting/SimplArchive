@@ -101,6 +101,19 @@ public sealed class WebDavMiddleware
         var services = context.RequestServices;
         var db = services.GetRequiredService<SimplArchiveDbContext>();
 
+        // The whole exchange, at Trace (ADR 0626). Off everywhere by default; the point is that it EXISTS, so
+        // an interop question is one config change away rather than five rounds of inference from status codes.
+        //
+        // BEFORE authentication, and completed on every exit including a refusal: "the mount is rejected" is
+        // precisely the exchange somebody needs to read, and a trace that starts after the gate cannot show it.
+        var trace = services.GetRequiredService<ILogger<WebDavMiddleware>>();
+        WebDavTrace.Request(trace, context, method, path);
+        context.Response.OnStarting(() =>
+        {
+            WebDavTrace.Response(trace, context, method, path);
+            return Task.CompletedTask;
+        });
+
         // ---- Basic auth against the app-specific WebDAV password -------------------------------------------
         var user = await AuthenticateAsync(context, db);
         if (user is null)
@@ -129,15 +142,16 @@ public sealed class WebDavMiddleware
             case "GET": await HandleGetAsync(context, services, db, user, segments, body: true); break;
             case "HEAD": await HandleGetAsync(context, services, db, user, segments, body: false); break;
             case "PUT": await HandlePutAsync(context, services, db, user, segments); break;
-            case "MKCOL": await HandleMkColAsync(context, db, user, segments); break;
+            case "MKCOL": await HandleMkColAsync(context, services, db, user, segments); break;
             case "DELETE": await HandleDeleteAsync(context, services, db, user, segments); break;
             case "MOVE": await HandleMoveAsync(context, services, db, user, segments); break;
             case "COPY": await HandleCopyAsync(context, services, db, user, segments); break;
-            case "LOCK": WebDavLockHandling.HandleLock(_lockStore, context, user, segments); break;
+            case "LOCK": await WebDavLockHandling.HandleLockAsync(_lockStore, services, context, user, segments); break;
             case "UNLOCK": WebDavLockHandling.HandleUnlock(_lockStore, context, user, segments); break;
             case "PROPPATCH": await HandlePropPatchAsync(context, db, user, segments, matchedBase); break;
             default: context.Response.StatusCode = StatusCodes.Status405MethodNotAllowed; break;
         }
+
     }
 
     private async Task<User?> AuthenticateAsync(HttpContext context, SimplArchiveDbContext db)
@@ -211,10 +225,66 @@ public sealed class WebDavMiddleware
             return;
         }
 
+        // The collection and its contents, once it has been created. Before that — while the editor is PROBING
+        // candidate names for a free one — nothing is recorded, so this falls through to the ordinary 404 that
+        // tells it the name is available. Both answers matter, and they are distinguished by whether MKCOL has
+        // happened, not by the name's shape.
+        if (WebDavClutter.IsSafeSaveScope(segments))
+        {
+            var storage = services.GetRequiredService<IObjectStorageClient>();
+            if (await WebDavSafeSave.ExistsAsync(storage, user, segments, context.RequestAborted))
+            {
+                if (WebDavSafeSave.IsCollectionItself(segments))
+                {
+                    var collectionProps = new List<PropStatXml> { CollectionProp(basePath, segments, segments[^1]) };
+                    if (depth != "0")
+                    {
+                        collectionProps.AddRange((await WebDavSafeSave.FilesAsync(storage, user, segments)).Select(f =>
+                            FileProp(basePath, [.. segments, f.Name], f.Size, f.Modified, ContentTypes.ForExtension(Path.GetExtension(f.Name)))));
+                    }
+
+                    await WebDavXml.WriteMultiStatusAsync(context, collectionProps);
+                    return;
+                }
+
+                var staged = (await WebDavSafeSave.FilesAsync(storage, user, segments)).FirstOrDefault(f => f.Name == segments[^1]);
+                await WebDavXml.WriteMultiStatusAsync(context, [FileProp(basePath, segments, staged.Size, staged.Modified, ContentTypes.ForExtension(Path.GetExtension(segments[^1])))]);
+                return;
+            }
+
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        // NOTE on the ANSWER ABOVE: it must depend on whether MKCOL happened. Answering 207
+        // ("it exists") was added on the speculation that an editor verifies its scratch directory — and the
+        // wire says the opposite. Its first move is to PROBE for a FREE name:
+        //
+        //     PROPFIND …/Test123.docx.sb-43a5b669-ZdBc5Y → 207
+        //     PROPFIND …/Test123.docx.sb-43a5b669-adBc5Y → 207
+        //     PROPFIND …/Test123.docx.sb-43a5b669-bdBc5Y → 207   …and on, and on
+        //
+        // Answering "exists" to every candidate means no candidate is ever free, so it never reaches MKCOL and
+        // saving hangs. The truthful answer is the useful one: the collection does not exist, so 404, which is
+        // what the ordinary resolution below already returns.
         var calc = services.GetRequiredService<IEffectiveRightsCalculator>();
         var node = await WebDavPathResolver.ResolveAsync(db, user, segments);
         if (node is null)
         {
+            // Anything we ACCEPTED but did not file — OS clutter, or the OS's zero-byte placeholder for a file
+            // it is about to write. Serving it back is the whole point: a 404 for a write we answered 201 to is
+            // what breaks an atomic save, because the editor finds no original to replace.
+            var shadowStorage = services.GetRequiredService<IObjectStorageClient>();
+            var shadowKey = WebDavSafeSave.ShadowKey(user, segments);
+            if (segments.Count > 0 && await shadowStorage.ExistsAsync(shadowKey, context.RequestAborted))
+            {
+                var meta = (await shadowStorage.ListObjectsAsync(shadowKey)).FirstOrDefault();
+                await WebDavXml.WriteMultiStatusAsync(context, [FileProp(
+                    basePath, segments, meta?.Size ?? 0, meta?.LastModified ?? DateTimeOffset.UtcNow,
+                    ContentTypes.ForExtension(Path.GetExtension(segments[^1])))]);
+                return;
+            }
+
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             return;
         }
@@ -226,12 +296,18 @@ public sealed class WebDavMiddleware
             return;
         }
 
-        var responses = new List<PropStatXml> { PropFor(node, segments, basePath) };
+        var propStorage = services.GetRequiredService<IObjectStorageClient>();
+        var responses = new List<PropStatXml>
+        {
+            PropFor(node, segments, basePath,
+                await WebDavSafeSave.WorkingCopySizeAsync(propStorage, user, node.Document?.Id, node.Document?.CheckedOutByUserId, context.RequestAborted)),
+        };
         if (depth != "0" && node.IsCollection)
         {
             foreach (var child in await WebDavPathResolver.ChildrenAsync(db, user, node, calc, services.GetRequiredService<ILogger<WebDavMiddleware>>()))
             {
-                responses.Add(PropFor(child, [.. segments, child.WebDavName], basePath));
+                responses.Add(PropFor(child, [.. segments, child.WebDavName], basePath,
+                    await WebDavSafeSave.WorkingCopySizeAsync(propStorage, user, child.Document?.Id, child.Document?.CheckedOutByUserId, context.RequestAborted)));
             }
         }
 
@@ -240,7 +316,7 @@ public sealed class WebDavMiddleware
 
 
 
-    private static PropStatXml PropFor(WebDavNode node, List<string> segments, string basePath)
+    private static PropStatXml PropFor(WebDavNode node, List<string> segments, string basePath, long? workingCopySize = null)
     {
         var href = WebDavPathResolver.HrefFor(basePath, segments) + (node.IsCollection ? "/" : "");
         var props = new StringBuilder();
@@ -250,7 +326,7 @@ public sealed class WebDavMiddleware
             : "<D:resourcetype/>");
         if (!node.IsCollection)
         {
-            props.Append($"<D:getcontentlength>{node.Length}</D:getcontentlength>");
+            props.Append($"<D:getcontentlength>{workingCopySize ?? node.Length}</D:getcontentlength>");
             props.Append($"<D:getcontenttype>{WebDavXml.Xml(node.ContentType)}</D:getcontenttype>");
         }
 
@@ -265,6 +341,28 @@ public sealed class WebDavMiddleware
     private async Task HandleGetAsync(HttpContext context, IServiceProvider services, SimplArchiveDbContext db, User user, List<string> segments, bool body)
     {
         var storage = services.GetRequiredService<IObjectStorageClient>();
+
+        // Anything ACCEPTED but not filed has to be READABLE, not merely listable. This was the last verb still
+        // answering 404 to a write we had returned 201 for, and macOS reads back everything it writes: after the
+        // set-aside was accepted, four consecutive `GET …/~WRL3914` returned 404, and Word showed "Saved" and
+        // then reverted to unsaved. Same defect as every other one in #762 — telling a client two different
+        // things about one path — and GET is where it stayed longest because listing was fixed first.
+        if (segments.Count > 0 && !IsSpecialPath(context, segments))
+        {
+            var swallowed = WebDavClutter.IsUnderSafeSaveTemp(segments)
+                ? WebDavSafeSave.FileKey(user, segments)
+                : WebDavSafeSave.ShadowKey(user, segments);
+
+            if (await storage.ExistsAsync(swallowed, context.RequestAborted)
+                && await WebDavPathResolver.ResolveAsync(db, user, segments) is null)
+            {
+                var meta = (await storage.ListObjectsAsync(swallowed)).FirstOrDefault();
+                await StreamAsync(context, storage, swallowed,
+                    ContentTypes.ForExtension(Path.GetExtension(segments[^1])),
+                    meta?.Size ?? 0, meta?.LastModified ?? DateTimeOffset.UtcNow, body);
+                return;
+            }
+        }
 
         if (IsSpecialPath(context, segments))
         {
@@ -289,6 +387,26 @@ public sealed class WebDavMiddleware
         {
             context.Response.StatusCode = StatusCodes.Status405MethodNotAllowed; // GET on a collection isn't supported
             return;
+        }
+
+        // A document the CALLER has checked out serves their WORKING COPY, not the last checked-in version
+        // (#762). The mount then behaves like a filesystem: what you saved is what you read back. Without this,
+        // every save over WebDAV — which is a working copy by design (ADR 0562) — would read back as the
+        // previous content, and a user would rightly call that losing their work.
+        //
+        // Per user, deliberately: a colleague browsing the same folder sees the archived version, because a
+        // working copy is one person's unfinished edit and not yet a fact about the document. Exactly the rule
+        // the Check-out FOLDER already applies (WebDavUserAreas.CheckoutFilesAsync); this is it one level out,
+        // where the document actually lives.
+        if (node.Document is { CheckedOutByUserId: { } holder } && holder == user.Id)
+        {
+            var stashKey = CheckoutStashKey.Build(user.TenantId, user.Id, node.Document.Id);
+            if (await storage.ExistsAsync(stashKey, context.RequestAborted))
+            {
+                await StreamAsync(context, storage, stashKey, node.ContentType,
+                    await storage.GetObjectSizeAsync(stashKey), node.Modified, body);
+                return;
+            }
         }
 
         await StreamAsync(context, storage, node.ObjectKey!, node.ContentType, node.Length, node.Modified, body);
@@ -402,6 +520,24 @@ public sealed class WebDavMiddleware
 
         var fileName = segments[^1];
 
+        // A write INSIDE a safe-save collection (#762). Answering 201 to the MKCOL was a PROMISE, and this is
+        // the verb that has to keep it: the collection was never materialised, so resolving this path's parent
+        // fails and the editor got a 409 — "failed to write" — with the original left untouched but unsaved.
+        //
+        // Staged in the same per-user scratch the save-by-rename flow uses (ADR 0562), keyed by the LEAF name.
+        // That is not a coincidence to lean on but the shape of the thing: the editor's next step renames this
+        // file over the original, and inside a safe-save collection the leaf already HAS the original's exact
+        // name — so TryCommitImplicitCheckoutAsync finds it on the MOVE and commits it, unchanged, with no new
+        // code on the commit side at all.
+        //
+        // Accept-and-discard, which is right for junk nobody writes into (.DS_Store, .Trashes), was wrong here
+        // for exactly one reason: a safe-save collection is a directory the editor DOES write into.
+        if (WebDavClutter.IsUnderSafeSaveTemp(segments))
+        {
+            await WebDavSpecialHandlers.StageSafeSaveAsync(context, services, user, segments);
+            return;
+        }
+
         // A browser in-progress download (.crdownload/.part/.partial/.dltemp) is STAGED in the per-user temp
         // area (not dropped, not materialized as a document) and committed to a real document on the completing
         // MOVE (ADR "WebDAV .crdownload staging"). Checked before the clutter filter, which also matches these.
@@ -411,11 +547,14 @@ public sealed class WebDavMiddleware
             return;
         }
 
-        // Don't file OS clutter (._*, .DS_Store, Thumbs.db, …) as documents in the permanent archive — accept +
-        // silently discard (ADR "WebDAV clutter filter").
+        // OS clutter (._*, .DS_Store, Thumbs.db, …) never becomes a document (ADR "WebDAV clutter filter") — but
+        // it is REMEMBERED rather than dropped. Accepting a write and then answering 404 to a read of it is the
+        // defect that produced "Word cannot complete the save due to a file permission error": measured on the
+        // wire, the editor wrote `._<name>`, got 201, asked for it, got 404, wrote it AGAIN (201, not 204 —
+        // proof nothing was kept), and eventually concluded it could not write at all.
         if (WebDavClutter.IsOsClutter(fileName))
         {
-            context.Response.StatusCode = StatusCodes.Status201Created;
+            await WebDavSpecialHandlers.StageShadowAsync(context, services, user, segments);
             return;
         }
 
@@ -472,13 +611,54 @@ public sealed class WebDavMiddleware
         await context.Request.Body.CopyToAsync(buffered, context.RequestAborted);
         buffered.Position = 0;
 
-        // A zero-byte PUT to a NEW name is the OS's placeholder (Finder's LOCK/create dance, or a browser's
-        // real-name placeholder while it streams the bytes into a sibling .crdownload) — don't materialize an
-        // empty document; the real content arrives via a later PUT or the .crdownload → MOVE commit (ADR "WebDAV
-        // .crdownload staging"). Accept + discard so the OS copy doesn't error.
-        if (buffered.Length == 0 && existing is null)
+        // A zero-byte PUT to a NEW name is the OS creating the file before it writes to it — macOS does exactly
+        // this, and a browser does the same while streaming into a sibling .crdownload. It becomes a REAL, empty
+        // document, and that is a deliberate reversal: it used to be accepted and discarded.
+        //
+        // Discarding it broke atomic saving invisibly. The file macOS had just created answered 404 on the next
+        // read, so the editor wrote its content into the scratch collection, went to swap it over the original,
+        // found no original, and abandoned — never issuing the MOVE. Measured (#762): PUT Test987.docx 0B → 201,
+        // PUT …/.~WRD3576 13471B → 204, DELETE …/.~WRD3576, and no MOVE anywhere. Word reported success, because
+        // webdavfs had been told 201 and had no reason to doubt it.
+        //
+        // Making it visible-but-not-a-document was tried next and moved the same contradiction one verb along:
+        // PROPFIND said it existed, GET said 404, and macOS deleted the file it could not read. A placeholder
+        // has to be a REAL resource or every verb has to learn about it separately — and a created-but-unwritten
+        // file is an empty file on any filesystem, so an empty document is the honest representation. The
+        // content that follows becomes a new VERSION of it, which is the check-out semantics we already want.
+
+
+        // A write over a document that ALREADY HAS CONTENT is a working copy, not a version — whatever route the
+        // application took to get here. Some editors save through a scratch collection and a swap; others, an
+        // office spreadsheet among them, simply PUT the whole file at its real name:
+        //
+        //     PUT …/Contoso Cloud/Book1.xlsx  Content-Length: 8910   (no collection, no MOVE)
+        //
+        // Both are the same act. Routing only the first to a check-out made the archive's behaviour depend on
+        // WHICH APPLICATION you saved from, with nothing in the UI to explain why one app's edits need checking
+        // in and another's did not — an inconsistency worse than either rule alone.
+        //
+        // A PUT to a NEW name still creates a document: that is filing something, not editing it.
+        // …but NOT a zero-byte one. macOS opens a file for writing by creating/truncating it first and sends the
+        // content in a second request, so an empty body here is the OS clearing its throat, not an edit.
+        // Treating it as one stashed an EMPTY working copy over a document that had content — and since the
+        // tree serves the owner their working copy, the file then read as 0 bytes while v2 sat in the archive
+        // holding all 13311 of them. Nothing was lost, and it looked exactly like loss, which is nearly as bad.
+        if (buffered.Length > 0
+            && existing is { Document: { } target, IsCollection: false }
+            && await db.DocumentVersions.AnyAsync(
+                v => v.DocumentId == target.Id && v.Status == DocumentVersionStatus.Confirmed && v.SizeBytes > 0,
+                context.RequestAborted))
         {
-            context.Response.StatusCode = StatusCodes.Status201Created;
+            await WebDavSpecialHandlers.StashOverExistingAsync(context, services, db, user, target, buffered);
+            return;
+        }
+
+        // The OS's create/truncate against a document that already has content: accepted, and it changes
+        // nothing. The content arrives in the next request.
+        if (buffered.Length == 0 && existing is { IsCollection: false })
+        {
+            context.Response.StatusCode = StatusCodes.Status204NoContent;
             return;
         }
 
@@ -567,7 +747,7 @@ public sealed class WebDavMiddleware
 
 
     // ---- MKCOL (create folder) ----------------------------------------------------------------------------
-    private async Task HandleMkColAsync(HttpContext context, SimplArchiveDbContext db, User user, List<string> segments)
+    private async Task HandleMkColAsync(HttpContext context, IServiceProvider services, SimplArchiveDbContext db, User user, List<string> segments)
     {
         // BEFORE the special-path refusal, and that ordering is the fix (#764). A word processor's atomic replace
         // creates a `<file>.sb-<hex>-<rand>` collection; refusing it made the editor roll back and DELETE THE
@@ -575,6 +755,10 @@ public sealed class WebDavMiddleware
         // any other junk directory: the editor gets its "yes", and nothing is materialised.
         if (segments.Count >= 2 && WebDavClutter.IsSafeSaveTemp(segments[^1]))
         {
+            // RECORDED, not discarded. Discarding is what made every later verb a lie: the editor went on to
+            // PUT into a collection we said did not exist, and to PROPFIND files we had already accepted.
+            await WebDavSafeSave.CreateAsync(
+                services.GetRequiredService<IObjectStorageClient>(), user, segments, context.RequestAborted);
             context.Response.StatusCode = StatusCodes.Status201Created;
             return;
         }
@@ -639,6 +823,18 @@ public sealed class WebDavMiddleware
     // ---- DELETE (soft-delete to the recycle bin) ----------------------------------------------------------
     private async Task HandleDeleteAsync(HttpContext context, IServiceProvider services, SimplArchiveDbContext db, User user, List<string> segments)
     {
+        // The safe-save collection, or anything inside it (#762). It was never materialised, so there is nothing
+        // to delete — but 404 is the wrong answer to give an editor tidying up after a save it believes
+        // succeeded, and it is the answer this path used to give. Same promise as the 201: having accepted the
+        // collection, every later verb has to behave as though it exists.
+        if (WebDavClutter.IsSafeSaveScope(segments))
+        {
+            await WebDavSafeSave.RemoveAsync(
+                services.GetRequiredService<IObjectStorageClient>(), user, segments, context.RequestAborted);
+            context.Response.StatusCode = StatusCodes.Status204NoContent;
+            return;
+        }
+
         if (IsSpecialPath(context, segments))
         {
             if (segments.Count != 3)
@@ -775,6 +971,120 @@ public sealed class WebDavMiddleware
         if (WebDavClutter.IsDownloadTemp(segments[^1]) && await WebDavSpecialHandlers.TryCommitDownloadTempAsync(context, services, db, user, segments))
         {
             return;
+        }
+
+        // The safe-save swap. The staged file lives under the collection's own area, so its bytes are bridged
+        // into the scratch key the implicit-checkout commit already looks for — one commit path serves both
+        // atomic-save shapes, rather than a second one that would drift from it.
+        //
+        // Only when something is actually staged; otherwise this falls through and an ordinary move happens.
+        // The SET-ASIDE, which is how macOS actually begins an atomic replace: it moves the ORIGINAL into the
+        // scratch collection as a backup (`…/~WRL0328`) and then renames the new content into the vacated name.
+        // Measured (#762) — and the opposite direction from the one this code was built for:
+        //
+        //     MOVE /…/Test_xxx.docx  Destination: /…/Test_xxx.docx.sb-…-KXPK2o/~WRL0328  → 409
+        //     DELETE /…/Test_xxx.docx                                                    → 204
+        //
+        // The 409 came from the destination's parent not being a real folder, and the line after it is the cost:
+        // refused the backup, macOS concluded the save had failed and DELETED THE FILE. "The file disappeared."
+        //
+        // Accepted as a no-op that KEEPS the document where it is. There is nothing to back up — a replace here
+        // becomes a new version, and the previous bytes stay reachable through version history, which is a
+        // better backup than a copy in a temp folder. The name is remembered so a later read of it answers.
+        if (ParseDestination(context) is { Count: > 0 } setAside && WebDavClutter.IsUnderSafeSaveTemp(setAside)
+            && !WebDavClutter.IsUnderSafeSaveTemp(segments))
+        {
+            var asideStorage = services.GetRequiredService<IObjectStorageClient>();
+            var asideKey = WebDavSafeSave.FileKey(user, setAside);
+            var source = await WebDavPathResolver.ResolveAsync(db, user, segments);
+
+            // The backup must CONTAIN the document, not merely exist. Writing an empty marker here was fine for
+            // a new file — the placeholder was empty anyway — and fatal for editing one in place: Word reads its
+            // backup back before continuing, and measured (#762) it got `200, Content-Length: 0`, so it stopped
+            // rather than destroy the original. That refusal is correct of it and the empty backup was wrong of
+            // us. The document itself still stays where it is; version history is our backup, and this copy is
+            // the one the editor insists on seeing.
+            if (source is { IsCollection: false, ObjectKey: { } sourceKey })
+            {
+                var held = source.Document is { CheckedOutByUserId: { } by } && by == user.Id
+                    ? CheckoutStashKey.Build(user.TenantId, user.Id, source.Document.Id)
+                    : null;
+                var from = held is not null && await asideStorage.ExistsAsync(held, context.RequestAborted) ? held : sourceKey;
+                await asideStorage.CopyObjectAsync(from, asideKey, context.RequestAborted);
+            }
+            else
+            {
+                await asideStorage.PutObjectAsync(asideKey, new MemoryStream([]), "application/octet-stream", context.RequestAborted);
+            }
+
+            context.Response.StatusCode = StatusCodes.Status201Created;
+            return;
+        }
+
+        // The safe-save swap. The staged bytes are bridged into the keys the two EXISTING commit helpers look
+        // for, so neither's logic is duplicated here — one of them serves a REPLACE (implicit check-out onto an
+        // existing document, ADR 0562) and the other a CREATE.
+        //
+        // Both are needed, and only the first was here: TryCommitImplicitCheckoutAsync declines a destination
+        // that does not exist ("an ordinary create, handled elsewhere"), and elsewhere resolves the SOURCE as a
+        // Document — which a staged file is not. So saving a NEW document through an atomic save had no commit
+        // path at all, which is what the wire showed: the target PROPFINDed 404 because it had never existed.
+        if (WebDavClutter.IsUnderSafeSaveTemp(segments))
+        {
+            var safeSaveStorage = services.GetRequiredService<IObjectStorageClient>();
+            var stagedKey = WebDavSafeSave.FileKey(user, segments);
+
+            // A sidecar leaving the collection stays OUT of the archive. macOS moves its AppleDouble to the
+            // final name alongside the document (`…/.sb-…/._.~WRD3471` → `…/._Test.docx`), and committing THAT
+            // minted documents called `._ahfsjishaijf`, `._Line1`, `._The real test` — 4 KB of resource-fork
+            // metadata filed as though it were someone's work.
+            //
+            // The clutter filter decides what may become a document, and it has to decide that on EVERY path in,
+            // not just on PUT. A rule enforced at one entrance is not a rule.
+            var movedDestination = ParseDestination(context);
+            if (movedDestination is { Count: > 0 } && WebDavClutter.IsOsClutter(movedDestination[^1]))
+            {
+                if (await safeSaveStorage.ExistsAsync(stagedKey, context.RequestAborted))
+                {
+                    await safeSaveStorage.CopyObjectAsync(
+                        stagedKey, WebDavSafeSave.ShadowKey(user, movedDestination), context.RequestAborted);
+                    await safeSaveStorage.DeleteObjectAsync(stagedKey, context.RequestAborted);
+                }
+
+                context.Response.StatusCode = StatusCodes.Status201Created;
+                return;
+            }
+
+            if (await safeSaveStorage.ExistsAsync(stagedKey, context.RequestAborted))
+            {
+                await safeSaveStorage.CopyObjectAsync(
+                    stagedKey, WebDavUserAreas.CheckoutScratchPrefix(user) + segments[^1], context.RequestAborted);
+                await safeSaveStorage.CopyObjectAsync(
+                    stagedKey, WebDavUserAreas.TempKeyFor(user, segments), context.RequestAborted);
+                await safeSaveStorage.DeleteObjectAsync(stagedKey, context.RequestAborted);
+
+                // EVERY save over WebDAV is a working copy, never a silent version (ADR 0562, reaffirmed for
+                // #762). The bytes land in the stash, the document shows on the Check-out tab, and check-in is
+                // the deliberate act that mints the next version — including the FIRST save of a newly created
+                // document, so the rule has no special case to remember.
+                //
+                // What makes that honest rather than lossy is that the tree SERVES the stash to its owner (see
+                // HandleGetAsync): you read back what you saved. Without that half, this half reads as data
+                // loss — the file returns the empty placeholder and the editor appears to have thrown your work
+                // away.
+                if (await WebDavSpecialHandlers.TryCommitImplicitCheckoutAsync(context, services, db, user, segments))
+                {
+                    await safeSaveStorage.DeleteObjectAsync(WebDavUserAreas.TempKeyFor(user, segments), context.RequestAborted);
+                    return;
+                }
+
+                if (await WebDavSpecialHandlers.TryCommitDownloadTempAsync(context, services, db, user, segments))
+                {
+                    await safeSaveStorage.DeleteObjectAsync(
+                        WebDavUserAreas.CheckoutScratchPrefix(user) + segments[^1], context.RequestAborted);
+                    return;
+                }
+            }
         }
 
         // Commit-on-rename for a save-by-rename edit: the source is a buffered editor temp and the destination is

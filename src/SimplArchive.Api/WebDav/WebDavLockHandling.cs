@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Users;
 
 namespace SimplArchive.Api.WebDav;
@@ -13,7 +14,50 @@ internal static partial class WebDavLockHandling
     // present (via If / Lock-Token) on subsequent mutations.
     internal const int DefaultLockSeconds = 3600;
 
-    internal static void HandleLock(WebDavLockStore lockStore, HttpContext context, User user, List<string> segments)
+    /// <summary>
+    /// LOCK, including the <b>lock-null</b> case RFC 4918 §9.10.4 requires: a lock on an unmapped URL creates a
+    /// locked, empty resource and answers <b>201 Created</b>.
+    /// </summary>
+    /// <remarks>
+    /// This is how a word processor RESERVES a name before writing it, and answering 200 instead is what made
+    /// atomic saving impossible (#762). Measured: <c>LOCK …/.~WRD1464</c> returned 200 — which says the resource
+    /// already exists — while <c>PROPFIND</c> on the same path returned 404. Given two contradictory answers the
+    /// editor abandoned the attempt and started again with a fresh collection, six times over, and then reported
+    /// a network or permission error. Nothing failed; we simply told it two incompatible things.
+    ///
+    /// The lock-null body is an empty object in the same per-user area the path would be staged in, so it is
+    /// visible to PROPFIND immediately and a later PUT just replaces it. Confined to paths that are ALREADY
+    /// swallowed — inside a safe-save collection, or a name the clutter filter keeps out of the archive —
+    /// because creating one anywhere else would mean inventing a Document nobody asked for.
+    /// </remarks>
+    internal static async Task HandleLockAsync(
+        WebDavLockStore lockStore, IServiceProvider services, HttpContext context, User user, List<string> segments)
+    {
+        var created = false;
+        if (segments.Count > 0 && ShadowableLeaf(segments))
+        {
+            var storage = services.GetRequiredService<IObjectStorageClient>();
+            var key = WebDavClutter.IsUnderSafeSaveTemp(segments)
+                ? WebDavSafeSave.FileKey(user, segments)
+                : WebDavSafeSave.ShadowKey(user, segments);
+
+            if (!await storage.ExistsAsync(key, context.RequestAborted))
+            {
+                await storage.PutObjectAsync(key, new MemoryStream([]), "application/octet-stream", context.RequestAborted);
+                created = true;
+            }
+        }
+
+        HandleLock(lockStore, context, user, segments, created);
+    }
+
+    /// <summary>Paths we already keep out of the archive, and can therefore hold a lock-null for.</summary>
+    private static bool ShadowableLeaf(IReadOnlyList<string> segments) =>
+        WebDavClutter.IsUnderSafeSaveTemp(segments)
+        || WebDavClutter.IsOsClutter(segments[^1])
+        || WebDavClutter.IsTransientClutter(segments[^1]);
+
+    internal static void HandleLock(WebDavLockStore lockStore, HttpContext context, User user, List<string> segments, bool created = false)
     {
         var pathKey = PathKey(segments);
         var timeout = TimeSpan.FromSeconds(ParseTimeoutSeconds(context));
@@ -28,7 +72,10 @@ internal static partial class WebDavLockHandling
         var owner = WebDavXml.Xml(user.Email);
         var xml = $"""<?xml version="1.0" encoding="utf-8"?><D:prop xmlns:D="DAV:"><D:lockdiscovery><D:activelock><D:locktype><D:write/></D:locktype><D:lockscope><D:exclusive/></D:lockscope><D:depth>0</D:depth><D:owner>{owner}</D:owner><D:timeout>Second-{seconds}</D:timeout><D:locktoken><D:href>{lockInfo.Token}</D:href></D:locktoken></D:activelock></D:lockdiscovery></D:prop>""";
         context.Response.Headers["Lock-Token"] = $"<{lockInfo.Token}>";
-        context.Response.StatusCode = StatusCodes.Status200OK;
+        // 201 when the lock CREATED the resource (RFC 4918 §9.10.4), 200 when it locked one that was already
+        // there. The difference is not cosmetic: 200 on an unmapped URL claims the resource exists, which the
+        // next PROPFIND then contradicts.
+        context.Response.StatusCode = created ? StatusCodes.Status201Created : StatusCodes.Status200OK;
         context.Response.ContentType = "application/xml; charset=utf-8";
         context.Response.WriteAsync(xml).GetAwaiter().GetResult();
     }

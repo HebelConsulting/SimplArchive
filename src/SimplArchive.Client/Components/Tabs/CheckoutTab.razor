@@ -360,6 +360,15 @@
         await _preview.RenderAsync(url, null, converted);
     }
 
+    // The tab asks for its own list on activation, the way IntrayTab does. The component exists only while its
+    // tab is shown (ADR 0558), so being created IS being entered — which is what makes this the refresh.
+    //
+    // It went stale because this list is the SHELL's (the tab strip needs the count for its badge) and nothing
+    // re-asked for it on entry. That is invisible until something OUTSIDE the app checks a document out — and a
+    // WebDAV save is an implicit check-out (ADR 0562), so the tab that exists to show those was the one that
+    // could not see them. Refresh is the shell's own loader, so the badge stays right too.
+    protected override async Task OnInitializedAsync() => await Refresh.InvokeAsync();
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (_pendingPreview is { } pending && _preview is not null)

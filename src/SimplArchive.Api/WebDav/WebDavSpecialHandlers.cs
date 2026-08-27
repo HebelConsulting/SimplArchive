@@ -263,31 +263,42 @@ internal static class WebDavSpecialHandlers
 
         var destName = destSegments[^1];
         var now = DateTimeOffset.UtcNow;
-        // The key groups by the new document (ADR 0530): its filing year + a fresh storage folder, version id leaf.
-        var storageFolderId = Guid.NewGuid();
-        var versionId = Guid.NewGuid();
-        var objectKey = ObjectKeyBuilder.Build(user.TenantId, now, storageFolderId, versionId, Path.GetExtension(destName));
 
-        // Server-side copy the staged blob to a real version key, then create the Document + finalize.
+        // The destination may ALREADY EXIST as the OS's own zero-byte placeholder: macOS (and a browser) create
+        // the real name first and write to it afterwards, and since #762 that create materialises an empty
+        // document rather than being discarded. Filling it is the whole point — creating a second document
+        // beside it would leave the empty one behind and put the bytes somewhere the client is not looking.
+        var destination = await WebDavPathResolver.ResolveAsync(db, user, destSegments);
+        var document = destination is { IsCollection: false, Document: { } existingDoc } ? existingDoc : null;
+
+        // The key groups by the document (ADR 0530): an existing one reuses its filing year + storage folder.
+        var storageFolderId = document?.StorageFolderId ?? Guid.NewGuid();
+        var versionId = Guid.NewGuid();
+        var objectKey = ObjectKeyBuilder.Build(user.TenantId, document?.CreatedAt ?? now, storageFolderId, versionId, Path.GetExtension(destName));
+
+        // Server-side copy the staged blob to a real version key, then create-or-reuse the Document + finalize.
         await storage.CopyObjectAsync(tempKey, objectKey, context.RequestAborted);
 
-        var document = new Document
+        if (document is null)
         {
-            Id = Guid.NewGuid(),
-            TenantId = user.TenantId,
-            ParentId = destParentDoc.Id,
-            Name = Path.GetFileNameWithoutExtension(destName),
-            CreatedByUserId = user.Id,
-            CreatedAt = now,
-            StorageFolderId = storageFolderId,
-        };
-        db.Documents.Add(document);
-        try { await db.SaveChangesAsync(context.RequestAborted); }
-        catch (InvalidOperationException)
-        {
-            await storage.DeleteObjectAsync(objectKey, context.RequestAborted);
-            context.Response.StatusCode = StatusCodes.Status409Conflict; // sibling-name clash
-            return true;
+            document = new Document
+            {
+                Id = Guid.NewGuid(),
+                TenantId = user.TenantId,
+                ParentId = destParentDoc.Id,
+                Name = Path.GetFileNameWithoutExtension(destName),
+                CreatedByUserId = user.Id,
+                CreatedAt = now,
+                StorageFolderId = storageFolderId,
+            };
+            db.Documents.Add(document);
+            try { await db.SaveChangesAsync(context.RequestAborted); }
+            catch (InvalidOperationException)
+            {
+                await storage.DeleteObjectAsync(objectKey, context.RequestAborted);
+                context.Response.StatusCode = StatusCodes.Status409Conflict; // sibling-name clash
+                return true;
+            }
         }
 
         var version = new DocumentVersion
@@ -402,6 +413,78 @@ internal static class WebDavSpecialHandlers
     // two people editing different documents cannot collide unless they use the same temp name at the same
     // moment — in which case the loser's buffer is overwritten and their editor's rename fails, which is the
     // same outcome it would get from a local disk.
+    /// <summary>A direct write over a document that already has content: a working copy, not a version.</summary>
+    /// <remarks>
+    /// The same outcome the save-by-rename and scratch-collection routes reach (ADR 0562), for applications
+    /// that simply PUT the whole file at its real name. Every refusal the other routes apply is applied here
+    /// too — rights, legal hold, and someone else's lock — because a mount must not be a side door.
+    /// </remarks>
+    internal static async Task StashOverExistingAsync(
+        HttpContext context, IServiceProvider services, SimplArchiveDbContext db, User user, Document document, Stream content)
+    {
+        if (!(await WebDavMiddleware.RightsAsync(services, user, document.Id)).CanEditContent
+            || await services.GetRequiredService<ILegalHoldService>().IsFrozenAsync(document.Id, context.RequestAborted))
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+
+        if (document.CheckedOutByUserId is { } holder && holder != user.Id)
+        {
+            context.Response.StatusCode = StatusCodes.Status423Locked;
+            return;
+        }
+
+        if (document.CheckedOutByUserId is null)
+        {
+            document.CheckedOutByUserId = user.Id;
+            document.CheckedOutAt = DateTimeOffset.UtcNow;
+            document.CheckoutReminderSentAt = null;
+            var agent = context.Request.Headers.UserAgent.ToString();
+            document.ImplicitCheckoutAgent = string.IsNullOrWhiteSpace(agent)
+                ? "(unidentified WebDAV client)"
+                : agent[..Math.Min(agent.Length, 256)];
+        }
+
+        content.Position = 0;
+        await services.GetRequiredService<IObjectStorageClient>().PutObjectAsync(
+            CheckoutStashKey.Build(user.TenantId, user.Id, document.Id), content,
+            context.Request.ContentType ?? "application/octet-stream", context.RequestAborted);
+        await db.SaveChangesAsync(context.RequestAborted);
+
+        context.Response.StatusCode = StatusCodes.Status204NoContent;
+    }
+
+    /// <summary>Remembers a swallowed write (OS clutter) so the client can read back what we accepted (#762).</summary>
+    internal static async Task StageShadowAsync(HttpContext context, IServiceProvider services, User user, List<string> segments)
+    {
+        var storage = services.GetRequiredService<IObjectStorageClient>();
+        await using var buffered = new MemoryStream();
+        await context.Request.Body.CopyToAsync(buffered, context.RequestAborted);
+        buffered.Position = 0;
+
+        var key = WebDavSafeSave.ShadowKey(user, segments);
+        var existed = await storage.ExistsAsync(key, context.RequestAborted);
+        await storage.PutObjectAsync(key, buffered, context.Request.ContentType ?? "application/octet-stream", context.RequestAborted);
+
+        // 204 on the second write, which is the answer that stops an editor rewriting the same sidecar forever.
+        context.Response.StatusCode = existed ? StatusCodes.Status204NoContent : StatusCodes.Status201Created;
+    }
+
+    /// <summary>Buffers a write made INSIDE a safe-save collection, where the editor can then see it (#762).</summary>
+    internal static async Task StageSafeSaveAsync(HttpContext context, IServiceProvider services, User user, List<string> segments)
+    {
+        var storage = services.GetRequiredService<IObjectStorageClient>();
+        await using var buffered = new MemoryStream();
+        await context.Request.Body.CopyToAsync(buffered, context.RequestAborted);
+        buffered.Position = 0;
+
+        var key = WebDavSafeSave.FileKey(user, segments);
+        var existed = await storage.ExistsAsync(key, context.RequestAborted);
+        await storage.PutObjectAsync(key, buffered, context.Request.ContentType ?? "application/octet-stream", context.RequestAborted);
+        context.Response.StatusCode = existed ? StatusCodes.Status204NoContent : StatusCodes.Status201Created;
+    }
+
     internal static async Task StageTreeScratchAsync(HttpContext context, IServiceProvider services, string fileName, User user)
     {
         var storage = services.GetRequiredService<IObjectStorageClient>();

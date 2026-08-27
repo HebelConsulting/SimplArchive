@@ -31,6 +31,7 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
     /// </param>
     public async Task ReloadAsync(bool isTenantAdmin)
     {
+        var reopen = ExpandedIds(Roots).ToList();
         try
         {
             var nodes = new List<TreeItemData<BrowseNode>>();
@@ -73,6 +74,19 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
             }
 
             Roots = nodes;
+
+            // Re-open what was open. A reload rebuilds from the ROOTS, so without this every refresh closes the
+            // tree under the user — reported after a soft-delete: "the Demo Repository folder collapsed".
+            //
+            // Captured BEFORE the rebuild and replayed in breadth-first order, which is what makes it work at
+            // any depth: a parent is always reopened before its child, so each child's siblings are loaded by
+            // the time we look for it. RevealAsync cannot do this job — it searches only what is LOADED, and
+            // immediately after a rebuild that is the roots alone, so it silently returns false for anything
+            // deeper than one level.
+            foreach (var id in reopen)
+            {
+                await ExpandAsync(id, includeSelf: true);
+            }
         }
         catch (AccessTokenNotAvailableException) { }
         catch (HttpRequestException) { }
@@ -138,6 +152,31 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
         }
 
         return true;
+    }
+
+    // Every expanded node, BREADTH-FIRST — the order they must be reopened in, since expanding a node is what
+    // loads the children the next one is found among.
+    private static IEnumerable<Guid> ExpandedIds(IEnumerable<ITreeItemData<BrowseNode>> items)
+    {
+        var level = items.ToList();
+        while (level.Count > 0)
+        {
+            var next = new List<ITreeItemData<BrowseNode>>();
+            foreach (var item in level.Where(i => i.Expanded))
+            {
+                if (item.Value is { AdminKind: "" } value && value.Id != Guid.Empty)
+                {
+                    yield return value.Id;
+                }
+
+                if (item.Children is { } children)
+                {
+                    next.AddRange(children);
+                }
+            }
+
+            level = next;
+        }
     }
 
     // Depth-first, recording the chain so the caller can expand it. Searches only what is LOADED — an
