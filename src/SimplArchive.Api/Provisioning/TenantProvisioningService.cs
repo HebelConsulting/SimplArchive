@@ -42,7 +42,8 @@ public interface ITenantProvisioningService
         string administratorDisplayName,
         string? repositoryName,
         string? administratorPassword,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        Func<string, Guid>? idFor = null);
 }
 
 public sealed class TenantProvisioningService : ITenantProvisioningService
@@ -75,11 +76,17 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
         string administratorDisplayName,
         string? repositoryName,
         string? administratorPassword,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Func<string, Guid>? idFor = null)
     {
         var tenant = new Tenant
         {
-            Id = Guid.NewGuid(),
+            // idFor (#781): a config-declared tenant (the demo) derives its ids from stable slugs, so a nightly
+            // wipe-and-reseed produces the SAME archive rather than a new one wearing the same names. Every
+            // client-visible identity (RFC 8474 MAILBOXID/EMAILID, DAV collections, UIDVALIDITY) rests on these
+            // GUIDs. Null everywhere else — a real tenant keeps fresh ids, which is what lets a genuinely
+            // purged-and-recreated folder read as recreated.
+            Id = idFor?.Invoke("tenant") ?? Guid.NewGuid(),
             Name = name,
             Status = TenantStatus.Active,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -110,7 +117,7 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
 
         var administrator = new User
         {
-            Id = Guid.NewGuid(),
+            Id = idFor?.Invoke("user/admin") ?? Guid.NewGuid(),
             TenantId = tenant.Id,
             Email = administratorEmail,
             DisplayName = administratorDisplayName,
@@ -164,11 +171,12 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
         // The tenant administrator is a user like any other, so their personal space is provisioned at creation
         // rather than on first sign-in (#634) — the first level is closed now, and My Documents is the only home
         // for their own content.
-        await _personalSpaces.EnsureAsync(administrator.Id, tenant.Id, cancellationToken);
+        await _personalSpaces.EnsureAsync(administrator.Id, tenant.Id, cancellationToken,
+            idFor is null ? null : slug => idFor($"personal/admin/{slug}"));
 
         var repository = new Document
         {
-            Id = Guid.NewGuid(),
+            Id = idFor?.Invoke("repository") ?? Guid.NewGuid(),
             TenantId = tenant.Id,
             ParentId = null,
             Name = repositoryName ?? tenant.Name,

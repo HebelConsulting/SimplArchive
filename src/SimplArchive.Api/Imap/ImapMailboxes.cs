@@ -501,9 +501,15 @@ internal static class ImapMailboxes
             {
                 FolderId = entry.FolderId,
                 TenantId = tenantId,
-                // Any positive value works as the epoch marker; seconds-since-2020 stays well inside int and
-                // differs between a purged-and-recreated folder's two lives.
-                UidValidity = (int)(DateTimeOffset.UtcNow - new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero)).TotalSeconds,
+                // Derived from the FOLDER id, not the clock (#781). UIDVALIDITY's one job is to change exactly
+                // when previously-issued UIDs stop being valid — which happens when a folder is purged and
+                // recreated, and a recreated folder has a new GUID. The old seconds-since-2020 value also
+                // changed on occasions when the UIDs were still perfectly valid (any row recreation, the demo
+                // reseed included), which is a spurious full resync. With the demo's ids deterministic (#781),
+                // the reseeded folder keeps its id and therefore its UIDVALIDITY — and its UIDs re-derive over
+                // the same set in the same order, which is what makes keeping it honest. A real folder's
+                // recreation mints a fresh GUID, so this still changes between its two lives.
+                UidValidity = UidValidityFor(entry.FolderId),
                 NextUid = 1,
             };
             db.ImapMailboxes.Add(mailbox);
@@ -580,5 +586,12 @@ internal static class ImapMailboxes
             db.ImapSeenMarks.Remove(existing);
             await db.SaveChangesAsync();
         }
+    }
+
+    /// <summary>A stable, positive UIDVALIDITY from the folder's own identity (#781; see the assignment above).</summary>
+    internal static int UidValidityFor(Guid folderId)
+    {
+        var value = BitConverter.ToInt32(folderId.ToByteArray(), 0) & int.MaxValue;
+        return value == 0 ? 1 : value;
     }
 }

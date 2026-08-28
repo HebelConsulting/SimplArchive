@@ -62,7 +62,7 @@ internal static class DavEndpoints
 
         if (context.Depth >= 1)
         {
-            foreach (var item in await DavTree.ItemsAsync(context.Db, context.Protocol, context.UserId, folderId, context.Cancellation))
+            foreach (var item in await DavTree.ItemsAsync(context.Db, context.Protocol, context.UserId, folderId, context.Cancellation, Wire(context)))
             {
                 resources.Add(DavResources.Item(context.Protocol, item, data: null));
             }
@@ -164,7 +164,7 @@ internal static class DavEndpoints
         // everything plus a token, and "everything" is what the collection holds, not what the log remembers.
         if ((since ?? 0) == 0)
         {
-            var everything = await DavTree.ItemsAsync(context.Db, context.Protocol, context.UserId, folderId, context.Cancellation);
+            var everything = await DavTree.ItemsAsync(context.Db, context.Protocol, context.UserId, folderId, context.Cancellation, Wire(context));
             var initial = MultiStatus.Build(request, [.. everything.Select(i => DavResources.Item(context.Protocol, i, data: null))]);
             MultiStatus.WithSyncToken(initial, DavTokens.Format(current));
             return DavXml.MultiStatus(initial);
@@ -269,7 +269,7 @@ internal static class DavEndpoints
         var request = PropRequest.FromProp(body?.Element(DavNames.Prop));
         var wanted = body?.Elements(DavNames.Href).Select(h => h.Value.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
 
-        var items = await DavTree.ItemsAsync(context.Db, context.Protocol, context.UserId, folderId, context.Cancellation);
+        var items = await DavTree.ItemsAsync(context.Db, context.Protocol, context.UserId, folderId, context.Cancellation, Wire(context));
         if (wanted.Count > 0)
         {
             items = items.Where(i =>

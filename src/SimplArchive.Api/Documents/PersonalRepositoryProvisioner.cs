@@ -73,20 +73,24 @@ public sealed class PersonalRepositoryProvisioner
     /// "My Documents" subfolder exists — so a pre-existing personal repo gains it the next time it's accessed
     /// (the "backfill existing" behaviour), not only freshly-created ones.
     /// </summary>
-    public async Task<Document> EnsureAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken)
+    public async Task<Document> EnsureAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken,
+        Func<string, Guid>? idFor = null)
     {
-        var root = await EnsureRootAsync(userId, tenantId, cancellationToken);
+        // idFor (#781): the demo seeder derives the space's folder ids from stable slugs so the kiosk's nightly
+        // reseed keeps every client-visible identity. Null for real users — their recreated space must READ as
+        // recreated (a fresh id is what moves UIDVALIDITY and the DAV collection identity).
+        var root = await EnsureRootAsync(userId, tenantId, cancellationToken, idFor?.Invoke("root"));
         // My Documents goes through the same helper as the other two now: it used to have a near-copy of its
         // own, differing only in that it stamped the plain Folder mask. It wears its OWN mask since #634, and
         // restampFromMaskId is what moves an already-provisioned one off Folder — a space created before that
         // mask existed has a correctly-typed folder by the old rule and a wrongly-typed one by the new.
-        await EnsureTypedFolderAsync(root, tenantId, userId, MyDocumentsFolderName, WellKnownMaskIds.MyDocuments, cancellationToken, restampFromMaskId: WellKnownMaskIds.Folder);
-        await EnsureTypedFolderAsync(root, tenantId, userId, MyCalendarFolderName, WellKnownMaskIds.Calendar, cancellationToken);
-        await EnsureTypedFolderAsync(root, tenantId, userId, MyAddressbookFolderName, WellKnownMaskIds.Addressbook, cancellationToken, LegacyMyContactsFolderName);
+        await EnsureTypedFolderAsync(root, tenantId, userId, MyDocumentsFolderName, WellKnownMaskIds.MyDocuments, cancellationToken, restampFromMaskId: WellKnownMaskIds.Folder, id: idFor?.Invoke("my-documents"));
+        await EnsureTypedFolderAsync(root, tenantId, userId, MyCalendarFolderName, WellKnownMaskIds.Calendar, cancellationToken, id: idFor?.Invoke("my-calendar"));
+        await EnsureTypedFolderAsync(root, tenantId, userId, MyAddressbookFolderName, WellKnownMaskIds.Addressbook, cancellationToken, LegacyMyContactsFolderName, id: idFor?.Invoke("my-addressbook"));
         return root;
     }
 
-    private async Task<Document> EnsureRootAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken)
+    private async Task<Document> EnsureRootAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken, Guid? id = null)
     {
         var existing = await _dbContext.Documents.SingleOrDefaultAsync(d => d.PersonalOfUserId == userId, cancellationToken);
         if (existing is not null)
@@ -105,7 +109,7 @@ public sealed class PersonalRepositoryProvisioner
 
         var document = new Document
         {
-            Id = Guid.NewGuid(),
+            Id = id ?? Guid.NewGuid(),
             TenantId = tenantId,
             ParentId = null,
             Name = PersonalSpaceName.For(owner.DisplayName, owner.Email),
@@ -163,7 +167,7 @@ public sealed class PersonalRepositoryProvisioner
     /// </summary>
     private async Task EnsureTypedFolderAsync(
         Document root, Guid tenantId, Guid userId, string name, Guid folderMaskId, CancellationToken cancellationToken,
-        string? legacyName = null, Guid? restampFromMaskId = null)
+        string? legacyName = null, Guid? restampFromMaskId = null, Guid? id = null)
     {
         var maskVersionId = await FolderMask.CurrentVersionIdAsync(_dbContext, tenantId, folderMaskId, cancellationToken);
 
@@ -213,7 +217,7 @@ public sealed class PersonalRepositoryProvisioner
 
         _dbContext.Documents.Add(new Document
         {
-            Id = Guid.NewGuid(),
+            Id = id ?? Guid.NewGuid(),
             TenantId = tenantId,
             ParentId = root.Id,
             Name = name,

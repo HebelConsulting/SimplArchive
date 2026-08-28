@@ -199,7 +199,9 @@ internal static class DemoArtistsSeeder
             {
                 dbContext.DocumentReferences.Add(new DocumentReference
                 {
-                    Id = Guid.NewGuid(),
+                    // Composed from the two deterministic ends (#781), like every id in this seeder: the seed
+                    // must reproduce the SAME archive across the kiosk's nightly reseed.
+                    Id = DemoId.For(tenantId, $"ref/{artistFolder.Id}/{card2.Id}"),
                     TenantId = tenantId,
                     ParentFolderId = artistFolder.Id,
                     TargetDocumentId = card2.Id,
@@ -389,7 +391,7 @@ internal static class DemoArtistsSeeder
 
         dbContext.FieldValues.Add(new FieldValue
         {
-            Id = Guid.NewGuid(),
+            Id = DemoId.For(tenantId, $"field-value/{folder.Id}/{field}"),
             TenantId = tenantId,
             DocumentId = folder.Id,
             FieldDefinitionId = field,
@@ -414,7 +416,7 @@ internal static class DemoArtistsSeeder
 
         dbContext.FieldValues.Add(new FieldValue
         {
-            Id = Guid.NewGuid(),
+            Id = DemoId.For(tenantId, $"field-value/{mailboxId}/{field}"),
             TenantId = tenantId,
             DocumentId = mailboxId,
             FieldDefinitionId = field,
@@ -435,7 +437,8 @@ internal static class DemoArtistsSeeder
 
         var folder = new Document
         {
-            Id = Guid.NewGuid(),
+            // (parent id, name) is the identity: both are stable in this seeder's data (#781).
+            Id = DemoId.For(tenantId, $"folder/artists/{parentId}/{name}"),
             TenantId = tenantId,
             ParentId = parentId,
             Name = name,
@@ -462,11 +465,11 @@ internal static class DemoArtistsSeeder
             return existing;
         }
 
-        var storageFolderId = Guid.NewGuid();
-        var versionId = Guid.NewGuid();
+        var storageFolderId = DemoId.For(tenantId, $"doc/artists/{parentId}/{name}/storage");
+        var versionId = DemoId.For(tenantId, $"doc/artists/{parentId}/{name}/v1");
         var document = new Document
         {
-            Id = Guid.NewGuid(),
+            Id = DemoId.For(tenantId, $"doc/artists/{parentId}/{name}"),
             TenantId = tenantId,
             ParentId = parentId,
             Name = name,

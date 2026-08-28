@@ -83,12 +83,18 @@ public static class DemoDataSeeder
             return;
         }
 
+        // Deterministic ids (#781): the kiosk's nightly down -v reseeds from scratch, and fresh GUIDs each
+        // morning would hand every caching client (IMAP, DAV, WebDAV) a brand-new server wearing yesterday's
+        // names. Every id in the demo seed derives from the tenant root + a stable slug instead, so a reseed
+        // reproduces the SAME archive. Only fresh volumes are affected — an existing tenant returns above.
+        var demoTenantId = DemoId.Root(demoTenantName);
         var provisioned = await services.GetRequiredService<ITenantProvisioningService>().ProvisionAsync(
             demoTenantName,
             demoAdminEmail,
             configuration["Demo:Administrator:DisplayName"] ?? "Demo Admin",
             configuration["Demo:RepositoryName"],
-            demoAdminPassword);
+            demoAdminPassword,
+            idFor: slug => slug == "tenant" ? demoTenantId : DemoId.For(demoTenantId, slug));
 
         // The sample tree reads masks/field definitions and relies on SaveChanges' required-field validation, all
         // tenant-filtered — so set the tenant on the accessor the DbContext reads from (nothing did, since this
@@ -193,19 +199,33 @@ public static class DemoDataSeeder
         // A small colour-coded tag catalog + a couple of tags on the invoice (ADR "Tag controlled vocabulary" 0422).
         foreach (var (tagName, tagColor) in new[] { ("invoice", "#e53935"), ("contract", "#1e88e5"), ("urgent", "#fb8c00"), ("reviewed", "#43a047") })
         {
-            dbContext.TagDefinitions.Add(new TagDefinition { Id = Guid.NewGuid(), TenantId = tenantId, Name = tagName, Color = tagColor, CreatedAt = now });
+            dbContext.TagDefinitions.Add(new TagDefinition { Id = DemoId.For(tenantId, $"tag-def/{tagName}"), TenantId = tenantId, Name = tagName, Color = tagColor, CreatedAt = now });
         }
 
         foreach (var tagName in new[] { "invoice", "reviewed" })
         {
-            dbContext.DocumentTags.Add(new DocumentTag { Id = Guid.NewGuid(), TenantId = tenantId, DocumentId = invoice.Id, Tag = tagName, CreatedAt = now });
+            dbContext.DocumentTags.Add(new DocumentTag { Id = DemoId.For(tenantId, $"tag/invoice/{tagName}"), TenantId = tenantId, DocumentId = invoice.Id, Tag = tagName, CreatedAt = now });
         }
 
         await dbContext.SaveChangesAsync();
 
         // ── Two extra users + a shared "Scan Team" group intray (the group-intray showcase, ADR 0532). ─────────────
-        var (annaId, _) = await SeedTeamAsync(
+        var (annaId, tomId) = await SeedTeamAsync(
             dbContext, objectStorage, assembly, tenantId, repositoryId, adminId, now, demoPassword, provisioned.AdministratorEmail);
+
+        // Materialize every advertised login's mailbox NOW, deterministically (#781). Left to first use, the
+        // mailbox and its standing folders would be minted with fresh GUIDs at whatever moment a visitor's
+        // client (or ingress mail) first touched them — which is exactly the identity churn this seed exists
+        // to remove. The admin's personal-space prefix matches the one ProvisionAsync already used, so the
+        // space provisioned there and the mailbox grown here wear one id family. The NOTEBOOK is deliberately
+        // NOT pre-created: a notes client creates it itself (#596), and its content is visitor-authored, so a
+        // reset genuinely recreates it — fresh ids are the honest answer there.
+        var mailboxes = services.GetRequiredService<Documents.PersonalMailboxProvisioner>();
+        foreach (var (userSlug, userId) in new[] { ("admin", adminId), ("anna", annaId), ("tom", tomId) })
+        {
+            await mailboxes.EnsureMailboxAsync(tenantId, userId, CancellationToken.None,
+                slug => DemoId.For(tenantId, $"personal/{userSlug}/{slug}"));
+        }
 
         // A real conversation on the offer (issue #380). The thread already carries the automatic entries — filed,
         // each version saved (ADR 0545) — so this puts what PEOPLE said alongside them, which is what the pane
@@ -217,7 +237,7 @@ public static class DemoDataSeeder
         // logged-in user.
         var offerThread = new ChatMessage
         {
-            Id = Guid.NewGuid(),
+            Id = DemoId.For(tenantId, "chat/offer/1"),
             TenantId = tenantId,
             DocumentId = offer.Id,
             Body = "Customer came back on the price — version 2 has the corrected figure.",
@@ -227,7 +247,7 @@ public static class DemoDataSeeder
         dbContext.ChatMessages.Add(offerThread);
         dbContext.ChatMessages.Add(new ChatMessage
         {
-            Id = Guid.NewGuid(),
+            Id = DemoId.For(tenantId, "chat/offer/2"),
             TenantId = tenantId,
             DocumentId = offer.Id,
             ParentMessageId = offerThread.Id,
@@ -237,7 +257,7 @@ public static class DemoDataSeeder
         });
         dbContext.ChatMessages.Add(new ChatMessage
         {
-            Id = Guid.NewGuid(),
+            Id = DemoId.For(tenantId, "chat/invoice/1"),
             TenantId = tenantId,
             DocumentId = invoice.Id,
             Body = "Approved for payment — see the stamp on page 1.",
@@ -282,7 +302,7 @@ public static class DemoDataSeeder
     {
         dbContext.ExternalLinks.Add(new ExternalLink
         {
-            Id = Guid.NewGuid(),
+            Id = DemoId.For(tenantId, "external-link/telekom-agreement"),
             TenantId = tenantId,
             DocumentId = documentId,
             Token = ExternalLinkToken.DeriveForDemoSeed("simplarchive-demo-telekom-service-agreement-v1"),
@@ -304,20 +324,20 @@ public static class DemoDataSeeder
         Guid tenantId, Guid repositoryId, Guid adminId, DateTimeOffset now, Guid basicEntryVersionId, Guid? folderMaskVersionId,
         Documents.DocumentFinalizer finalizer)
     {
-        async Task<Document> FolderAsync(Guid parentId, string name) =>
-            await AddFolderAsync(dbContext, tenantId, parentId, name, adminId, now, folderMaskVersionId);
+        async Task<Document> FolderAsync(Guid parentId, string name, string slug) =>
+            await AddFolderAsync(dbContext, tenantId, parentId, name, adminId, now, folderMaskVersionId, slug);
 
         Task<Document> DocAsync(Guid parentId, string name, string resource, string ext, string contentType, DateOnly date) =>
             AddDocumentAsync(dbContext, storage, assembly, tenantId, parentId, name, adminId, now, basicEntryVersionId, resource, ext, contentType, date, finalizer);
 
         // Business Years / 2026 / 01..12 <Month>.
-        var businessYears = await FolderAsync(repositoryId, "Business Years");
-        var year2026 = await FolderAsync(businessYears.Id, "2026");
+        var businessYears = await FolderAsync(repositoryId, "Business Years", "business-years");
+        var year2026 = await FolderAsync(businessYears.Id, "2026", "business-years/2026");
         string[] months = ["01 January", "02 February", "03 March", "04 April", "05 May", "06 June", "07 July", "08 August", "09 September", "10 October", "11 November", "12 December"];
         var monthFolders = new Dictionary<int, Document>();
         for (var i = 0; i < months.Length; i++)
         {
-            monthFolders[i + 1] = await FolderAsync(year2026.Id, months[i]);
+            monthFolders[i + 1] = await FolderAsync(year2026.Id, months[i], $"business-years/2026/{i + 1:00}");
         }
 
         // February holds the public-transport-ticket invoice (an .eml — exercises the email rendering path).
@@ -335,20 +355,20 @@ public static class DemoDataSeeder
         await dbContext.SaveChangesAsync();
 
         // Contracts / …
-        var contracts = await FolderAsync(repositoryId, "Contracts");
+        var contracts = await FolderAsync(repositoryId, "Contracts", "contracts");
         // Acme Corp — a customer folder holding their offer (2-version compare showcase) + an invoice; filled by
         // the caller after this tree exists.
-        var acmeCorp = await FolderAsync(contracts.Id, "Acme Corp");
-        var contoso = await FolderAsync(contracts.Id, "Contoso Cloud");
+        var acmeCorp = await FolderAsync(contracts.Id, "Acme Corp", "contracts/acme-corp");
+        var contoso = await FolderAsync(contracts.Id, "Contoso Cloud", "contracts/contoso-cloud");
         await DocAsync(contoso.Id, "Contoso Cloud — 2026 cost forecast", "DemoContosoForecast.xlsx", ".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", new DateOnly(2026, 1, 15));
 
-        var telekom = await FolderAsync(contracts.Id, "MyCountry Telekom");
+        var telekom = await FolderAsync(contracts.Id, "MyCountry Telekom", "contracts/telekom");
         // Returned to the caller: this is the document the seeded external link shares (issue #405).
         var telekomAgreement = await DocAsync(telekom.Id, "MyCountry Telekom — service agreement", "DemoTelekomContract.pdf", ".pdf", "application/pdf", new DateOnly(2026, 1, 1));
 
         // The three monthly Telekom invoices live under Contracts/MyCountry Telekom/Invoices AND are *referenced*
         // (a shortcut, ADR "…move and reference") into the matching Business Years month — the multi-filing showcase.
-        var telekomInvoices = await FolderAsync(telekom.Id, "Invoices");
+        var telekomInvoices = await FolderAsync(telekom.Id, "Invoices", "contracts/telekom/invoices");
         var invJan = await DocAsync(telekomInvoices.Id, "MyCountry Telekom invoice — January 2026", "DemoTelekomInvoiceJan.pdf", ".pdf", "application/pdf", new DateOnly(2026, 1, 1));
         var invFeb = await DocAsync(telekomInvoices.Id, "MyCountry Telekom invoice — February 2026", "DemoTelekomInvoiceFeb.pdf", ".pdf", "application/pdf", new DateOnly(2026, 2, 1));
         var invMar = await DocAsync(telekomInvoices.Id, "MyCountry Telekom invoice — March 2026", "DemoTelekomInvoiceMar.pdf", ".pdf", "application/pdf", new DateOnly(2026, 3, 1));
@@ -356,17 +376,17 @@ public static class DemoDataSeeder
         await AddReferenceAsync(dbContext, tenantId, monthFolders[2].Id, invFeb.Id, adminId, now);
         await AddReferenceAsync(dbContext, tenantId, monthFolders[3].Id, invMar.Id, adminId, now);
 
-        var rental = await FolderAsync(contracts.Id, "Rental Agreement");
+        var rental = await FolderAsync(contracts.Id, "Rental Agreement", "contracts/rental-agreement");
         await DocAsync(rental.Id, "Complaint letter — stairwell cleanliness", "DemoRentalComplaint.docx", ".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", new DateOnly(2026, 3, 12));
 
         // General / … (mostly filing folders; Templates holds the ODF templates).
-        var general = await FolderAsync(repositoryId, "General");
+        var general = await FolderAsync(repositoryId, "General", "general");
         foreach (var name in new[] { "Accounting", "Authorities", "Banks", "Employees", "Insurances" })
         {
-            await FolderAsync(general.Id, name);
+            await FolderAsync(general.Id, name, $"general/{name.ToLowerInvariant()}");
         }
 
-        var templates = await FolderAsync(general.Id, "Templates");
+        var templates = await FolderAsync(general.Id, "Templates", "general/templates");
         await DocAsync(templates.Id, "Letterhead template", "DemoLetterheadTemplate.odt", ".odt", "application/vnd.oasis.opendocument.text", new DateOnly(2026, 1, 1));
         await DocAsync(templates.Id, "Invoice template", "DemoInvoiceTemplate.ods", ".ods", "application/vnd.oasis.opendocument.spreadsheet", new DateOnly(2026, 1, 1));
 
@@ -421,7 +441,7 @@ public static class DemoDataSeeder
 
         User MakeUser(string localPart, string displayName)
         {
-            var user = new User { Id = Guid.NewGuid(), TenantId = tenantId, Email = $"{localPart}@{domain}", DisplayName = displayName, IsActive = true, CreatedAt = now, ImapShowAllDocuments = true };
+            var user = new User { Id = DemoId.For(tenantId, $"user/{localPart}"), TenantId = tenantId, Email = $"{localPart}@{domain}", DisplayName = displayName, IsActive = true, CreatedAt = now, ImapShowAllDocuments = true };
             user.PasswordHash = hasher.HashPassword(user, demoPassword); // same known demo password, so they can log in too
             return user;
         }
@@ -431,7 +451,7 @@ public static class DemoDataSeeder
         dbContext.Users.Add(anna);
         dbContext.Users.Add(tom);
 
-        var scanTeam = new Group { Id = Guid.NewGuid(), TenantId = tenantId, Name = "Scan Team" };
+        var scanTeam = new Group { Id = DemoId.For(tenantId, "group/scan-team"), TenantId = tenantId, Name = "Scan Team" };
         dbContext.Groups.Add(scanTeam);
         await dbContext.SaveChangesAsync();
 
@@ -446,7 +466,7 @@ public static class DemoDataSeeder
         // Give the group read/work access to the demo repository so its members can actually see and file into it.
         dbContext.AclEntries.Add(new AclEntry
         {
-            Id = Guid.NewGuid(),
+            Id = DemoId.For(tenantId, "acl/repository/scan-team"),
             TenantId = tenantId,
             DocumentId = repositoryId,
             GroupId = scanTeam.Id,
@@ -471,11 +491,13 @@ public static class DemoDataSeeder
     // ── helpers ────────────────────────────────────────────────────────────────────────────────────────────────
 
     private static async Task<Document> AddFolderAsync(
-        SimplArchiveDbContext dbContext, Guid tenantId, Guid parentId, string name, Guid adminId, DateTimeOffset at, Guid? folderMaskVersionId)
+        SimplArchiveDbContext dbContext, Guid tenantId, Guid parentId, string name, Guid adminId, DateTimeOffset at, Guid? folderMaskVersionId, string slug)
     {
         var folder = new Document
         {
-            Id = Guid.NewGuid(),
+            // The SLUG, not the display name, is the identity (#781) — renaming a seeded folder must not
+            // change what a client cached about it.
+            Id = DemoId.For(tenantId, $"folder/{slug}"),
             TenantId = tenantId,
             ParentId = parentId,
             Name = name,
@@ -494,10 +516,14 @@ public static class DemoDataSeeder
         string resourceName, string ext, string contentType, DateOnly documentDate,
         Documents.DocumentFinalizer finalizer, string? comment = null)
     {
-        var storageFolderId = Guid.NewGuid();
+        // The embedded-resource stem is the identity (#781): a code-level literal, unique per seeded document,
+        // and stable when the DISPLAY name changes — the same "stable by construction" rule as
+        // DemoArtistsSeeder's demo-artist-{slug} UIDs.
+        var stem = Path.GetFileNameWithoutExtension(resourceName);
+        var storageFolderId = DemoId.For(tenantId, $"doc/{stem}/storage");
         var document = new Document
         {
-            Id = Guid.NewGuid(),
+            Id = DemoId.For(tenantId, $"doc/{stem}"),
             TenantId = tenantId,
             ParentId = parentId,
             Name = name,
@@ -520,7 +546,7 @@ public static class DemoDataSeeder
         Documents.DocumentFinalizer finalizer, string? comment = null)
     {
         var bytes = await ReadResourceAsync(assembly, resourceName);
-        var versionId = Guid.NewGuid();
+        var versionId = DemoId.For(document.TenantId, $"version/{Path.GetFileNameWithoutExtension(resourceName)}");
         var objectKey = ObjectKeyBuilder.Build(document.TenantId, document.CreatedAt, storageFolderId, versionId, ext);
         using (var content = new MemoryStream(bytes))
         {
@@ -564,7 +590,7 @@ public static class DemoDataSeeder
     {
         dbContext.DocumentAnnotations.Add(new DocumentAnnotation
         {
-            Id = Guid.NewGuid(),
+            Id = DemoId.For(tenantId, $"annotation/{documentId}/{kind}/{x},{y}"),
             TenantId = tenantId,
             DocumentId = documentId,
             DocumentVersionId = versionId,
@@ -587,7 +613,7 @@ public static class DemoDataSeeder
     {
         var workflowState = new WorkflowState
         {
-            Id = Guid.NewGuid(),
+            Id = DemoId.For(tenantId, $"workflow/{versionId}"),
             TenantId = tenantId,
             DocumentVersionId = versionId,
             Status = WorkflowStatus.InReview,
@@ -601,7 +627,7 @@ public static class DemoDataSeeder
         dbContext.WorkflowStates.Add(workflowState);
         dbContext.WorkflowTransitions.Add(new WorkflowTransition
         {
-            Id = Guid.NewGuid(),
+            Id = DemoId.For(tenantId, $"workflow/{versionId}/t1"),
             TenantId = tenantId,
             WorkflowStateId = workflowState.Id,
             FromStatus = WorkflowStatus.Draft,
@@ -618,7 +644,7 @@ public static class DemoDataSeeder
     {
         dbContext.DocumentReferences.Add(new DocumentReference
         {
-            Id = Guid.NewGuid(),
+            Id = DemoId.For(tenantId, $"ref/{parentFolderId}/{targetDocumentId}"),
             TenantId = tenantId,
             ParentFolderId = parentFolderId,
             TargetDocumentId = targetDocumentId,
@@ -654,7 +680,8 @@ public static class DemoDataSeeder
         // The personal space is provisioned on demand — for the demo user it does not exist until something
         // asks for it, and this is that something. Idempotent, so a restart against an existing volume is safe.
         var personal = await services.GetRequiredService<Documents.PersonalRepositoryProvisioner>()
-            .EnsureAsync(adminId, tenantId, CancellationToken.None);
+            .EnsureAsync(adminId, tenantId, CancellationToken.None,
+                slug => DemoId.For(tenantId, $"personal/admin/{slug}"));
 
         var addressbookId = await dbContext.Documents
             .Where(d => d.ParentId == personal.Id && d.Name == PersonalFolders.MyAddressbook)

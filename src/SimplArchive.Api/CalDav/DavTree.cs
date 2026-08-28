@@ -135,7 +135,8 @@ internal static class DavTree
     /// when it creates one itself, so server-side and client-side items are indistinguishable.
     /// </summary>
     internal static async Task<List<DavItem>> ItemsAsync(
-        SimplArchiveDbContext db, DavProtocol protocol, Guid userId, Guid folderId, CancellationToken cancellationToken)
+        SimplArchiveDbContext db, DavProtocol protocol, Guid userId, Guid folderId, CancellationToken cancellationToken,
+        ILogger? logger = null)
     {
         if (protocol == DavProtocol.CalDav && TaskFeeds.KindOf(userId, folderId) is { } feed)
         {
@@ -157,7 +158,7 @@ internal static class DavTree
         var items = new List<DavItem>();
         foreach (var document in documents)
         {
-            if (await ToItemAsync(db, protocol, folderId, document, uids.GetValueOrDefault(document.Id), cancellationToken) is { } item)
+            if (await ToItemAsync(db, protocol, folderId, document, uids.GetValueOrDefault(document.Id), cancellationToken, logger) is { } item)
             {
                 items.Add(item);
             }
@@ -195,6 +196,7 @@ internal static class DavTree
             .FirstOrDefaultAsync(cancellationToken);
 
         return document is null ? null : await ToItemAsync(db, protocol, folderId, document, uid, cancellationToken);
+
     }
 
     /// <summary>
@@ -259,7 +261,8 @@ internal static class DavTree
             .ToListAsync(cancellationToken);
 
     private static async Task<DavItem?> ToItemAsync(
-        SimplArchiveDbContext db, DavProtocol protocol, Guid folderId, ItemRow document, string? uid, CancellationToken cancellationToken)
+        SimplArchiveDbContext db, DavProtocol protocol, Guid folderId, ItemRow document, string? uid, CancellationToken cancellationToken,
+        ILogger? logger = null)
     {
         var version = await CurrentVersion.ResolveAsync(db.DocumentVersions, document.Id, document.CurrentVersionId, cancellationToken);
         if (version?.ObjectKey is not { Length: > 0 } objectKey)
@@ -268,7 +271,17 @@ internal static class DavTree
         }
 
         // A UID is guaranteed by classification (it falls back to the document id), but an item filed by some
-        // other path might lack one — the document id keeps the resource addressable either way.
+        // other path might lack one — the document id keeps the resource addressable either way. Warned when it
+        // fires on an ENUMERATION (#789, the ADR 0626 rule): a resource whose identity is a raw document GUID is
+        // one no client can recognise across a restore, and nothing else says so — the client just re-downloads
+        // and cannot say why. Trace on the wire category carries the full exchange.
+        if (uid is not { Length: > 0 })
+        {
+            logger?.LogWarning(
+                "DAV item {DocumentId} in folder {FolderId} has no UID — its resource name falls back to the document id, "
+                + "which no client can track across a restore; Trace on the DAV wire category carries the exchange",
+                document.Id, folderId);
+        }
         var resourceUid = uid is { Length: > 0 } value ? value : document.Id.ToString();
 
         return new DavItem(
