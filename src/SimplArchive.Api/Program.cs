@@ -365,6 +365,12 @@ using (var scope = app.Services.CreateScope())
         {
             await maskSeeder.EnsureWellKnownMasksAsync(tenantId);
         }
+
+        // …and the same stranded-data shape one entity over (#795): a personal space provisioned before
+        // ADR 0671 is still named "Personal" — invisible on the nightly-reset kiosk, permanent on an upgraded
+        // installation. Renamed to the owner here; WebDavMiddleware keeps serving the old segment as an alias.
+        await SimplArchive.Api.Documents.LegacyPersonalSpaceHealer.HealAsync(
+            dbContext, services.GetRequiredService<ILoggerFactory>().CreateLogger("SimplArchive.Api.Documents.LegacyPersonalSpaceHealer"));
     }
 
     var applicationManager = services.GetRequiredService<IOpenIddictApplicationManager>();

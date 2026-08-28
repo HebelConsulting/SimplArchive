@@ -150,6 +150,21 @@ public sealed class WebDavMiddleware
         var segments = path[matchedBase.Length..].Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries)
             .Select(Uri.UnescapeDataString).ToList();
 
+        // A mount saved before the #795 heal still addresses the space as "Personal" — canonicalise the alias
+        // to the owner name (the /webdav → /SimplArchive recipe: the canonical name moved, the alias serves).
+        // Guarded twice: a space genuinely still named "Personal" needs no alias, and a REAL shared root that
+        // happens to be called "Personal" must keep winning over the alias — an alias that shadows a real name
+        // serves the wrong archive, which is worse than a broken mount.
+        if (segments.Count > 0
+            && segments[0] == PersonalRepositoryProvisioner.LegacyPersonalRepositoryName
+            && personalRoot.Name != PersonalRepositoryProvisioner.LegacyPersonalRepositoryName
+            && !await db.Documents.AnyAsync(d =>
+                d.ParentId == null && d.PersonalOfUserId == null
+                && d.Name == PersonalRepositoryProvisioner.LegacyPersonalRepositoryName))
+        {
+            segments[0] = personalRoot.Name;
+        }
+
         switch (method)
         {
             case "OPTIONS": HandleOptions(context); break;
