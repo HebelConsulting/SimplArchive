@@ -125,7 +125,11 @@
                                  Style="@($"{Styling.ChipStyle(node.SensitivityLabelColor)}height:16px; font-size:.62rem;")" title="@string.Format(Strings.Get("SensitivityTip"), node.SensitivityLabelName)">@node.SensitivityLabelName</MudChip>
                     }
                 </span>
-                <span class="wb-ccell" title="@node.DocumentType">@(node.IsFolder ? Strings.Get("FolderType") : node.DocumentType)</span>
+                @* The SERVER's type, which for a typed folder is the mask name ("Addressbook", "Calendar", "Notebook") —
+                   flattening every folder to the generic word predates typed folders and discarded an answer the
+                   server was already giving (#824). Only the genuine plain Folder is localised; a mask name is
+                   tenant data and renders as itself, exactly as the mask line in the detail pane does. *@
+                <span class="wb-ccell" title="@node.DocumentType">@(node.IsFolder && (node.DocumentType.Length == 0 || node.DocumentType == "Folder") ? Strings.Get("FolderType") : node.DocumentType)</span>
                 <span class="wb-ccell" title="@(node.DocumentDate?.ToString("yyyy-MM-dd") ?? "")">@(node.DocumentDate?.ToString("yyyy-MM-dd") ?? "")</span>
                 <span class="wb-ccell" title="@ByteSize.Format(node.SizeBytes)">@ByteSize.Format(node.SizeBytes)</span>
                 <span class="wb-ccell" title="@string.Join(", ", node.TagList)">@string.Join(", ", node.TagList)</span>

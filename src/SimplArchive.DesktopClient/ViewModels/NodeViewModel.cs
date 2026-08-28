@@ -117,7 +117,12 @@ public sealed class NodeViewModel
     public string SensitivityBrush => string.IsNullOrEmpty(SensitivityLabelColor) ? "#9e9e9e" : SensitivityLabelColor;
 
     // Column display strings (blank for a folder / version-less doc where they don't apply).
-    public string TypeText => IsFolder ? "Folder" : DocumentType;
+    // The SERVER's type — for a typed folder that is the mask name ("Addressbook", "Calendar", "Notebook").
+    // Flattening every folder to "Folder" predates typed folders and discarded an answer the server was
+    // already giving (#824); only the genuine plain Folder is localised, a mask name renders as itself.
+    public string TypeText => IsFolder && (DocumentType.Length == 0 || DocumentType == "Folder")
+        ? SimplArchive.Localization.Strings.Get("FolderType")
+        : DocumentType;
     public string DocumentDateText => DocumentDate?.ToString("yyyy-MM-dd") ?? "";
     public string TagsText => string.Join(", ", Tags);
 
