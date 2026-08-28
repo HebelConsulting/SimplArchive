@@ -82,7 +82,15 @@ internal static class ImapWrites
         // The Notes flow (#562 slice 5): a NoteFolder-typed mailbox correlates by the client's UUID header —
         // Apple Notes EDITS by appending a new message and deleting the old, so a UUID match becomes a new
         // VERSION of the existing note document instead of a sibling.
-        var folderIsNotes = await db.MaskVersions.AnyAsync(v => v.Id == folder.MaskVersionId && v.MaskId == SimplArchive.Domain.Masks.WellKnownMaskIds.Notebook);
+        //
+        // SECTIONS count (#812). This tested Notebook alone, and a note appended into a user-created section
+        // took the mail path below — whose Message-ID dedup cannot see an edit, because Apple regenerates the
+        // Message-ID on every edit and only the UUID header is stable. Measured on a phone as every edit
+        // becoming a second note. Notes in the ROOT notebook were always correlated, which is why the round
+        // that validated note creation passed while the section edit did not.
+        var folderIsNotes = await db.MaskVersions.AnyAsync(v => v.Id == folder.MaskVersionId
+            && (v.MaskId == SimplArchive.Domain.Masks.WellKnownMaskIds.Notebook
+                || v.MaskId == SimplArchive.Domain.Masks.WellKnownMaskIds.NotebookSection));
         if (folderIsNotes)
         {
             await AppendNoteAsync(session, scope, tag, db, folder, mailbox, stem, bytes, userId, tenantId);

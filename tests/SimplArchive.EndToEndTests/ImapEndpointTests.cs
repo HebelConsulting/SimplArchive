@@ -478,6 +478,79 @@ public class ImapEndpointTests
         await client.DisconnectAsync(true);
     }
 
+    // The SAME edit dance, inside a user-created SECTION (#812). The dispatch tested the Notebook mask alone,
+    // so a note appended into a section took the mail path — whose Message-ID dedup cannot see an edit,
+    // because a notes client regenerates the Message-ID on every edit (MimeKit stamps a fresh one per message
+    // here for the same reason) and only the UUID header is stable. Measured on a phone as every edit becoming
+    // a second note: creation "worked" (a message appeared), so the round that validated sections passed while
+    // this defect shipped.
+    [Fact]
+    public async Task A_note_edited_in_a_created_section_versions_instead_of_duplicating()
+    {
+        var (_, _, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: false);
+        var email = $"imap-sect-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, email, "sect-1234", "Section Writer");
+        using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, "sect-1234"));
+        var imapPassword = (await TestJson.Post(api, "/api/me/imap-access", new { })).GetProperty("password").GetString()!;
+
+        // The notebook the way the sibling tests make one: under the mailbox the IMAP credential materialised.
+        var personalId = (await TestJson.Post(api, "/api/me/personal-repository", new { })).GetProperty("id").GetGuid();
+        var mailboxId = (await TestJson.Get(api, $"/api/documents/{personalId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "My Mailbox").GetProperty("id").GetGuid();
+        await TestJson.Post(api, $"/api/documents/{mailboxId}/children", new { name = "Notebook", folderMask = "notes" });
+        var notesId = (await TestJson.Get(api, $"/api/documents/{mailboxId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "Notebook").GetProperty("id").GetGuid();
+
+        var port = ((ImapServer)_factory.Services.GetService(typeof(ImapServer))!).BoundPort!.Value;
+        using var client = new ImapClient();
+        await client.ConnectAsync("127.0.0.1", port, SecureSocketOptions.None);
+        await client.AuthenticateAsync(email, imapPassword);
+
+        // The section the way Apple Notes makes one: CREATE "Notes/Travel" over the wire (#564).
+        var notes = await client.GetFolderAsync("Notes");
+        var section = (await notes.CreateAsync("Travel", true))!;
+        Assert.NotNull(section);
+
+        MimeKit.MimeMessage Note(string text)
+        {
+            var m = new MimeKit.MimeMessage();
+            m.From.Add(new MimeKit.MailboxAddress("Me", email));
+            m.Subject = "Packing list";
+            m.Headers.Add("X-Universally-Unique-Identifier", "note-uuid-section-1");
+            m.Body = new MimeKit.TextPart("html") { Text = text };
+            return m;
+        }
+
+        var uid1 = (await section.AppendAsync(Note("<b>socks</b>")))!.Value;
+
+        // The append landed as a NOTE, not as mail: the Note mask carries the correlation key the edit needs.
+        var sectionId = (await TestJson.Get(api, $"/api/documents/{notesId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "Travel").GetProperty("id").GetGuid();
+        var created = (await TestJson.Get(api, $"/api/documents/{sectionId}/children"))
+            .GetProperty("children").EnumerateArray().ToList();
+        var noteDoc = Assert.Single(created, c => c.GetProperty("name").GetString() == "Packing list");
+        Assert.Equal("Note", noteDoc.GetProperty("documentType").GetString());
+        var noteId = noteDoc.GetProperty("id").GetGuid();
+
+        // The Apple edit dance in the section: append the edit under the same UUID, delete + expunge the old.
+        await section.OpenAsync(FolderAccess.ReadWrite);
+        await section.AppendAsync(Note("<b>socks and a charger</b>"));
+        await section.AddFlagsAsync(uid1, MessageFlags.Deleted, silent: true);
+        await section.ExpungeAsync();
+
+        // ONE note, SAME identity, TWO versions — not a sibling beside a corpse.
+        var after = (await TestJson.Get(api, $"/api/documents/{sectionId}/children"))
+            .GetProperty("children").EnumerateArray().ToList();
+        var survived = Assert.Single(after, c => c.GetProperty("name").GetString() == "Packing list");
+        Assert.Equal(noteId, survived.GetProperty("id").GetGuid());
+        Assert.Equal(2, survived.GetProperty("versionCount").GetInt32());
+
+        await client.DisconnectAsync(true);
+    }
+
     // What LIST ADVERTISES, pinned on the raw socket (#792). Apple Notes never sent CREATE because nothing
     // told it creation was possible: the CHILDREN capability was absent (so \HasChildren had no contract) and
     // no attribute separated the one creatable subtree from the read-only rest. A capability the server holds
