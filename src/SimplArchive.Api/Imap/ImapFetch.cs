@@ -441,7 +441,12 @@ internal static class ImapFetch
 
         var body = new Multipart("mixed")
         {
-            new TextPart("plain") { Text = $"{message.Name}{message.Extension} — served from the SimplArchive archive." },
+            // A bare URL, deliberately (#783): plain text cannot carry a real link, and every mainstream
+            // client auto-links a recognisable URL while the rest degrade to readable text. The alternative —
+            // a multipart/alternative HTML sibling — moves the attachment out of BODY[2], which is the exact
+            // section-number defect class #766 was. Unconditional by decision: this is a showcase product's
+            // signature, and gating it becomes a feature the day a customer asks.
+            new TextPart("plain") { Text = $"{message.Name}{message.Extension} — served from the SimplArchive archive: https://www.simplarchive.dev" },
             new MimePart
             {
                 Content = new MimeContent(new MemoryStream(content.ToArray())),

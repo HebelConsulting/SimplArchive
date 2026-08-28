@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -170,6 +172,126 @@ public class WebDavReferencedDocumentTests
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(body, $"href>[^<]*{System.Text.RegularExpressions.Regex.Escape($"{sharedName}.txt")}<"));
 
         Assert.NotEqual(childId, strangerId);
+    }
+
+
+    // A referenced FOLDER appears on the mount, walkable, and deletes as the appearance (#615).
+    //
+    // IMAP has projected referenced folders since ADR 0627; the mount excluded them — deliberately, back when
+    // resolution could not walk into one, so a folder would have appeared without its subtree. Resolution now
+    // continues into the target's real children, which is what dissolves the old reason. ADR 0509 binds the
+    // mount to the tree the workbench shows, and the workbench shows these.
+    [Fact]
+    public async Task A_referenced_folder_is_listed_walkable_and_deletes_as_the_appearance()
+    {
+        var (clientId, secret, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
+        using var owner = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
+        var repoName = $"RefF{Guid.NewGuid():N}"[..12];
+        var repoId = (await TestJson.Post(owner, "/api/repositories", new { name = repoName })).GetProperty("id").GetGuid();
+
+        var email = $"davreff-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, email, "davreff-1234", "Dav RefFolder User");
+        await _factory.GrantTenantAdminAsync(email);
+        using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, "davreff-1234"));
+        var davPassword = (await TestJson.Post(api, "/api/me/webdav-password", new { })).GetProperty("password").GetString()!;
+        var basic = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{email}:{davPassword}")));
+        using var dav = _factory.CreateClient();
+
+        async Task<HttpResponseMessage> DavAsync(string method, string path, params (string K, string V)[] headers)
+        {
+            var request = new HttpRequestMessage(new HttpMethod(method), path) { Headers = { Authorization = basic } };
+            foreach (var (k, v) in headers) { request.Headers.TryAddWithoutValidation(k, v); }
+            return await dav.SendAsync(request);
+        }
+
+        // A project folder with a document in it, referenced into a year folder — the shape a user builds.
+        var projectId = (await TestJson.Post(api, $"/api/documents/{repoId}/children", new { name = "Project X" })).GetProperty("id").GetGuid();
+        var yearId = (await TestJson.Post(api, $"/api/documents/{repoId}/children", new { name = "2026" })).GetProperty("id").GetGuid();
+        var docId = (await TestJson.Post(api, $"/api/documents/{projectId}/children", new { name = "spec" })).GetProperty("id").GetGuid();
+        var version = await TestJson.Post(api, $"/api/documents/{docId}/versions", new { fileExtension = ".txt" });
+        using (var storage = new HttpClient())
+        {
+            (await storage.PutAsync(version.GetProperty("uploadUrl").GetString()!, new ByteArrayContent(Encoding.ASCII.GetBytes("the spec")))).EnsureSuccessStatusCode();
+        }
+
+        (await api.PutAsJsonAsync($"/api/documents/{docId}/versions/{version.GetProperty("id").GetGuid()}", new { })).EnsureSuccessStatusCode();
+        await TestJson.Post(api, $"/api/documents/{yearId}/references", new { targetId = projectId });
+
+        // LISTED as a collection in the year folder…
+        using (var propfind = new HttpRequestMessage(new HttpMethod("PROPFIND"), $"/SimplArchive/{repoName}/2026"))
+        {
+            propfind.Headers.Authorization = basic;
+            propfind.Headers.Add("Depth", "1");
+            var body = await (await dav.SendAsync(propfind)).Content.ReadAsStringAsync();
+            Assert.Contains("Project X", body);
+            Assert.Contains("collection", body);
+        }
+
+        // …WALKABLE: the aliased path serves the target's real child, byte for byte.
+        var get = await DavAsync("GET", $"/SimplArchive/{repoName}/2026/Project X/spec.txt");
+        Assert.Equal(HttpStatusCode.OK, get.StatusCode);
+        Assert.Equal("the spec", await get.Content.ReadAsStringAsync());
+
+        // …and DELETE removes the APPEARANCE: the reference goes, the project and its spec stay untouched.
+        Assert.True((await DavAsync("DELETE", $"/SimplArchive/{repoName}/2026/Project X")).IsSuccessStatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await DavAsync("GET", $"/SimplArchive/{repoName}/2026/Project X/spec.txt")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await DavAsync("GET", $"/SimplArchive/{repoName}/Project X/spec.txt")).StatusCode);
+        var repoChildren = (await TestJson.Get(api, $"/api/documents/{repoId}/children"))
+            .GetProperty("children").EnumerateArray().Select(c => c.GetProperty("name").GetString()).ToList();
+        Assert.Contains("Project X", repoChildren);
+    }
+
+    // The cycle the projection must refuse to draw (#615): a reference pointing back up its own real path
+    // would let a file browser walk A/Ref/A/Ref/… forever. Omitted from the listing — and SAID, because
+    // silence is indistinguishable from "never filed" (ADR 0626); IMAP's catalog applies the same rule.
+    [Fact]
+    public async Task A_reference_back_up_its_own_path_is_omitted_from_the_mount()
+    {
+        var (clientId, secret, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
+        using var owner = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
+        var repoName = $"RefC{Guid.NewGuid():N}"[..12];
+        var repoId = (await TestJson.Post(owner, "/api/repositories", new { name = repoName })).GetProperty("id").GetGuid();
+
+        var email = $"davrefc-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, email, "davrefc-1234", "Dav RefCycle User");
+        await _factory.GrantTenantAdminAsync(email);
+        using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, "davrefc-1234"));
+        var davPassword = (await TestJson.Post(api, "/api/me/webdav-password", new { })).GetProperty("password").GetString()!;
+        var basic = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{email}:{davPassword}")));
+        using var dav = _factory.CreateClient();
+
+        // The API refuses CREATING a reference to an ancestor (INVALID_REFERENCE_TARGET), so the cyclic
+        // state can only arise sideways — a legal reference whose holder is then MOVED under the target, or
+        // an import. Forced here at the store, because the guard exists precisely for the states no endpoint
+        // hands out.
+        var outerId = (await TestJson.Post(api, $"/api/documents/{repoId}/children", new { name = "Outer" })).GetProperty("id").GetGuid();
+        var innerId = (await TestJson.Post(api, $"/api/documents/{outerId}/children", new { name = "Inner" })).GetProperty("id").GetGuid();
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SimplArchive.Infrastructure.Persistence.SimplArchiveDbContext>();
+            var creator = await db.Users.IgnoreQueryFilters(["TenantFilter"])
+                .Where(u => u.NormalizedEmail == email.ToUpperInvariant())
+                .Select(u => u.Id)
+                .SingleAsync();
+            db.DocumentReferences.Add(new SimplArchive.Domain.Documents.DocumentReference
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ParentFolderId = innerId,
+                TargetDocumentId = outerId,
+                CreatedByUserId = creator,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        using var propfind = new HttpRequestMessage(new HttpMethod("PROPFIND"), $"/SimplArchive/{repoName}/Outer/Inner")
+        {
+            Headers = { Authorization = basic },
+        };
+        propfind.Headers.Add("Depth", "1");
+        var body = await (await dav.SendAsync(propfind)).Content.ReadAsStringAsync();
+        Assert.DoesNotContain("Outer/Inner/Outer", body);
     }
 
     private static async Task<Guid> CreateDocumentAsync(HttpClient api, Guid parentId, string name, string content)

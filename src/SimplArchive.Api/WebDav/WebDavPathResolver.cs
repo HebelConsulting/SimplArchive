@@ -194,8 +194,25 @@ internal static class WebDavPathResolver
         // document, and ADR 0509 binds this mount to the Repositories tree — which shows them. Without this the
         // same archive presented two shapes: the workbench listed a referenced invoice in the folder its owner
         // filed it into, and the mounted drive listed that folder without it.
+        // The folder's REAL ancestor chain, for the cycle guard below (#615) — computed once per listing,
+        // and only when a reference exists to check against.
+        HashSet<Guid>? ancestors = null;
         foreach (var (reference, target) in await ReferencedDocumentsAsync(db, node.Document!.Id))
         {
+            // A reference pointing back UP its own real path would let a file browser walk
+            // Personal/A/RefToPersonal/A/… forever. Omitted, and SAID (ADR 0626) — the same rule IMAP's
+            // catalog applies, on the same reasoning: silence here is indistinguishable from "never filed".
+            ancestors ??= await AncestorsOfAsync(db, node.Document!.Id);
+            if (target.Id == node.Document!.Id || ancestors.Contains(target.Id))
+            {
+                logger?.LogWarning(
+                    "WebDAV: reference to {TargetName} in folder {FolderId} points back into its own path and "
+                    + "is OMITTED from the mount; the app shows it and the mounted drive cannot. Set "
+                    + "Serilog:MinimumLevel:Override:SimplArchive.Api.WebDav to Trace for the walk",
+                    target.Name, node.Document!.Id);
+                continue;
+            }
+
             // Its rights are its OWN: the target lives elsewhere and inherits from its real parent, not from
             // the folder it is referenced into. A reference the caller may not follow is simply not there,
             // rather than there and failing on access.
@@ -251,10 +268,12 @@ internal static class WebDavPathResolver
         return null;
     }
 
-    /// <summary>The DOCUMENTS referenced into a folder — targets that have content, paired with the reference.</summary>
+    /// <summary>Everything referenced into a folder — documents AND folders (#615), paired with the reference.</summary>
     /// <remarks>
-    /// Documents only: a referenced FOLDER is #615's half and is not projected here yet, so a folder reference
-    /// stays absent from the mount rather than appearing without its subtree.
+    /// Folders included since #615: resolution now walks INTO a referenced folder (deeper path segments hit
+    /// the target's real children), so the old reason for excluding them — a folder appearing without its
+    /// subtree — no longer holds. The projection itself decides folder-vs-file exactly as it does for a real
+    /// child: <see cref="NodeForAsync"/>, by whether a confirmed version exists.
     /// </remarks>
     internal static async Task<List<(DocumentReference Reference, Document Target)>> ReferencedDocumentsAsync(
         SimplArchiveDbContext db, Guid folderId)
@@ -267,14 +286,26 @@ internal static class WebDavPathResolver
 
         var targetIds = references.Select(r => r.TargetDocumentId).ToList();
         var targets = (await db.Documents
-                .Where(d => targetIds.Contains(d.Id)
-                    && db.DocumentVersions.Any(v => v.DocumentId == d.Id && v.Status == DocumentVersionStatus.Confirmed))
+                .Where(d => targetIds.Contains(d.Id))
                 .ToListAsync())
             .ToDictionary(d => d.Id);
 
         return [.. references
             .Where(r => targets.ContainsKey(r.TargetDocumentId))
             .Select(r => (r, targets[r.TargetDocumentId]))];
+    }
+
+    /// <summary>The ids on a folder's real ParentId chain, root included. Bounded by the cycle invariant.</summary>
+    private static async Task<HashSet<Guid>> AncestorsOfAsync(SimplArchiveDbContext db, Guid folderId)
+    {
+        var ancestors = new HashSet<Guid>();
+        var cursor = await db.Documents.Where(d => d.Id == folderId).Select(d => d.ParentId).FirstOrDefaultAsync();
+        while (cursor is { } id && ancestors.Add(id))
+        {
+            cursor = await db.Documents.Where(d => d.Id == id).Select(d => d.ParentId).FirstOrDefaultAsync();
+        }
+
+        return ancestors;
     }
 
     internal static async Task<WebDavNode> NodeForAsync(SimplArchiveDbContext db, Document document)

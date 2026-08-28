@@ -124,6 +124,13 @@ public class ImapEndpointTests
             var pdfMessage = await repo.GetMessageAsync(synthetic.UniqueId);
             var attachment = Assert.Single(pdfMessage.Attachments);
             Assert.Equal("summary.pdf", attachment.ContentDisposition!.FileName);
+
+            // The body line links to the product (#783) — a bare URL, so clients auto-link it and the part
+            // tree stays untouched: the attachment must remain part 2, because clients address it as BODY[2]
+            // and moving it is the #766 defect class. Both facts asserted together, so the link can never be
+            // "improved" into an HTML sibling without this test asking about the section number.
+            Assert.Contains("https://www.simplarchive.dev", pdfMessage.TextBody);
+            Assert.Single(pdfMessage.Attachments);
             await client.DisconnectAsync(true);
         }
     }
