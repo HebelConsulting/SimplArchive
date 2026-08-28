@@ -8,7 +8,12 @@ using SimplArchive.Infrastructure.Persistence;
 namespace SimplArchive.Api.Imap;
 
 /// <summary>One mailbox in the catalog: its wire name and the folder Document behind it.</summary>
-internal sealed record ImapMailboxEntry(string Name, Guid FolderId, bool HasChildren);
+/// <param name="AcceptsChildren">
+/// True only for the notebook tree, where CREATE is honoured (#596). Everything else refuses CREATE, and the
+/// LIST attributes now say so (#792): advertising a capability the wire denies — or holding one it never
+/// advertises — are the same fault in opposite directions.
+/// </param>
+internal sealed record ImapMailboxEntry(string Name, Guid FolderId, bool HasChildren, bool AcceptsChildren = false);
 
 /// <summary>The SELECTed mailbox's session snapshot: sequence numbers are positions in <see cref="Messages"/>.
 /// DeletedDocumentIds is the session-transient \Deleted staging (#562 slice 3) — nothing happens before
@@ -49,7 +54,16 @@ internal static class ImapMailboxes
                 continue;
             }
 
+            // RFC 3348 CHILDREN attributes, now under an advertised contract (#792) — and \Noinferiors for a
+            // LEAF outside the notebook tree, where CREATE is refused. Only for leaves: \Noinferiors claims no
+            // child can ever exist (RFC 3501 §7.2.2), which would be a lie on a read-only folder that HAS
+            // children. There is no LIST attribute for "has children but takes no more"; that limit is
+            // accepted rather than mis-stated.
             var children = entry.HasChildren ? "\\HasChildren" : "\\HasNoChildren";
+            if (!entry.AcceptsChildren && !entry.HasChildren)
+            {
+                children = "\\Noinferiors " + children;
+            }
 
             // RFC 6154 SPECIAL-USE. Clients find Drafts/Sent/Junk/Trash by ATTRIBUTE, not by name — a client
             // told nothing will helpfully create its own "Sent Messages" beside ours, and then the user has
@@ -73,6 +87,10 @@ internal static class ImapMailboxes
         Documents.PersonalMailboxProvisioner.SentFolderName => " \\Sent",
         Documents.PersonalMailboxProvisioner.JunkFolderName => " \\Junk",
         Documents.PersonalMailboxProvisioner.TrashFolderName => " \\Trash",
+
+        // RFC 6154 \Archive: the attribute a client's Archive button files by. Keyed on the WIRE name, like
+        // the rest — the workbench calls the folder eMail-Archive, the wire calls it Archive (#802).
+        "Archive" => " \\Archive",
         _ => string.Empty,
     };
 
@@ -254,8 +272,8 @@ internal static class ImapMailboxes
                     // sections existed this said HasChildren: false and the subtree was never visited — which
                     // is exactly why Apple Notes could see no subfolders.
                     var hasSections = await HasSubfoldersAsync(db, nid);
-                    entries.Add(new ImapMailboxEntry("Notes", nid, hasSections));
-                    await AddSubfoldersAsync(db, calculator, logger, userId, nid, "Notes", entries);
+                    entries.Add(new ImapMailboxEntry("Notes", nid, hasSections, AcceptsChildren: true));
+                    await AddSubfoldersAsync(db, calculator, logger, userId, nid, "Notes", entries, acceptsChildren: true);
                 }
             }
 
@@ -274,8 +292,12 @@ internal static class ImapMailboxes
                 foreach (var (folderId, wireName) in await StandingMailboxesAsync(db, root.Id))
                 {
                     standingIds.Add(folderId);
-                    entries.Add(new ImapMailboxEntry(wireName, folderId, await HasSubfoldersAsync(db, folderId)));
-                    await AddSubfoldersAsync(db, calculator, logger, userId, folderId, wireName, entries);
+
+                    // Only the archive takes user folders (#802) — the attribute set and the CREATE handler
+                    // must agree, and both read this flag.
+                    var takesFolders = wireName == "Archive";
+                    entries.Add(new ImapMailboxEntry(wireName, folderId, await HasSubfoldersAsync(db, folderId), takesFolders));
+                    await AddSubfoldersAsync(db, calculator, logger, userId, folderId, wireName, entries, acceptsChildren: takesFolders);
                 }
             }
 
@@ -309,12 +331,20 @@ internal static class ImapMailboxes
         return Documents.PersonalMailboxProvisioner.StandingFolderNames
             .Select(name => (Name: name, Match: folders.FirstOrDefault(f => f.Name == name)))
             .Where(x => x.Match is not null)
-            .Select(x => (x.Match!.Id, WireName: x.Name == Documents.PersonalMailboxProvisioner.InboxFolderName ? "INBOX" : x.Name))
+            .Select(x => (x.Match!.Id, WireName: x.Name switch
+            {
+                Documents.PersonalMailboxProvisioner.InboxFolderName => "INBOX",
+
+                // The workbench name says what the folder is FOR; the wire name is the one every mail client's
+                // archive gesture already knows (#802). Same one-folder-two-projections rule as Notebook/Notes.
+                Documents.PersonalMailboxProvisioner.EmailArchiveFolderName => "Archive",
+                _ => x.Name,
+            }))
             .ToList();
     }
 
     private static async Task AddSubfoldersAsync(
-        SimplArchiveDbContext db, IEffectiveRightsCalculator calculator, ILogger logger, Guid userId, Guid parentId, string parentName, List<ImapMailboxEntry> entries, IReadOnlySet<Guid>? skipFolderIds = null, IReadOnlySet<Guid>? ancestors = null)
+        SimplArchiveDbContext db, IEffectiveRightsCalculator calculator, ILogger logger, Guid userId, Guid parentId, string parentName, List<ImapMailboxEntry> entries, IReadOnlySet<Guid>? skipFolderIds = null, IReadOnlySet<Guid>? ancestors = null, bool acceptsChildren = false)
     {
         // The folders on the path to here, so a reference pointing back up one stops instead of recursing for
         // ever. It must be the ANCESTOR CHAIN rather than a global visited-set: the same folder legitimately
@@ -383,11 +413,11 @@ internal static class ImapMailboxes
                 continue;
             }
 
-            entries.Add(new ImapMailboxEntry(name, folder.Id, await HasSubfoldersAsync(db, folder.Id)));
+            entries.Add(new ImapMailboxEntry(name, folder.Id, await HasSubfoldersAsync(db, folder.Id), acceptsChildren));
             // The skip PROPAGATES rather than stopping at the first level: the notebook it names is a
             // grandchild of the personal root (#596), so dropping it here would list it twice — once as the
             // root-level `Notes` Apple Notes expects, and again as `INBOX/My Mailbox/Notebook`.
-            await AddSubfoldersAsync(db, calculator, logger, userId, folder.Id, name, entries, skipFolderIds, path);
+            await AddSubfoldersAsync(db, calculator, logger, userId, folder.Id, name, entries, skipFolderIds, path, acceptsChildren);
         }
     }
 

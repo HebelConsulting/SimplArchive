@@ -146,7 +146,14 @@ internal static class ImapWrites
             }
         }
 
-        var objectKey = ObjectKeyBuilder.Build(tenantId, document.CreatedAt, document.StorageFolderId, versionId, ".eml");
+        // The key follows the FOLDER's tier (#802). An APPEND into a staging folder stores on the ephemeral
+        // mail key, exactly as LMTP delivery does — bytes live where their folder lives, so a later move to
+        // Trash is ephemeral→ephemeral and a filing into the repository re-keys, both as designed. The old
+        // unconditional archive key put appended mail on the wrong tier: expunging it to Trash was refused by
+        // the mover's one-way rule ("archive content cannot enter mail storage"), surfacing as NO server error.
+        var objectKey = await EphemeralMailFolder.IsEphemeralAsync(db, folder.Id)
+            ? ObjectKeyBuilder.EphemeralMailKey(tenantId, userId, document.StorageFolderId, versionId, ".eml")
+            : ObjectKeyBuilder.Build(tenantId, document.CreatedAt, document.StorageFolderId, versionId, ".eml");
         await storage.PutObjectAsync(objectKey, new MemoryStream(bytes), "message/rfc822");
 
         var version = new DocumentVersion
@@ -251,6 +258,28 @@ internal static class ImapWrites
 
             var document = await db.Documents.FirstAsync(d => d.Id == message.DocumentId);
 
+            // The document does not LIVE in this folder. Two different facts wear that shape, and they get
+            // two different answers (#802). An entry backed by a REFERENCE deletes as the reference — the
+            // shortcut goes, the document does not learn it happened (the WebDAV #769 rule). Anything else is
+            // the stale second half of a client's move emulation — a COPY-that-organizes already moved the
+            // document, and the expunge aimed at the superseded source entry — absorbed, touching nothing,
+            // or it would yank the freshly organized mail out of its archive folder into Trash.
+            if (document.ParentId != selected.FolderId)
+            {
+                var shortcut = await db.DocumentReferences.FirstOrDefaultAsync(
+                    r => r.ParentFolderId == selected.FolderId && r.TargetDocumentId == message.DocumentId);
+                if (shortcut is not null)
+                {
+                    db.DocumentReferences.Remove(shortcut);
+                    await db.SaveChangesAsync();
+                    await scope.ServiceProvider.GetRequiredService<IAuditRecorder>()
+                        .RecordAsync(AuditActions.ReferenceRemoved, "Document", document.Id, document.Name, "Reference removed over IMAP (EXPUNGE)");
+                }
+
+                expungedSequences.Add(index + 1);
+                continue;
+            }
+
             // WHERE the delete happens decides what it MEANS (#658). In a mail client, deleting outside Trash
             // moves the message to Trash and deleting inside Trash is final — that is what every user expects,
             // and doing the final thing everywhere made a mis-click in Inbox unrecoverable from the client.
@@ -350,6 +379,70 @@ internal static class ImapWrites
                 continue;
             }
 
+            // A REFERENCE-backed entry (#802, second live find): the listing projects a document referenced
+            // into this folder as a message, and nothing marked it — so MOVE re-parented the TARGET document
+            // out of the repository, and the within-tier COPY hauled it into a mail folder. Acting on an
+            // appearance acts on the APPEARANCE: the reference row relocates (or duplicates, for a true copy),
+            // and the document does not learn it happened — the same rule WebDAV's DELETE follows (#769).
+            var appearance = await db.DocumentReferences.FirstOrDefaultAsync(
+                r => r.ParentFolderId == selected.FolderId && r.TargetDocumentId == message.DocumentId);
+            if (appearance is not null
+                && !await db.Documents.AnyAsync(d => d.Id == message.DocumentId && d.ParentId == selected.FolderId))
+            {
+                var duplicate = await db.DocumentReferences.AnyAsync(
+                    r => r.ParentFolderId == targetFolderId && r.TargetDocumentId == message.DocumentId);
+                var alreadyHome = await db.Documents.AnyAsync(
+                    d => d.Id == message.DocumentId && d.ParentId == targetFolderId);
+                if (move || await EphemeralMailFolder.IsEphemeralAsync(db, targetFolderId))
+                {
+                    // Moving the shortcut — explicitly (MOVE), or the mail client's drag between mail folders,
+                    // which arrives as COPY and means move (the emulation this whole branch family serves).
+                    if (duplicate || alreadyHome)
+                    {
+                        db.DocumentReferences.Remove(appearance); // the target already shows it — collapse
+                    }
+                    else
+                    {
+                        appearance.ParentFolderId = targetFolderId;
+                    }
+
+                    await db.SaveChangesAsync();
+                    await scope.ServiceProvider.GetRequiredService<IAuditRecorder>()
+                        .RecordAsync(AuditActions.ReferenceMoved, "Document", message.DocumentId, message.Name, "Reference moved over IMAP");
+                    if (move)
+                    {
+                        movedSequences.Add(sequence);
+                    }
+                    else
+                    {
+                        remaining.Add(message);
+                    }
+                }
+                else
+                {
+                    // A true COPY of the shortcut into an archive folder: a second appearance.
+                    if (!duplicate && !alreadyHome)
+                    {
+                        db.DocumentReferences.Add(new DocumentReference
+                        {
+                            Id = Guid.NewGuid(),
+                            TenantId = tenantId,
+                            ParentFolderId = targetFolderId,
+                            TargetDocumentId = message.DocumentId,
+                            CreatedByUserId = userId,
+                            CreatedAt = DateTimeOffset.UtcNow,
+                        });
+                        await db.SaveChangesAsync();
+                        await scope.ServiceProvider.GetRequiredService<IAuditRecorder>()
+                            .RecordAsync(AuditActions.ReferenceAdded, "Document", message.DocumentId, message.Name, "Referenced over IMAP (COPY)");
+                    }
+
+                    remaining.Add(message);
+                }
+
+                continue;
+            }
+
             if (move)
             {
                 // MOVE = the workbench reparent (#562): a new ParentId, gated on CanMove; SaveChanges enforces
@@ -411,23 +504,32 @@ internal static class ImapWrites
                     await mover.RelocateContentForMoveAsync(document.Id, targetFolderId, CancellationToken.None);
                     document.ParentId = targetFolderId;
 
-                    // …and the stash keeps a shortcut, so the message still shows in the mail client where the
-                    // user left it, now pointing at the filed document rather than being it.
-                    db.DocumentReferences.Add(new DocumentReference
+                    // WITHIN the staging tier — Inbox to a user's Archive folder — the shortcut is withheld
+                    // (#802, live find): organizing means the mail LEAVES Inbox, and a reference left behind is
+                    // the opposite of the promise. The shortcut belongs to the other case only: filing into
+                    // the REPOSITORY, where the mailbox keeping a pointer at the filed document is the feature.
+                    var withinMailTier = await EphemeralMailFolder.IsEphemeralAsync(db, targetFolderId);
+                    if (!withinMailTier)
                     {
-                        Id = Guid.NewGuid(),
-                        TenantId = tenantId,
-                        ParentFolderId = selected.FolderId,
-                        TargetDocumentId = message.DocumentId,
-                        CreatedByUserId = userId,
-                        CreatedAt = DateTimeOffset.UtcNow,
-                    });
+                        // The stash keeps a shortcut, so the message still shows in the mail client where the
+                        // user left it, now pointing at the filed document rather than being it.
+                        db.DocumentReferences.Add(new DocumentReference
+                        {
+                            Id = Guid.NewGuid(),
+                            TenantId = tenantId,
+                            ParentFolderId = selected.FolderId,
+                            TargetDocumentId = message.DocumentId,
+                            CreatedByUserId = userId,
+                            CreatedAt = DateTimeOffset.UtcNow,
+                        });
+                    }
 
                     try
                     {
                         await db.SaveChangesAsync();
                         await scope.ServiceProvider.GetRequiredService<IAuditRecorder>()
-                            .RecordAsync(AuditActions.DocumentFiled, "Document", document.Id, document.Name, "Filed out of mail storage over IMAP (COPY)");
+                            .RecordAsync(AuditActions.DocumentFiled, "Document", document.Id, document.Name,
+                                withinMailTier ? "Moved between mail folders over IMAP (COPY)" : "Filed out of mail storage over IMAP (COPY)");
                     }
                     catch (InvalidOperationException)
                     {
@@ -475,6 +577,184 @@ internal static class ImapWrites
 
     // ---- Notes (#562 slice 5, ADR "IMAP endpoint: Notes") --------------------------------------------
 
+    /// <summary>Creates a user mail folder under the archive subtree (#802).</summary>
+    private static async Task CreateImapFolderAsync(ImapSession session, IServiceScope scope, string tag, string[] segments)
+    {
+        // The parent is everything but the last segment, and it must already exist — clients create nested
+        // paths one level at a time, so inventing intermediates would let a typo build a tree.
+        var parentName = string.Join('/', segments[..^1]);
+        var leaf = segments[^1];
+
+        var parent = await ImapMailboxes.ResolveAsync(session, scope, ImapProtocol.EncodeModifiedUtf7(parentName));
+        if (parent is null)
+        {
+            await session.WriteLineAsync($"{tag} NO [TRYCREATE] no such parent mailbox");
+            return;
+        }
+
+        var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+        var calculator = scope.ServiceProvider.GetRequiredService<IEffectiveRightsCalculator>();
+        var userId = scope.ServiceProvider.GetRequiredService<ICurrentUserAccessor>().UserId!.Value;
+        var tenantId = scope.ServiceProvider.GetRequiredService<ICurrentTenantAccessor>().TenantId!.Value;
+
+        if (!(await calculator.GetEffectiveRightsAsync(userId, parent.Value.Mailbox.FolderId)).CanCreateSubItems)
+        {
+            await session.WriteLineAsync($"{tag} NO you cannot create a folder here");
+            return;
+        }
+
+        var maskVersionId = await FolderMask.CurrentVersionIdAsync(
+            db, tenantId, SimplArchive.Domain.Masks.WellKnownMaskIds.ImapFolder, CancellationToken.None);
+
+        db.Documents.Add(new Document
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ParentId = parent.Value.Mailbox.FolderId,
+            Name = leaf,
+            MaskVersionId = maskVersionId,
+            CreatedByUserId = userId,
+            CreatedAt = DateTimeOffset.UtcNow,
+            StorageFolderId = Guid.NewGuid(),
+        });
+
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (InvalidOperationException)
+        {
+            // The sibling-name invariant: the mailbox already has one. RFC 3501 calls this a NO, and naming
+            // the reason beats the blanket sentence — a client shows this text to the user.
+            await session.WriteLineAsync($"{tag} NO a mailbox with that name already exists");
+            return;
+        }
+
+        await scope.ServiceProvider.GetRequiredService<IAuditRecorder>()
+            .RecordAsync(AuditActions.DocumentCreated, "Document", db.Documents.Local.First(d => d.Name == leaf).Id, leaf,
+                "Mail folder created over IMAP");
+        await session.WriteLineAsync($"{tag} OK CREATE completed");
+    }
+
+    /// <summary>True when the mailbox is a user-created mail folder — the only kind DELETE/RENAME touch.</summary>
+    /// <remarks>
+    /// Asked of the MASK, not the path: a folder reached as Archive/Work is deletable because it IS an
+    /// IMAP Folder, and a provisioned mailbox is not because it is not — the same one-answer rule as the
+    /// ephemeral tier's, so renaming the archive or a future second creatable subtree cannot silently widen
+    /// or narrow what these verbs act on (#802).
+    /// </remarks>
+    private static async Task<bool> IsUserMailFolderAsync(SimplArchiveDbContext db, Guid folderId)
+    {
+        var maskId = await db.Documents
+            .Where(d => d.Id == folderId)
+            .Select(d => db.MaskVersions.Where(mv => mv.Id == d.MaskVersionId).Select(mv => (Guid?)mv.MaskId).FirstOrDefault())
+            .FirstOrDefaultAsync();
+        return maskId == SimplArchive.Domain.Masks.WellKnownMaskIds.ImapFolder;
+    }
+
+    /// <summary>DELETE of a user mail folder: the subtree soft-deletes into the recycle bin (#802).</summary>
+    /// <remarks>
+    /// Soft, deliberately — a folder of mail a user tidies away from their phone must be recoverable, and the
+    /// recycle bin is where every other delete in this product goes. Refused for everything that is not a
+    /// user folder, with the same sentence as before: the rest of the tree is managed in the workbench.
+    /// </remarks>
+    internal static async Task DeleteMailboxAsync(ImapSession session, IServiceScope scope, string tag, string arguments)
+    {
+        var tokens = ImapProtocol.Tokenize(arguments);
+        var resolved = tokens.Count >= 1 ? await ImapMailboxes.ResolveAsync(session, scope, tokens[0]) : null;
+        var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+        if (resolved is null || !await IsUserMailFolderAsync(db, resolved.Value.Mailbox.FolderId))
+        {
+            await session.WriteLineAsync($"{tag} NO the folder structure is managed in SimplArchive, not over IMAP");
+            return;
+        }
+
+        var calculator = scope.ServiceProvider.GetRequiredService<IEffectiveRightsCalculator>();
+        var userId = scope.ServiceProvider.GetRequiredService<ICurrentUserAccessor>().UserId!.Value;
+        if (!(await calculator.GetEffectiveRightsAsync(userId, resolved.Value.Mailbox.FolderId)).CanDelete)
+        {
+            await session.WriteLineAsync($"{tag} NO you cannot delete this mailbox");
+            return;
+        }
+
+        // The CASCADE the workbench delete performs, and the same two gates: a folder of mail is a subtree,
+        // and deleting the folder alone would leave its messages alive under a deleted parent — invisible
+        // everywhere, restorable nowhere.
+        var document = await db.Documents.FirstAsync(d => d.Id == resolved.Value.Mailbox.FolderId);
+        var toDelete = await db.CollectSubtreeAsync(document.Id, document, CancellationToken.None);
+        if (toDelete.Any(d => d.CheckedOutByUserId is { } holder && holder != userId))
+        {
+            await session.WriteLineAsync($"{tag} NO a document in this mailbox is checked out by someone else");
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var doc in toDelete)
+        {
+            doc.DeletedAt = now;
+        }
+
+        await db.SaveChangesAsync();
+        await scope.ServiceProvider.GetRequiredService<IAuditRecorder>()
+            .RecordAsync(AuditActions.DocumentDeleted, "Document", document.Id, document.Name, "Mail folder deleted over IMAP");
+        await session.WriteLineAsync($"{tag} OK DELETE completed");
+    }
+
+    /// <summary>RENAME of a user mail folder: the document renames, the subtree rides along (#802).</summary>
+    /// <remarks>
+    /// The destination must stay inside the archive subtree and renames only the LEAF — a rename that would
+    /// re-parent (RFC 3501 allows "RENAME a/b c/d") is refused rather than half-honoured, because a move has
+    /// its own semantics (re-keying, audit) that a rename must not silently perform.
+    /// </remarks>
+    internal static async Task RenameMailboxAsync(ImapSession session, IServiceScope scope, string tag, string arguments)
+    {
+        var tokens = ImapProtocol.Tokenize(arguments);
+        var resolved = tokens.Count >= 2 ? await ImapMailboxes.ResolveAsync(session, scope, tokens[0]) : null;
+        var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+        if (resolved is null || !await IsUserMailFolderAsync(db, resolved.Value.Mailbox.FolderId))
+        {
+            await session.WriteLineAsync($"{tag} NO the folder structure is managed in SimplArchive, not over IMAP");
+            return;
+        }
+
+        var oldName = ImapProtocol.DecodeModifiedUtf7(tokens[0]).TrimEnd('/');
+        var newName = ImapProtocol.DecodeModifiedUtf7(tokens[1]).TrimEnd('/');
+        var oldSegments = oldName.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var newSegments = newName.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (newSegments.Length != oldSegments.Length
+            || !oldSegments[..^1].SequenceEqual(newSegments[..^1], StringComparer.Ordinal))
+        {
+            await session.WriteLineAsync($"{tag} NO RENAME may change the name, not the place — move messages instead");
+            return;
+        }
+
+        var calculator = scope.ServiceProvider.GetRequiredService<IEffectiveRightsCalculator>();
+        var userId = scope.ServiceProvider.GetRequiredService<ICurrentUserAccessor>().UserId!.Value;
+        if (!(await calculator.GetEffectiveRightsAsync(userId, resolved.Value.Mailbox.FolderId)).CanEditIndexData)
+        {
+            await session.WriteLineAsync($"{tag} NO you cannot rename this mailbox");
+            return;
+        }
+
+        var document = await db.Documents.FirstAsync(d => d.Id == resolved.Value.Mailbox.FolderId);
+        var previousName = document.Name;
+        document.Name = newSegments[^1];
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (InvalidOperationException)
+        {
+            await session.WriteLineAsync($"{tag} NO a mailbox with that name already exists");
+            return;
+        }
+
+        await scope.ServiceProvider.GetRequiredService<IAuditRecorder>()
+            .RecordAsync(AuditActions.DocumentRenamed, "Document", document.Id, document.Name,
+                $"Mail folder renamed over IMAP (was: {previousName})");
+        await session.WriteLineAsync($"{tag} OK RENAME completed");
+    }
+
     private static async Task AppendNoteAsync(
         ImapSession session, IServiceScope scope, string tag, SimplArchiveDbContext db,
         Document folder, Domain.Imap.ImapMailbox mailbox, string stem, byte[] bytes, Guid userId, Guid tenantId)
@@ -493,7 +773,14 @@ internal static class ImapWrites
             .ToDictionaryAsync(f => f.Name, f => f.Id);
 
         // An existing note with this UUID in this folder → the append IS an edit: a new version, same identity.
+        //
+        // PAST the soft-delete filter, deliberately (#790). A notes client edits in either order, and only
+        // APPEND-then-DELETE was survivable: a client that DELETES the old message first really soft-deletes
+        // the note, and a correlation that cannot see the deleted row then forks a NEW document for the
+        // replacement — the note "disappears" and returns as a stranger. The tenant filter stays enforced;
+        // only the soft-delete veil lifts, and only for the question "did this UUID ever live here".
         var existingId = await db.FieldValues
+            .IgnoreQueryFilters(["SoftDeleteFilter"])
             .Where(fv => fv.FieldDefinitionId == fieldIds["Note UUID"] && fv.Value == uuid
                 && db.Documents.Any(d => d.Id == fv.DocumentId && d.ParentId == folder.Id))
             .Select(fv => (Guid?)fv.DocumentId)
@@ -504,7 +791,18 @@ internal static class ImapWrites
         Document document;
         if (existingId is { } id)
         {
-            document = await db.Documents.FirstAsync(d => d.Id == id);
+            document = await db.Documents.IgnoreQueryFilters(["SoftDeleteFilter"]).FirstAsync(d => d.Id == id);
+
+            // The delete half of the edit already landed: bring the note back before attaching its new
+            // version. The append IS the proof the client still has the note — restoring is not second-
+            // guessing a deletion, it is completing the edit the two verbs together mean. The full restorer
+            // rather than a bare DeletedAt reset, so a gone parent and the search index are handled the same
+            // way a workbench restore handles them.
+            if (document.DeletedAt is not null)
+            {
+                await scope.ServiceProvider.GetRequiredService<Documents.DocumentRestorer>()
+                    .RestoreAsync(document, userId, null, CancellationToken.None);
+            }
         }
         else
         {
@@ -604,9 +902,20 @@ internal static class ImapWrites
 
         var name = ImapProtocol.DecodeModifiedUtf7(tokens[0]).TrimEnd('/');
         var segments = name.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (segments.Length < 1 || !string.Equals(segments[0], "Notes", StringComparison.Ordinal))
+        var isNotes = segments.Length >= 1 && string.Equals(segments[0], "Notes", StringComparison.Ordinal);
+        var isArchive = segments.Length >= 2 && string.Equals(segments[0], "Archive", StringComparison.Ordinal);
+        if (!isNotes && !isArchive)
         {
             await session.WriteLineAsync($"{tag} NO the folder structure is managed in SimplArchive, not over IMAP");
+            return;
+        }
+
+        // `CREATE "Archive/<name>"` — a user folder in the mailbox's own organizational space (#802). The
+        // archive root itself is provisioned, so only children are creatable, and the LIST attributes say
+        // exactly that: the read-only tree wears \Noinferiors, the archive subtree does not.
+        if (isArchive)
+        {
+            await CreateImapFolderAsync(session, scope, tag, segments);
             return;
         }
 

@@ -34,7 +34,10 @@ public static class EphemeralMailFolder
             .Select(d => dbContext.MaskVersions.Where(mv => mv.Id == d.MaskVersionId).Select(mv => (Guid?)mv.MaskId).FirstOrDefault())
             .FirstOrDefaultAsync(cancellationToken);
 
-        return maskId == WellKnownMaskIds.ImapSpecial;
+        // Both masks of the staging tier: the provisioned folders and the user-created ones inside them
+        // (#802). One tier, one answer — a message in Archive/Work must delete to Trash and re-key exactly
+        // as one in Inbox does, or the folder a user made would silently change what deletion means.
+        return maskId == WellKnownMaskIds.ImapSpecial || maskId == WellKnownMaskIds.ImapFolder;
     }
 
     /// <summary>
@@ -74,6 +77,24 @@ public static class EphemeralMailFolder
             || folder.Name == PersonalMailboxProvisioner.TrashFolderName)
         {
             return null; // already Trash: this delete is the final one
+        }
+
+        // A USER folder can be nested (Archive/Work/2026), so its parent is not the mailbox — walk up until
+        // it is (#802). The loop ascends the ephemeral chain: each hop is another staging folder, and the
+        // first non-ephemeral ancestor is the Mailbox the Trash lives under. Bounded by the tree depth the
+        // cycle invariant already guarantees.
+        while (await IsEphemeralAsync(dbContext, mailboxId, cancellationToken))
+        {
+            var up = await dbContext.Documents
+                .Where(d => d.Id == mailboxId)
+                .Select(d => d.ParentId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (up is not { } next)
+            {
+                return null; // a staging folder at a root — structurally impossible, but never loop on it
+            }
+
+            mailboxId = next;
         }
 
         return await dbContext.Documents

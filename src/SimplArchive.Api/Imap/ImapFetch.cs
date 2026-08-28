@@ -1,5 +1,6 @@
 using System.Text;
 using MimeKit;
+using MimeKit.Utils;
 using SimplArchive.Application.Abstractions;
 
 namespace SimplArchive.Api.Imap;
@@ -190,7 +191,30 @@ internal static class ImapFetch
                         var open = item.IndexOf('[');
                         var section = item[(open + 1)..item.LastIndexOf(']')];
                         var payload = await SectionAsync(session, section, BytesAsync, MimeAsync);
-                        literals.Add(($"BODY[{section.ToUpperInvariant()}] {{{payload.Length}}}", payload));
+
+                        // The <start.count> partial (RFC 3501 §6.4.5). It was silently dropped: a client asking
+                        // for the first 16 KB of a section got the whole thing, unlabeled — and a partial
+                        // response MUST carry its origin octet (`BODY[TEXT]<0>`), or the client splices what it
+                        // got at the wrong offset. Ignoring a qualifier the client sent is the same fault as
+                        // refusing one it may send: it believes it asked and was answered.
+                        var label = $"BODY[{section.ToUpperInvariant()}]";
+                        var angle = item.IndexOf('<', item.LastIndexOf(']'));
+                        if (angle >= 0 && item.EndsWith(">", StringComparison.Ordinal))
+                        {
+                            var range = item[(angle + 1)..^1].Split('.');
+                            if (range.Length is 1 or 2
+                                && long.TryParse(range[0], out var start) && start >= 0
+                                && (range.Length == 1 || long.TryParse(range[1], out _)))
+                            {
+                                var count = range.Length == 2 ? long.Parse(range[1]) : long.MaxValue;
+                                var from = (int)Math.Min(start, payload.Length);
+                                var take = (int)Math.Min(count, payload.Length - from);
+                                payload = payload[from..(from + take)];
+                                label += $"<{start}>";
+                            }
+                        }
+
+                        literals.Add(($"{label} {{{payload.Length}}}", payload));
                     }
                     else
                     {
@@ -429,7 +453,15 @@ internal static class ImapFetch
         mime.Body = body;
 
         using var output = new MemoryStream();
-        mime.WriteTo(output);
+
+        // CRLF explicitly (#802): MimeKit's default FormatOptions follow the PLATFORM (LF on Unix), and an
+        // LF-only message is not RFC 5322. Most clients tolerated it on BODY[], but our own TEXT slicer scans
+        // for CRLFCRLF to find the header end — so BODY[TEXT] of a synthetic message silently returned the
+        // WHOLE message, headers, boundaries and base64 included, and a mail client rendered that soup as the
+        // message text. The server's own parser was the first strict consumer of its own malformed output.
+        var options = FormatOptions.Default.Clone();
+        options.NewLineFormat = NewLineFormat.Dos;
+        mime.WriteTo(options, output);
         return output.ToArray();
     }
 
@@ -489,6 +521,24 @@ internal static class ImapFetch
         }
     }
 
-    private static string Quote(string? value) =>
-        value is null ? "NIL" : $"\"{value.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"";
+    /// <remarks>
+    /// IMAP is a 7-bit protocol and a quoted string may not carry bare non-ASCII — yet the values quoted here
+    /// come from MimeKit DECODED (a subject, a filename), so "invoice — January.pdf" put a raw em-dash on the
+    /// wire (#802). Re-encoded as RFC 2047 words when needed: that is the form the header would carry in the
+    /// message itself, and the form every client already decodes for display.
+    /// </remarks>
+    private static string Quote(string? value)
+    {
+        if (value is null)
+        {
+            return "NIL";
+        }
+
+        if (value.Any(c => c > 127))
+        {
+            value = Encoding.ASCII.GetString(Rfc2047.EncodeText(FormatOptions.Default, Encoding.UTF8, value));
+        }
+
+        return $"\"{value.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"";
+    }
 }

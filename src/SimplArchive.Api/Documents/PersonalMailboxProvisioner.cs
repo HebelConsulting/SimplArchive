@@ -49,16 +49,25 @@ public sealed class PersonalMailboxProvisioner
     public const string TrashFolderName = "Trash";
 
     /// <summary>
+    /// The user-organizable half of the mailbox (#802): the standing folder under which a user creates their
+    /// own <c>IMAP Folder</c>s and sorts mail. Ephemeral tier like its five siblings — the mailbox answers
+    /// "how do ephemeral eMails reach the repository", and for the small installation using SimplArchive AS
+    /// its mailbox, this is where order lives. Projects over IMAP as <c>Archive</c> with the RFC 6154
+    /// <c>\Archive</c> attribute, so a mail client's Archive button files into it natively.
+    /// </summary>
+    public const string EmailArchiveFolderName = "eMail-Archive";
+
+    /// <summary>
     /// The standing mailboxes every mailbox gets, in the order a client conventionally shows them.
     /// </summary>
     /// <remarks>
-    /// All five wear <see cref="WellKnownMaskIds.ImapSpecial"/>, which is what makes their contents
+    /// All six wear <see cref="WellKnownMaskIds.ImapSpecial"/>, which is what makes their contents
     /// <b>ephemeral</b> — staged under the <c>mail/</c> key prefix rather than filed in the repository
     /// (ADR 0638). Only <c>Junk</c> and <c>Trash</c> are ever swept (#640); the rest keep their mail until the
     /// user files or deletes it.
     /// </remarks>
     public static readonly IReadOnlyList<string> StandingFolderNames =
-        [InboxFolderName, DraftsFolderName, SentFolderName, JunkFolderName, TrashFolderName];
+        [InboxFolderName, DraftsFolderName, SentFolderName, JunkFolderName, TrashFolderName, EmailArchiveFolderName];
 
     private readonly SimplArchiveDbContext _dbContext;
     private readonly PersonalRepositoryProvisioner _personalSpace;
@@ -119,7 +128,7 @@ public sealed class PersonalMailboxProvisioner
         return mailbox;
     }
 
-    /// <summary>The five standing mailboxes, created or healed. Idempotent, and safe to call on every path.</summary>
+    /// <summary>The six standing mailboxes, created or healed. Idempotent, and safe to call on every path.</summary>
     private async Task EnsureStandingFoldersAsync(Document mailbox, Guid tenantId, Guid userId, CancellationToken cancellationToken)
     {
         foreach (var name in StandingFolderNames)

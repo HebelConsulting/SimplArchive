@@ -123,6 +123,11 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         // indexing lives on the messages inside it.
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.ImapSpecial, "IMAP Special", [], cancellationToken);
 
+        // A user-created mail folder in the staging tier (#802) — fieldless, like the Section it is shaped
+        // after. Its placement rows (under a staging folder or itself) come from ConstrainedPlacements in the
+        // containment pass below.
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.ImapFolder, "IMAP Folder", [], cancellationToken);
+
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.Note, "Note",
         [
             new FieldSpec("Note UUID", FieldDataType.Text, IsRequired: true),

@@ -38,6 +38,9 @@ public static class MaskIcon
         // The INBOX and its future siblings. A tray rather than a folder-with-envelope, which Material has no
         // glyph for; the token is "mail-folder" because SENT/DRAFTS/JUNK will wear the same mask.
         ["mail-folder"] = (Icons.Material.Filled.Inbox, Icons.Material.Outlined.Inbox),
+        // A user-created mail folder (#802): stacked trays, not the single tray — it sits beside the standing
+        // folders under My Mailbox and must read as "mine, holds mail" at 16 px.
+        ["mail-user-folder"] = (Icons.Material.Filled.AllInbox, Icons.Material.Outlined.AllInbox),
         ["notebook"] = (Icons.Material.Filled.MenuBook, Icons.Material.Outlined.MenuBook),
         ["section"] = (Icons.Material.Filled.Topic, Icons.Material.Outlined.Topic),
         // A BOOK with a person, not a contact card. Contacts/ContactPage are person-shaped at 16 px and so is

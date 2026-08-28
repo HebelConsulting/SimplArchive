@@ -247,7 +247,14 @@ public sealed class MaskContainmentRules
         // …and if the parent holds no subfolders, is this child one? Folder-ness comes from the MASK because
         // the usual tell — does it have versions — cannot be read here: a folder and a just-delivered message
         // are both version-less at the instant this runs.
+        //
+        // A child that DECLARES this parent as an allowed home passes the gate (#802). "No subfolders" means
+        // no ORDINARY subfolders — it was written to keep plain folders and repositories out of the staging
+        // mailboxes, and a mask whose allowed-parents row names the leaf was placed by declaration, not by
+        // accident. Data both ways: the gate is a flag on the parent, the exception a row on the child, and
+        // neither names a folder instance — which is the trap admission-by-name set in #630.
         return _folderMasks.Contains(childMaskId) && parentMaskId is { } leafId && _leafFolders.Contains(leafId)
+            && !(_allowedParents.TryGetValue(childMaskId, out var declaredHomes) && declaredHomes.Contains(leafId))
             ? Refusal.FolderHoldsNoSubfolders
             : Refusal.None;
     }

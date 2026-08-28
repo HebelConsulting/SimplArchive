@@ -58,6 +58,9 @@ public static class AuditActions
     public const string ExternalLinkUrlViewed = "ExternalLink.UrlViewed";
     public const string ReferenceAdded = "Reference.Added";
     public const string ReferenceRemoved = "Reference.Removed";
+
+    /// <summary>A reference relocated between folders — the appearance moved, the document did not (#802).</summary>
+    public const string ReferenceMoved = "Reference.Moved";
     public const string AnnotationAdded = "Annotation.Added";
     public const string AnnotationEdited = "Annotation.Edited";
     public const string AnnotationRemoved = "Annotation.Removed";

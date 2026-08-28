@@ -37,6 +37,9 @@ public static class MaskIcon
         // The INBOX and its future siblings — "mail-folder", not "inbox", because SENT/DRAFTS/JUNK wear the
         // same mask and naming the token for today's only instance would be wrong when the second arrives.
         ["mail-folder"] = "mdi-inbox",
+        // A user-created mail folder (#802) — stacked trays beside the standing tray, same distinction the
+        // web client draws.
+        ["mail-user-folder"] = "mdi-inbox-multiple",
         ["notebook"] = "mdi-notebook",
         ["section"] = "mdi-folder-text",
         // A BOOK with a person, not a contact card: mdi-contacts is person-shaped at 16 px, and so are the

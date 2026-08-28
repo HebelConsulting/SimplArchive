@@ -163,12 +163,16 @@ public class CreatableChildrenTests
         Assert.Equal(WellKnownMaskIds.Folder, entry.MaskId);
     }
 
-    // The fourth fact — a folder that admits no subfolders at all (#673's AdmitsNoSubfolders). It declares
-    // nothing either, so the menu is empty and the client hides the New affordance entirely.
+    // The fourth fact — AdmitsNoSubfolders keeps ordinary folders out of the staging mailboxes, but it now
+    // yields to the ONE mask that declares a staging folder as its home (#802, decided looseness): the user
+    // mail folder. So the menu offers exactly that, everywhere in the staging tier — under the archive by
+    // design, under Inbox as the accepted consequence of containment that cannot name one folder instance
+    // without keying on its name (the #630 trap).
     [Fact]
-    public async Task An_ephemeral_mail_folder_offers_nothing()
+    public async Task An_ephemeral_mail_folder_offers_exactly_the_user_mail_folder()
     {
-        Assert.Empty(await AdmitsAsync(WellKnownMaskIds.ImapSpecial));
+        var entry = Assert.Single(await AdmitsAsync(WellKnownMaskIds.ImapSpecial));
+        Assert.Equal(WellKnownMaskIds.ImapFolder, entry.MaskId);
     }
 
     // An Addressbook offers exactly Contact, a Calendar exactly Appointment (#689) — one entry each, at the

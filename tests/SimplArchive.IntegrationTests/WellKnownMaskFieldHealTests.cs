@@ -124,8 +124,9 @@ public class WellKnownMaskFieldHealTests
             // a repository previously wore the plain Folder mask, so this one has its own id and existing
             // repositories are moved onto it by the seeder's backfill. 12 → 13 with Mailbox (ADR 0628),
             // 13 → 14 with IMAP Special (#596) — the mask that marks a mailbox's standing folders ephemeral.
+            // 15 → 16 with IMAP Folder (#802) — the user-created mail folder inside the staging tier.
             var maskCount = await db.Masks.IgnoreQueryFilters().CountAsync(m => m.TenantId == _tenantId);
-            Assert.Equal(15, maskCount);
+            Assert.Equal(16, maskCount); // + IMAP Folder (#802)
             Assert.Equal(maskCount, await db.MaskVersions.IgnoreQueryFilters().CountAsync(v => v.TenantId == _tenantId));
         }
     }

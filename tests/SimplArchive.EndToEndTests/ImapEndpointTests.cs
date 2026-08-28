@@ -2,6 +2,8 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using MailKit;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using MailKit.Net.Imap;
 using MailKit.Security;
 using SimplArchive.Api.Imap;
@@ -400,4 +402,595 @@ public class ImapEndpointTests
 
         await client.DisconnectAsync(true);
     }
+    // The OTHER ordering of a notes edit: DELETE-old first, THEN append the replacement (#790).
+    //
+    // Only append-then-delete was survivable. In this order the delete really lands — currentUid equals the
+    // message's uid, so the absorption guard cannot fire, and the note is soft-deleted like ordinary mail. The
+    // re-append's correlation then could not see the soft-deleted row, so it forked a NEW document: measured
+    // with Apple Notes as the note disappearing and returning as a stranger. The fix lets the correlation look
+    // past the soft-delete and RESTORE the note — the append is the proof the client still has it, so restoring
+    // completes the edit rather than second-guessing a deletion.
+    [Fact]
+    public async Task A_notes_edit_that_deletes_before_appending_keeps_the_same_note()
+    {
+        var (_, _, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: false);
+        var email = $"imap-note2-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, email, "note-1234", "Note Editor");
+        using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, "note-1234"));
+        var imapPassword = (await TestJson.Post(api, "/api/me/imap-access", new { })).GetProperty("password").GetString()!;
+
+        var personal = await TestJson.Post(api, "/api/me/personal-repository", new { });
+        var personalId = personal.GetProperty("id").GetGuid();
+        var mailboxId = (await TestJson.Get(api, $"/api/documents/{personalId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "My Mailbox")
+            .GetProperty("id").GetGuid();
+        await TestJson.Post(api, $"/api/documents/{mailboxId}/children", new { name = "Notebook", folderMask = "notes" });
+        var notesId = (await TestJson.Get(api, $"/api/documents/{mailboxId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "Notebook").GetProperty("id").GetGuid();
+
+        var port = ((ImapServer)_factory.Services.GetService(typeof(ImapServer))!).BoundPort!.Value;
+        using var client = new ImapClient();
+        await client.ConnectAsync("127.0.0.1", port, SecureSocketOptions.None);
+        await client.AuthenticateAsync(email, imapPassword);
+
+        MimeKit.MimeMessage Note(string text)
+        {
+            var m = new MimeKit.MimeMessage();
+            m.From.Add(new MimeKit.MailboxAddress("Me", email));
+            m.Subject = "Meeting notes";
+            m.Headers.Add("X-Universally-Unique-Identifier", "note-uuid-2");
+            m.Body = new MimeKit.TextPart("html") { Text = text };
+            return m;
+        }
+
+        var notesFolder = await client.GetFolderAsync("Notes");
+        var uid1 = (await notesFolder.AppendAsync(Note("<b>first draft</b>")))!.Value;
+        var noteId = (await TestJson.Get(api, $"/api/documents/{notesId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "Meeting notes").GetProperty("id").GetGuid();
+
+        // DELETE first — the ordering the absorption guard cannot see coming — then append the edit.
+        await notesFolder.OpenAsync(FolderAccess.ReadWrite);
+        await notesFolder.AddFlagsAsync(uid1, MessageFlags.Deleted, silent: true);
+        await notesFolder.ExpungeAsync();
+        await notesFolder.AppendAsync(Note("<b>first draft, revised</b>"));
+
+        // Same identity, full history — exactly what the other ordering already guaranteed.
+        var children = (await TestJson.Get(api, $"/api/documents/{notesId}/children"))
+            .GetProperty("children").EnumerateArray().ToList();
+        var survived = Assert.Single(children, c => c.GetProperty("name").GetString() == "Meeting notes");
+        Assert.Equal(noteId, survived.GetProperty("id").GetGuid());
+        Assert.Equal(2, survived.GetProperty("versionCount").GetInt32());
+
+        // …and it is NOT ALSO in the recycle bin: restored, not resurrected as a copy over a corpse.
+        var bin = (await TestJson.Get(api, "/api/recycle-bin")).GetProperty("items").EnumerateArray().ToList();
+        Assert.DoesNotContain(bin, i => i.GetProperty("name").GetString() == "Meeting notes");
+
+        await client.DisconnectAsync(true);
+    }
+
+    // What LIST ADVERTISES, pinned on the raw socket (#792). Apple Notes never sent CREATE because nothing
+    // told it creation was possible: the CHILDREN capability was absent (so \HasChildren had no contract) and
+    // no attribute separated the one creatable subtree from the read-only rest. A capability the server holds
+    // and never advertises produces the same silent loss as one it advertises and refuses — a healthy session
+    // and a crippled one log identically, which is the SEARCH incident's shape (ADR 0626).
+    //
+    // Raw socket, not MailKit: the assertion is about exact tokens on the wire, and a tolerant client library
+    // normalises away precisely what is being tested (the THREADID NIL lesson).
+    [Fact]
+    public async Task List_advertises_children_and_marks_only_the_notebook_tree_creatable()
+    {
+        var (_, _, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: false);
+        var email = $"imap-list-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, email, "list-1234", "List Reader");
+        using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, "list-1234"));
+        var imapPassword = (await TestJson.Post(api, "/api/me/imap-access", new { })).GetProperty("password").GetString()!;
+
+        // Provision the notebook so the Notes mailbox exists to be listed.
+        var personalId = (await TestJson.Post(api, "/api/me/personal-repository", new { })).GetProperty("id").GetGuid();
+        var mailboxId = (await TestJson.Get(api, $"/api/documents/{personalId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "My Mailbox").GetProperty("id").GetGuid();
+        await TestJson.Post(api, $"/api/documents/{mailboxId}/children", new { name = "Notebook", folderMask = "notes" });
+
+        var port = ((ImapServer)_factory.Services.GetService(typeof(ImapServer))!).BoundPort!.Value;
+        using var tcp = new System.Net.Sockets.TcpClient("127.0.0.1", port);
+        using var stream = tcp.GetStream();
+        using var reader = new StreamReader(stream, Encoding.ASCII);
+        using var writer = new StreamWriter(stream, Encoding.ASCII) { AutoFlush = true, NewLine = "\r\n" };
+
+        await reader.ReadLineAsync(); // greeting
+
+        async Task<List<string>> ExchangeAsync(string tag, string command)
+        {
+            await writer.WriteLineAsync($"{tag} {command}");
+            var lines = new List<string>();
+            while (await reader.ReadLineAsync() is { } line)
+            {
+                lines.Add(line);
+                if (line.StartsWith(tag + " ", StringComparison.Ordinal))
+                {
+                    break;
+                }
+            }
+
+            return lines;
+        }
+
+        // CAPABILITY carries CHILDREN — the RFC 3348 contract for the attributes LIST is about to use.
+        var capability = await ExchangeAsync("a1", "CAPABILITY");
+        var capLine = Assert.Single(capability, l => l.StartsWith("* CAPABILITY", StringComparison.Ordinal));
+        Assert.Contains(" CHILDREN", capLine, StringComparison.Ordinal);
+
+        var authPlain = Convert.ToBase64String(Encoding.UTF8.GetBytes($"\0{email}\0{imapPassword}"));
+        var login = await ExchangeAsync("a2", $"AUTHENTICATE PLAIN {authPlain}");
+        Assert.Contains(login, l => l.StartsWith("a2 OK", StringComparison.Ordinal));
+
+        var list = await ExchangeAsync("a3", "LIST \"\" \"*\"");
+
+        // The notebook is the creatable place: never \Noinferiors, whatever its child state.
+        var notes = Assert.Single(list, l => l.EndsWith(" \"Notes\"", StringComparison.Ordinal));
+        Assert.DoesNotContain("\\Noinferiors", notes, StringComparison.Ordinal);
+
+        // A read-only LEAF says \Noinferiors — creation there will be refused, so the affordance should never
+        // be offered. Drafts is provisioned empty, which makes it the stable leaf to pin.
+        var drafts = Assert.Single(list, l => l.EndsWith(" \"Drafts\"", StringComparison.Ordinal));
+        Assert.Contains("\\Noinferiors", drafts, StringComparison.Ordinal);
+        Assert.Contains("\\HasNoChildren", drafts, StringComparison.Ordinal);
+
+        // …and never on a mailbox that HAS children: \Noinferiors claims no child can ever exist (RFC 3501
+        // §7.2.2), which would be a lie told about the personal root.
+        foreach (var line in list.Where(l => l.Contains("\\HasChildren", StringComparison.Ordinal)))
+        {
+            Assert.DoesNotContain("\\Noinferiors", line, StringComparison.Ordinal);
+        }
+
+        await ExchangeAsync("a4", "LOGOUT");
+    }
+
+    // The HTML half of #790: does a note's content type survive the round trip? The report showed Apple's own
+    // markup (`overflow-wrap: break-word` is what Notes emits) DISPLAYED as text, which is a content-type
+    // failure, not corruption. This pins the answer at the fetch: the body part comes back as text/html with
+    // the text intact. If this holds, the display-as-text seen live was a consequence of the edit fork (the
+    // ordering bug fixed above), not of the storage or fetch path.
+    [Fact]
+    public async Task An_html_note_round_trips_with_its_content_type()
+    {
+        var (_, _, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: false);
+        var email = $"imap-html-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, email, "html-1234", "Html Writer");
+        using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, "html-1234"));
+        var imapPassword = (await TestJson.Post(api, "/api/me/imap-access", new { })).GetProperty("password").GetString()!;
+
+        var personalId = (await TestJson.Post(api, "/api/me/personal-repository", new { })).GetProperty("id").GetGuid();
+        var mailboxId = (await TestJson.Get(api, $"/api/documents/{personalId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "My Mailbox").GetProperty("id").GetGuid();
+        await TestJson.Post(api, $"/api/documents/{mailboxId}/children", new { name = "Notebook", folderMask = "notes" });
+
+        var port = ((ImapServer)_factory.Services.GetService(typeof(ImapServer))!).BoundPort!.Value;
+        using var client = new ImapClient();
+        await client.ConnectAsync("127.0.0.1", port, SecureSocketOptions.None);
+        await client.AuthenticateAsync(email, imapPassword);
+
+        // The body Apple Notes actually sends — its wrapper markup, stored verbatim.
+        const string html = "<html><head></head><body style=\"overflow-wrap: break-word; -webkit-nbsp-mode: space;\">the note text</body></html>";
+        var message = new MimeKit.MimeMessage();
+        message.From.Add(new MimeKit.MailboxAddress("Me", email));
+        message.Subject = "Styled note";
+        message.Headers.Add("X-Universally-Unique-Identifier", "note-uuid-html");
+        message.Body = new MimeKit.TextPart("html") { Text = html };
+
+        var notesFolder = await client.GetFolderAsync("Notes");
+        var uid = (await notesFolder.AppendAsync(message))!.Value;
+
+        await notesFolder.OpenAsync(FolderAccess.ReadOnly);
+        var fetched = await notesFolder.GetMessageAsync(uid);
+        var part = Assert.IsType<MimeKit.TextPart>(fetched.Body);
+        Assert.True(part.ContentType.IsMimeType("text", "html"),
+            $"the note came back as {part.ContentType.MimeType}; a client shown text/plain displays the markup as text");
+        Assert.Equal(html, part.Text.TrimEnd('\r', '\n'));
+
+        await client.DisconnectAsync(true);
+    }
+
+    // The eMail-Archive (#802): the user-organizable half of the mailbox, driven over IMAP the way a mail
+    // client drives it. One test for the whole lifecycle because the steps only mean anything in sequence —
+    // a rename of a folder that was never listed, or a Trash move out of a folder never filed into, would
+    // each pass vacuously alone.
+    [Fact]
+    public async Task The_email_archive_supports_folders_over_imap_end_to_end()
+    {
+        var (_, _, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: false);
+        var email = $"imap-arch-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, email, "arch-1234", "Archive User");
+        using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, "arch-1234"));
+        var imapPassword = (await TestJson.Post(api, "/api/me/imap-access", new { })).GetProperty("password").GetString()!;
+
+        // Provisioning: the sixth standing folder exists in the workbench under My Mailbox…
+        var personalId = (await TestJson.Post(api, "/api/me/personal-repository", new { })).GetProperty("id").GetGuid();
+        var mailboxId = (await TestJson.Get(api, $"/api/documents/{personalId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "My Mailbox").GetProperty("id").GetGuid();
+        var archive = (await TestJson.Get(api, $"/api/documents/{mailboxId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "eMail-Archive");
+        var archiveId = archive.GetProperty("id").GetGuid();
+
+        // …and the workbench menu offers exactly the mail folder there: the admits list rides each listing
+        // row as mask-data both clients read, so this one assertion covers the affordance in both (ADR 0656).
+        var admits = archive.GetProperty("admits").EnumerateArray()
+            .Select(c => c.GetProperty("name").GetString()).ToList();
+        Assert.Contains("IMAP Folder", admits);
+        Assert.DoesNotContain("Folder", admits);
+
+        var port = ((ImapServer)_factory.Services.GetService(typeof(ImapServer))!).BoundPort!.Value;
+        using var client = new ImapClient();
+        await client.ConnectAsync("127.0.0.1", port, SecureSocketOptions.None);
+        await client.AuthenticateAsync(email, imapPassword);
+
+        // The wire projection: root-level "Archive", the RFC 6154 attribute a client's archive button keys on.
+        var personalNs = client.PersonalNamespaces[0];
+        var archiveFolder = await client.GetFolderAsync("Archive");
+        Assert.True(archiveFolder.Attributes.HasFlag(FolderAttributes.Archive),
+            "the Archive mailbox must advertise \\Archive, or every client invents its own beside it");
+
+        // CREATE — the verb the whole feature exists for.
+        var work = (await archiveFolder.CreateAsync("Work", isMessageFolder: true))!;
+        Assert.Equal("Archive/Work", work.FullName);
+
+        // A message filed into the user folder…
+        var message = new MimeKit.MimeMessage();
+        message.From.Add(new MimeKit.MailboxAddress("Someone", "someone@example.com"));
+        message.To.Add(new MimeKit.MailboxAddress("Me", email));
+        message.Subject = "Quarterly numbers";
+        message.MessageId = MimeKit.Utils.MimeUtils.GenerateMessageId();
+        message.Body = new MimeKit.TextPart("plain") { Text = "the figures" };
+        var uid = (await work.AppendAsync(message))!.Value;
+
+        // …deletes with MAIL semantics: to Trash, not to the recycle bin — the folder the user made must not
+        // change what deletion means (the ephemeral-tier walk, nested one level below a standing folder).
+        await work.OpenAsync(FolderAccess.ReadWrite);
+        await work.AddFlagsAsync(uid, MessageFlags.Deleted, silent: true);
+        await work.ExpungeAsync();
+        var trash = await client.GetFolderAsync("Trash");
+        await trash.OpenAsync(FolderAccess.ReadOnly);
+        Assert.Equal(1, trash.Count);
+
+        // RENAME renames the leaf…
+        await work.RenameAsync(archiveFolder, "Projects");
+        var listed = (await client.GetFoldersAsync(personalNs)).Select(f => f.FullName).ToList();
+        Assert.Contains("Archive/Projects", listed);
+        Assert.DoesNotContain("Archive/Work", listed);
+
+        // …and DELETE soft-deletes into the recycle bin, where the workbench can bring it back.
+        var projects = await client.GetFolderAsync("Archive/Projects");
+        await projects.DeleteAsync();
+        Assert.DoesNotContain("Archive/Projects",
+            (await client.GetFoldersAsync(personalNs)).Select(f => f.FullName));
+        var bin = (await TestJson.Get(api, "/api/recycle-bin")).GetProperty("items").EnumerateArray().ToList();
+        Assert.Contains(bin, i => i.GetProperty("name").GetString() == "Projects");
+
+        // The provisioned tree stays read-only: the standing refusal, not a new hole.
+        var inbox = client.Inbox;
+        await Assert.ThrowsAnyAsync<Exception>(() => inbox.RenameAsync(inbox.ParentFolder!, "Postbox"));
+
+        await client.DisconnectAsync(true);
+    }
+
+    // The heal half of provisioning (#802): a personal space that PREDATES the sixth folder gains it on the
+    // next provisioning pass. The trap this pins is the grow-later seed that only fresh volumes ever see —
+    // every tenant a test creates is new, so without forcing the old state the heal path never runs (#664).
+    [Fact]
+    public async Task An_existing_mailbox_gains_the_email_archive_on_the_next_provisioning_pass()
+    {
+        var (_, _, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: false);
+        var email = $"imap-heal-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, email, "heal-1234", "Heal User");
+        using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, "heal-1234"));
+
+        // The mailbox provisioning hangs off the IMAP credential, not off the personal space alone.
+        await TestJson.Post(api, "/api/me/imap-access", new { });
+        var personalId = (await TestJson.Post(api, "/api/me/personal-repository", new { })).GetProperty("id").GetGuid();
+        var mailboxId = (await TestJson.Get(api, $"/api/documents/{personalId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "My Mailbox").GetProperty("id").GetGuid();
+
+        // Force the pre-#802 state: the folder ceases to exist, as it never existed for a space provisioned
+        // before the release. Hard-deleted rather than soft: a soft-deleted folder would test the restore
+        // path, not the provisioning one.
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SimplArchive.Infrastructure.Persistence.SimplArchiveDbContext>();
+            var archiveDoc = await db.Documents.IgnoreQueryFilters(["TenantFilter"])
+                .SingleAsync(d => d.ParentId == mailboxId && d.Name == "eMail-Archive");
+            db.Documents.Remove(archiveDoc);
+            await db.SaveChangesAsync();
+        }
+
+        // The next pass is a plain IMAP LOGIN — the path the live report exposed (#802): a user whose
+        // credential predates the new folder rotates nothing and receives no delivery, so login is the ONLY
+        // provisioning moment their account ever reaches. Healing on rotation alone strands exactly them.
+        var imapPassword = (await TestJson.Post(api, "/api/me/imap-access", new { })).GetProperty("password").GetString()!;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SimplArchive.Infrastructure.Persistence.SimplArchiveDbContext>();
+            var again = await db.Documents.IgnoreQueryFilters(["TenantFilter"])
+                .SingleAsync(d => d.ParentId == mailboxId && d.Name == "eMail-Archive");
+            db.Documents.Remove(again);
+            await db.SaveChangesAsync();
+        }
+
+        var port = ((ImapServer)_factory.Services.GetService(typeof(ImapServer))!).BoundPort!.Value;
+        using (var client = new ImapClient())
+        {
+            await client.ConnectAsync("127.0.0.1", port, SecureSocketOptions.None);
+            await client.AuthenticateAsync(email, imapPassword);
+            Assert.Contains(await client.GetFoldersAsync(client.PersonalNamespaces[0]), f => f.FullName == "Archive");
+            await client.DisconnectAsync(true);
+        }
+
+        var healed = (await TestJson.Get(api, $"/api/documents/{mailboxId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Select(c => c.GetProperty("name").GetString()).ToList();
+        Assert.Contains("eMail-Archive", healed);
+    }
+
+    // A synthetic message serves its sections honestly, on a 7-bit CRLF wire (#802's live find).
+    //
+    // Measured with a real client on a demo document whose name carries an em-dash: Apple Mail asked
+    // `BODY.PEEK[TEXT]<0.16384>` and was answered with the WHOLE message, unlabeled — 41843 bytes of headers,
+    // boundaries and base64 rendered as the message text. Three defects in one line, all pinned here on the
+    // raw socket because each is about exact bytes: the synthetic serializer wrote LF-only newlines (so our
+    // own CRLFCRLF header scan failed and TEXT degraded to everything), the <start.count> partial was silently
+    // dropped, and the decoded em-dash went bare into a quoted string on a 7-bit protocol.
+    [Fact]
+    public async Task A_synthetic_message_slices_its_text_honours_partials_and_stays_seven_bit()
+    {
+        var (clientId, secret, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
+        using var owner = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
+        var email = $"imap-wire-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, email, "wire-1234", "Wire Reader");
+        await _factory.GrantTenantAdminAsync(email);
+        using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, "wire-1234"));
+        var imapPassword = (await TestJson.Post(api, "/api/me/imap-access", new { })).GetProperty("password").GetString()!;
+
+        // Documents, not just emails, over IMAP — a PDF only becomes a synthetic message with the per-user
+        // show-all preference on (#793).
+        (await api.PutAsJsonAsync("/api/me/imap-access/settings", new { showAllDocuments = true })).EnsureSuccessStatusCode();
+
+        // A PDF document with a non-ASCII name in the user's own archive folder — the synthetic-message case.
+        await TestJson.Post(api, "/api/me/personal-repository", new { });
+        var repoId = (await TestJson.Post(owner, "/api/repositories", new { name = $"Wire{Guid.NewGuid():N}"[..10] }))
+            .GetProperty("id").GetGuid();
+        var stem = "Invoice — January";
+        var docId = (await TestJson.Post(owner, $"/api/documents/{repoId}/children", new { name = stem })).GetProperty("id").GetGuid();
+        var version = await TestJson.Post(owner, $"/api/documents/{docId}/versions", new { fileExtension = ".pdf" });
+        using (var storage = new HttpClient())
+        {
+            var bytes = new byte[4000];
+            Array.Fill(bytes, (byte)0x41);
+            (await storage.PutAsync(version.GetProperty("uploadUrl").GetString()!, new ByteArrayContent(bytes))).EnsureSuccessStatusCode();
+        }
+
+        await TestJson.Put(owner, $"/api/documents/{docId}/versions/{version.GetProperty("id").GetGuid()}", new { });
+
+        var port = ((ImapServer)_factory.Services.GetService(typeof(ImapServer))!).BoundPort!.Value;
+        using var tcp = new System.Net.Sockets.TcpClient("127.0.0.1", port);
+        using var stream = tcp.GetStream();
+        using var reader = new StreamReader(stream, Encoding.Latin1);
+        using var writer = new StreamWriter(stream, Encoding.ASCII) { AutoFlush = true, NewLine = "\r\n" };
+        await reader.ReadLineAsync();
+
+        async Task<string> ExchangeAsync(string tag, string command)
+        {
+            await writer.WriteLineAsync($"{tag} {command}");
+            var sb = new StringBuilder();
+            var buffer = new char[65536];
+            while (true)
+            {
+                var read = await reader.ReadAsync(buffer, 0, buffer.Length);
+                sb.Append(buffer, 0, read);
+                if (sb.ToString().Contains($"\r\n{tag} ", StringComparison.Ordinal) || sb.ToString().StartsWith($"{tag} ", StringComparison.Ordinal))
+                {
+                    break;
+                }
+            }
+
+            return sb.ToString();
+        }
+
+        var authPlain = Convert.ToBase64String(Encoding.UTF8.GetBytes($"\0{email}\0{imapPassword}"));
+        Assert.Contains("a1 OK", await ExchangeAsync("a1", $"AUTHENTICATE PLAIN {authPlain}"));
+
+        var repoName = (await TestJson.Get(api, $"/api/documents/{repoId}")).GetProperty("name").GetString();
+        Assert.Contains("a2 OK", await ExchangeAsync("a2", $"SELECT \"{repoName}\""));
+
+        // 1. The whole exchange is 7-bit: the em-dash travels as an RFC 2047 word, never as raw UTF-8.
+        var structure = await ExchangeAsync("a3", "UID FETCH 1 (BODYSTRUCTURE ENVELOPE)");
+        Assert.DoesNotContain('—', structure);
+        Assert.Contains("=?utf-8?", structure, StringComparison.OrdinalIgnoreCase);
+
+        // 2. TEXT is the body section, not the message: strictly smaller than BODY[], and it must not carry
+        //    the top-level headers the client already fetched separately.
+        var whole = await ExchangeAsync("a4", "UID FETCH 1 BODY.PEEK[]");
+        var text = await ExchangeAsync("a5", "UID FETCH 1 BODY.PEEK[TEXT]");
+        int LiteralSize(string response) => int.Parse(
+            System.Text.RegularExpressions.Regex.Match(response, @"\{(\d+)\}").Groups[1].Value);
+        Assert.True(LiteralSize(text) < LiteralSize(whole),
+            $"BODY[TEXT] ({LiteralSize(text)}) must be smaller than BODY[] ({LiteralSize(whole)}) — equal means the header scan failed and the whole message was served as text");
+        Assert.DoesNotContain("Message-Id:", text.Split("\r\n\r\n")[0][text.IndexOf('{')..], StringComparison.OrdinalIgnoreCase);
+
+        // 3. A partial is sliced AND labeled with its origin octet — an unlabeled full answer to a ranged ask
+        //    is what a client splices at the wrong offset or renders whole.
+        var partial = await ExchangeAsync("a6", "UID FETCH 1 BODY.PEEK[TEXT]<0.64>");
+        Assert.Contains("BODY[TEXT]<0> {64}", partial, StringComparison.Ordinal);
+
+        // …and the CRLF discipline that makes the TEXT slice work is asserted at its root: the serialized
+        // message uses CRLF newlines, so the header/body boundary exists on the wire.
+        Assert.Contains("\r\n\r\n", whole[whole.IndexOf('{')..], StringComparison.Ordinal);
+
+        await ExchangeAsync("a7", "LOGOUT");
+    }
+
+    // Organizing mail WITHIN the tier leaves no shortcut behind (#802, live find).
+    //
+    // A COPY out of a staging folder files-for-real and leaves a reference where the message was — the right
+    // behaviour for filing into the REPOSITORY, where the mailbox keeping a pointer is the feature. Dragging
+    // Inbox → Archive/Work is the other thing: organizing, whose whole promise is that the mail LEAVES Inbox.
+    // Measured live: the drag left a reference in Inbox, the opposite of the promise.
+    //
+    // The sequence is the client's real move emulation — COPY, then STORE \Deleted + EXPUNGE on the source
+    // entry — so this also pins the second half: the expunge aims at a stale entry whose document has already
+    // moved, and it must absorb rather than yank the freshly organized mail into Trash.
+    [Fact]
+    public async Task Organizing_mail_into_an_archive_folder_moves_it_whole()
+    {
+        var (_, _, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: false);
+        var email = $"imap-org-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, email, "org-1234", "Organizer");
+        using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, "org-1234"));
+        var imapPassword = (await TestJson.Post(api, "/api/me/imap-access", new { })).GetProperty("password").GetString()!;
+        await TestJson.Post(api, "/api/me/personal-repository", new { });
+
+        var port = ((ImapServer)_factory.Services.GetService(typeof(ImapServer))!).BoundPort!.Value;
+        using var client = new ImapClient();
+        await client.ConnectAsync("127.0.0.1", port, SecureSocketOptions.None);
+        await client.AuthenticateAsync(email, imapPassword);
+
+        var archiveRoot = await client.GetFolderAsync("Archive");
+        var work = (await archiveRoot.CreateAsync("Sorted", isMessageFolder: true))!;
+
+        var message = new MimeKit.MimeMessage();
+        message.From.Add(new MimeKit.MailboxAddress("Someone", "someone@example.com"));
+        message.Subject = "To be sorted";
+        message.MessageId = MimeKit.Utils.MimeUtils.GenerateMessageId();
+        message.Body = new MimeKit.TextPart("plain") { Text = "sort me" };
+
+        var inbox = client.Inbox;
+        await inbox.OpenAsync(FolderAccess.ReadWrite);
+        var uid = (await inbox.AppendAsync(message))!.Value;
+
+        // Re-select so the session's snapshot carries the appended message — a real client refreshes on the
+        // EXISTS it is sent; a UID COPY against a stale snapshot silently matches nothing.
+        await inbox.CloseAsync();
+        await inbox.OpenAsync(FolderAccess.ReadWrite);
+
+        // The measured sequence: COPY, then the move emulation's delete of the source entry.
+        await inbox.CopyToAsync(uid, work);
+        await inbox.AddFlagsAsync(uid, MessageFlags.Deleted, silent: true);
+        await inbox.ExpungeAsync();
+
+        // The mail lives in the archive folder and ONLY there: no shortcut in Inbox, and the expunge did not
+        // pull it into Trash.
+        await work.OpenAsync(FolderAccess.ReadOnly);
+        Assert.Equal(1, work.Count);
+        await inbox.OpenAsync(FolderAccess.ReadOnly);
+        Assert.Equal(0, inbox.Count);
+        var trash = await client.GetFolderAsync("Trash");
+        await trash.OpenAsync(FolderAccess.ReadOnly);
+        Assert.Equal(0, trash.Count);
+
+        // Said against the store as well, where a reference and a listing row are distinguishable: the tier
+        // holds no reference rows for this mail anywhere.
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SimplArchive.Infrastructure.Persistence.SimplArchiveDbContext>();
+            Assert.False(await db.DocumentReferences.IgnoreQueryFilters(["TenantFilter"])
+                .AnyAsync(r => r.TenantId == tenantId));
+        }
+
+        await client.DisconnectAsync(true);
+    }
+
+    // Acting on a SHORTCUT acts on the shortcut (#802, second live find + refinement).
+    //
+    // Filing Inbox → repository leaves a reference in Inbox by design. That reference projects into the
+    // mailbox as an ordinary-looking message, and nothing marked it — so moving it re-parented the TARGET
+    // document out of the repository, and deleting it (after the expunge guard) silently kept it. The rule is
+    // WebDAV's #769 rule on this surface: the appearance moves, copies and deletes as the appearance, and the
+    // document never learns it happened.
+    [Fact]
+    public async Task A_filed_shortcut_moves_and_deletes_as_the_shortcut()
+    {
+        var (clientId, secret, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
+        using var owner = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
+        var email = $"imap-ref-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, email, "ref-1234", "Ref Mover");
+        await _factory.GrantTenantAdminAsync(email);
+        using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, "ref-1234"));
+        var imapPassword = (await TestJson.Post(api, "/api/me/imap-access", new { })).GetProperty("password").GetString()!;
+        await TestJson.Post(api, "/api/me/personal-repository", new { });
+        var repoId = (await TestJson.Post(owner, "/api/repositories", new { name = $"Ref{Guid.NewGuid():N}"[..10] }))
+            .GetProperty("id").GetGuid();
+        var repoName = (await TestJson.Get(api, $"/api/documents/{repoId}")).GetProperty("name").GetString();
+
+        var port = ((ImapServer)_factory.Services.GetService(typeof(ImapServer))!).BoundPort!.Value;
+        using var client = new ImapClient();
+        await client.ConnectAsync("127.0.0.1", port, SecureSocketOptions.None);
+        await client.AuthenticateAsync(email, imapPassword);
+
+        var archiveRoot = await client.GetFolderAsync("Archive");
+        var sorted = (await archiveRoot.CreateAsync("Shortcuts", isMessageFolder: true))!;
+
+        var message = new MimeKit.MimeMessage();
+        message.From.Add(new MimeKit.MailboxAddress("Someone", "someone@example.com"));
+        message.Subject = "Contract scan";
+        message.MessageId = MimeKit.Utils.MimeUtils.GenerateMessageId();
+        message.Body = new MimeKit.TextPart("plain") { Text = "the scan" };
+
+        var inbox = client.Inbox;
+        await inbox.OpenAsync(FolderAccess.ReadWrite);
+        var uid = (await inbox.AppendAsync(message))!.Value;
+        await inbox.CloseAsync();
+        await inbox.OpenAsync(FolderAccess.ReadWrite);
+
+        // FILE it into the repository: the document moves, Inbox keeps the shortcut — the designed behaviour
+        // this test must NOT change.
+        var repoFolder = await client.GetFolderAsync(repoName!);
+        await inbox.CopyToAsync(uid, repoFolder);
+        Guid docId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SimplArchive.Infrastructure.Persistence.SimplArchiveDbContext>();
+            var doc = await db.Documents.IgnoreQueryFilters(["TenantFilter"]).SingleAsync(d => d.Name == "Contract scan");
+            docId = doc.Id;
+            Assert.Equal(repoId, doc.ParentId);
+            Assert.True(await db.DocumentReferences.IgnoreQueryFilters(["TenantFilter"])
+                .AnyAsync(r => r.TargetDocumentId == docId), "filing must leave the shortcut in Inbox");
+        }
+
+        // MOVE the shortcut into an archive folder: the reference relocates; the document stays filed.
+        await inbox.CloseAsync();
+        await inbox.OpenAsync(FolderAccess.ReadWrite);
+        var refUid = (await inbox.SearchAsync(MailKit.Search.SearchQuery.All)).Single();
+        await inbox.MoveToAsync(refUid, sorted);
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SimplArchive.Infrastructure.Persistence.SimplArchiveDbContext>();
+            Assert.Equal(repoId, (await db.Documents.IgnoreQueryFilters(["TenantFilter"]).SingleAsync(d => d.Id == docId)).ParentId);
+            var reference = await db.DocumentReferences.IgnoreQueryFilters(["TenantFilter"]).SingleAsync(r => r.TargetDocumentId == docId);
+            var holder = await db.Documents.IgnoreQueryFilters(["TenantFilter"]).SingleAsync(d => d.Id == reference.ParentFolderId);
+            Assert.Equal("Shortcuts", holder.Name);
+        }
+
+        // DELETE the shortcut where it now lives: the reference goes; the document still does not move.
+        await sorted.OpenAsync(FolderAccess.ReadWrite);
+        var inSorted = (await sorted.SearchAsync(MailKit.Search.SearchQuery.All)).Single();
+        await sorted.AddFlagsAsync(inSorted, MessageFlags.Deleted, silent: true);
+        await sorted.ExpungeAsync();
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SimplArchive.Infrastructure.Persistence.SimplArchiveDbContext>();
+            Assert.False(await db.DocumentReferences.IgnoreQueryFilters(["TenantFilter"]).AnyAsync(r => r.TargetDocumentId == docId));
+            var doc = await db.Documents.IgnoreQueryFilters(["TenantFilter"]).SingleAsync(d => d.Id == docId);
+            Assert.Equal(repoId, doc.ParentId);
+            Assert.Null(doc.DeletedAt);
+        }
+
+        await client.DisconnectAsync(true);
+    }
+
 }

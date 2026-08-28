@@ -165,7 +165,7 @@ public sealed class ImapSession
         switch (command)
         {
             case "CAPABILITY":
-                await WriteLineAsync("* CAPABILITY IMAP4rev1 AUTH=PLAIN MOVE UIDPLUS SPECIAL-USE OBJECTID");
+                await WriteLineAsync("* CAPABILITY IMAP4rev1 AUTH=PLAIN MOVE UIDPLUS SPECIAL-USE OBJECTID CHILDREN");
                 await OkAsync(tag, "CAPABILITY");
                 return true;
             case "NOOP":
@@ -284,10 +284,12 @@ public sealed class ImapSession
                 await RunScopedAsync(scope => ImapWrites.CreateAsync(this, scope, tag, arguments));
                 return true;
             case "DELETE":
+                // A USER mail folder deletes (soft, to the recycle bin); everything else keeps the standing
+                // refusal — the tree is managed in the workbench, where the ACL and naming rules live (#802).
+                await RunScopedAsync(scope => ImapWrites.DeleteMailboxAsync(this, scope, tag, arguments));
+                return true;
             case "RENAME":
-                // The mailbox tree IS the archive tree — read-only by design (#562): folders are managed in the
-                // workbench, where the ACL and naming rules live.
-                await WriteLineAsync($"{tag} NO the folder structure is managed in SimplArchive, not over IMAP");
+                await RunScopedAsync(scope => ImapWrites.RenameMailboxAsync(this, scope, tag, arguments));
                 return true;
             // SEARCH is MANDATORY in the IMAP4rev1 we advertise, and refusing it is what made a mail client
             // that enumerates with UID SEARCH show every folder as empty (ADR 0626).
@@ -529,6 +531,24 @@ public sealed class ImapSession
         _logger.LogInformation(
             "IMAP sign-in for {Email} (tenant {TenantId}, all documents: {ShowAllDocuments})",
             _email, _tenantId, ShowAllDocuments);
+
+        // Provision-on-login (#802's live find): the mailbox heals on credential CREATION and on LMTP
+        // delivery, and a user whose credential predates a new standing folder touches neither — their client
+        // simply never shows the folder, and no log says why. The mailbox catalog is about to be asked for
+        // the tree, so this is the last moment the answer can still be made true. Idempotent: on the ordinary
+        // login it is a handful of existence probes.
+        try
+        {
+            await RunScopedAsync(scope => scope.ServiceProvider
+                .GetRequiredService<Documents.PersonalMailboxProvisioner>()
+                .EnsureMailboxAsync(_tenantId, _userId, CancellationToken.None));
+        }
+        catch (Exception e)
+        {
+            // A heal that fails must not refuse the login — the account worked yesterday without the new
+            // folder and still does today. Warning, because the folder the user expects will be missing.
+            _logger.LogWarning(e, "IMAP mailbox provisioning on login failed for {Email}; standing folders may be incomplete", _email);
+        }
 
         await OkAsync(tag, "authenticated");
     }

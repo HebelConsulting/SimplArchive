@@ -156,8 +156,14 @@ public class MaskContainmentEquivalenceTests
             return false;
         }
 
+        // The leaf gate, with the exception the model carries (#802): "no subfolders" yields to a child whose
+        // allowed-parents row NAMES the leaf — an IMAP Folder under a staging folder is placed by declaration,
+        // not by accident. Same two data sources as the model, so the equivalence stays a real comparison.
+        var declaredHome = WellKnownMaskIds.AllowedParentMasks.TryGetValue(childMaskId, out var homes)
+            && parentMaskId is { } declaredParent && homes.Contains(declaredParent);
         return !(WellKnownMaskIds.FolderMasks.Contains(childMaskId)
-                 && WellKnownMaskIds.NoSubfolderMasks.Any(m => m.FolderMaskId == parentMaskId));
+                 && WellKnownMaskIds.NoSubfolderMasks.Any(m => m.FolderMaskId == parentMaskId)
+                 && !declaredHome);
     }
 
     private static string Name(Guid maskId) =>

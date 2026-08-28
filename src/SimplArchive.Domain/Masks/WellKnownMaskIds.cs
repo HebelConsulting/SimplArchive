@@ -95,6 +95,22 @@ public static class WellKnownMaskIds
     /// </remarks>
     public static readonly Guid ImapSpecial = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E3F");
 
+    /// <summary>
+    /// A user-created mail folder inside the ephemeral tier — the mask behind "bring some order to the
+    /// mailbox" (#802). Fieldless, like the Section it is shaped after: it types the folder, and the fields
+    /// live on the mail.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately its OWN mask rather than a sixth use of <see cref="ImapSpecial"/>: that mask means
+    /// "provisioned staging folder" and carries the standing five's invariants (nowhere but under a Mailbox,
+    /// never user-created). What the two share is the TIER — <c>EphemeralMailFolder</c> counts both as
+    /// staging, so mail inside a user folder keeps mail semantics (delete → Trash, no repository membership).
+    /// Where it may live is <see cref="ConstrainedPlacements"/>: under a staging folder or under itself —
+    /// loose by decision, so a mail folder under Inbox is legal even though IMAP only advertises creation
+    /// under the archive.
+    /// </remarks>
+    public static readonly Guid ImapFolder = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E41");
+
     /// <summary>The mask <c>My Documents</c> wears — a personal space's one general-purpose folder (#634).</summary>
     /// <remarks>
     /// <para>
@@ -188,7 +204,7 @@ public static class WellKnownMaskIds
     /// </para>
     /// </remarks>
     public static readonly IReadOnlySet<Guid> FolderMasks =
-        new HashSet<Guid> { Folder, Repository, UserFolder, MyDocuments, Mailbox, ImapSpecial, Notebook, NotebookSection, Addressbook, Calendar };
+        new HashSet<Guid> { Folder, Repository, UserFolder, MyDocuments, Mailbox, ImapSpecial, ImapFolder, Notebook, NotebookSection, Addressbook, Calendar };
 
     /// <summary>
     /// The file extensions that make a well-known mask the automatic choice for an upload (#671).
@@ -246,6 +262,9 @@ public static class WellKnownMaskIds
             // wear the same mask and are not inboxes — naming the token for today's only instance would be
             // wrong the moment the second one arrives.
             [ImapSpecial] = "mail-folder",
+            // A USER's mail folder, distinct from the standing tray: the two sit side by side under
+            // My Mailbox, and two masks drawn identically are two things the eye cannot separate.
+            [ImapFolder] = "mail-user-folder",
             [Notebook] = "notebook",
             [NotebookSection] = "section",
             [Addressbook] = "addressbook",
@@ -400,6 +419,11 @@ public static class WellKnownMaskIds
         new Dictionary<Guid, IReadOnlySet<Guid>>
         {
             [Mailbox] = new HashSet<Guid> { Folder, UserFolder },
+
+            // A mail folder lives in the staging tier and nowhere else — under a provisioned staging folder
+            // or under another mail folder. This row is also what opens the staging folders' no-subfolder
+            // gate for it: a leaf refusal yields to a child that DECLARES the leaf as its parent (#802).
+            [ImapFolder] = new HashSet<Guid> { ImapSpecial, ImapFolder },
         };
 
     public static readonly IReadOnlyDictionary<Guid, IReadOnlySet<Guid>> AllowedParentMasks =
