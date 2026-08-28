@@ -1830,11 +1830,20 @@
         // Re-pointed BY ID at the freshly-loaded row, because the row object is new even when the document is
         // the same. Gone from the folder (deleted, moved, filtered away) means the selection is genuinely
         // over, and the pane falls back to the folder below.
-        if (_selectedNode is { } wasSelected && !wasSelected.IsFolder
+        //
+        // FOLDER rows survive too (#811). First written for document rows only, and a folder row clicked
+        // inside the window was silently reverted to the parent — 20 % of clicks at WAN latency, ~0 % on
+        // localhost, which is why no local run ever saw it: the first aggressive load test did.
+        if (_selectedNode is { } wasSelected
             && _folderContents.FirstOrDefault(n => n.Id == wasSelected.Id && n.IsReference == wasSelected.IsReference) is { } stillListed)
         {
             _selectedNode = stillListed;
             await LoadDetailForAsync(stillListed);
+            if (stillListed.IsFolder)
+            {
+                await LoadFolderSubscriptionAsync(stillListed);
+                await LoadCommentsAsync(stillListed);
+            }
             return;
         }
 

@@ -119,7 +119,9 @@ public class WorkbenchShellSizeTests
     // while a folder was still loading was silently discarded when the rows arrived, emptying the detail and
     // preview panes with no error. Shell-level by definition — the shell owns the selection and owns the load
     // that was clobbering it.
-    private const int Ceiling = 3_417;
+    // 3,417 → 3,426 for the same fix's second half (#811): the survival rule covered document rows only, and
+    // a FOLDER row clicked during the reload was reverted to the parent. Same seam, same owner, same reason.
+    private const int Ceiling = 3_426;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()
