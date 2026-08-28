@@ -4665,4 +4665,25 @@
   <data name="ApiErrPersonalSpaceStructure" xml:space="preserve">
     <value>Esta es una de las carpetas fijas del espacio personal y no se puede modificar.</value>
   </data>
+  <data name="TenantGroupMail" xml:space="preserve">
+    <value>Correo</value>
+  </data>
+  <data name="TenantImapShowAllDefault" xml:space="preserve">
+    <value>Los nuevos usuarios ven todos los documentos por IMAP</value>
+  </data>
+  <data name="TenantImapShowAllDefaultInfo" xml:space="preserve">
+    <value>La posición inicial de la vista IMAP de un nuevo usuario. Activada, el cliente de correo muestra también los documentos que no son correo como mensajes de solo lectura con el archivo adjunto; desactivada, solo correos. Es un valor inicial, no un permiso: la vista nunca muestra nada que los derechos de acceso rechazarían, y cada usuario puede cambiar su propia configuración en el diálogo IMAP en cualquier momento. Los usuarios existentes conservan su elección.</value>
+  </data>
+  <data name="ImShowAllHint" xml:space="preserve">
+    <value>Muestra sus documentos que no son correo como mensajes de solo lectura con el archivo adjunto — nunca más de lo que sus derechos de acceso ya permiten.</value>
+  </data>
+  <data name="UgImapShowAll" xml:space="preserve">
+    <value>Vista IMAP: {0}</value>
+  </data>
+  <data name="UgImapAllDocs" xml:space="preserve">
+    <value>todos los documentos</value>
+  </data>
+  <data name="UgImapMailOnly" xml:space="preserve">
+    <value>solo correos</value>
+  </data>
 </root>

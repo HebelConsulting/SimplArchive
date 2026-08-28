@@ -145,6 +145,18 @@
                     <NumericUpDown Value="{Binding TenantIncompleteUploadCleanupDays}" Minimum="0" Increment="1" FormatString="0"
                                    IsEnabled="{Binding IsEditingTenantStorage}" HorizontalAlignment="Left" Width="200" />
 
+                    <!-- ==== Mail (#793) ========================================================== -->
+                    <v:TenantGroupHeader Title="{loc:Tr TenantGroupMail}" Group="mail"
+                                         IsEditing="{Binding IsEditingTenantMail}" />
+                    <!-- The info text carries the surprise: this is a SEED for new users, not a permission —
+                         the projection can never show anything the ACL would refuse, and existing users keep
+                         their own self-service choice. -->
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <CheckBox IsChecked="{Binding TenantImapShowAllDocumentsDefault}" IsEnabled="{Binding IsEditingTenantMail}" Content="{loc:Tr TenantImapShowAllDefault}" />
+                        <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                ToolTip.Tip="{loc:Tr TenantImapShowAllDefaultInfo}" />
+                    </StackPanel>
+
                     <!-- ==== External links (ADR 0546) ============================================ -->
                     <v:TenantGroupHeader Title="{loc:Tr TenantGroupExternalLinks}" Group="external-links"
                                          IsEditing="{Binding IsEditingTenantExternalLinks}" />

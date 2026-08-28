@@ -103,7 +103,7 @@ public partial class MainWindow
         }
     });
 
-    private void OnChangePrincipalPhoto(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnChangePrincipalPhoto(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm && await new ProfilePhotoDialog().ShowDialog<byte[]?>(this) is { } png)
         {
@@ -111,7 +111,7 @@ public partial class MainWindow
         }
     });
 
-    private void OnRemovePrincipalPhoto(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnRemovePrincipalPhoto(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm)
         {
@@ -120,7 +120,7 @@ public partial class MainWindow
     });
 
     // Passwords (ADR "User password management") — the dialogs live in the view; the VM does the API call.
-    private void OnResetPrincipalPassword(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnResetPrincipalPassword(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.SelectedPrincipal is not { IsGroup: false } p)
         {
@@ -188,7 +188,7 @@ public partial class MainWindow
     });
 
     // Impersonate the selected user (ADR "User impersonation"): swap the session to act as them.
-    private void OnImpersonatePrincipal(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnImpersonatePrincipal(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm && vm.SelectedPrincipal is { IsGroup: false } p)
         {
@@ -196,7 +196,7 @@ public partial class MainWindow
         }
     });
 
-    private void OnResetPrincipalMfa(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnResetPrincipalMfa(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.SelectedPrincipal is not { IsGroup: false } p)
         {

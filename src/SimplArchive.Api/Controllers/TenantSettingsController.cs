@@ -69,6 +69,11 @@ public class TenantSettingsController : ControllerBase
         public bool RequireMfa { get; set; }
         public bool AllowPasskeyLogin { get; set; }
         public bool RequireDispositionReview { get; set; }
+        // What a NEW user's IMAP "show all documents" preference is seeded from (#793): not a permission —
+        // the projection grants nothing the ACL does not — just the tenant's starting position for a
+        // self-service knob. Existing users keep their own value.
+        public bool ImapShowAllDocumentsDefault { get; set; }
+
         // External links (ADR 0546). AllowExternalLinks is the tenant's master switch for sharing a document with
         // people who have no account — read at ACCESS time, so turning it off stops links already in the wild.
         public bool AllowExternalLinks { get; set; }
@@ -143,6 +148,13 @@ public class TenantSettingsController : ControllerBase
         public long? StorageQuotaBytes { get; set; }
         // Abort incomplete multipart uploads after this many days; 0 = disabled (ADR "Per-tenant bucket policy knobs").
         public int IncompleteUploadCleanupDays { get; set; }
+    }
+
+    public class UpdateMailSettingsRequest
+    {
+        // What a NEW user's IMAP "show all documents" preference is seeded from (#793) — not a permission,
+        // just the tenant's starting position for a self-service knob. Existing users keep their own value.
+        public bool ImapShowAllDocumentsDefault { get; set; }
     }
 
     public class UpdateExternalLinkSettingsRequest
@@ -348,6 +360,14 @@ public class TenantSettingsController : ControllerBase
 
             tenant.StorageQuotaBytes = request.StorageQuotaBytes; // null = unlimited
             tenant.IncompleteUploadCleanupDays = request.IncompleteUploadCleanupDays;
+            return Task.CompletedTask;
+        }, cancellationToken);
+
+    [HttpPut("mail")]
+    public Task<IActionResult> UpdateMail([FromBody] UpdateMailSettingsRequest request, CancellationToken cancellationToken) =>
+        UpdateGroupAsync(AuditActions.TenantSettingsMailUpdated, tenant =>
+        {
+            tenant.ImapShowAllDocumentsDefault = request.ImapShowAllDocumentsDefault;
             return Task.CompletedTask;
         }, cancellationToken);
 
@@ -573,6 +593,7 @@ public class TenantSettingsController : ControllerBase
         AllowPasskeyLogin = tenant.AllowPasskeyLogin,
         RestrictTagsToCatalog = tenant.RestrictTagsToCatalog,
         RequireDispositionReview = tenant.RequireDispositionReview,
+        ImapShowAllDocumentsDefault = tenant.ImapShowAllDocumentsDefault,
         AllowExternalLinks = tenant.AllowExternalLinks,
         ExternalLinkMaxDays = tenant.ExternalLinkMaxDays,
         ExternalLinkDefaultAccesses = tenant.ExternalLinkDefaultAccesses,
@@ -600,6 +621,7 @@ public class TenantSettingsController : ControllerBase
             new Link("settings-records", "/api/tenant-settings/records", "PUT"),
             new Link("settings-checkout", "/api/tenant-settings/checkout", "PUT"),
             new Link("settings-storage", "/api/tenant-settings/storage", "PUT"),
+            new Link("settings-mail", "/api/tenant-settings/mail", "PUT"),
             new Link("settings-external-links", "/api/tenant-settings/external-links", "PUT"),
             new Link("settings-audit-streaming", "/api/tenant-settings/audit-streaming", "PUT"),
             // Maintenance actions on these settings, advertised where the client already is (issue #416):

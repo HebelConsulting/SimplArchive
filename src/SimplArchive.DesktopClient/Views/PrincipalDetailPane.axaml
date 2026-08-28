@@ -1,0 +1,109 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="using:SimplArchive.DesktopClient.Views"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             x:Class="SimplArchive.DesktopClient.Views.PrincipalDetailPane"
+             x:DataType="vm:MainWindowViewModel">
+    <!-- The Users & Groups principal detail (#793 extraction, paying down MainWindow.axaml's #466 debt):
+         header + pencil row, group membership, profile photo + the user actions, and the rights matrix.
+         Click handlers forward to MainWindow (the TenantSettingsPane pattern) — the dialogs need the Window
+         as owner, and the VM methods they call already live behind it. -->
+    <DockPanel Margin="16" IsVisible="{Binding HasSelectedPrincipal}" LastChildFill="True">
+        <!-- Edit lives ribbon-style in the pane's upper-right; Save/Cancel take its slot
+             while editing (ADR 0550 — the commit controls sit where the pencil was). -->
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+            <TextBlock Grid.Column="0" Text="{Binding PrincipalRightsHeader}" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                <Button Command="{Binding BeginRightsEditCommand}" ToolTip.Tip="{loc:Tr Edit}"
+                        IsVisible="{Binding !UgEditingRights}" IsEnabled="{Binding !UgBusy}"><i:Icon Value="mdi-pencil" FontSize="18" /></Button>
+                <Button Command="{Binding SaveRightsCommand}" ToolTip.Tip="{loc:Tr Save}"
+                        IsVisible="{Binding UgEditingRights}" IsEnabled="{Binding !UgBusy}"><i:Icon Value="mdi-content-save" FontSize="18" /></Button>
+                <Button Command="{Binding CancelRightsEditCommand}" ToolTip.Tip="{loc:Tr Cancel}"
+                        IsVisible="{Binding UgEditingRights}" IsEnabled="{Binding !UgBusy}"><i:Icon Value="mdi-close" FontSize="18" /></Button>
+            </StackPanel>
+        </Grid>
+        <TextBlock DockPanel.Dock="Top" IsVisible="{Binding SelectedPrincipalIsGroup}" TextWrapping="Wrap"
+                   Text="{loc:Tr UgGroupRightsNote}"
+                   Foreground="{DynamicResource WbFaint}" FontSize="11" Margin="0,0,0,8" />
+        <!-- Group membership (ADR "Group membership editing") — direct members with a
+             searchable add-picker. -->
+        <StackPanel DockPanel.Dock="Top" IsVisible="{Binding SelectedPrincipalIsGroup}" Spacing="6" Margin="0,0,0,10">
+            <TextBlock Text="{loc:Tr UgMembers}" FontWeight="SemiBold" />
+            <AutoCompleteBox ItemsSource="{Binding MemberCandidates}" SelectedItem="{Binding SelectedMemberToAdd}"
+                             Watermark="{loc:Tr UgAddMember}" FilterMode="ContainsOrdinal" MinimumPrefixLength="0"
+                             ValueMemberBinding="{Binding DisplayName}" Width="320" HorizontalAlignment="Left">
+                <AutoCompleteBox.ItemTemplate>
+                    <DataTemplate x:CompileBindings="False"><TextBlock Text="{Binding DisplayName}" /></DataTemplate>
+                </AutoCompleteBox.ItemTemplate>
+            </AutoCompleteBox>
+            <TextBlock Text="{loc:Tr UgNoMembers}" Foreground="{DynamicResource WbFaint}" FontSize="11"
+                       IsVisible="{Binding !HasGroupMembers}" />
+            <ItemsControl ItemsSource="{Binding GroupMembers}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:CompileBindings="False">
+                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,1">
+                            <i:Icon Value="mdi-account" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" Width="240" TextTrimming="CharacterEllipsis" />
+                            <Button Padding="4,0" ToolTip.Tip="{loc:Tr UgRemoveMember}"
+                                    Command="{Binding DataContext.RemoveMemberCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                    CommandParameter="{Binding}"><i:Icon Value="mdi-close" Foreground="#e53935" /></Button>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+        <!-- Profile photo (users only) — ADR "User profile photo". -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12" Margin="0,0,0,12"
+                    IsVisible="{Binding SelectedPrincipalIsUser}">
+            <Border Width="56" Height="56" CornerRadius="28" ClipToBounds="True" Background="{DynamicResource WbAccentTint}">
+                <Panel>
+                    <TextBlock Text="{Binding SelectedPrincipalInitials}" Foreground="{DynamicResource WbAccentText}" FontSize="20" FontWeight="SemiBold"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding !HasSelectedPrincipalPhoto}" />
+                    <Image Source="{Binding SelectedPrincipalPhoto}" Stretch="UniformToFill" IsVisible="{Binding HasSelectedPrincipalPhoto}" />
+                </Panel>
+            </Border>
+            <StackPanel Orientation="Vertical" Spacing="6" VerticalAlignment="Center">
+                <Button Content="{loc:Tr AccountChangePhoto}" Click="OnChangePrincipalPhoto" />
+                <Button Content="{loc:Tr UgRemove}" Click="OnRemovePrincipalPhoto" IsVisible="{Binding HasSelectedPrincipalPhoto}" />
+                <!-- Admin password reset — ADR "User password management". -->
+                <Button Content="{loc:Tr UgResetPassword}" Click="OnResetPrincipalPassword" />
+                <!-- Two-factor status + admin reset — ADR "MFA (interactive login, TOTP)". -->
+                <TextBlock Text="{Binding SelectedPrincipalMfaStatus}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                <!-- Read-only (#793): the preference stays self-service. -->
+                <TextBlock Text="{Binding SelectedPrincipalImapStatus}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                <Button Content="{loc:Tr UgResetMfa}" Click="OnResetPrincipalMfa" IsVisible="{Binding CanResetSelectedPrincipalMfa}" />
+                <!-- Impersonate a non-admin user — ADR "User impersonation". -->
+                <Button Content="{loc:Tr UgImpersonate}" Click="OnImpersonatePrincipal" IsVisible="{Binding CanImpersonateSelectedPrincipal}" />
+            </StackPanel>
+        </StackPanel>
+        <ScrollViewer>
+            <StackPanel>
+                <ItemsControl ItemsSource="{Binding PrincipalRights}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:PrincipalRightViewModel">
+                            <CheckBox IsChecked="{Binding IsChecked}" Content="{Binding Label}" Margin="0,1"
+                                      IsEnabled="{ReflectionBinding $parent[ItemsControl].DataContext.UgEditingRights}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <!-- Sensitivity clearance (ADR "Sensitivity clearance enforcement") — the highest label rank this principal may access. -->
+                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,10,0,0">
+                    <TextBlock Text="{loc:Tr MwClearanceLabel}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" />
+                    <ComboBox MinWidth="220"
+                              ItemsSource="{Binding ClearanceOptions}"
+                              SelectedValue="{Binding SelectedPrincipalClearance}"
+                              SelectedValueBinding="{ReflectionBinding Rank}"
+                              IsEnabled="{Binding UgEditingRights}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{ReflectionBinding Label}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

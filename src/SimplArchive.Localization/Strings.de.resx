@@ -4665,4 +4665,25 @@
   <data name="ApiErrPersonalSpaceStructure" xml:space="preserve">
     <value>Dies ist einer der festen Ordner des persönlichen Bereichs und kann nicht geändert werden.</value>
   </data>
+  <data name="TenantGroupMail" xml:space="preserve">
+    <value>E-Mail</value>
+  </data>
+  <data name="TenantImapShowAllDefault" xml:space="preserve">
+    <value>Neue Benutzer sehen alle Dokumente über IMAP</value>
+  </data>
+  <data name="TenantImapShowAllDefaultInfo" xml:space="preserve">
+    <value>Die Ausgangseinstellung für die IMAP-Ansicht neuer Benutzer. Eingeschaltet zeigt das Mailprogramm auch Nicht-Mail-Dokumente als schreibgeschützte Nachrichten mit angehängter Datei; ausgeschaltet nur E-Mails. Dies ist eine Vorgabe, keine Berechtigung: Die Ansicht zeigt nie etwas, das die Zugriffsrechte verweigern würden, und jeder Benutzer kann seine Einstellung jederzeit im IMAP-Dialog ändern. Bestehende Benutzer behalten ihre Wahl.</value>
+  </data>
+  <data name="ImShowAllHint" xml:space="preserve">
+    <value>Zeigt Ihre Nicht-Mail-Dokumente als schreibgeschützte Nachrichten mit angehängter Datei — nie mehr, als Ihre Zugriffsrechte ohnehin erlauben.</value>
+  </data>
+  <data name="UgImapShowAll" xml:space="preserve">
+    <value>IMAP-Ansicht: {0}</value>
+  </data>
+  <data name="UgImapAllDocs" xml:space="preserve">
+    <value>alle Dokumente</value>
+  </data>
+  <data name="UgImapMailOnly" xml:space="preserve">
+    <value>nur E-Mails</value>
+  </data>
 </root>

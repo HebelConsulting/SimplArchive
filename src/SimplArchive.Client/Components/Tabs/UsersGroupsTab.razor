@@ -144,6 +144,15 @@
                         <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.LockReset" Color="Color.Error" OnClick="ResetPrincipalMfaAsync">@Strings.Get("UgResetMfa")</MudButton>
                     }
                 </div>
+                @* The user's IMAP view preference, read-only (#793): self-service, shown so an administrator
+                   can answer "why does my colleague see the PDFs and I don't" without asking them. *@
+                @if (!sel.IsGroup)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2">
+                        <MudIcon Icon="@(sel.ImapShowAllDocuments ? Icons.Material.Filled.AllInbox : Icons.Material.Filled.Inbox)" Size="Size.Small" />
+                        @string.Format(Strings.Get("UgImapShowAll"), sel.ImapShowAllDocuments ? Strings.Get("UgImapAllDocs") : Strings.Get("UgImapMailOnly"))
+                    </MudText>
+                }
                 @* Impersonate a non-admin user (ADR "User impersonation"). *@
                 @if (CanImpersonate && !sel.Rights.IsTenantAdmin && !sel.Rights.CanImpersonate)
                 {
@@ -313,7 +322,7 @@
                 var page = await Http.GetFromJsonAsync<UsersAdminResponse>(uurl);
                 foreach (var u in page?.Users ?? [])
                 {
-                    rows.Add(new PrincipalRow { IsGroup = false, Id = u.Id, Name = u.DisplayName, IsActive = u.IsActive, MfaEnabled = u.MfaEnabled, Rights = u.Rights ?? new(), PhotoHref = Links.Href(u.Links, "photo"), Links = Links.RelMap(u.Links) });
+                    rows.Add(new PrincipalRow { IsGroup = false, Id = u.Id, Name = u.DisplayName, IsActive = u.IsActive, MfaEnabled = u.MfaEnabled, ImapShowAllDocuments = u.ImapShowAllDocuments, Rights = u.Rights ?? new(), PhotoHref = Links.Href(u.Links, "photo"), Links = Links.RelMap(u.Links) });
                 }
                 uurl = Links.Href(page?.Links, "next");
             }
@@ -834,6 +843,7 @@
         public string Name { get; set; } = "";
         public bool IsActive { get; set; } = true;
         public bool MfaEnabled { get; set; }
+        public bool ImapShowAllDocuments { get; set; }
         public SystemRightsDto Rights { get; set; } = new();
 
         // The addresses the listing advertised for this row (issue #416): a user carries photo /
@@ -869,7 +879,7 @@
         public int ClearanceRank { get; set; }
     }
 
-    private record UserAdminDto { public Guid Id { get; set; } public string Email { get; set; } = ""; public string DisplayName { get; set; } = ""; public bool IsActive { get; set; } public bool MfaEnabled { get; set; } public SystemRightsDto? Rights { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+    private record UserAdminDto { public Guid Id { get; set; } public string Email { get; set; } = ""; public string DisplayName { get; set; } = ""; public bool IsActive { get; set; } public bool MfaEnabled { get; set; } public bool ImapShowAllDocuments { get; set; } public SystemRightsDto? Rights { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record GroupAdminDto { public Guid Id { get; set; } public string Name { get; set; } = ""; public SystemRightsDto? Rights { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record UsersAdminResponse { public List<UserAdminDto> Users { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
     private record GroupsAdminResponse { public List<GroupAdminDto> Groups { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }

@@ -107,6 +107,10 @@ public class UsersController : ControllerBase
         // admin tab shows the status + a Reset MFA action.
         public bool MfaEnabled { get; set; }
 
+        // The user's IMAP "show all documents" preference, VISIBLE but not editable here (#793): it stays
+        // self-service, and this answers "why does my colleague see the PDFs and I don't" from the admin side.
+        public bool ImapShowAllDocuments { get; set; }
+
         // The tenant-wide system-level rights (ADR "Users & groups administration tab") — read here, set
         // via PUT /api/users/{id}/rights.
         public SystemRights Rights { get; set; } = new();
@@ -151,6 +155,13 @@ public class UsersController : ControllerBase
             return Forbid();
         }
 
+        // Seeded from the tenant default (#793): the preference stays self-service, the tenant just gives it
+        // a starting position — a new user's mail client shows the archive unless the tenant decided otherwise.
+        var tenantDefault = await _dbContext.Tenants
+            .Where(t => t.Id == _currentTenantAccessor.TenantId!.Value)
+            .Select(t => t.ImapShowAllDocumentsDefault)
+            .SingleAsync(cancellationToken);
+
         var user = new User
         {
             Id = Guid.NewGuid(),
@@ -159,6 +170,7 @@ public class UsersController : ControllerBase
             DisplayName = request.DisplayName,
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
+            ImapShowAllDocuments = tenantDefault,
         };
 
         if (!string.IsNullOrEmpty(request.Password))
@@ -841,6 +853,7 @@ public class UsersController : ControllerBase
             DisplayName = user.DisplayName,
             IsActive = user.IsActive,
             MfaEnabled = user.MfaEnabledAt is not null,
+            ImapShowAllDocuments = user.ImapShowAllDocuments,
             Rights = Users.SystemRightsMapping.Read(user),
             Links =
             [

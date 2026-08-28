@@ -993,4 +993,54 @@ public class ImapEndpointTests
         await client.DisconnectAsync(true);
     }
 
+    // The tenant default SEEDS a new user's IMAP view and owns nothing else (#793, ADR 0710). Three facts in
+    // one arc, because each alone is passable by a wrong implementation: the default seeds a new user; an
+    // EXISTING user's own choice survives a tenant-default change; and the seeded user can still override
+    // themselves — it is a starting position, never a policy.
+    [Fact]
+    public async Task The_tenant_default_seeds_new_users_and_owns_nobody()
+    {
+        var (clientId, secret, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: false);
+        var adminEmail = $"imap-def-a-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, adminEmail, "def-1234", "Default Admin");
+        await _factory.GrantTenantAdminAsync(adminEmail);
+        using (var scope = _factory.Services.CreateScope())
+        {
+            // The shared promote helper deliberately does not include user management; this test needs the
+            // CREATE path specifically, since that is where the seed lives.
+            var db = scope.ServiceProvider.GetRequiredService<SimplArchive.Infrastructure.Persistence.SimplArchiveDbContext>();
+            var promoted = await db.Users.IgnoreQueryFilters(["TenantFilter"]).SingleAsync(u => u.NormalizedEmail == adminEmail.ToUpperInvariant());
+            promoted.CanManageUsers = true;
+            await db.SaveChangesAsync();
+        }
+
+        using var admin = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(adminEmail, "def-1234"));
+
+        // The tenant arrives with the default ON (the store default) — visible in the settings resource.
+        var settings = await TestJson.Get(admin, "/api/tenant-settings");
+        Assert.True(settings.GetProperty("imapShowAllDocumentsDefault").GetBoolean());
+
+        // A user created now is seeded ON…
+        var seededOn = await TestJson.Post(admin, "/api/users",
+            new { email = $"on-{Guid.NewGuid():N}@e2e.local", displayName = "Seeded On", password = "seed-1234" });
+        Assert.True(seededOn.GetProperty("imapShowAllDocuments").GetBoolean());
+
+        // …and after the tenant flips the default OFF, the next user is seeded OFF while the first keeps ON:
+        // the default owns creation, never the person.
+        (await admin.PutAsJsonAsync("/api/tenant-settings/mail", new { imapShowAllDocumentsDefault = false }))
+            .EnsureSuccessStatusCode();
+        var seededOff = await TestJson.Post(admin, "/api/users",
+            new { email = $"off-{Guid.NewGuid():N}@e2e.local", displayName = "Seeded Off", password = "seed-1234" });
+        Assert.False(seededOff.GetProperty("imapShowAllDocuments").GetBoolean());
+        var firstAgain = await TestJson.Get(admin, $"/api/users/{seededOn.GetProperty("id").GetGuid()}");
+        Assert.True(firstAgain.GetProperty("imapShowAllDocuments").GetBoolean());
+
+        // …and the seeded user overrides their own seed — self-service survives (#793's whole premise).
+        using var off = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(
+            seededOff.GetProperty("email").GetString()!, "seed-1234"));
+        (await off.PutAsJsonAsync("/api/me/imap-access/settings", new { showAllDocuments = true })).EnsureSuccessStatusCode();
+        var overridden = await TestJson.Get(admin, $"/api/users/{seededOff.GetProperty("id").GetGuid()}");
+        Assert.True(overridden.GetProperty("imapShowAllDocuments").GetBoolean());
+    }
+
 }

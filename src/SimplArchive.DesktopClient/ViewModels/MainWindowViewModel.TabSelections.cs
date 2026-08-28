@@ -244,6 +244,7 @@ public sealed partial class MainWindowViewModel
         OnPropertyChanged(nameof(IsEditingTenantRecords));
         OnPropertyChanged(nameof(IsEditingTenantCheckout));
         OnPropertyChanged(nameof(IsEditingTenantStorage));
+        OnPropertyChanged(nameof(IsEditingTenantMail));
         OnPropertyChanged(nameof(IsEditingTenantExternalLinks));
         OnPropertyChanged(nameof(IsEditingTenantAuditStreaming));
         OnPropertyChanged(nameof(NoTenantGroupEditing));
@@ -259,6 +260,8 @@ public sealed partial class MainWindowViewModel
     public bool IsEditingTenantRecords => TenantEditingGroup == "records";
     public bool IsEditingTenantCheckout => TenantEditingGroup == "checkout";
     public bool IsEditingTenantStorage => TenantEditingGroup == "storage";
+    public bool IsEditingTenantMail => TenantEditingGroup == "mail";
+
     public bool IsEditingTenantExternalLinks => TenantEditingGroup == "external-links";
     public bool IsEditingTenantAuditStreaming => TenantEditingGroup == "audit-streaming";
 
@@ -298,6 +301,7 @@ public sealed partial class MainWindowViewModel
                 storageQuotaBytes = TenantStorageQuotaMb is { } mb ? (long?)((long)mb * 1024 * 1024) : null,
                 incompleteUploadCleanupDays = TenantIncompleteUploadCleanupDays,
             },
+            "mail" => new { imapShowAllDocumentsDefault = TenantImapShowAllDocumentsDefault },
             "external-links" => new { allowExternalLinks = TenantAllowExternalLinks, externalLinkMaxDays = TenantExternalLinkMaxDays, externalLinkDefaultAccesses = TenantExternalLinkDefaultAccesses, showExternalLinkUrl = TenantShowExternalLinkUrl },
             "audit-streaming" => new
             {

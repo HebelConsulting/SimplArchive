@@ -4119,6 +4119,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         SelectedPrincipalIsGroup = value.IsGroup;
         SelectedPrincipalIsUser = !value.IsGroup;
         OnPropertyChanged(nameof(SelectedPrincipalMfaStatus));
+        OnPropertyChanged(nameof(SelectedPrincipalImapStatus));
         OnPropertyChanged(nameof(CanResetSelectedPrincipalMfa));
         OnPropertyChanged(nameof(CanImpersonateSelectedPrincipal));
         PrincipalRightsHeader = $"{value.Name} — {(value.IsGroup ? "group" : "user")} rights";
@@ -4248,6 +4249,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
         ? $"Two-factor: {(p.MfaEnabled ? "enabled" : "off")}"
         : "";
 
+    /// <summary>The user's IMAP view preference, read-only (#793): self-service, shown for the admin's answer
+    /// to "why does my colleague see the PDFs and I don't".</summary>
+    public string SelectedPrincipalImapStatus => SelectedPrincipal is { IsGroup: false } q
+        ? string.Format(Strings.Get("UgImapShowAll"), Strings.Get(q.Source?.ImapShowAllDocuments == true ? "UgImapAllDocs" : "UgImapMailOnly"))
+        : "";
+
     public bool CanResetSelectedPrincipalMfa => CanResetMfa && SelectedPrincipal is { IsGroup: false, MfaEnabled: true };
 
     // Impersonate action shows for a selected active, non-admin user when the caller can impersonate and isn't
@@ -4289,6 +4296,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             await _api.Admin.ResetUserMfaAsync(p.Source!);
             p.MfaEnabled = false;
             OnPropertyChanged(nameof(SelectedPrincipalMfaStatus));
+            OnPropertyChanged(nameof(SelectedPrincipalImapStatus));
             OnPropertyChanged(nameof(CanResetSelectedPrincipalMfa));
             Status = string.Format(Strings.Get("StMfaResetFor"), p.Name);
         }
@@ -4619,6 +4627,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     // External links (ADR 0546, issue #385). The two caps only mean anything while the switch is on, so the UI
     // reveals them with it — one yes/no decision, then its bounds.
+    // The tenant default a NEW user's IMAP show-all preference seeds from (#793) — not a permission.
+    [ObservableProperty] private bool _tenantImapShowAllDocumentsDefault;
+
     [ObservableProperty] private bool _tenantAllowExternalLinks;
 
     // Whether an existing link's URL may be revealed again (issue #412). Threaded through EVERY site below:
@@ -4707,6 +4718,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         TenantRequireDispositionReview = s.RequireDispositionReview;
         TenantRestrictTagsToCatalog = s.RestrictTagsToCatalog;
         TenantEnforceClearance = s.EnforceClearance;
+        TenantImapShowAllDocumentsDefault = s.ImapShowAllDocumentsDefault;
         TenantAllowExternalLinks = s.AllowExternalLinks;
         TenantShowExternalLinkUrl = s.ShowExternalLinkUrl;
         TenantExternalLinkMaxDays = s.ExternalLinkMaxDays;

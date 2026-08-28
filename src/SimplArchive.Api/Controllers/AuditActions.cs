@@ -139,6 +139,7 @@ public static class AuditActions
     public const string TenantSettingsRecordsUpdated = "Tenant.SettingsRecordsUpdated";
     public const string TenantSettingsCheckoutUpdated = "Tenant.SettingsCheckoutUpdated";
     public const string TenantSettingsStorageUpdated = "Tenant.SettingsStorageUpdated";
+    public const string TenantSettingsMailUpdated = "Tenant.SettingsMailUpdated";
     public const string TenantSettingsExternalLinksUpdated = "Tenant.SettingsExternalLinksUpdated";
     public const string TenantSettingsAuditStreamingUpdated = "Tenant.SettingsAuditStreamingUpdated";
 

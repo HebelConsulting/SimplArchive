@@ -42,7 +42,7 @@ public sealed class AdminClient(ApiCore core)
     // Links are the row's own advertised addresses (ADR 0543/0555): rights, photo, reset-password, reset-mfa,
     // deactivate for a user; rights, members, delete for a group. The client's methods take this row and follow
     // one of them, instead of rebuilding /users/{id}/… and /groups/{id}/… paths from an id.
-    public sealed record PrincipalInfo(bool IsGroup, Guid Id, string Name, bool IsActive, SystemRightsData Rights, bool MfaEnabled = false,
+    public sealed record PrincipalInfo(bool IsGroup, Guid Id, string Name, bool IsActive, SystemRightsData Rights, bool MfaEnabled = false, bool ImapShowAllDocuments = false,
         IReadOnlyDictionary<string, string>? Links = null)
     {
         public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
@@ -183,7 +183,7 @@ public sealed class AdminClient(ApiCore core)
 
     // ---- Tenant-admin settings (ADR "Tenant-admin settings tab") -----------------------------------
 
-    public sealed record TenantSettingsInfo(Guid Id, string Name, string Status, DateTimeOffset CreatedAt, string DefaultOcrLanguages, int AuditRetentionDays, int CheckoutTtlDays, int CheckoutWarningDays, int WormLockMode, bool RequireMfa, bool AllowPasskeyLogin, bool RequireDispositionReview, bool RestrictTagsToCatalog, bool EnforceClearance, bool AllowExternalLinks, int ExternalLinkMaxDays, int ExternalLinkDefaultAccesses, bool ShowExternalLinkUrl, long? StorageQuotaBytes, long StorageUsedBytes, int IncompleteUploadCleanupDays, string? AuditWebhookUrl, bool AuditWebhookConfigured, int AuditWebhookConsecutiveFailures, DateTimeOffset? AuditWebhookLastSuccessAt, DateTimeOffset? AuditWebhookLastFailureAt, DateTimeOffset? AuditWebhookNextAttemptAt, string? AuditWebhookLastError,
+    public sealed record TenantSettingsInfo(Guid Id, string Name, string Status, DateTimeOffset CreatedAt, string DefaultOcrLanguages, int AuditRetentionDays, int CheckoutTtlDays, int CheckoutWarningDays, int WormLockMode, bool RequireMfa, bool AllowPasskeyLogin, bool RequireDispositionReview, bool RestrictTagsToCatalog, bool EnforceClearance, bool ImapShowAllDocumentsDefault, bool AllowExternalLinks, int ExternalLinkMaxDays, int ExternalLinkDefaultAccesses, bool ShowExternalLinkUrl, long? StorageQuotaBytes, long StorageUsedBytes, int IncompleteUploadCleanupDays, string? AuditWebhookUrl, bool AuditWebhookConfigured, int AuditWebhookConsecutiveFailures, DateTimeOffset? AuditWebhookLastSuccessAt, DateTimeOffset? AuditWebhookLastFailureAt, DateTimeOffset? AuditWebhookNextAttemptAt, string? AuditWebhookLastError,
         IReadOnlyDictionary<string, string>? Links = null);
 
     public async Task<TenantSettingsInfo> GetTenantSettingsAsync(CancellationToken cancellationToken = default)
@@ -491,6 +491,7 @@ public sealed class AdminClient(ApiCore core)
         j.TryGetProperty("requireDispositionReview", out var dr) && dr.ValueKind == JsonValueKind.True,
         j.TryGetProperty("restrictTagsToCatalog", out var rt) && rt.ValueKind == JsonValueKind.True,
         j.TryGetProperty("enforceClearance", out var ec) && ec.ValueKind == JsonValueKind.True,
+        j.TryGetProperty("imapShowAllDocumentsDefault", out var im) && im.ValueKind == JsonValueKind.True,
         j.TryGetProperty("allowExternalLinks", out var xl) && xl.ValueKind == JsonValueKind.True,
         j.TryGetProperty("externalLinkMaxDays", out var xd) ? xd.GetInt32() : 180,
         j.TryGetProperty("externalLinkDefaultAccesses", out var xa) ? xa.GetInt32() : 5,
@@ -532,6 +533,7 @@ public sealed class AdminClient(ApiCore core)
         !e.TryGetProperty("isActive", out var a) || a.ValueKind == JsonValueKind.True,
         ParseRights(e),
         e.TryGetProperty("mfaEnabled", out var mfa) && mfa.ValueKind == JsonValueKind.True,
+        e.TryGetProperty("imapShowAllDocuments", out var im) && im.ValueKind == JsonValueKind.True,
         ApiCore.ParseLinks(e));
 
     private static PrincipalInfo ParseGroup(JsonElement e) => new(
@@ -540,6 +542,7 @@ public sealed class AdminClient(ApiCore core)
         e.GetProperty("name").GetString() ?? "",
         true,
         ParseRights(e),
+        false,
         false,
         ApiCore.ParseLinks(e));
 

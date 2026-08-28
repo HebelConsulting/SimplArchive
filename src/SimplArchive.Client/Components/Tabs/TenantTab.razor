@@ -153,6 +153,14 @@
             <InfoButton Text="@(Strings.Get("TenantUploadCleanupInfo"))" />
         </div>
 
+        @* ---- Mail (#793) --------------------------------------------------------------------------- *@
+        @GroupHeader("mail", Strings.Get("TenantGroupMail"))
+        <div class="wb-setting-row mb-4">
+            <MudSwitch T="bool" @bind-Value="_tenantEdit.ImapShowAllDocumentsDefault" Disabled="@(!Editing("mail"))" Color="Color.Primary" Class="flex-grow-1"
+                       Label="@Strings.Get("TenantImapShowAllDefault")" />
+            <InfoButton Text="@(Strings.Get("TenantImapShowAllDefaultInfo"))" />
+        </div>
+
         @* ---- External links (ADR 0546) ------------------------------------------------------------ *@
         @GroupHeader("external-links", Strings.Get("TenantGroupExternalLinks"))
         <div class="wb-setting-row mb-2">
@@ -340,7 +348,7 @@
     private void SyncTenantEditFromTenant()
     {
         if (_tenant is null) return;
-        _tenantEdit = new TenantSettingsEdit { Name = _tenant.Name, AuditRetentionDays = _tenant.AuditRetentionDays, CheckoutTtlDays = _tenant.CheckoutTtlDays, CheckoutWarningDays = _tenant.CheckoutWarningDays, WormLockMode = _tenant.WormLockMode, RequireMfa = _tenant.RequireMfa, AllowPasskeyLogin = _tenant.AllowPasskeyLogin, RequireDispositionReview = _tenant.RequireDispositionReview, RestrictTagsToCatalog = _tenant.RestrictTagsToCatalog, EnforceClearance = _tenant.EnforceClearance, AllowExternalLinks = _tenant.AllowExternalLinks, ShowExternalLinkUrl = _tenant.ShowExternalLinkUrl, ExternalLinkMaxDays = _tenant.ExternalLinkMaxDays, ExternalLinkDefaultAccesses = _tenant.ExternalLinkDefaultAccesses, StorageQuotaMb = _tenant.StorageQuotaBytes is { } b ? (int)(b / (1024 * 1024)) : null, IncompleteUploadCleanupDays = _tenant.IncompleteUploadCleanupDays, AuditWebhookUrl = _tenant.AuditWebhookUrl, AuditWebhookSecret = null };
+        _tenantEdit = new TenantSettingsEdit { Name = _tenant.Name, AuditRetentionDays = _tenant.AuditRetentionDays, CheckoutTtlDays = _tenant.CheckoutTtlDays, CheckoutWarningDays = _tenant.CheckoutWarningDays, WormLockMode = _tenant.WormLockMode, RequireMfa = _tenant.RequireMfa, AllowPasskeyLogin = _tenant.AllowPasskeyLogin, RequireDispositionReview = _tenant.RequireDispositionReview, RestrictTagsToCatalog = _tenant.RestrictTagsToCatalog, EnforceClearance = _tenant.EnforceClearance, ImapShowAllDocumentsDefault = _tenant.ImapShowAllDocumentsDefault, AllowExternalLinks = _tenant.AllowExternalLinks, ShowExternalLinkUrl = _tenant.ShowExternalLinkUrl, ExternalLinkMaxDays = _tenant.ExternalLinkMaxDays, ExternalLinkDefaultAccesses = _tenant.ExternalLinkDefaultAccesses, StorageQuotaMb = _tenant.StorageQuotaBytes is { } b ? (int)(b / (1024 * 1024)) : null, IncompleteUploadCleanupDays = _tenant.IncompleteUploadCleanupDays, AuditWebhookUrl = _tenant.AuditWebhookUrl, AuditWebhookSecret = null };
         _tenantEditOcr = new HashSet<string>(_tenant.DefaultOcrLanguages.Split('+', StringSplitOptions.RemoveEmptyEntries));
     }
 
@@ -366,6 +374,7 @@
                 storageQuotaBytes = _tenantEdit.StorageQuotaMb is { } mb ? (long?)((long)mb * 1024 * 1024) : null,
                 incompleteUploadCleanupDays = _tenantEdit.IncompleteUploadCleanupDays,
             },
+            "mail" => new { imapShowAllDocumentsDefault = _tenantEdit.ImapShowAllDocumentsDefault },
             "external-links" => new { allowExternalLinks = _tenantEdit.AllowExternalLinks, externalLinkMaxDays = _tenantEdit.ExternalLinkMaxDays, externalLinkDefaultAccesses = _tenantEdit.ExternalLinkDefaultAccesses, showExternalLinkUrl = _tenantEdit.ShowExternalLinkUrl },
             "audit-streaming" => new
             {
@@ -419,6 +428,7 @@
         public List<LinkResponse> Links { get; set; } = [];
 
         // External links (ADR 0546) — the tenant master switch plus its two caps.
+        public bool ImapShowAllDocumentsDefault { get; set; }
         public bool AllowExternalLinks { get; set; }
 
         public bool ShowExternalLinkUrl { get; set; }
@@ -457,6 +467,7 @@
     {
         public string Name { get; set; } = "";
         // External links (ADR 0546).
+        public bool ImapShowAllDocumentsDefault { get; set; }
         public bool AllowExternalLinks { get; set; }
 
         public bool ShowExternalLinkUrl { get; set; }

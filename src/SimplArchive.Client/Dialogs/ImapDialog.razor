@@ -36,6 +36,9 @@
             @* The user's own view choice (#562): only emails, or every visible document as an attachment message. *@
             <MudSwitch T="bool" Class="mt-3" Color="Color.Primary" Value="_showAll" ValueChanged="SetShowAllAsync" Disabled="!_available"
                        Label="@Strings.Get("ImShowAll")" />
+            @* The label alone does not say what "documents" means here (#793): non-mail files, projected as
+               read-only messages with the file attached — and never more than the caller may already see. *@
+            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@Strings.Get("ImShowAllHint")</MudText>
         </div>
     </DialogContent>
     <DialogActions>

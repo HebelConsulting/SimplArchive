@@ -28,6 +28,12 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(t => t.CheckoutTtlDays).HasDefaultValue(0);
         builder.Property(t => t.CheckoutWarningDays).HasDefaultValue(1);
 
+        // HasDefaultValue, not just the C# initializer (#793): the initializer applies only to NEW rows built
+        // in this process; the store default is what EXISTING tenants receive when the column is added. Without
+        // it the migration writes DEFAULT false and every pre-upgrade tenant seeds its new users mail-only —
+        // the opposite of the decision.
+        builder.Property(t => t.ImapShowAllDocumentsDefault).HasDefaultValue(true);
+
         // External links (ADR 0546). HasDefaultValue, not just the C# initializer: the initializer only applies to
         // objects created in code, so without these an EXISTING tenant would be migrated to 0 — which would mean
         // "links may expire at most 0 days out" and silently make the feature unusable for every tenant that

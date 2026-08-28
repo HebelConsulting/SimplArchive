@@ -116,6 +116,7 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             DisplayName = administratorDisplayName,
             IsActive = true,
             IsTenantAdmin = true,
+            ImapShowAllDocuments = tenant.ImapShowAllDocumentsDefault,
             // The tenant administrator gets EVERY system-level right at provisioning. No right is implied by
             // IsTenantAdmin, and a caller can only grant a right it already holds (SystemRightsPolicy) — so if
             // the founding admin lacked a right, there'd be nobody in the tenant able to delegate it (it would

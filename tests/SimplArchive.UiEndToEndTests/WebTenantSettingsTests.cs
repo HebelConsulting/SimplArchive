@@ -33,22 +33,23 @@ public class WebTenantSettingsTests
         await Expect(view.GetByText("Reference").First).ToBeVisibleAsync();
         await Expect(view.GetByText("Tenant ID")).ToBeVisibleAsync();
 
-        // The eight decided groups render, in order.
-        foreach (var group in new[] { "General", "Documents & capture", "Security & sign-in", "Records & compliance", "Check-out", "Storage", "External links", "Audit streaming (SIEM)" })
+        // The nine decided groups render, in order (Mail joined with #793).
+        foreach (var group in new[] { "General", "Documents & capture", "Security & sign-in", "Records & compliance", "Check-out", "Storage", "Mail", "External links", "Audit streaming (SIEM)" })
         {
             await Expect(view.Locator(".wb-tenant-group-head").Filter(new() { HasText = group })).ToBeVisibleAsync();
         }
 
-        // Each explainable setting carries an info button (hover tooltip) — the same seventeen as before the
-        // regrouping (the webhook secret + delivery-health buttons render only in edit mode / when a webhook
-        // is configured). The count still DEPENDS on external links being on for the demo tenant (ADR 0214).
-        await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Explanation" })).ToHaveCountAsync(17);
+        // Each explainable setting carries an info button (hover tooltip) — eighteen: the seventeen from the
+        // regrouping plus the Mail group's IMAP seed default (#793). The webhook secret + delivery-health
+        // buttons render only in edit mode / when a webhook is configured, and the count still DEPENDS on
+        // external links being on for the demo tenant (ADR 0214).
+        await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Explanation" })).ToHaveCountAsync(18);
 
         // The storage-usage line (ADR "Per-tenant storage quota") shows how much is used vs the limit.
         await Expect(view.GetByText("Used:")).ToBeVisibleAsync();
 
-        // Read-only everywhere: eight pencils, no Save/Cancel.
-        await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Edit" })).ToHaveCountAsync(8);
+        // Read-only everywhere: nine pencils, no Save/Cancel.
+        await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Edit" })).ToHaveCountAsync(9);
         await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Save" })).ToBeHiddenAsync();
 
         // A group's pencil → Save/Cancel appear IN ITS HEADER ROW, and the other pencils hide (starting a
@@ -61,7 +62,7 @@ public class WebTenantSettingsTests
 
         // Cancel discards without persisting anything and returns every pencil.
         await general.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
-        await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Edit" })).ToHaveCountAsync(8);
+        await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Edit" })).ToHaveCountAsync(9);
     }
 
     // Per-group editability: a group's pencil enables ITS fields and nobody else's — the point of the split.

@@ -421,7 +421,7 @@ public static class DemoDataSeeder
 
         User MakeUser(string localPart, string displayName)
         {
-            var user = new User { Id = Guid.NewGuid(), TenantId = tenantId, Email = $"{localPart}@{domain}", DisplayName = displayName, IsActive = true, CreatedAt = now };
+            var user = new User { Id = Guid.NewGuid(), TenantId = tenantId, Email = $"{localPart}@{domain}", DisplayName = displayName, IsActive = true, CreatedAt = now, ImapShowAllDocuments = true };
             user.PasswordHash = hasher.HashPassword(user, demoPassword); // same known demo password, so they can log in too
             return user;
         }

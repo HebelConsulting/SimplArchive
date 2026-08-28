@@ -808,7 +808,7 @@ public sealed class RepositoryImporter
             var existing = await _dbContext.Users.FirstOrDefaultAsync(u => u.NormalizedEmail == normalized, cancellationToken);
             if (existing is null)
             {
-                existing = new User { Id = Guid.NewGuid(), TenantId = tenantId, Email = user.Email, DisplayName = user.DisplayName, IsActive = false, CreatedAt = DateTimeOffset.UtcNow };
+                existing = new User { Id = Guid.NewGuid(), TenantId = tenantId, Email = user.Email, DisplayName = user.DisplayName, IsActive = false, CreatedAt = DateTimeOffset.UtcNow, ImapShowAllDocuments = await _dbContext.Tenants.Where(t => t.Id == tenantId).Select(t => t.ImapShowAllDocumentsDefault).SingleAsync(cancellationToken) };
                 _dbContext.Users.Add(existing);
             }
 

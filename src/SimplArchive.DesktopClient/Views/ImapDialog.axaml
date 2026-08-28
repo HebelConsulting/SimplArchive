@@ -35,6 +35,9 @@
 
         <!-- The user's own view choice (#562): emails only, or every visible document as an attachment message. -->
         <CheckBox x:Name="ShowAllBox" Content="{loc:Tr ImShowAll}" IsCheckedChanged="OnShowAllChanged" />
+        <!-- The label alone does not say what "documents" means here (#793): non-mail files, projected as
+             read-only messages with the file attached — never more than the caller may already see. -->
+        <TextBlock Text="{loc:Tr ImShowAllHint}" Foreground="{DynamicResource WbMuted}" FontSize="12" TextWrapping="Wrap" Margin="24,0,0,4" />
 
         <TextBlock x:Name="StatusText" Foreground="{DynamicResource WbMuted}" FontSize="12" TextWrapping="Wrap" />
 

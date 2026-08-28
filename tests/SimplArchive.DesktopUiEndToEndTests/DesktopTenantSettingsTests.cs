@@ -31,6 +31,9 @@ public class DesktopTenantSettingsTests
         await api.Admin.SaveTenantSettingsGroupAsync(before, "security", new { requireMfa = true, allowPasskeyLogin = true, enforceClearance = false });
         await api.Admin.SaveTenantSettingsGroupAsync(before, "storage", new { storageQuotaBytes = 500L * 1024 * 1024, incompleteUploadCleanupDays = 14 });
         await api.Admin.SaveTenantSettingsGroupAsync(before, "external-links", new { allowExternalLinks = true, externalLinkMaxDays = 30, externalLinkDefaultAccesses = 2, showExternalLinkUrl = true });
+        // The IMAP seed default arrives TRUE (the store default, #793) — flip it OFF so the round-trip proves
+        // the save writes rather than the default surviving.
+        await api.Admin.SaveTenantSettingsGroupAsync(before, "mail", new { imapShowAllDocumentsDefault = false });
         var updated = await api.Admin.SaveTenantSettingsGroupAsync(before, "audit-streaming", new { auditWebhookUrl = "https://siem.example.com/ingest", auditWebhookSecret = "s3cr3t-signing-key" });
         // External links (issue #385): a group save must not disturb the OTHER groups — the split exists so a
         // forgotten field can no longer silently switch an unrelated feature off.
@@ -40,6 +43,9 @@ public class DesktopTenantSettingsTests
         // Same reasoning for the newest field (issue #412): a full-replacement PUT turns "forgot to send it" into
         // "silently switched it off", so every new tenant setting earns a round-trip assertion here.
         Assert.True(updated.ShowExternalLinkUrl);
+
+        // #793 — flipped off above against a true default, so this asserts the write, not the seed.
+        Assert.False(updated.ImapShowAllDocumentsDefault);
 
         Assert.Equal("deu+eng", updated.DefaultOcrLanguages);
         Assert.Equal(500, updated.AuditRetentionDays);

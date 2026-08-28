@@ -117,6 +117,15 @@ public class Tenant
     // for links already in the wild rather than merely a block on making new ones.
     public bool AllowExternalLinks { get; set; }
 
+    /// <summary>
+    /// What a NEW user's IMAP "show all documents" preference is seeded from (#793, ADR 0710). Defaults to
+    /// TRUE — a mail client showing only .eml files in a document archive looks broken rather than filtered,
+    /// and the projection grants nothing: every listed item still passes the caller's effective-rights check,
+    /// so the widest default is also the safe one. Not a permission, and deliberately not in the rights model;
+    /// existing users keep their own self-service value.
+    /// </summary>
+    public bool ImapShowAllDocumentsDefault { get; set; } = true;
+
     // The furthest out a link may be set to expire, and the access count a link gets when the creator doesn't
     // choose one. Tenant-level so an administrator can tighten the rails to their own policy.
     public int ExternalLinkMaxDays { get; set; } = 180;
