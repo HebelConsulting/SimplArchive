@@ -394,6 +394,18 @@ internal static class Program
             return;
         }
 
+        // The side-by-side diff renders (#803, ADR 0712): `--diff-test`, in DiffViewCheck — headless
+        // Avalonia, because the point is that the rows MATERIALIZE (a VM test cannot see an empty panel).
+        if (args.Contains("--diff-test"))
+        {
+            AppBuilder.Configure<App>()
+                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .UseSkia()
+                .SetupWithoutStarting();
+            Services.DiffViewCheck.Run();
+            return;
+        }
+
         // The Open shortcut (#482, ADR "One shortcut for opening a document"): `--shortcut-test`, in
         // OpenShortcutCheck.
         if (args.Contains("--shortcut-test"))

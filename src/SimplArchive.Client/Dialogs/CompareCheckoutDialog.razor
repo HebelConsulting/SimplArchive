@@ -1,14 +1,15 @@
 @inject HttpClient Http
 
-@* Compare the current version against the working copy in check-out (the cloud stash) as an inline unified text
-   diff (ADR 0517). Fixed two sides (no version pickers) — Current version → Your working copy; added lines green,
-   removed red, unchanged default. "Not available" for binary formats / no working copy. Web = unified diff only. *@
+@* Compare the current version against the working copy in check-out (the cloud stash) SIDE BY SIDE (ADRs
+   0517/0712): the server sends the two extracted texts, the shared Presentation TextDiff aligns the lines and
+   marks the changed words, DiffView renders the rows. Fixed two sides (no version pickers) — Current version →
+   Your working copy. "Not available" for binary formats / no working copy. *@
 <MudDialog>
     <TitleContent>
         <MudText Typo="Typo.h6">@string.Format(Strings.Get("CoCompareTitleFor"), DocumentName)</MudText>
     </TitleContent>
     <DialogContent>
-        <div style="min-width: 620px;">
+        <div style="min-width: 860px;">
             <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px; font-size:13px;">
                 <span class="mud-text-secondary">@Strings.Get("CoCompareCurrent")</span>
                 <MudIcon Icon="@Icons.Material.Filled.ArrowForward" Size="Size.Small" />
@@ -25,10 +26,7 @@
             }
             else if (_result is { } r)
             {
-                <div style="max-height:52vh; overflow:auto; border:1px solid var(--mud-palette-lines-default); border-radius:4px;">
-                    <pre style="margin:0; font-size:12.5px; line-height:1.5; font-family:var(--mud-typography-monospace-family, monospace);">@foreach (var line in r.Lines)
-{<span style="display:block; padding:0 8px; white-space:pre-wrap; @LineStyle(line.Op)">@Prefix(line.Op)@line.Text</span>}</pre>
-                </div>
+                <DiffView FromText="@r.FromText" ToText="@r.ToText" />
             }
         </div>
     </DialogContent>
@@ -59,20 +57,10 @@
         }
         catch (Exception)
         {
-            _result = new CompareResult { Available = false, Lines = [] };
+            _result = new CompareResult { Available = false };
         }
         _busy = false;
     }
 
-    private static string LineStyle(int op) => op switch
-    {
-        1 => "background:rgba(76,175,80,0.16);",   // added
-        2 => "background:rgba(244,67,54,0.16);",   // removed
-        _ => "",
-    };
-
-    private static string Prefix(int op) => op switch { 1 => "+ ", 2 => "- ", _ => "  " };
-
-    private record CompareResult { public bool Available { get; set; } public List<DiffLine> Lines { get; set; } = []; }
-    private record DiffLine { public int Op { get; set; } public string Text { get; set; } = ""; }
+    private record CompareResult { public bool Available { get; set; } public string FromText { get; set; } = ""; public string ToText { get; set; } = ""; }
 }

@@ -426,7 +426,9 @@ public class DocumentVersionsController : ControllerBase
         return NoContent();
     }
 
-    // Inline unified text diff between two versions of this document (ADR "Document version comparison").
+    // The two versions' extracted texts, for the client-side side-by-side diff (ADR 0712 — the server used
+    // to diff here itself; now both clients compute identical rows from these texts via the shared
+    // SimplArchive.Presentation.TextDiff, so word-level emphasis needs no wire shape of its own).
     // Requires CanReadContent on both (via CanAccessVersionContentAsync, which also enforces workflow gating).
     // Available is false when either version has no extractable text (a binary/image format, or Tika unavailable
     // for office/PDF) — the client then shows "comparison not available for this format".
@@ -461,7 +463,8 @@ public class DocumentVersionsController : ControllerBase
             ToVersionId = toVersion.Id,
             ToVersionNumber = toVersion.VersionNumber,
             Available = comparison.Available,
-            Lines = comparison.Lines.Select(l => new DiffLineResource { Op = (int)l.Op, Text = l.Text }).ToList(),
+            FromText = comparison.FromText,
+            ToText = comparison.ToText,
             Links = [new Link("self", $"/api/documents/{documentId}/versions/compare?from={fromVersionId}&to={toVersionId}", "GET")],
         });
     }
@@ -613,14 +616,8 @@ public class DocumentVersionsController : ControllerBase
         public Guid ToVersionId { get; set; }
         public int? ToVersionNumber { get; set; }
         public bool Available { get; set; }
-        public List<DiffLineResource> Lines { get; set; } = [];
-    }
-
-    // Op: 0 = unchanged, 1 = added, 2 = removed (matches Application's DiffOp).
-    public class DiffLineResource
-    {
-        public int Op { get; set; }
-        public string Text { get; set; } = "";
+        public string FromText { get; set; } = string.Empty;
+        public string ToText { get; set; } = string.Empty;
     }
 
     public class TextLayoutPageResource

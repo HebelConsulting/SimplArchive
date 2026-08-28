@@ -280,8 +280,9 @@ any other working-copy edit). Split and join stay in the Intray: they turn one i
 which is filing work.
 
 #shot("screenshots/web-version-compare.png",
-  [*Compare versions*: an inline diff of two revisions of a document — added lines marked with `+`, removed lines
-   with `-` — so a change between versions is easy to see.])
+  [*Compare versions*: two revisions of a document side by side — old on the left, new on the right, changed
+   lines aligned and the changed words highlighted within them. Works for any pair whose content yields text,
+   notes and emails included.])
 
 = Organizing
 

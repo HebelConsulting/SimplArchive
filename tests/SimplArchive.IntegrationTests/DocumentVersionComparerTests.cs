@@ -5,7 +5,8 @@ using SimplArchive.Infrastructure.Comparison;
 
 namespace SimplArchive.IntegrationTests;
 
-// The version/checkout comparer (ADR "Document version comparison"; ADR 0517). The check-out stash key is
+// The version/checkout comparer (ADRs 0712/0517) — extraction only; the diff itself is the clients'
+// (SimplArchive.Presentation.TextDiff, pinned by TextDiffTests). The check-out stash key is
 // extensionless (tenants/{t}/users/{u}/checkout/{doc}), so without a hint a text-file working copy would fall back
 // to Tika. These tests prove the toExtensionHint lets an extensionless text side decode directly — no Tika needed.
 public class DocumentVersionComparerTests
@@ -37,8 +38,31 @@ public class DocumentVersionComparerTests
         var result = await comparer.CompareAsync(versionKey, stashKey, toExtensionHint: ".txt");
 
         Assert.True(result.Available);
-        Assert.Contains(result.Lines, l => l.Op == DiffOp.Removed && l.Text.Contains("line two"));
-        Assert.Contains(result.Lines, l => l.Op == DiffOp.Added && l.Text.Contains("CHANGED"));
+        Assert.Contains("line two\n", result.FromText);
+        Assert.Contains("line two CHANGED", result.ToText);
+    }
+
+    [Fact]
+    public async Task An_eml_side_extracts_its_body_not_its_mime_envelope()
+    {
+        // A note edited from a mail client is HTML in an .eml (#803) — the comparison must yield the PROSE.
+        const string fromKey = "tenants/t/2026/a.eml";
+        const string toKey = "tenants/t/2026/b.eml";
+        const string emlA = "From: a@x\r\nSubject: n\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<div>Hello <b>world</b></div><div>second line</div>\r\n";
+        const string emlB = "From: a@x\r\nSubject: n\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nplain body\r\n";
+        var storage = new InMemoryObjectStorage();
+        storage.Objects[fromKey] = Encoding.UTF8.GetBytes(emlA);
+        storage.Objects[toKey] = Encoding.UTF8.GetBytes(emlB);
+        var comparer = new DocumentVersionComparer(storage, new NullTextExtractor());
+
+        var result = await comparer.CompareAsync(fromKey, toKey);
+
+        Assert.True(result.Available);
+        Assert.Contains("Hello world", result.FromText);       // tags stripped, entities decoded
+        Assert.Contains("second line", result.FromText);       // block boundary became a line break
+        Assert.DoesNotContain("Content-Type", result.FromText); // the envelope is not the text
+        Assert.DoesNotContain("<div>", result.FromText);
+        Assert.Contains("plain body", result.ToText);           // a text body is taken as-is
     }
 
     [Fact]

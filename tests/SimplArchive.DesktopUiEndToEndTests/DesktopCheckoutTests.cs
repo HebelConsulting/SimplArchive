@@ -118,8 +118,12 @@ public class DesktopCheckoutTests
         await vm.SetupAsync(api, row.Item!, row.DisplayName, row.FileExtension, row.StashDownloadUrl);
 
         Assert.False(vm.NotAvailable);
-        Assert.Contains(vm.Lines, l => l.Op == 2 && l.Display.Contains("line two"));  // removed
-        Assert.Contains(vm.Lines, l => l.Op == 1 && l.Display.Contains("CHANGED"));   // added
+
+        // The rows are the shared Presentation TextDiff's (ADR 0712): the edited line pairs old and new with
+        // word-level emphasis — "CHANGED" is what the working copy added.
+        Assert.Contains(vm.Rows, r =>
+            r.OldSegments.Any(s => s.Text.Contains("line two"))
+            && r.NewSegments.Any(s => s.Emphasized && s.Text.Contains("CHANGED")));
     }
 
     [Fact]

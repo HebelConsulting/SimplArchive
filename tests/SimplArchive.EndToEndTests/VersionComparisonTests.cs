@@ -4,9 +4,10 @@ using System.Text;
 
 namespace SimplArchive.EndToEndTests;
 
-// End-to-end for document version comparison (ADR "Document version comparison") over the real API + Postgres +
-// object storage (+ Tika): two text versions produce an inline unified diff (added/removed/unchanged lines); a
-// binary version reports "not available"; the caller needs CanReadContent.
+// End-to-end for document version comparison (ADR 0712) over the real API + Postgres + object storage
+// (+ Tika): the endpoint returns the two versions' EXTRACTED TEXTS — the diff itself is the clients'
+// (Presentation TextDiff, pinned by TextDiffTests); a binary version reports "not available"; a note-style
+// .eml pair yields prose, not MIME; the caller needs CanReadContent.
 [Collection(E2ECollection.Name)]
 [Trait("Area", "e2e-2")]
 public class VersionComparisonTests
@@ -16,7 +17,7 @@ public class VersionComparisonTests
     public VersionComparisonTests(E2EApiFactory factory) => _factory = factory;
 
     [Fact]
-    public async Task Two_text_versions_produce_an_inline_diff()
+    public async Task Two_text_versions_return_both_extracted_texts()
     {
         var (clientId, secret, _) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
         using var api = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
@@ -29,13 +30,34 @@ public class VersionComparisonTests
 
         var cmp = await TestJson.Get(api, $"/api/documents/{docId}/versions/compare?from={v1}&to={v2}");
         Assert.True(cmp.GetProperty("available").GetBoolean());
-        var lines = cmp.GetProperty("lines").EnumerateArray().Select(l => (Op: l.GetProperty("op").GetInt32(), Text: l.GetProperty("text").GetString())).ToList();
+        Assert.Equal("alpha\nbeta\ngamma\n", cmp.GetProperty("fromText").GetString());
+        Assert.Equal("alpha\nBETA changed\ngamma\ndelta\n", cmp.GetProperty("toText").GetString());
+    }
 
-        // "alpha" + "gamma" unchanged (op 0); "beta" removed (op 2); "BETA changed" + "delta" added (op 1).
-        Assert.Contains(lines, l => l.Op == 0 && l.Text == "alpha");
-        Assert.Contains(lines, l => l.Op == 2 && l.Text == "beta");
-        Assert.Contains(lines, l => l.Op == 1 && l.Text == "BETA changed");
-        Assert.Contains(lines, l => l.Op == 1 && l.Text == "delta");
+    [Fact]
+    public async Task An_eml_pair_compares_as_prose_not_mime()
+    {
+        // The headline case of #803: a note edited from a mail client is HTML in an .eml, and its versions
+        // must compare as the words the user wrote — bodies extracted, tags stripped, envelope absent.
+        var (clientId, secret, _) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
+        using var api = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
+
+        var repoId = (await TestJson.Post(api, "/api/repositories", new { name = $"Cmp {Guid.NewGuid():N}" })).GetProperty("id").GetGuid();
+        var docId = (await TestJson.Post(api, $"/api/documents/{repoId}/children", new { name = "note-doc" })).GetProperty("id").GetGuid();
+
+        const string emlV1 = "From: notes@e2e.local\r\nSubject: shopping\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<div>milk</div><div>bread</div>\r\n";
+        const string emlV2 = "From: notes@e2e.local\r\nSubject: shopping\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<div>milk</div><div>bread &amp; butter</div>\r\n";
+        var v1 = await UploadVersionAsync(api, docId, ".eml", emlV1);
+        var v2 = await UploadVersionAsync(api, docId, ".eml", emlV2);
+
+        var cmp = await TestJson.Get(api, $"/api/documents/{docId}/versions/compare?from={v1}&to={v2}");
+        Assert.True(cmp.GetProperty("available").GetBoolean());
+        var fromText = cmp.GetProperty("fromText").GetString()!;
+        var toText = cmp.GetProperty("toText").GetString()!;
+        Assert.Contains("milk", fromText);
+        Assert.Contains("bread & butter", toText);        // entity decoded
+        Assert.DoesNotContain("<div>", toText);           // tags stripped
+        Assert.DoesNotContain("Content-Type", fromText);  // the envelope is not the note
     }
 
     [Fact]
@@ -53,7 +75,7 @@ public class VersionComparisonTests
 
         var cmp = await TestJson.Get(api, $"/api/documents/{docId}/versions/compare?from={v1}&to={v2}");
         Assert.False(cmp.GetProperty("available").GetBoolean());
-        Assert.Empty(cmp.GetProperty("lines").EnumerateArray());
+        Assert.Equal(string.Empty, cmp.GetProperty("fromText").GetString());
     }
 
     [Fact]

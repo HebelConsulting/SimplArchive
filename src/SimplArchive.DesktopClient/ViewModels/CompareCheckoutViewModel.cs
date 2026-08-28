@@ -9,9 +9,10 @@ using SimplArchive.Localization;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
-// Backs the desktop Compare-checkout dialog (ADR 0517) — an inline unified diff of a checked-out document's current
-// version vs its working copy in check-out (the cloud stash), plus an optional "Beyond Compare" launch when that
-// tool is installed. Fixed two sides (no version pickers), mirroring CompareVersionsViewModel.
+// Backs the desktop Compare-checkout dialog (ADR 0517) — a side-by-side diff (the shared TextDiff rows,
+// ADR 0712) of a checked-out document's current version vs its working copy in check-out (the cloud stash),
+// plus an optional "Beyond Compare" launch when that tool is installed. Fixed two sides (no version pickers),
+// mirroring CompareVersionsViewModel.
 public sealed partial class CompareCheckoutViewModel : ObservableObject
 {
     private SimplArchiveApiClient? _api;
@@ -23,7 +24,8 @@ public sealed partial class CompareCheckoutViewModel : ObservableObject
     [ObservableProperty] private string _status = "";
     [ObservableProperty] private bool _notAvailable;
 
-    public ObservableCollection<DiffLineViewModel> Lines { get; } = [];
+    // The rendered side-by-side rows — computed client-side from the two texts the server extracts (ADR 0712).
+    [ObservableProperty] private IReadOnlyList<DiffRowViewModel> _rows = [];
 
     public async Task SetupAsync(SimplArchiveApiClient api, CheckoutClient.CheckoutItem checkout, string documentName, string fileExtension, string? stashDownloadUrl)
     {
@@ -33,7 +35,7 @@ public sealed partial class CompareCheckoutViewModel : ObservableObject
         _stashDownloadUrl = stashDownloadUrl;
         DocumentName = documentName;
 
-        Lines.Clear();
+        Rows = [];
         NotAvailable = false;
         Status = Strings.Get("StComparing");
         try
@@ -46,12 +48,8 @@ public sealed partial class CompareCheckoutViewModel : ObservableObject
                 return;
             }
 
-            foreach (var l in cmp.Lines)
-            {
-                Lines.Add(new DiffLineViewModel(l.Op, l.Text));
-            }
-
-            Status = string.Format(Strings.Get("StLines"), cmp.Lines.Count);
+            Rows = DiffRowViewModel.Build(cmp.FromText, cmp.ToText);
+            Status = string.Format(Strings.Get("StLines"), Rows.Count);
         }
         catch (Exception e)
         {

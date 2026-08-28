@@ -100,11 +100,15 @@ public sealed record Preview(string? PreviewUrl, bool PreviewConverted, string? 
 // RemoveHref is set only where the option came from a collection whose rows advertise a removal address —
 // a group's members; it is null for pickers such as reminder targets (issue #416).
 public sealed record UserOptionInfo(Guid Id, string DisplayName, string? RemoveHref = null);
-public sealed record DiffLineInfo(int Op, string Text);
-
-
-
-// Inline unified diff of a checked-out document's current version vs its working copy in check-out (ADR 0517).
-// Holder-only; Available=false when there's no working-copy stash or a side has no extractable text.
-
-public sealed record VersionComparison(bool Available, List<DiffLineInfo> Lines);
+// The two sides of a comparison as extracted texts (ADR 0712) — the client computes the side-by-side rows
+// from them via the shared SimplArchive.Presentation.TextDiff. Serves both the version compare and the
+// check-out working-copy compare (ADR 0517). Available=false when a side has no extractable text (or, for
+// check-out, no working-copy stash exists).
+public sealed record VersionComparison(bool Available, string FromText, string ToText)
+{
+    // The one wire parse both consumers (VersionsClient, CheckoutClient) share — the payloads are the same shape.
+    public static VersionComparison Parse(System.Text.Json.JsonElement json) => new(
+        json.TryGetProperty("available", out var a) && a.ValueKind == System.Text.Json.JsonValueKind.True,
+        json.TryGetProperty("fromText", out var f) && f.ValueKind == System.Text.Json.JsonValueKind.String ? f.GetString()! : string.Empty,
+        json.TryGetProperty("toText", out var t) && t.ValueKind == System.Text.Json.JsonValueKind.String ? t.GetString()! : string.Empty);
+}

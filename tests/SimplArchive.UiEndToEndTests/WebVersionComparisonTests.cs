@@ -7,8 +7,9 @@ using static Microsoft.Playwright.Assertions;
 
 namespace SimplArchive.UiEndToEndTests;
 
-// The web half of version comparison (ADR "Document version comparison"): a document with two text versions is
-// seeded via the API, then the UI opens "Compare versions" from the detail pane and shows the inline diff.
+// The web half of version comparison (ADR 0712): a document with two text versions is seeded via the API,
+// then the UI opens "Compare versions" from the detail pane and shows the SIDE-BY-SIDE diff — aligned rows
+// from the shared Presentation TextDiff, with the changed words carrying the inline emphasis.
 [Collection(UiCollection.Name)]
 [Trait("Area", "ui-3")]
 public class WebVersionComparisonTests
@@ -18,7 +19,7 @@ public class WebVersionComparisonTests
     public WebVersionComparisonTests(SelfHostedAppFixture app) => _app = app;
 
     [Fact]
-    public async Task Compare_versions_shows_an_inline_diff()
+    public async Task Compare_versions_shows_a_side_by_side_diff()
     {
         var name = "cmp-" + Guid.NewGuid().ToString("N")[..8];
 
@@ -50,13 +51,15 @@ public class WebVersionComparisonTests
 
         await dialog.GetByRole(AriaRole.Button, new() { Name = "Compare", Exact = true }).ClickAsync();
 
-        // The diff shows the added line (with its "+" marker) and the removed line. The result panel is also
-        // asserted BY ITS TEST ID, because the manual's capture waits on that id to know the comparison has
-        // finished — a hook nothing asserts is one that gets renamed, and the figure would go back to being a
-        // picture of the spinner.
+        // The changed pair sits in ONE row: "banana" emphasized on the old side, "BANANA split" on the new —
+        // and the pure addition "date" appears with an empty old cell. The result panel is also asserted BY
+        // ITS TEST ID, because the manual's capture waits on that id to know the comparison has finished — a
+        // hook nothing asserts is one that gets renamed, and the figure would go back to being a picture of
+        // the spinner.
         await Expect(dialog.Locator("[data-testid='compare-diff']")).ToBeVisibleAsync();
-        await Expect(dialog.GetByText("+ BANANA split")).ToBeVisibleAsync();
-        await Expect(dialog.GetByText("- banana")).ToBeVisibleAsync();
+        await Expect(dialog.Locator(".wb-diff-emph-removed", new() { HasText = "banana" })).ToBeVisibleAsync();
+        await Expect(dialog.Locator(".wb-diff-emph-added", new() { HasText = "BANANA" })).ToBeVisibleAsync();
+        await Expect(dialog.Locator(".wb-diff-added").Filter(new() { HasText = "date" })).ToBeVisibleAsync();
         await Expect(hint).ToBeHiddenAsync();
 
         // Changing a picker discards the diff and returns to the hint, so a stale diff is never attributed to the
@@ -65,7 +68,7 @@ public class WebVersionComparisonTests
         await page.Locator(".mud-list-item").Filter(new() { HasText = "v2" }).First.ClickAsync();
 
         await Expect(hint).ToBeVisibleAsync();
-        await Expect(dialog.GetByText("+ BANANA split")).ToBeHiddenAsync();
+        await Expect(dialog.Locator("[data-testid='compare-diff']")).ToBeHiddenAsync();
         await Expect(dialog.GetByRole(AriaRole.Button, new() { Name = "Compare", Exact = true })).ToBeDisabledAsync();
     }
 

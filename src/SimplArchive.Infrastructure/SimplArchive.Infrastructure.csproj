@@ -6,7 +6,6 @@
 
   <ItemGroup>
     <PackageReference Include="AWSSDK.S3" Version="4.0.100.3" />
-    <PackageReference Include="DiffPlex" Version="1.9.0" />
     <!-- The BCL cannot ask for a TXT record — System.Net.Dns resolves names to addresses and nothing else — and
          mail-domain verification (#667) is a TXT challenge. Apache-2.0, so within the licence allowlist. -->
     <PackageReference Include="DnsClient" Version="1.8.0" />

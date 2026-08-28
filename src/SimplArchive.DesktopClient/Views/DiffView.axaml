@@ -1,0 +1,38 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:views="using:SimplArchive.DesktopClient.Views"
+             x:Class="SimplArchive.DesktopClient.Views.DiffView">
+    <!-- The side-by-side rendering of the shared TextDiff rows (ADR 0712) — used by BOTH compare dialogs
+         (versions, check-out working copy), so the two cannot drift. Line numbers muted in the margin; the
+         old side tints removed/changed red, the new side added/changed green; word emphasis is a stronger
+         run background inside the line. -->
+    <ScrollViewer>
+        <ItemsControl x:Name="Rows">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:DiffRowViewModel">
+                    <Grid ColumnDefinitions="34,*,34,*">
+                        <Border Grid.Column="0" Background="{Binding OldBackground}">
+                            <TextBlock Text="{Binding OldNumber}" Foreground="{DynamicResource WbMuted}"
+                                       FontFamily="Cascadia Code,Menlo,Consolas,monospace" FontSize="11"
+                                       HorizontalAlignment="Right" Padding="0,1,6,0" />
+                        </Border>
+                        <Border Grid.Column="1" Background="{Binding OldBackground}" Padding="4,0,8,0" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,1,0">
+                            <views:DiffSegmentText Segments="{Binding OldSegments}" EmphasisBrush="{Binding OldEmphasisBrush}"
+                                                   FontFamily="Cascadia Code,Menlo,Consolas,monospace" FontSize="12.5" TextWrapping="Wrap" />
+                        </Border>
+                        <Border Grid.Column="2" Background="{Binding NewBackground}">
+                            <TextBlock Text="{Binding NewNumber}" Foreground="{DynamicResource WbMuted}"
+                                       FontFamily="Cascadia Code,Menlo,Consolas,monospace" FontSize="11"
+                                       HorizontalAlignment="Right" Padding="0,1,6,0" />
+                        </Border>
+                        <Border Grid.Column="3" Background="{Binding NewBackground}" Padding="4,0,8,0">
+                            <views:DiffSegmentText Segments="{Binding NewSegments}" EmphasisBrush="{Binding NewEmphasisBrush}"
+                                                   FontFamily="Cascadia Code,Menlo,Consolas,monospace" FontSize="12.5" TextWrapping="Wrap" />
+                        </Border>
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </ScrollViewer>
+</UserControl>

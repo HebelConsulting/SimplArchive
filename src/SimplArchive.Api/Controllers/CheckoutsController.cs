@@ -128,18 +128,14 @@ public class CheckoutsController : ControllerBase
         public bool PreviewConverted { get; set; }
     }
 
-    // Inline unified text diff of the current version vs the working copy in check-out (the stash) — ADR 0513 slice 3.
+    // The current version's and the working copy's extracted texts — the client computes the side-by-side
+    // diff from them (ADR 0712, same shape as the version compare) — ADR 0513 slice 3.
     public class CheckoutComparisonResource : HypermediaResource
     {
         // False when there's no stash (nothing changed) or a side has no extractable text (binary/image format).
         public bool Available { get; set; }
-        public List<CheckoutDiffLine> Lines { get; set; } = [];
-    }
-
-    public class CheckoutDiffLine
-    {
-        public int Op { get; set; } // matches DiffOp: 0 unchanged, 1 inserted, 2 deleted
-        public string Text { get; set; } = "";
+        public string FromText { get; set; } = string.Empty;
+        public string ToText { get; set; } = string.Empty;
     }
 
     [HttpGet]
@@ -187,7 +183,7 @@ public class CheckoutsController : ControllerBase
         var version = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, documentId, document.CurrentVersionId, cancellationToken);
         if (version is null || !await _objectStorage.ExistsAsync(stashKey, cancellationToken))
         {
-            return Ok(new CheckoutComparisonResource { Available = false, Lines = [], Links = [selfLink] });
+            return Ok(new CheckoutComparisonResource { Available = false, Links = [selfLink] });
         }
 
         // The stash key is extensionless (ADR 0517) — hint the current version's extension so a text-file working
@@ -196,7 +192,8 @@ public class CheckoutsController : ControllerBase
         return Ok(new CheckoutComparisonResource
         {
             Available = comparison.Available,
-            Lines = comparison.Lines.Select(l => new CheckoutDiffLine { Op = (int)l.Op, Text = l.Text }).ToList(),
+            FromText = comparison.FromText,
+            ToText = comparison.ToText,
             Links = [selfLink],
         });
     }

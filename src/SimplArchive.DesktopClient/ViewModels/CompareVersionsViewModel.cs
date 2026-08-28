@@ -10,8 +10,8 @@ using SimplArchive.Localization;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
-// Backs the desktop Compare-versions dialog (ADR "Document version comparison") — two version pickers + an inline
-// unified diff, plus an optional "Beyond Compare" launch when that tool is installed on the machine.
+// Backs the desktop Compare-versions dialog (ADR 0712) — two version pickers + a side-by-side diff of the
+// shared TextDiff rows, plus an optional "Beyond Compare" launch when that tool is installed on the machine.
 // The comparison NEVER runs on its own (ADR "Explicit compare"): the result area shows a hint until Compare is
 // clicked, the button is disabled until two DIFFERENT versions are picked, and changing a picker after a run
 // clears the result back to the hint so a stale diff can't be mistaken for the current selection's.
@@ -28,7 +28,9 @@ public sealed partial class CompareVersionsViewModel : ObservableObject
     [ObservableProperty] private bool _notAvailable;
 
     public ObservableCollection<VersionOption> Versions { get; } = [];
-    public ObservableCollection<DiffLineViewModel> Lines { get; } = [];
+
+    // The rendered side-by-side rows — computed client-side from the two texts the server extracts (ADR 0712).
+    [ObservableProperty] private IReadOnlyList<DiffRowViewModel> _rows = [];
 
     [NotifyCanExecuteChangedFor(nameof(CompareCommand))]
     [ObservableProperty] private VersionOption? _fromVersion;
@@ -86,7 +88,7 @@ public sealed partial class CompareVersionsViewModel : ObservableObject
 
     private void ResetToHint()
     {
-        Lines.Clear();
+        Rows = [];
         NotAvailable = false;
         ShowHint = true;
         Status = Strings.Get("CompareHint");
@@ -100,7 +102,7 @@ public sealed partial class CompareVersionsViewModel : ObservableObject
             return;
         }
 
-        Lines.Clear();
+        Rows = [];
         NotAvailable = false;
         ShowHint = false;
         Status = Strings.Get("StComparing");
@@ -116,12 +118,8 @@ public sealed partial class CompareVersionsViewModel : ObservableObject
                 return;
             }
 
-            foreach (var l in cmp.Lines)
-            {
-                Lines.Add(new DiffLineViewModel(l.Op, l.Text));
-            }
-
-            Status = string.Format(Strings.Get("StLines"), cmp.Lines.Count);
+            Rows = DiffRowViewModel.Build(cmp.FromText, cmp.ToText);
+            Status = string.Format(Strings.Get("StLines"), Rows.Count);
         }
         catch (Exception e)
         {
@@ -171,23 +169,3 @@ public sealed record VersionOption(Guid Id, int Number, string FileExtension, st
     public string Label => $"v{Number}";
 }
 
-// One diff line — the op decides the row background (added green / removed red / unchanged transparent) and the
-// leading +/- marker.
-public sealed class DiffLineViewModel
-{
-    public DiffLineViewModel(int op, string text)
-    {
-        Op = op;
-        Display = (op switch { 1 => "+ ", 2 => "- ", _ => "  " }) + text;
-    }
-
-    public int Op { get; }
-    public string Display { get; }
-
-    public IBrush Background => Op switch
-    {
-        1 => new SolidColorBrush(Color.FromArgb(40, 76, 175, 80)),
-        2 => new SolidColorBrush(Color.FromArgb(40, 244, 67, 54)),
-        _ => Brushes.Transparent,
-    };
-}

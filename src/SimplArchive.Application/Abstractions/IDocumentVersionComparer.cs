@@ -1,7 +1,10 @@
 namespace SimplArchive.Application.Abstractions;
 
-// Produces an inline unified text diff between two document versions' extracted text (ADR "Document version
-// comparison"). Plain-text formats decode directly; office/PDF go through ITextExtractor (Tika) when configured.
+// Extracts both sides of a comparison to plain text (ADR 0712, superseding the server-side diff of ADR
+// "Document version comparison"): plain-text formats decode directly, emails go through MimeKit, office/PDF
+// through ITextExtractor (Tika) when configured. The DIFF itself — row alignment, word emphasis — is computed
+// by the clients from these texts, in the shared SimplArchive.Presentation.TextDiff, so both clients answer
+// "what changed" identically and a side-by-side view needs no second wire shape.
 // Available is false when either side has no extractable text (a binary/image format, or Tika unavailable).
 public interface IDocumentVersionComparer
 {
@@ -11,13 +14,4 @@ public interface IDocumentVersionComparer
     Task<VersionComparison> CompareAsync(string fromObjectKey, string toObjectKey, string? toExtensionHint = null, CancellationToken cancellationToken = default);
 }
 
-public enum DiffOp
-{
-    Unchanged = 0,
-    Added = 1,
-    Removed = 2,
-}
-
-public sealed record DiffLine(DiffOp Op, string Text);
-
-public sealed record VersionComparison(bool Available, IReadOnlyList<DiffLine> Lines);
+public sealed record VersionComparison(bool Available, string FromText, string ToText);

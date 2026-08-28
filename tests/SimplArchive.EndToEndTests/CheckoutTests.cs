@@ -271,12 +271,12 @@ public class CheckoutTests
         using var storage = new HttpClient();
         (await storage.PutAsync(uploadUrl, new ByteArrayContent(Encoding.UTF8.GetBytes("line one\nline two CHANGED\nline three\n")))).EnsureSuccessStatusCode();
 
-        // The holder's compare now shows a unified diff: the changed line as a removed + added pair.
+        // The holder's compare now returns both extracted texts (ADR 0712) — the diff itself is the
+        // clients' shared TextDiff.
         var cmp = await TestJson.Get(holder, $"/api/checkouts/{docId}/compare");
         Assert.True(cmp.GetProperty("available").GetBoolean());
-        var lines = cmp.GetProperty("lines").EnumerateArray().ToList();
-        Assert.Contains(lines, l => l.GetProperty("op").GetInt32() == 2 && l.GetProperty("text").GetString()!.Contains("line two"));  // removed
-        Assert.Contains(lines, l => l.GetProperty("op").GetInt32() == 1 && l.GetProperty("text").GetString()!.Contains("CHANGED"));   // added
+        Assert.Contains("line two\n", cmp.GetProperty("fromText").GetString());
+        Assert.Contains("line two CHANGED", cmp.GetProperty("toText").GetString());
 
         // A non-holder can't compare someone else's working copy.
         var (_, bystander) = await SeedAdminAsync(tenantId);

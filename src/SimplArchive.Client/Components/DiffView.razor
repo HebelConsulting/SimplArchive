@@ -1,0 +1,72 @@
+@using SimplArchive.Presentation
+
+@* The side-by-side rendering of the shared TextDiff rows (ADR 0712) — used by BOTH compare dialogs (versions,
+   check-out working copy), so the two cannot drift. The ROWS — alignment, kinds, word emphasis — come from
+   SimplArchive.Presentation.TextDiff; this component only turns them into markup. Old side tints removed/changed
+   red, new side added/changed green; the words that changed carry a stronger inline background. *@
+<style>
+    .wb-diff { max-height: 52vh; overflow: auto; border: 1px solid var(--mud-palette-lines-default); border-radius: 4px;
+               font-family: var(--mud-typography-monospace-family, monospace); font-size: 12.5px; line-height: 1.5; }
+    .wb-diff-row { display: grid; grid-template-columns: 34px 1fr 34px 1fr; }
+    .wb-diff-num { color: var(--mud-palette-text-secondary); font-size: 11px; text-align: right; padding: 1px 6px 0 0; user-select: none; }
+    .wb-diff-cell { padding: 0 8px 0 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .wb-diff-cell.wb-diff-old { border-right: 1px solid var(--mud-palette-lines-default); }
+    .wb-diff-removed { background: rgba(244,67,54,0.16); }
+    .wb-diff-added { background: rgba(76,175,80,0.16); }
+    .wb-diff-gap { background: rgba(128,128,128,0.055); }
+    .wb-diff-emph-removed { background: rgba(244,67,54,0.38); border-radius: 2px; }
+    .wb-diff-emph-added { background: rgba(76,175,80,0.38); border-radius: 2px; }
+</style>
+
+<div class="wb-diff" data-testid="compare-diff">
+    @foreach (var row in _rows)
+    {
+        <div class="wb-diff-row">
+            <div class="wb-diff-num @SideClass(row, old: true)">@(row.Old?.LineNumber.ToString() ?? "")</div>
+            <div class="wb-diff-cell wb-diff-old @SideClass(row, old: true)">@Cell(row.Old, "wb-diff-emph-removed")</div>
+            <div class="wb-diff-num @SideClass(row, old: false)">@(row.New?.LineNumber.ToString() ?? "")</div>
+            <div class="wb-diff-cell @SideClass(row, old: false)">@Cell(row.New, "wb-diff-emph-added")</div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string FromText { get; set; } = string.Empty;
+    [Parameter] public string ToText { get; set; } = string.Empty;
+
+    private IReadOnlyList<DiffRow> _rows = [];
+
+    protected override void OnParametersSet() => _rows = TextDiff.Compute(FromText, ToText);
+
+    private static string SideClass(DiffRow row, bool old) => row.Kind switch
+    {
+        DiffRowKind.Changed => old ? "wb-diff-removed" : "wb-diff-added",
+        DiffRowKind.Removed => old ? "wb-diff-removed" : "wb-diff-gap",
+        DiffRowKind.Added => old ? "wb-diff-gap" : "wb-diff-added",
+        _ => string.Empty,
+    };
+
+    private static RenderFragment Cell(DiffCell? cell, string emphClass) => builder =>
+    {
+        if (cell is null)
+        {
+            return;
+        }
+
+        var seq = 0;
+        foreach (var segment in cell.Segments)
+        {
+            if (segment.Emphasized)
+            {
+                builder.OpenElement(seq++, "span");
+                builder.AddAttribute(seq++, "class", emphClass);
+                builder.AddContent(seq++, segment.Text);
+                builder.CloseElement();
+            }
+            else
+            {
+                builder.AddContent(seq++, segment.Text);
+            }
+        }
+    };
+}

@@ -223,16 +223,7 @@ public sealed class VersionsClient(ApiCore core)
     public async Task<VersionComparison> GetVersionComparisonAsync(string compareHref, Guid fromVersionId, Guid toVersionId, CancellationToken cancellationToken = default)
     {
         var json = await _core.Http.GetFromJsonAsync<JsonElement>($"{compareHref}?from={fromVersionId}&to={toVersionId}", cancellationToken);
-        var lines = new List<DiffLineInfo>();
-        if (json.TryGetProperty("lines", out var arr))
-        {
-            foreach (var l in arr.EnumerateArray())
-            {
-                lines.Add(new DiffLineInfo(l.GetProperty("op").GetInt32(), l.GetProperty("text").GetString() ?? ""));
-            }
-        }
-
-        return new VersionComparison(json.TryGetProperty("available", out var a) && a.ValueKind == JsonValueKind.True, lines);
+        return VersionComparison.Parse(json);
     }
 
 

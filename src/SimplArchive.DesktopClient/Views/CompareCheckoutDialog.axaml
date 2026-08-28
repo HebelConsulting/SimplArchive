@@ -2,9 +2,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="using:SimplArchive.DesktopClient.Localization"
         xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+        xmlns:views="using:SimplArchive.DesktopClient.Views"
         x:Class="SimplArchive.DesktopClient.Views.CompareCheckoutDialog"
         x:DataType="vm:CompareCheckoutViewModel"
-        Title="{loc:Tr CoCompare}" Width="720" Height="560"
+        Title="{loc:Tr CoCompare}" Width="980" Height="600"
         WindowStartupLocation="CenterOwner">
     <DockPanel Margin="16" LastChildFill="True">
         <TextBlock DockPanel.Dock="Top" Text="{Binding DocumentName}" FontWeight="SemiBold" FontSize="15" Margin="0,0,0,10" />
@@ -21,17 +22,7 @@
         <Button DockPanel.Dock="Bottom" Content="{loc:Tr Close}" Click="OnClose" HorizontalAlignment="Right" Margin="0,10,0,0" />
 
         <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" CornerRadius="4">
-            <ScrollViewer>
-                <ItemsControl ItemsSource="{Binding Lines}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:DiffLineViewModel">
-                            <Border Background="{Binding Background}">
-                                <TextBlock Text="{Binding Display}" FontFamily="Cascadia Code,Menlo,Consolas,monospace" FontSize="12.5" TextWrapping="Wrap" Padding="8,0" />
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
+            <views:DiffView RowsSource="{Binding Rows}" />
         </Border>
     </DockPanel>
 </Window>
