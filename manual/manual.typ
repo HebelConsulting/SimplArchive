@@ -695,6 +695,11 @@ so `montage` finds a document that only ever says `Montagehalterung`, and `sechs
 containing it. This matters most in German, where one word does the work of several. The second attempt is
 slower and its ranking is flatter, so it only runs when the first found nothing at all.
 
+*What the field does not do.* Operators are not interpreted: quotes, `AND`, `field:value` and wildcards are
+searched as literal text, deliberately — a query can never fail over a stray character. Structured narrowing —
+by document type, owner, year, tags, or a specific index field — lives in the refinement filters beside the
+results, not in the text box.
+
 = Collaboration
 
 Documents are collaborative: post *comments*#idx("Chat / comments") in a feed, attach *annotations*#idx("Annotations") (sticky notes, highlights, and shapes)

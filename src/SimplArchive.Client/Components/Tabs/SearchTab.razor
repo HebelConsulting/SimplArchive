@@ -93,6 +93,9 @@
                 <MudSelectItem T="Guid?" Value="@((Guid?)repo.Id)">@repo.Name</MudSelectItem>
             }
         </MudSelect>
+        @* What the query field accepts (#707) — the Tenant tab's info-icon pattern, honest about what the
+           parser deliberately does NOT do (operators are searched literally, so nothing can 400). *@
+        <InfoButton Text="@(Strings.Get("SearchSyntaxInfo"))" />
     </div>
 
     @if (_savedSearches.Count > 0)

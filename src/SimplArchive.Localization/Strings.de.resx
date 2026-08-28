@@ -4686,6 +4686,9 @@
   <data name="UgImapMailOnly" xml:space="preserve">
     <value>nur E-Mails</value>
   </data>
+  <data name="SearchSyntaxInfo" xml:space="preserve">
+    <value>Geben Sie ein oder mehrere Wörter ein: Sie werden als ganze Wörter in Dokumentnamen (am stärksten gewichtet), Indexfeldern, Anmerkungen und dem extrahierten Text gesucht, beste Treffer zuerst. Findet sich nichts, läuft automatisch eine Enthält-Suche. Operatoren wie Anführungszeichen, AND oder feld:wert werden nicht interpretiert — der Text wird immer so gesucht, wie er eingegeben wurde. Nutzen Sie die Filter darunter, um nach Typ, Besitzer, Jahr, Tags oder Indexfeldern einzugrenzen. Das Kapitel „Suche“ im Benutzerhandbuch beschreibt alles im Detail.</value>
+  </data>
   <data name="CombinedContactsStem" xml:space="preserve">
     <value>Kontakte</value>
   </data>

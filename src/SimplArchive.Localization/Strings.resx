@@ -4686,6 +4686,9 @@
   <data name="UgImapMailOnly" xml:space="preserve">
     <value>e-mails only</value>
   </data>
+  <data name="SearchSyntaxInfo" xml:space="preserve">
+    <value>Type one or more words: they are matched as whole words in document names (weighted highest), index fields, annotations and the extracted text, best matches first. If nothing matches, a contains-search runs automatically. Operators such as quotes, AND or field:value are not interpreted — text is always searched as typed. Use the filters below to narrow by type, owner, year, tags or index fields. The Search chapter of the user manual describes all of this in detail.</value>
+  </data>
   <data name="CombinedContactsStem" xml:space="preserve">
     <value>Contacts</value>
   </data>

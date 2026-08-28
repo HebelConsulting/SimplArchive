@@ -4686,6 +4686,9 @@
   <data name="UgImapMailOnly" xml:space="preserve">
     <value>solo correos</value>
   </data>
+  <data name="SearchSyntaxInfo" xml:space="preserve">
+    <value>Escriba una o más palabras: se buscan como palabras completas en los nombres de documentos (mayor peso), campos de índice, anotaciones y el texto extraído, mejores resultados primero. Si no hay resultados, se ejecuta automáticamente una búsqueda por contenido. Los operadores como comillas, AND o campo:valor no se interpretan — el texto siempre se busca tal como se escribió. Use los filtros de abajo para acotar por tipo, propietario, año, etiquetas o campos de índice. El capítulo Búsqueda del manual de usuario lo describe todo en detalle.</value>
+  </data>
   <data name="CombinedContactsStem" xml:space="preserve">
     <value>Contactos</value>
   </data>

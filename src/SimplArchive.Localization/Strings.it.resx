@@ -4686,6 +4686,9 @@
   <data name="UgImapMailOnly" xml:space="preserve">
     <value>solo e-mail</value>
   </data>
+  <data name="SearchSyntaxInfo" xml:space="preserve">
+    <value>Digitare una o più parole: vengono cercate come parole intere nei nomi dei documenti (peso maggiore), nei campi indice, nelle annotazioni e nel testo estratto, prima i risultati migliori. Se non ci sono risultati, viene eseguita automaticamente una ricerca per contenuto. Gli operatori come virgolette, AND o campo:valore non vengono interpretati — il testo viene sempre cercato così com'è. Usare i filtri sottostanti per restringere per tipo, proprietario, anno, tag o campi indice. Il capitolo Ricerca del manuale utente descrive tutto in dettaglio.</value>
+  </data>
   <data name="CombinedContactsStem" xml:space="preserve">
     <value>Contatti</value>
   </data>
