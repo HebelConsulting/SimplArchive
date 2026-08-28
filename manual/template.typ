@@ -12,9 +12,13 @@
 
 #let conf(version: "", date: "", doc) = {
   set document(title: "SimplArchive — User Manual")
+  // Named because the last-third heading rule below computes against the page BODY, and a margin changed
+  // here but not there would silently move where "the last third" begins.
+  let margin-top = 2.4cm
+  let margin-bottom = 2.2cm
   set page(
     paper: "a4",
-    margin: (x: 2.2cm, top: 2.4cm, bottom: 2.2cm),
+    margin: (x: 2.2cm, top: margin-top, bottom: margin-bottom),
     numbering: "1",
     footer: context {
       set text(size: 8pt, fill: gray)
@@ -44,12 +48,32 @@
   // alone at the foot of a page, which is what "12.1 The controls an administrator holds" was doing: the
   // heading and one line of intro, then a page turn for the list. Level 1 never showed it only because it
   // starts on a fresh page anyway.
-  show heading.where(level: 2): it => {
-    block(above: 1.1em, below: 0.6em, sticky: true)[
-      #set text(size: 13pt, fill: accent.darken(15%), weight: "bold")
-      #it
-    ]
-  }
+  // …and stickiness is not enough when the heading lands LOW (#815): the sticky chain only guarantees the
+  // heading is not alone — a sub-chapter opening in the last third of the page still reads as a footnote to
+  // the previous topic, with its real content overleaf. So a level-2/3 heading whose top would fall past
+  // two-thirds of the page BODY starts on a fresh page instead. Measured against the body (margins excluded),
+  // not the sheet, because "the last third of the page" means the last third of what a reader sees as the
+  // page. `weak: true` so a heading already at the top of a page (level 1 just broke, or two sub-chapters
+  // back to back at a boundary) does not mint a blank page.
+  // NOT by measuring the heading's position: "measure, and break if low" moves the heading to the next page,
+  // where it measures high, so the next layout pass removes the break — an oscillation Typst reports as
+  // "document did not converge" and resolves by shipping whatever pass five produced, page counter (and so
+  // TOC and index numbers) included. Latching the decision in a state converges too slowly for the five-pass
+  // cap. So the mechanism is the layout engine's own, with no feedback at all: the heading rides inside an
+  // UNBREAKABLE block one-third of the body tall — the engine must break the page exactly when less than a
+  // third remains — and the flow is then pulled back up by the block's unused remainder, so when the heading
+  // fits mid-page nothing changes visually. measure() is pass-stable, unlike here().position().
+  let keep-out-of-last-third(above, below, styled) = layout(size => {
+    let third = size.height / 3
+    let h = measure(block(width: size.width, styled)).height
+    block(above: above, below: 0pt, breakable: false, sticky: true, height: third, styled)
+    v(h + below - third)
+  })
+  show heading.where(level: 2): it => keep-out-of-last-third(1.1em, 0.6em, {
+    set text(size: 13pt, fill: accent.darken(15%), weight: "bold")
+    it
+  })
+  show heading.where(level: 3): it => keep-out-of-last-third(0.9em, 0.5em, it)
 
   // ...and stickiness has to reach PAST the intro line (#699). A heading sticks to the block that follows, and a
   // one-line paragraph satisfies that completely — so "heading + one line + page turn" survives a sticky
