@@ -37,8 +37,11 @@
            unambiguous while it was a rounded rect with a label — but in a row of circles whose toggles show ON
            as filled primary, a filled circle says "pressed", not "primary". The tab already says where to
            start: this is the first button, and the list below it is a drop-zone that says so in words. *@
+        @* A REAL button, not a label over the input (#511): a label is unfocusable and a display:none
+           input is out of the tab order, so the label pattern left no keyboard path to Upload at all. The
+           button forwards its activation to the input; focus, Enter/Space and the role stay native. *@
         <MudButton Class="wb-rib-btn" Size="Size.Small"
-                   HtmlTag="label" for="intray-file-input"
+                   OnClick="@(async () => await JS.InvokeVoidAsync("openFilePicker", "intray-file-input"))"
                    title="@Strings.Get("IntrayUpload")" aria-label="@Strings.Get("IntrayUpload")">
             <MudIcon Icon="@Icons.Material.Filled.Upload" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntrayUpload")</span>
         </MudButton>

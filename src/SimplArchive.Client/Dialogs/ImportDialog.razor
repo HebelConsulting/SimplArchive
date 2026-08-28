@@ -1,3 +1,5 @@
+@inject IJSRuntime JS
+
 @* Import-archive dialog (ADR "Idempotent re-import"): pick a .zip and choose whether re-importing should update
    already-imported items (default off → a re-import of the same archive skips duplicates). Returns the bytes +
    the update flag for the caller to POST. *@
@@ -8,7 +10,8 @@
                 @(string.Format(Strings.Get("ImportDesc"), string.IsNullOrEmpty(TargetName) ? Strings.Get("ImportAsNewRepo") : string.Format(Strings.Get("ImportUnderTarget"), TargetName)))
             </MudText>
 
-            <MudButton HtmlTag="label" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.AttachFile" for="import-dialog-input">
+            @* A real button forwarding to the input (#511) — a label over a hidden input is keyboard-unreachable. *@
+            <MudButton OnClick="@(async () => await JS.InvokeVoidAsync("openFilePicker", "import-dialog-input"))" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.AttachFile">
                 @(_fileName ?? Strings.Get("ImportChooseArchive"))
             </MudButton>
             <InputFile id="import-dialog-input" OnChange="OnFileAsync" accept=".zip" style="display:none" />

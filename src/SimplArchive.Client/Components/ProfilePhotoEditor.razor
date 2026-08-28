@@ -13,7 +13,8 @@
    The component owns the picture and the crop and nothing else: it does not save, upload, or know whose photo
    this is. The host asks for CroppedPngAsync() when its own Save is pressed. *@
 <div style="min-width: 380px;">
-    <MudButton HtmlTag="label" for="@_inputId" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PhotoCamera">@Strings.Get("PhotoChoose")</MudButton>
+    @* A real button forwarding to the input (#511) — a label over a hidden input is keyboard-unreachable. *@
+    <MudButton OnClick="@(async () => await JS.InvokeVoidAsync("openFilePicker", _inputId))" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PhotoCamera">@Strings.Get("PhotoChoose")</MudButton>
     @* The id is unique so the label's `for` reaches THIS instance; the class is the stable handle tests use,
        since a generated id cannot be selected on. *@
     <InputFile id="@_inputId" class="pp-file" OnChange="OnFileAsync" accept="image/*" style="display:none" />
