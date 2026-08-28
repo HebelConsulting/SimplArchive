@@ -26,24 +26,11 @@ public class DesktopWebDavMountTests
         Assert.DoesNotContain(letter.Value, "ABC");
     }
 
-    [Fact]
-    public void Mapping_a_drive_is_windows_only_and_persistent()
-    {
-        var command = OsFileManager.BuildMapDriveCommand("https://host/SimplArchive", "anna@demo", "pw");
-
-        if (OsFileManager.Current != OsFileManager.Platform.Windows)
-        {
-            // Drive letters do not exist elsewhere; the plain open path already mounts on macOS and Linux.
-            Assert.Null(command);
-            return;
-        }
-
-        var (file, args) = command!.Value;
-        Assert.Equal("net", file);
-        Assert.Contains("/persistent:yes", args);          // survives a reboot — the point of mapping at all
-        Assert.Contains(args, a => a.EndsWith(':') && a[0] is >= 'D' and <= 'Z');
-        Assert.Contains(args, a => a.Contains("DavWWWRoot", StringComparison.OrdinalIgnoreCase));
-    }
+    // The `net use` builder this file used to pin was DEAD CODE with a broken argument order (password after
+    // /user:, a `net` syntax error) — and its test was the only caller, proving the shape of a command nothing
+    // ever ran (#820, the guard-on-fixture trap). Mapping now goes through WindowsDavDrive.Map
+    // (WNetAddConnection3 + the system credential dialog, so no password ever passes through this process);
+    // its testable halves are the free-letter choice above and the host matching in DesktopWebDavUncMatchTests.
 
     [Fact]
     public void The_probe_answers_without_touching_the_network()

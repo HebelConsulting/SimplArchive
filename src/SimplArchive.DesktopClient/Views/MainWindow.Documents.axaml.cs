@@ -517,7 +517,8 @@ public partial class MainWindow
         }
 
         vm.Status = Strings.Get("MwWebDavMounting");
-        var result = await OsFileManager.OpenWebDavFolderAsync(status.Url.TrimEnd('/'), subFolder);
+        var result = await OsFileManager.OpenWebDavFolderAsync(status.Url.TrimEnd('/'), subFolder,
+            TryGetPlatformHandle()?.Handle ?? 0); // parents the Windows credential dialog (#820)
         vm.Status = result.Success
             ? Strings.Get("MwWebDavMounted")
             : string.Format(Strings.Get("MwWebDavMountFailed"), result.Error);

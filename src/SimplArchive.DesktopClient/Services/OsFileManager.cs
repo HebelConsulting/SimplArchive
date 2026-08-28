@@ -53,7 +53,7 @@ public static class OsFileManager
     // thread) and reports success/failure. On macOS a non-zero osascript exit (e.g. the server is unreachable or
     // auth was cancelled) is surfaced; explorer.exe returns non-zero even on success and xdg-open just hands off,
     // so those are treated as fire-and-forget.
-    public static Task<OpenResult> OpenWebDavAsync(string httpUrl) => OpenWebDavFolderAsync(httpUrl, "");
+    public static Task<OpenResult> OpenWebDavAsync(string httpUrl, nint ownerWindow = 0) => OpenWebDavFolderAsync(httpUrl, "", ownerWindow);
 
     /// <summary>Mounts if needed, waits for the mount to appear, and opens <paramref name="relativeFolder"/> in it.</summary>
     /// <remarks>
@@ -67,12 +67,41 @@ public static class OsFileManager
     /// after it produced "The file /Volumes/… does not exist" on a mount that had in fact just succeeded.
     /// </para>
     /// </remarks>
-    public static async Task<OpenResult> OpenWebDavFolderAsync(string httpBaseUrl, string relativeFolder)
+    public static async Task<OpenResult> OpenWebDavFolderAsync(string httpBaseUrl, string relativeFolder, nint ownerWindow = 0)
     {
         var baseUrl = httpBaseUrl.TrimEnd('/');
         var relative = relativeFolder.Trim('/');
 
-        if (MountedPathFor(baseUrl) is null)
+        DesktopLog.Debug("WebDAV open: url={BaseUrl} folder={Relative} platform={Platform}", baseUrl, relative, Current);
+        if (MountedPathFor(baseUrl) is { } already)
+        {
+            DesktopLog.Debug("WebDAV open: already mounted at {MountPoint}", already);
+        }
+        else if (OperatingSystem.IsWindows()) // the analyzer-recognised guard for WindowsDavDrive (CA1416)
+        {
+            // Map a persistent drive letter via the system credential dialog (#820, WindowsDavDrive). The old
+            // path handed explorer.exe the bare DavWWWRoot UNC fire-and-forget — and Explorer's own failure
+            // mode for a path it cannot open is showing the DOCUMENTS folder, which is exactly how "mounting
+            // is not successful" looked in the field: no error anywhere, the wrong folder on screen.
+            if (FirstFreeDriveLetter() is not { } letter)
+            {
+                DesktopLog.Warn("WebDAV mount: no free drive letter (D:–Z: all taken)");
+                return new OpenResult(false, "No free drive letter.");
+            }
+
+            var unc = ToWindowsUnc(new Uri(baseUrl));
+            DesktopLog.Debug("WebDAV mount: mapping {Letter}: to {Unc}", letter, unc);
+            var rc = await Task.Run(() =>
+                OperatingSystem.IsWindows() ? WindowsDavDrive.Map(ownerWindow, unc, letter) : -1); // guard repeated: CA1416 cannot see through the lambda
+            if (rc != 0)
+            {
+                DesktopLog.Warn("WebDAV mount: WNetAddConnection3 for {Letter}: to {Unc} failed with Win32 error {Rc}", letter, unc, rc);
+                return new OpenResult(false, $"Mapping {letter}: failed (Windows error {rc}).");
+            }
+
+            DesktopLog.Debug("WebDAV mount: {Letter}: mapped", letter);
+        }
+        else
         {
             var (fileName, arguments) = BuildOpenCommand(baseUrl, Current);
             var mount = await RunAsync(fileName, arguments, macOsChecksExit: Current == Platform.MacOs);
@@ -81,7 +110,7 @@ public static class OsFileManager
                 return mount;
             }
 
-            // Non-macOS platforms mount AND open in the one command, so there is nothing left to do.
+            // Linux mounts AND opens in the one command (xdg-open dav://), so there is nothing left to do.
             if (Current != Platform.MacOs)
             {
                 return mount;
@@ -91,8 +120,10 @@ public static class OsFileManager
         var mountPoint = await WaitForMountAsync(baseUrl);
         if (mountPoint is null)
         {
+            DesktopLog.Warn("WebDAV open: the volume for {BaseUrl} did not appear within the wait — run with --verbose and check the mount steps above", baseUrl);
             return new OpenResult(false, $"The volume for {baseUrl} did not appear.");
         }
+        DesktopLog.Debug("WebDAV open: volume for {BaseUrl} is at {MountPoint}", baseUrl, mountPoint);
 
         return await OpenLocalFolderAsync(relative.Length == 0
             ? mountPoint
@@ -106,6 +137,11 @@ public static class OsFileManager
     {
         for (var attempt = 0; attempt < 20; attempt++)
         {
+            if (attempt > 0 && attempt % 8 == 0)
+            {
+                DesktopLog.Debug("WebDAV wait: the volume for {BaseUrl} has not appeared after {Attempts} probes", baseUrl, attempt);
+            }
+
             if (MountedPathFor(baseUrl) is { } found)
             {
                 return found;
@@ -121,6 +157,9 @@ public static class OsFileManager
     // osascript exit (server unreachable / auth cancelled) is surfaced; explorer.exe/cmd/xdg-open just hand off.
     private static Task<OpenResult> RunAsync(string fileName, string[] arguments, bool macOsChecksExit)
     {
+        // Never a credential here: every command this runner sees addresses the share; authentication happens
+        // in the OS's own prompt (osascript / WNetAddConnection3 / GVFS), so the full line is safe to log.
+        DesktopLog.Debug("WebDAV run: {FileName} {Arguments}", fileName, string.Join(" ", arguments));
         return Task.Run(() =>
         {
             try
@@ -144,15 +183,21 @@ public static class OsFileManager
 
                 var stderr = process.StandardError.ReadToEnd();
                 process.WaitForExit();
+                DesktopLog.Debug("WebDAV run: {FileName} exited {ExitCode}{Stderr}", fileName, process.ExitCode,
+                    string.IsNullOrWhiteSpace(stderr) ? "" : $" — {stderr.Trim()}");
                 if (macOsChecksExit && process.ExitCode != 0)
                 {
                     return new OpenResult(false, string.IsNullOrWhiteSpace(stderr) ? $"Mount failed (exit {process.ExitCode})." : stderr.Trim());
                 }
 
+                // Explorer and xdg-open exit non-zero even on success, so their exit code cannot FAIL the call;
+                // it is still worth having in the log, because "handed off, exit 1" beside a wrong window on
+                // screen is the whole diagnosis of an open that silently went elsewhere (#820).
                 return new OpenResult(true, null);
             }
             catch (Exception e)
             {
+                DesktopLog.Warn(e, "WebDAV run: {FileName} could not be started", fileName);
                 return new OpenResult(false, e.Message);
             }
         });
@@ -241,6 +286,15 @@ public static class OsFileManager
     /// <summary>Opens a folder that is already on the filesystem (a mounted volume, or a path inside one).</summary>
     public static Task<OpenResult> OpenLocalFolderAsync(string path)
     {
+        // explorer.exe answers a path it cannot open by showing the DOCUMENTS folder — no error, the wrong
+        // window (#820). Refuse here instead: a real answer the status line can show beats Explorer's shrug.
+        if (Current == Platform.Windows && !System.IO.Directory.Exists(path))
+        {
+            DesktopLog.Warn("Open folder: {Path} does not exist — refusing rather than letting Explorer fall back to Documents", path);
+            return Task.FromResult(new OpenResult(false, $"{path} does not exist."));
+        }
+
+        DesktopLog.Debug("Open folder: {Path}", path);
         var (fileName, arguments) = BuildOpenLocalFolderCommand(path, Current);
 
         // `open` reports a missing path with a non-zero exit, which is worth surfacing: the deep-link folder can
@@ -287,8 +341,7 @@ public static class OsFileManager
             // `mount` prints "<source> on <point> (type, …)"; the source is the mounted URL.
             Platform.MacOs => MountEntries()
                 .FirstOrDefault(e => string.Equals(e.Source.TrimEnd('/'), wanted, StringComparison.OrdinalIgnoreCase)).Point,
-            Platform.Windows => System.IO.DriveInfo.GetDrives()
-                .FirstOrDefault(d => d.DriveType == System.IO.DriveType.Network && VolumeLabelOf(d) == VolumeName)?.Name,
+            Platform.Windows => Uri.TryCreate(wanted, UriKind.Absolute, out var server) ? WindowsMountedDrive(server) : null,
             _ => GvfsDavMount(),
         };
     }
@@ -314,8 +367,9 @@ public static class OsFileManager
             output = process.StandardOutput.ReadToEnd();
             process.WaitForExit();
         }
-        catch (Exception)
+        catch (Exception e)
         {
+            DesktopLog.Debug("WebDAV probe: running /sbin/mount failed ({Message}) — treating the volume as not mounted", e.Message);
             yield break;
         }
 
@@ -364,7 +418,7 @@ public static class OsFileManager
 
         return Current switch
         {
-            Platform.MacOs => MountEntries()
+            Platform.MacOs => LogProbe(MountEntries()
                 .Where(e => e.Point.StartsWith("/Volumes/", StringComparison.Ordinal))
                 .Where(e => Uri.TryCreate(e.Source, UriKind.Absolute, out var src)
                             && string.Equals(src.Host, server.Host, StringComparison.OrdinalIgnoreCase)
@@ -372,23 +426,62 @@ public static class OsFileManager
                 .Select(e => e.Point)
                 // `mount` keeps listing a WebDAV volume whose server has gone away, and opening one of those
                 // hands the user a Finder window that hangs. "Mounted" has to mean reachable, not merely listed.
-                .FirstOrDefault(System.IO.Directory.Exists),
-            Platform.Windows => System.IO.DriveInfo.GetDrives()
-                .FirstOrDefault(d => d.DriveType == System.IO.DriveType.Network && VolumeLabelOf(d) == VolumeName)?.Name,
-            _ => GvfsDavMount(),
+                .FirstOrDefault(System.IO.Directory.Exists), server),
+            Platform.Windows => WindowsMountedDrive(server),
+            _ => LogProbe(GvfsDavMount(), server),
         };
     }
 
-    private static string? VolumeLabelOf(System.IO.DriveInfo drive)
+    // One Debug line for every "is it mounted?" answer, whatever platform produced it: the probe drives what
+    // the WebDAV button DOES next, so a wrong answer here is the first thing to check in a --verbose run.
+    private static string? LogProbe(string? result, Uri server)
     {
-        try
+        DesktopLog.Debug("WebDAV probe: server {Server} -> {Result}", server.Host, result ?? "(not mounted)");
+        return result;
+    }
+
+    // Which mapped network drive points at THIS server — matched by the remote UNC's host, the same host rule
+    // the macOS arm follows (#820). The volume-label test this replaces asked the wrong question: a WebDAV
+    // mapping commonly reports NO label, so the client concluded "not mounted" forever and re-opened the bare
+    // UNC on every click.
+    private static string? WindowsMountedDrive(Uri server)
+    {
+        if (!OperatingSystem.IsWindows())
         {
-            return drive.VolumeLabel;
+            return null;
         }
-        catch (System.IO.IOException)
+
+        foreach (var drive in System.IO.DriveInfo.GetDrives())
         {
-            return null; // a disconnected mapping still enumerates
+            if (drive.DriveType != System.IO.DriveType.Network)
+            {
+                continue;
+            }
+
+            var remote = WindowsDavDrive.RemoteOf(char.ToUpperInvariant(drive.Name[0]));
+            DesktopLog.Debug("WebDAV probe: {Drive} -> {Remote}", drive.Name, remote ?? "(not a mapping)");
+            if (remote is not null && UncMatchesServer(remote, server))
+            {
+                return drive.Name;
+            }
         }
+
+        return null;
+    }
+
+    /// <summary>Does a mapped drive's remote UNC (<c>\host@SSL@443\DavWWWRoot\…</c>) point at this server?
+    /// Pure (unit-tested): host case-insensitively, port with the scheme's default filled in.</summary>
+    public static bool UncMatchesServer(string remoteUnc, Uri server)
+    {
+        var trimmed = remoteUnc.TrimStart('\\');
+        var hostPart = trimmed.Split('\\')[0];
+        var pieces = hostPart.Split('@');
+        var host = pieces[0];
+        var ssl = pieces.Any(p => p.Equals("SSL", StringComparison.OrdinalIgnoreCase));
+        var port = pieces.Skip(1).Select(p => int.TryParse(p, out var n) ? (int?)n : null).FirstOrDefault(n => n is not null)
+            ?? (ssl ? 443 : 80);
+        var serverPort = server.IsDefaultPort ? (server.Scheme == "https" ? 443 : 80) : server.Port;
+        return string.Equals(host, server.Host, StringComparison.OrdinalIgnoreCase) && port == serverPort;
     }
 
     private static string? GvfsDavMount()
@@ -413,23 +506,6 @@ public static class OsFileManager
         var taken = System.IO.DriveInfo.GetDrives().Select(d => char.ToUpperInvariant(d.Name[0])).ToHashSet();
         return "STUVWXYZ".Concat("RQPONMLKJIHGFED").Cast<char?>().FirstOrDefault(c => !taken.Contains(c!.Value));
     }
-
-    /// <summary>
-    /// Maps the volume to a PERSISTENT drive letter on Windows, so it survives a reboot (#461).
-    /// </summary>
-    /// <remarks>
-    /// <see cref="BuildOpenCommand"/>'s Windows path opens the DavWWWRoot UNC directly, which mounts and opens
-    /// in one step but leaves no drive letter and nothing persistent. That is right for "just show me the
-    /// files" and wrong for "put my documents on this machine", which is what the ribbon button means — hence a
-    /// second command rather than a change to the first.
-    ///
-    /// Windows only: macOS and Linux have no drive letters, and their mount is already persistent enough
-    /// (Finder remembers the server, gvfs remounts on demand).
-    /// </remarks>
-    public static (string FileName, string[] Arguments)? BuildMapDriveCommand(string httpUrl, string username, string password) =>
-        Current is Platform.Windows && FirstFreeDriveLetter() is { } letter
-            ? ("net", new[] { "use", $"{letter}:", ToWindowsUnc(new Uri(httpUrl)), $"/user:{username}", password, "/persistent:yes" })
-            : null;
 
     private static string ToDavScheme(Uri uri) =>
         (uri.Scheme == "https" ? "davs://" : "dav://") + uri.Authority + uri.AbsolutePath;
