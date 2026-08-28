@@ -878,6 +878,34 @@ Further reading:
 ]]
 
 // ─────────────────────────────────────────────────────────────────────────────
+= Appendix: the desktop client's log
+
+When the desktop client misbehaves — a preview that stays empty, a server that will not connect, a file that
+does not open — its log usually says why. The client writes one rolling log file per day, always at full
+detail, so there is nothing to switch on after the fact: whatever just went wrong is already recorded.
+
+*Where to find it.* The easiest way is in the app itself: *Help ▸ Show log folder* opens the folder directly.
+The location by operating system:
+
+- Windows — `%APPDATA%\SimplArchive\logs`
+- macOS — `~/Library/Application Support/SimplArchive/logs`
+- Linux — `~/.config/SimplArchive/logs`
+
+Files are named `simplarchive-YYYYMMDD.log`; the newest one is today's. The log is small by design (it rolls at
+4 MB and keeps seven files) and never contains a password or a token, so it is safe to attach to a support
+request as it is.
+
+*Watching it live.* Start the client from a terminal with the `--verbose` flag and the same full detail is
+printed to the terminal as it happens — useful when reproducing a problem step by step:
+
+- Windows — `SimplArchive.DesktopClient.exe --verbose`
+- macOS — `SimplArchive.app/Contents/MacOS/SimplArchive.DesktopClient --verbose`
+- Linux — `./SimplArchive.DesktopClient --verbose`
+
+Without the flag a terminal shows only the important lines; the file always carries everything, flag or no
+flag.
+
+// ─────────────────────────────────────────────────────────────────────────────
 #pagebreak()
 = Index
 

@@ -40,8 +40,10 @@ internal static class Program
             AttachConsole(AttachParentProcess); // false simply means there was no parent console — nothing to do
         }
 
-        // The log comes up before anything that might want to write to it (ADR 0613).
-        Services.DesktopLog.Initialize();
+        // The log comes up before anything that might want to write to it (ADR 0613). --verbose lifts the
+        // console sink to Debug (the file always carries Debug); on Windows the attach above has already given
+        // the flag a console to print into.
+        Services.DesktopLog.Initialize(verbose: args.Contains("--verbose"));
 
         // Crash guard (ADR "Desktop crash guard"): surface unhandled background/unobserved exceptions in the
         // "lost connection" modal instead of taking the app down. UI-thread async-void handlers are guarded

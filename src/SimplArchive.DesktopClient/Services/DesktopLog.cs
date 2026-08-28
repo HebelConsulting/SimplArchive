@@ -46,7 +46,12 @@ public static class DesktopLog
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SimplArchive", "logs");
 
     /// <summary>Called once at startup, before anything that might want to log.</summary>
-    public static void Initialize()
+    /// <param name="verbose">
+    /// <c>--verbose</c>: lift the CONSOLE to Debug. The file has always carried Debug (the pipeline minimum);
+    /// this flag only changes what a person watching a terminal sees, so "run it with --verbose and read the
+    /// console" and "send me the log file" describe the same detail through two channels.
+    /// </param>
+    public static void Initialize(bool verbose = false)
     {
         try
         {
@@ -56,7 +61,8 @@ public static class DesktopLog
                 .MinimumLevel.Debug()
                 .Enrich.WithProperty("Application", "SimplArchive.DesktopClient")
                 .Enrich.WithProperty("Version", typeof(DesktopLog).Assembly.GetName().Version?.ToString() ?? "unknown")
-                .WriteTo.Console(outputTemplate: Template, restrictedToMinimumLevel: LogEventLevel.Information)
+                .WriteTo.Console(outputTemplate: Template,
+                    restrictedToMinimumLevel: verbose ? LogEventLevel.Debug : LogEventLevel.Information)
                 .WriteTo.File(Path.Combine(Directory, "simplarchive-.log"),
                     outputTemplate: Template,
                     rollingInterval: RollingInterval.Day,
@@ -66,6 +72,10 @@ public static class DesktopLog
                     shared: true)
                 .CreateLogger();
 
+            if (verbose)
+            {
+                Debug("Verbose console logging on (--verbose); the file at {Directory} always carries this detail", Directory);
+            }
             Info("Client started ({Version} on {OS})", typeof(DesktopLog).Assembly.GetName().Version?.ToString() ?? "unknown",
                 Environment.OSVersion.ToString());
         }
