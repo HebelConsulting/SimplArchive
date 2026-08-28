@@ -9,6 +9,7 @@ namespace SimplArchive.EndToEndTests;
 // setting tags normalizes/dedupes them, the tenant tag catalog lists them, a non-editor is refused, and a
 // tagged document is found via system[tag] search with a Tags facet. Async indexing, so polled to consistency.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class DocumentTagsTests
 {
     private readonly E2EApiFactory _factory;

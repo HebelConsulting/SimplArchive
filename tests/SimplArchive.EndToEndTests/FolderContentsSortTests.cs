@@ -9,6 +9,7 @@ namespace SimplArchive.EndToEndTests;
 // contents sort order"): the children envelope carries the folder's sort order (defaulting to DocumentDate) +
 // each child's versionCreatedAt, PUT sets it, an undefined value is rejected, and a non-editor is refused.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class FolderContentsSortTests
 {
     private readonly E2EApiFactory _factory;

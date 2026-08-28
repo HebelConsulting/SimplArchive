@@ -20,6 +20,7 @@ namespace SimplArchive.EndToEndTests;
 // documents whose content still sits in ephemeral storage — correct until the sweep runs, and then silently
 // unreadable. So these tests assert the bytes are READABLE at the new key, never merely that the key changed.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class EphemeralMailKeyTests
 {
     private readonly E2EApiFactory _factory;

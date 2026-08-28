@@ -14,6 +14,7 @@ namespace SimplArchive.EndToEndTests;
 // emitted on the single-document GET but not on the children listing hides the action on every node a client
 // builds from a listing, which is exactly what happened to `folders` and was invisible from either side.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class TypedItemCreateTests
 {
     private readonly E2EApiFactory _factory;

@@ -10,6 +10,7 @@ namespace SimplArchive.EndToEndTests;
 // than a client-credentials ServiceAccount token. Covers submit → task inbox → approve → release, the reject
 // path (mandatory reason), and that only the assigned reviewer can decide.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class WorkflowLifecycleTests
 {
     private readonly E2EApiFactory _factory;

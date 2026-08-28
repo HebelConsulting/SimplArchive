@@ -19,6 +19,7 @@ namespace SimplArchive.EndToEndTests;
 // MailKit's own OBJECTID surface, and they stay null unless the server both advertises the capability and
 // answers in the documented shape. A hand-parsed socket assertion would pass on output no client accepts.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class ImapObjectIdTests
 {
     private readonly E2EApiFactory _factory;

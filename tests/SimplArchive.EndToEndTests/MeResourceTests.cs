@@ -6,6 +6,7 @@ namespace SimplArchive.EndToEndTests;
 // entry point for a client's self-service goes unverified. Every rel here is one a client follows instead of
 // composing a URL (ADR 0543), so a rel silently disappearing would break both clients quietly.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class MeResourceTests
 {
     private readonly E2EApiFactory _factory;

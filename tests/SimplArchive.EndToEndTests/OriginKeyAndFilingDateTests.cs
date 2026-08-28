@@ -9,6 +9,7 @@ namespace SimplArchive.EndToEndTests;
 // year (tenants/{t}/{filingYear}/…) + CreatedAt. Backdating without CanImport is refused. Not tied to any
 // specific source system.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class OriginKeyAndFilingDateTests
 {
     private readonly E2EApiFactory _factory;

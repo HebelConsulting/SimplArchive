@@ -7,6 +7,7 @@ namespace SimplArchive.EndToEndTests;
 // actions on selected documents"): add-tags, set-sensitivity, move, and delete each act on many items in one
 // call, authorizing per item (an item the caller can't edit is skipped and reported).
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class BulkActionsTests
 {
     private readonly E2EApiFactory _factory;

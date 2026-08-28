@@ -10,6 +10,7 @@ namespace SimplArchive.EndToEndTests;
 // The flag is what both clients' empty-folder icon keys on, and it also backs their "is there something to open"
 // tests, so this pins the corrected meaning across the endpoints that compute it independently.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class FolderHasChildrenTests
 {
     private readonly E2EApiFactory _factory;

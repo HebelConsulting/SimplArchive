@@ -10,6 +10,7 @@ namespace SimplArchive.EndToEndTests;
 // where it floats. The projection gains a comparable instant; the stored .ics keeps its floating time, so DAV
 // clients round-trip unchanged (ADR 0631/0647).
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class AppointmentIndexTimeTests
 {
     private readonly E2EApiFactory _factory;

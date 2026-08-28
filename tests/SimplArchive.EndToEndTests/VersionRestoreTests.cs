@@ -10,6 +10,7 @@ namespace SimplArchive.EndToEndTests;
 // versions list reports it as current; uploading a new version clears the pointer (the new one becomes current);
 // a non-editor is refused; and a restore is blocked while a workflow is in progress.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class VersionRestoreTests
 {
     private readonly E2EApiFactory _factory;

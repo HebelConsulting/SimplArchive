@@ -7,6 +7,7 @@ namespace SimplArchive.EndToEndTests;
 // object-storage bucket"): each tenant's blobs land in its own bucket `{prefix}-{tenantId}`, and one tenant's
 // object is absent from the other tenant's bucket — hard storage-layer isolation.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class PerTenantBucketTests
 {
     private readonly E2EApiFactory _factory;

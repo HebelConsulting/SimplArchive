@@ -4,6 +4,7 @@ namespace SimplArchive.EndToEndTests;
 // carries an X-Correlation-ID, a caller-supplied one is echoed back, and — implicitly — the app boots and serves
 // requests with Serilog installed as the host logger (WebApplicationFactory<Program> runs the real Program).
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class LoggingTests
 {
     private readonly E2EApiFactory _factory;

@@ -10,6 +10,7 @@ namespace SimplArchive.EndToEndTests;
 // than it should have been. These cover the renamed surface: the /chat route, the `messages` payload, and
 // `parentMessageId`.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class DocumentChatApiTests
 {
     private readonly E2EApiFactory _factory;

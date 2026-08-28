@@ -10,6 +10,7 @@ namespace SimplArchive.EndToEndTests;
 // type in a shape the reader could not parse was treated as "no version requested", so a caller who explicitly
 // asked for v2 was served v1 and never told (#595, ADR 0626).
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class ApiVersionNegotiationTests
 {
     private readonly E2EApiFactory _factory;

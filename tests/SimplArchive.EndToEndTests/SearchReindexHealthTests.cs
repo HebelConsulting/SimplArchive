@@ -7,6 +7,7 @@ namespace SimplArchive.EndToEndTests;
 // are pending. Before this the resource carried only a status string and a count from the last rebuild, so
 // "search is permanently empty" and "search is fine" read identically to an administrator.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class SearchReindexHealthTests
 {
     private readonly E2EApiFactory _factory;

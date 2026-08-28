@@ -6,6 +6,7 @@ namespace SimplArchive.EndToEndTests;
 // GET /api/audit-events/worm-verify reads the immutable segments back and confirms they match the DB (ADR "Audit
 // WORM segment verify"). A caller without CanViewAuditLog is refused.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class AuditWormVerifyTests
 {
     private readonly E2EApiFactory _factory;

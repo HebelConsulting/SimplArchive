@@ -12,6 +12,7 @@ namespace SimplArchive.EndToEndTests;
 // older than the tenant's CheckoutTtlDays is released by IStaleCheckoutService.SweepAsync — the lock clears,
 // the MinIO stash blob is deleted, and the former holder gets a CheckoutExpired notification.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class StaleCheckoutTests
 {
     private readonly E2EApiFactory _factory;

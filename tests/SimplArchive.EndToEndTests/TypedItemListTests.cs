@@ -11,6 +11,7 @@ namespace SimplArchive.EndToEndTests;
 // with no appointments in it — and the right to CREATE rides as the collection's `canCreateEntries` capability,
 // because one rel cannot say "read yes, write no".
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class TypedItemListTests
 {
     private readonly E2EApiFactory _factory;

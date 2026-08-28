@@ -19,6 +19,7 @@ namespace SimplArchive.EndToEndTests;
 // Sequence) is a unique index, so ordering by it is total where ordering by a random Guid was arbitrary — and
 // the case that made it visible needs the manual capture's frozen clock, where every event shares one instant.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class AuditOrderingTests
 {
     private readonly E2EApiFactory _factory;

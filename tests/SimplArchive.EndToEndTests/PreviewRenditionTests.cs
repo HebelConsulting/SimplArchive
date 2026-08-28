@@ -9,6 +9,7 @@ namespace SimplArchive.EndToEndTests;
 // needed (renditions are synchronous, unlike search indexing). TIFF→PNG is intentionally not covered: NetVips'
 // native lib is only packaged for the Linux-musl container image, not this macOS test host.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class PreviewRenditionTests
 {
     private readonly E2EApiFactory _factory;

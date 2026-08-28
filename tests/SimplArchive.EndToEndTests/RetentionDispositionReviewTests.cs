@@ -8,6 +8,7 @@ namespace SimplArchive.EndToEndTests;
 // review-before-disposition"): a records manager manually Disposes an eligible document, Extends another (which
 // then isn't disposable), can't dispose a legal-held one, and a non-manager is refused.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class RetentionDispositionReviewTests
 {
     private readonly E2EApiFactory _factory;

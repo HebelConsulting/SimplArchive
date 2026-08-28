@@ -9,6 +9,7 @@ namespace SimplArchive.EndToEndTests;
 // delivery") POSTs a synthetic, HMAC-signed audit event to the tenant's saved SIEM webhook, so an admin can verify
 // the endpoint + signature. A stub receiver captures the delivery and confirms the payload + signature.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class AuditWebhookTestDeliveryTests
 {
     private readonly E2EApiFactory _factory;

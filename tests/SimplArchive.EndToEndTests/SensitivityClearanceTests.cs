@@ -10,6 +10,7 @@ namespace SimplArchive.EndToEndTests;
 // labelled above their clearance (it's hidden from listings + search + a direct GET is denied), while unlabelled
 // documents stay visible; raising their clearance restores access. Off by default nothing is hidden.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class SensitivityClearanceTests
 {
     private readonly E2EApiFactory _factory;

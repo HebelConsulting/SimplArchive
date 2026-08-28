@@ -19,6 +19,7 @@ namespace SimplArchive.EndToEndTests;
 // indistinguishable to the caller. The log line itself is asserted where it can be — a test that scrapes log
 // output would pin the message text rather than the behaviour.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class TokenEndpointRefusalTests
 {
     private readonly E2EApiFactory _factory;

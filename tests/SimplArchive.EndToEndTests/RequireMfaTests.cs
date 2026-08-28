@@ -14,6 +14,7 @@ namespace SimplArchive.EndToEndTests;
 // to inline enrolment (QR + code) on the shared login page, and only completes once they enrol — driven by the
 // raw login-page HTTP with a cookie jar.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class RequireMfaTests
 {
     private readonly E2EApiFactory _factory;

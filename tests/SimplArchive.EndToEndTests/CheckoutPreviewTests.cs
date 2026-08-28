@@ -7,6 +7,7 @@ namespace SimplArchive.EndToEndTests;
 // The question that tab answers is "what am I about to check in?", so previewing the archived side would answer
 // the opposite one — which is why the preview reads the stash, not the current version.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class CheckoutPreviewTests
 {
     private readonly E2EApiFactory _factory;

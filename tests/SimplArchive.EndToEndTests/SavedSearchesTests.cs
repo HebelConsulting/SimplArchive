@@ -7,6 +7,7 @@ namespace SimplArchive.EndToEndTests;
 // search, lists + deletes it, a duplicate name is rejected, they're private to the user, and a ServiceAccount
 // has none.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class SavedSearchesTests
 {
     private readonly E2EApiFactory _factory;

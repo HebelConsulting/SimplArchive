@@ -11,6 +11,7 @@ namespace SimplArchive.EndToEndTests;
 // regression: the fallback must fire when the precise search found NOTHING, and must not fire when it found
 // something (or a search for a real word would start dragging in every longer word containing it).
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class SearchPartialWordTests
 {
     private readonly E2EApiFactory _factory;

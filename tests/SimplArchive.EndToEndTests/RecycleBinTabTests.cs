@@ -8,6 +8,7 @@ namespace SimplArchive.EndToEndTests;
 // GET /api/recycle-bin lists the deletion roots with path + deleted-by (from the audit trail); the read
 // endpoints serve a soft-deleted document (so the detail pane can inspect it); a tenant admin empties the bin.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class RecycleBinTabTests
 {
     private readonly E2EApiFactory _factory;

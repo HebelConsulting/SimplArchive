@@ -16,6 +16,7 @@ namespace SimplArchive.EndToEndTests;
 // (so it is refused BEFORE any bytes transfer, as the API and both clients already do), and the invariant now
 // re-checks on mask assignment (so a future path that creates maskless and masks later cannot walk past it).
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class WebDavPersonalRootTests
 {
     // The personal space is named after its owner (ADR 0671), so its WebDAV/IMAP path segment is

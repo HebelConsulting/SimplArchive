@@ -11,6 +11,7 @@ namespace SimplArchive.EndToEndTests;
 // DOCUMENT_ALREADY_CHECKED_OUT); GET /api/checkouts lists the holder's locks with the current SHA-256;
 // releasing frees it. A CanOverrideCheckout holder can force-release someone else's lock; a plain user can't.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class CheckoutTests
 {
     private readonly E2EApiFactory _factory;

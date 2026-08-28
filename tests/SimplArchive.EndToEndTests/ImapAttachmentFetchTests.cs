@@ -17,6 +17,7 @@ namespace SimplArchive.EndToEndTests;
 // answer. So this drives the same real client library down the path a user's client actually takes, and
 // compares the bytes it gets against the bytes that were filed.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class ImapAttachmentFetchTests
 {
     private readonly E2EApiFactory _factory;

@@ -9,6 +9,7 @@ namespace SimplArchive.EndToEndTests;
 // token (RFC 8693) for one representing a non-admin target user; whoami then shows the target + the acting admin.
 // A caller without CanImpersonate is refused, and an admin target can't be impersonated.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class ImpersonationTests
 {
     private readonly E2EApiFactory _factory;

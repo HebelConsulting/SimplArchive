@@ -9,6 +9,7 @@ namespace SimplArchive.EndToEndTests;
 // intray; a member can claim a group item into their own; a CanManageIntrays holder can open + drain any user's
 // intray via ?user=, while a non-admin cannot.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class IntrayMoveTests
 {
     private readonly E2EApiFactory _factory;

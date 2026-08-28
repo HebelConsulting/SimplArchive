@@ -13,6 +13,7 @@ namespace SimplArchive.EndToEndTests;
 // and then honoured by the multiplicity check on PUT /index-data. A flag lost at any of those three points
 // leaves every other assertion green while a list field behaves as single-valued.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class ListAndEmailFieldApiTests
 {
     private readonly E2EApiFactory _factory;

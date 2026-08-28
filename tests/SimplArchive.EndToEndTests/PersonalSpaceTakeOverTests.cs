@@ -12,6 +12,7 @@ namespace SimplArchive.EndToEndTests;
 // revoked like any other. Each of those four is asserted, because any one of them missing turns a deliberate
 // exception into exactly the quiet back door the privacy rule exists to remove.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class PersonalSpaceTakeOverTests
 {
     private readonly E2EApiFactory _factory;

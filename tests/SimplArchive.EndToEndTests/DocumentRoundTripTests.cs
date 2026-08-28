@@ -8,6 +8,7 @@ namespace SimplArchive.EndToEndTests;
 // End-to-end over the real API (in-process) + real Postgres + MinIO (ADR "Container-backed end-to-end
 // integration tests"). Drives the actual HTTP layer, EF migrations, OpenIddict tokens, and object storage.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class DocumentRoundTripTests
 {
     private readonly E2EApiFactory _factory;

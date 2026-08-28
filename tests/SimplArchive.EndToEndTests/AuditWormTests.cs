@@ -10,6 +10,7 @@ namespace SimplArchive.EndToEndTests;
 // after some auditable actions, the archiver seals the events into an NDJSON segment that is written to the
 // Object-Lock bucket and retention-LOCKED (immutable), and the worm-segments endpoint lists it.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class AuditWormTests
 {
     private readonly E2EApiFactory _factory;

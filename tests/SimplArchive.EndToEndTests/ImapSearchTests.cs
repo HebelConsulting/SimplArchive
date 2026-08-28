@@ -18,6 +18,7 @@ namespace SimplArchive.EndToEndTests;
 // So these tests use MailKit's own query API rather than hand-writing the wire commands: the point is not that
 // our parser accepts strings we chose, it is that a client's own idea of a search gets a usable answer.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class ImapSearchTests
 {
     private readonly E2EApiFactory _factory;

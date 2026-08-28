@@ -11,6 +11,7 @@ namespace SimplArchive.EndToEndTests;
 // so an untranslated refusal reaches the user as "a required field is missing" on a folder with no missing
 // field: a specific, checkable, FALSE cause. Asserting the status alone would pass either way.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class StructuralMaskImmutableTests
 {
     private readonly E2EApiFactory _factory;

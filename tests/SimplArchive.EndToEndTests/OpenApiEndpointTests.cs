@@ -8,6 +8,7 @@ namespace SimplArchive.EndToEndTests;
 // Scalar interactive UI is mapped in Development (the E2E factory runs as Development); and the /api root
 // discovery document advertises the spec via an "openApi" link.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class OpenApiEndpointTests
 {
     private readonly E2EApiFactory _factory;

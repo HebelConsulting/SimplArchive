@@ -10,6 +10,7 @@ namespace SimplArchive.EndToEndTests;
 // real API + Postgres + MinIO: create → list → edit (author, If-Match) → delete, plus the If-Match
 // concurrency contract (428/412) and placement validation (400s).
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class DocumentAnnotationApiTests
 {
     private readonly E2EApiFactory _factory;

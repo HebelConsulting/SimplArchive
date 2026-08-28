@@ -17,6 +17,7 @@ namespace SimplArchive.EndToEndTests;
 // The DNS is stubbed at the factory: CI cannot publish a TXT record for a domain a test invented, and a check
 // whose only implementation talks to the real resolver is one that cannot be exercised at all.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class TenantMailDomainsTests
 {
     private readonly E2EApiFactory _factory;

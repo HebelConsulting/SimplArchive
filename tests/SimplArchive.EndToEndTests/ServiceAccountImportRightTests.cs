@@ -7,6 +7,7 @@ namespace SimplArchive.EndToEndTests;
 // (a client-credentials batch tool) can be issued a CanImport credential. A caller lacking the right can't
 // hand it out. Proves the created account's client-credentials token can actually backdate a version.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class ServiceAccountImportRightTests
 {
     private readonly E2EApiFactory _factory;

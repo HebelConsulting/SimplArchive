@@ -9,6 +9,7 @@ namespace SimplArchive.EndToEndTests;
 // a CanManageClassification user creates/renames/retires labels (a non-manager is refused), and an upload
 // auto-classified as a mask with a default label inherits that label.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class SensitivityLabelAdminTests
 {
     private readonly E2EApiFactory _factory;

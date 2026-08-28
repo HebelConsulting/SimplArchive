@@ -10,6 +10,7 @@ namespace SimplArchive.EndToEndTests;
 // of every-mutation coverage. Detail is action + a short summary only (no comment/note content), so the log
 // stays PII-light.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class AuditCollaborationCoverageTests
 {
     private readonly E2EApiFactory _factory;

@@ -16,6 +16,7 @@ namespace SimplArchive.EndToEndTests;
 // native .eml serving, the ShowAllDocuments toggle's synthetic attachment messages, stable UIDs across
 // reconnects, and the read-only refusals.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class ImapEndpointTests
 {
     private readonly E2EApiFactory _factory;

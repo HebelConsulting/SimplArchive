@@ -25,6 +25,7 @@ namespace SimplArchive.EndToEndTests;
 /// is not involved at all here — the contract under test is HTTP in, page numbers out.
 /// </para>
 /// </remarks>
+[Trait("Area", "e2e-2")]
 public class PatchCodeDetectionTests : IAsyncLifetime
 {
     private IContainer? _ocr;

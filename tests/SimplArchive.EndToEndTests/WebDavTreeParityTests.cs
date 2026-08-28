@@ -11,6 +11,7 @@ namespace SimplArchive.EndToEndTests;
 // to /SimplArchive), and a plain browser GET of /webdav 301-redirects to /SimplArchive. These guard the
 // principle + backward compatibility against drift.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public partial class WebDavTreeParityTests
 {
     // The personal space is named after its owner (ADR 0671), so its WebDAV/IMAP path segment is

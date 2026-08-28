@@ -13,6 +13,7 @@ namespace SimplArchive.EndToEndTests;
 // holds no CanEditIndexData there and would be refused before the claims logic ever ran. The routing right
 // composes with ordinary ACL rights; it does not replace them.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class MailboxAddressClaimTests
 {
     private readonly E2EApiFactory _factory;

@@ -10,6 +10,7 @@ namespace SimplArchive.EndToEndTests;
 // re-imports the archive as a new repository, and the recreated document's version downloads byte-for-byte. A
 // non-admin is refused.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class RepositoryImportTests
 {
     private readonly E2EApiFactory _factory;

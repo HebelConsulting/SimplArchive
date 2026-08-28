@@ -10,6 +10,7 @@ namespace SimplArchive.EndToEndTests;
 // enroll → enable with a computed TOTP → the login now requires + accepts a TOTP → a recovery code also works →
 // self-disable and admin-reset both clear it.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class MfaTests
 {
     private readonly E2EApiFactory _factory;

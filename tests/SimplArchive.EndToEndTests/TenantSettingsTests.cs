@@ -9,6 +9,7 @@ namespace SimplArchive.EndToEndTests;
 // rejected per group. Each group PUT is a full replacement of ITS GROUP only — the other groups keep their
 // values, which is the point of the split and is asserted below.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class TenantSettingsTests
 {
     private readonly E2EApiFactory _factory;

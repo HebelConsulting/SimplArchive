@@ -235,7 +235,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: EndToEndTests, project: EndToEndTests, filter: "" }
+          # Split like the UI legs (#817): at ~20 min this leg was the tier's critical path, ~5.5 min past
+          # its slowest sibling. Balanced from a TRX timing run; both legs name their Area explicitly and the
+          # leg-balance guard refuses an untagged class (ADR 0697 — no catch-all leg).
+          - { name: "EndToEndTests · 1", project: EndToEndTests, filter: '--filter "Area=e2e-1"' }
+          - { name: "EndToEndTests · 2", project: EndToEndTests, filter: '--filter "Area=e2e-2"' }
           - { name: DesktopUiEndToEndTests, project: DesktopUiEndToEndTests, filter: "" }
           - { name: "UiEndToEndTests · 1", project: UiEndToEndTests, filter: '--filter "Area=ui-1"' }
           - { name: "UiEndToEndTests · 2", project: UiEndToEndTests, filter: '--filter "Area=ui-2"' }

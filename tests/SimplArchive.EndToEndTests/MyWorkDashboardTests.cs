@@ -7,6 +7,7 @@ namespace SimplArchive.EndToEndTests;
 // work dashboard"): GET /api/reminders returns the caller's overdue + due-soon reminders (not ones far out),
 // GET /api/subscriptions returns the documents they follow; both are User-only (a ServiceAccount → 403).
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class MyWorkDashboardTests
 {
     private readonly E2EApiFactory _factory;

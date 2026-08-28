@@ -7,6 +7,7 @@ namespace SimplArchive.EndToEndTests;
 // audited with a field-level before→after summary (secret redacted), filing an intray item — as a new document
 // and as a new version — is audited, and creating a personal repository is audited.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class AuditSettingsFilingPersonalTests
 {
     private readonly E2EApiFactory _factory;

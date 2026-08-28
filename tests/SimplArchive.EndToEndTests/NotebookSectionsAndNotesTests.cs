@@ -9,6 +9,7 @@ namespace SimplArchive.EndToEndTests;
 // document ADVERTISED them, so a notebook that stops advertising them silently disarms both clients — and an
 // ordinary folder that starts advertising them offers an action that cannot work.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class NotebookSectionsAndNotesTests
 {
     private readonly E2EApiFactory _factory;

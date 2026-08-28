@@ -10,6 +10,7 @@ namespace SimplArchive.EndToEndTests;
 // child documents only, so a filing destination a user referenced into their personal space was invisible to
 // their mail client — which is exactly what Goal 1(b) needs to work.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class ImapReferenceMailboxTests
 {
     // The personal space is named after its owner (ADR 0671), so its WebDAV/IMAP path segment is

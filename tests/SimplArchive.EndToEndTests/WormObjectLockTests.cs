@@ -15,6 +15,7 @@ namespace SimplArchive.EndToEndTests;
 // document's version blob (and releasing lifts it), and a retention policy applies an Object Lock retention that
 // refuses a purge (409 WORM_LOCKED) until it expires.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class WormObjectLockTests
 {
     private readonly E2EApiFactory _factory;

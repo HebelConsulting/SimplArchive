@@ -17,6 +17,7 @@ namespace SimplArchive.EndToEndTests;
 // The three behaviours the issue said to DECIDE rather than discover are asserted here, because each is a place
 // where a plausible guess loses data or surprises the user.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class WebDavReferencedDocumentTests
 {
     private readonly E2EApiFactory _factory;

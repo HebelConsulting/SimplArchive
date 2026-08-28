@@ -16,6 +16,7 @@ namespace SimplArchive.EndToEndTests;
 // So the assertion is deliberately on the REL, not on the endpoint: calling a path this test composed itself
 // would pass just as happily with the link missing, which is exactly the state that shipped.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class IntrayUploadSignalsIngestTests
 {
     private readonly E2EApiFactory _factory;

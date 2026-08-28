@@ -8,6 +8,7 @@ namespace SimplArchive.EndToEndTests;
 // the {name}.mask.json sidecar and applied to the filed version's OcrLanguages at filing (before the
 // searchable-PDF conversion runs).
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class IntrayOcrLanguagesTests
 {
     private readonly E2EApiFactory _factory;

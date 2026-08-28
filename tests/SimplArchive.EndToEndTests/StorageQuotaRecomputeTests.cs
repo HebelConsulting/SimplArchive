@@ -6,6 +6,7 @@ namespace SimplArchive.EndToEndTests;
 // storage quota") rebuilds the used-storage counter from the actual confirmed version blobs — fixing a tenant
 // whose blobs predate the quota feature (no SizeBytes) or whose counter drifted.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class StorageQuotaRecomputeTests
 {
     private readonly E2EApiFactory _factory;

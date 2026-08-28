@@ -13,6 +13,7 @@ namespace SimplArchive.EndToEndTests;
 // between two answers to one question, and a test pinning one of them lets the other move again — the same
 // reasoning as `DesktopFilingRootsParityTests` (ADR 0689).
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class WebDavPropertyParityTests
 {
     private const string Personal = "Prop User";

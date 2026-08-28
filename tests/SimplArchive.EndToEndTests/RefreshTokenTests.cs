@@ -18,6 +18,7 @@ namespace SimplArchive.EndToEndTests;
 // stubbed token endpoint, because every one of those three was missing independently and a stub would have
 // proved only that the client can parse a response we wrote ourselves.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class RefreshTokenTests
 {
     private readonly E2EApiFactory _factory;

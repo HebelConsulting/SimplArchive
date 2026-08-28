@@ -8,6 +8,7 @@ namespace SimplArchive.EndToEndTests;
 // purge"): a tenant admin purges a recycle-bin document, removing its rows and object-storage blobs; purging an
 // active document is refused, and a non-admin can't purge.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class PurgeTests
 {
     private readonly E2EApiFactory _factory;

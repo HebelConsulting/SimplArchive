@@ -8,6 +8,7 @@ namespace SimplArchive.EndToEndTests;
 // object storage (+ Tika): two text versions produce an inline unified diff (added/removed/unchanged lines); a
 // binary version reports "not available"; the caller needs CanReadContent.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class VersionComparisonTests
 {
     private readonly E2EApiFactory _factory;

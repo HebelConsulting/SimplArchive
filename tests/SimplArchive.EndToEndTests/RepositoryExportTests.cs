@@ -9,6 +9,7 @@ namespace SimplArchive.EndToEndTests;
 // tenant admin exports a repository subtree to a .zip; the archive carries the manifest + document/version
 // metadata and the version blob round-trips byte-for-byte from object storage. A non-admin is refused.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class RepositoryExportTests
 {
     private readonly E2EApiFactory _factory;

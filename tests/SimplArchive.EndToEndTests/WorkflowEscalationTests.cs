@@ -8,6 +8,7 @@ namespace SimplArchive.EndToEndTests;
 // submitted; the workflow + task resources report dueAt/isOverdue, and the escalation sweep notifies the
 // reviewer.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class WorkflowEscalationTests
 {
     private readonly E2EApiFactory _factory;

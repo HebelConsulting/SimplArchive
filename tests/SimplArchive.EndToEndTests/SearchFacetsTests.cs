@@ -8,6 +8,7 @@ namespace SimplArchive.EndToEndTests;
 // returns document-type / created-by / year facet counts over the result set, and clicking a document-type
 // facet (system[documentType][eq]=…) drills the results down. Async indexing, so polled to consistency.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class SearchFacetsTests
 {
     private readonly E2EApiFactory _factory;

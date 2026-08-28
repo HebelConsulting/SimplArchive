@@ -8,6 +8,7 @@ namespace SimplArchive.EndToEndTests;
 // eventually consistent, so the assertions poll. One comprehensive test — the container/upload setup is
 // expensive — covering: content full-text, repository scoping, indexed-ACL filtering, and delete-removal.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class SearchTests
 {
     private readonly E2EApiFactory _factory;

@@ -8,6 +8,7 @@ namespace SimplArchive.EndToEndTests;
 // Verifies the config round-trips on the real bucket (SeaweedFS); the lifecycle *effect* runs only on a
 // lifecycle-capable backend (e.g. AWS S3).
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class PerTenantBucketPolicyTests
 {
     private readonly E2EApiFactory _factory;

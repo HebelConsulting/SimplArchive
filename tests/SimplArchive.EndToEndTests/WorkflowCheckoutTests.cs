@@ -11,6 +11,7 @@ namespace SimplArchive.EndToEndTests;
 // released, submit succeeds; and checking out a document that is already In Review stays allowed (a new version
 // doesn't touch the reviewed one).
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class WorkflowCheckoutTests
 {
     private readonly E2EApiFactory _factory;

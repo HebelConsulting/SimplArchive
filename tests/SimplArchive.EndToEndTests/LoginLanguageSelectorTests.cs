@@ -7,6 +7,7 @@ namespace SimplArchive.EndToEndTests;
 // GET /Account/SetLanguage sets the framework culture cookie the RequestLocalization CookieRequestCultureProvider
 // reads, so the login dialog re-renders in the chosen language — and the endpoint refuses a non-local return URL.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class LoginLanguageSelectorTests
 {
     private readonly E2EApiFactory _factory;

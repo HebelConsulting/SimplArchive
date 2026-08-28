@@ -25,6 +25,7 @@ namespace SimplArchive.EndToEndTests;
 // the document landed in the right place. Neither joined them, so a working account and a broken one produced
 // identical logs — the same shape as the SEARCH bug, and the reason this file exists.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class ImapStandingMailboxTests
 {
     // The personal space is named after its owner (ADR 0671), so its WebDAV/IMAP path segment is

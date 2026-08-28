@@ -18,6 +18,7 @@ namespace SimplArchive.EndToEndTests;
 // own test surface, and seeding two mailboxes with the same address is exactly the state a CONFIRMED
 // duplicate leaves behind, which is the state fan-out delivery must handle.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class LmtpClaimDeliveryTests
 {
     private readonly E2EApiFactory _factory;

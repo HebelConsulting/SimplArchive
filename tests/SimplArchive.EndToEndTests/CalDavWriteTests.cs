@@ -9,6 +9,7 @@ namespace SimplArchive.EndToEndTests;
 // item, PUT it again as a new VERSION of the same document, collide on a stale If-Match, DELETE into the
 // recycle bin. A [Theory] over both protocols, since one implementation serves both.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class CalDavWriteTests
 {
     private static readonly XNamespace Dav = "DAV:";

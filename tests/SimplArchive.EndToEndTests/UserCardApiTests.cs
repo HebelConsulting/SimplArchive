@@ -11,6 +11,7 @@ namespace SimplArchive.EndToEndTests;
 // The security-relevant assertions are the boundary ones: a card resolves only inside the caller's own tenant,
 // and the card resource exposes nothing beyond the four fields it needs (no rights flags, no MFA state).
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class UserCardApiTests
 {
     private readonly E2EApiFactory _factory;

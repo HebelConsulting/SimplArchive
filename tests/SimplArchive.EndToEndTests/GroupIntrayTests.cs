@@ -9,6 +9,7 @@ namespace SimplArchive.EndToEndTests;
 // member can upload / list / file; the item appears in every member's intray labelled with the group; a non-member
 // sees none and is refused; a second file of an already-taken item is 404 (idempotent under contention).
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class GroupIntrayTests
 {
     private readonly E2EApiFactory _factory;

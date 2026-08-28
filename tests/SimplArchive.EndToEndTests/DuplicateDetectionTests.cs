@@ -7,6 +7,7 @@ namespace SimplArchive.EndToEndTests;
 // Postgres + object storage: GET /api/duplicates?hash= finds tenant documents whose latest confirmed version is
 // byte-identical, matches on the CURRENT version only, and never reveals a document the caller can't see.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class DuplicateDetectionTests
 {
     private readonly E2EApiFactory _factory;

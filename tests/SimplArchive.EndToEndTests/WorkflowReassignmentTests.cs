@@ -10,6 +10,7 @@ namespace SimplArchive.EndToEndTests;
 // Review" task to a different reviewer) and the deactivation guard — deactivating a user who still holds
 // pending reviews is refused unless a replacement reviewer is supplied to take them over.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class WorkflowReassignmentTests
 {
     private readonly E2EApiFactory _factory;

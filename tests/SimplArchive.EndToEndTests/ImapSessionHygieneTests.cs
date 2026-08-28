@@ -10,6 +10,7 @@ namespace SimplArchive.EndToEndTests;
 // (pre-auth 10 s, per-user 5, total 8); the authenticated idle timeout shares the same read-budget mechanism
 // as pre-auth and deliberately keeps its 30-minute default (see E2EApiFactory).
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class ImapSessionHygieneTests
 {
     private readonly E2EApiFactory _factory;

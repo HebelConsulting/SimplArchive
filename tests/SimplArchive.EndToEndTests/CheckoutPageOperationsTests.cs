@@ -14,6 +14,7 @@ namespace SimplArchive.EndToEndTests;
 // Pages get DIFFERENT WIDTHS (the IntrayPageOperationsTests identity trick): reading widths back out of the
 // stash says which page actually went where, and PdfPig reports rotation through width/height swapping.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class CheckoutPageOperationsTests
 {
     private readonly E2EApiFactory _factory;

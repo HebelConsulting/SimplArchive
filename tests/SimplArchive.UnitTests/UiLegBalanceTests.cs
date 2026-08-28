@@ -9,6 +9,11 @@ namespace SimplArchive.UnitTests;
 //
 // These tests keep the split honest in the two ways it can rot: a class that names no leg, and a class
 // that names a leg the CI matrix does not run.
+//
+// Parameterized over both split suites since the EndToEndTests leg was split the same way (#817): the same
+// two rots apply to any trait-split suite, and a second copy of this guard is how one of them stops being
+// looked at. The AREA PREFIX is per-suite ("ui-", "e2e-") so a class cannot accidentally name the OTHER
+// suite's leg and vanish from its own matrix.
 public class UiLegBalanceTests
 {
     // Deliberately permissive about modifiers and names. The first version of this guard matched only
@@ -19,10 +24,12 @@ public class UiLegBalanceTests
         @"((?:^[ \t]*\[[^\]]*\][ \t]*\r?\n)*)[ \t]*(?:public|internal)\s+(?:(?:sealed|partial|abstract|static)\s+)*class\s+(\w+)",
         RegexOptions.Multiline | RegexOptions.Compiled);
 
-    [Fact]
-    public void Every_web_ui_test_class_names_the_leg_it_runs_in()
+    [Theory]
+    [InlineData("SimplArchive.UiEndToEndTests", "ui")]
+    [InlineData("SimplArchive.EndToEndTests", "e2e")]
+    public void Every_test_class_in_a_split_suite_names_the_leg_it_runs_in(string project, string prefix)
     {
-        var offenders = UiTestClasses()
+        var offenders = TestClasses(project, prefix)
             .Where(c => c.Area is null)
             .Select(c => c.Name)
             .OrderBy(n => n)
@@ -30,15 +37,17 @@ public class UiLegBalanceTests
 
         Assert.True(
             offenders.Count == 0,
-            $"These web UI test classes declare no [Trait(\"Area\", \"ui-N\")], so they would all pile into "
+            $"These {project} test classes declare no [Trait(\"Area\", \"{prefix}-N\")], so they would all pile into "
             + $"one CI leg and slow the whole tier down. Pick the leg with the fewest cases:{Environment.NewLine}"
             + string.Join(Environment.NewLine, offenders));
     }
 
-    [Fact]
-    public void Every_declared_area_is_a_leg_the_ci_matrix_actually_runs()
+    [Theory]
+    [InlineData("SimplArchive.UiEndToEndTests", "ui")]
+    [InlineData("SimplArchive.EndToEndTests", "e2e")]
+    public void Every_declared_area_is_a_leg_the_ci_matrix_actually_runs(string project, string prefix)
     {
-        var declared = UiTestClasses()
+        var declared = TestClasses(project, prefix)
             .Where(c => c.Area is not null)
             .Select(c => c.Area!)
             .Distinct()
@@ -46,7 +55,7 @@ public class UiLegBalanceTests
             .ToList();
 
         var ci = File.ReadAllText(Path.Combine(RepoRoot(), ".github", "workflows", "ci.yml"));
-        var run = Regex.Matches(ci, @"Area=(ui-\d)").Select(m => m.Groups[1].Value).Distinct().ToList();
+        var run = Regex.Matches(ci, @"Area=(" + prefix + @"-\d)").Select(m => m.Groups[1].Value).Distinct().ToList();
 
         // A trait nobody runs is worse than no trait: those tests silently never execute.
         var orphaned = declared.Except(run).ToList();
@@ -63,9 +72,9 @@ public class UiLegBalanceTests
             + $"fleet to run nothing: {string.Join(", ", empty)}");
     }
 
-    private static IEnumerable<(string Name, string? Area)> UiTestClasses()
+    private static IEnumerable<(string Name, string? Area)> TestClasses(string project, string prefix)
     {
-        var dir = Path.Combine(RepoRoot(), "tests", "SimplArchive.UiEndToEndTests");
+        var dir = Path.Combine(RepoRoot(), "tests", project);
 
         // A partial class may be declared in several files with the trait on only one of them, and xUnit
         // is happy with that — so the unit is the class NAME, not the declaration.
@@ -96,7 +105,7 @@ public class UiLegBalanceTests
                     hasTests.Add(name);
                 }
 
-                var area = Regex.Match(match.Groups[1].Value, @"Trait\(""Area"",\s*""(ui-\d)""\)");
+                var area = Regex.Match(match.Groups[1].Value, @"Trait\(""Area"",\s*""(" + prefix + @"-\d)""\)");
                 if (area.Success || !areas.ContainsKey(name))
                 {
                     areas[name] = area.Success ? area.Groups[1].Value : null;

@@ -14,6 +14,7 @@ namespace SimplArchive.EndToEndTests;
 // would only carry properties the test author thought of, and the whole point of the merge is what happens to
 // the ones nobody thought of.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class AppointmentEndpointTests
 {
     private readonly E2EApiFactory _factory;

@@ -11,6 +11,7 @@ namespace SimplArchive.EndToEndTests;
 // Worth having as tests rather than trusting the composer: every property below is invisible in a rendering.
 // A sample whose pages are all upright, or which groups the wrong pages, looks entirely correct on screen and
 // silently stops exercising the thing it exists to exercise.
+[Trait("Area", "e2e-2")]
 public class PatchCodeSampleShapeTests
 {
     [Fact]

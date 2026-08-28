@@ -11,6 +11,7 @@ namespace SimplArchive.EndToEndTests;
 // hosts share the same Postgres + Valkey (via the collection fixture's process-global env), so a second in-process
 // WebApplicationFactory stands in for a second replica.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class RealtimeBackplaneTests
 {
     private readonly E2EApiFactory _factory;

@@ -28,6 +28,7 @@ namespace SimplArchive.EndToEndTests;
 /// </para>
 /// </remarks>
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class ThemeEndpointTests
 {
     private readonly E2EApiFactory _factory;

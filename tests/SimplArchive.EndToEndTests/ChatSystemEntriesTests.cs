@@ -11,6 +11,7 @@ namespace SimplArchive.EndToEndTests;
 // its wording is a localized template the clients render, and its "Version N" and check-in comment are read from
 // the referenced version at request time rather than copied at post time.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class ChatSystemEntriesTests
 {
     private readonly E2EApiFactory _factory;

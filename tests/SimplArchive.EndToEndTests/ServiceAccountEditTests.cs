@@ -6,6 +6,7 @@ namespace SimplArchive.EndToEndTests;
 // PUT /api/service-accounts/{id}, under the same escalation cap as create — a caller can only set a right to
 // true that it holds itself. Backs the desktop + web service-account management UIs.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class ServiceAccountEditTests
 {
     private readonly E2EApiFactory _factory;

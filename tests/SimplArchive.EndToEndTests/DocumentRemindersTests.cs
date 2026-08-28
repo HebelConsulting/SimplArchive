@@ -7,6 +7,7 @@ namespace SimplArchive.EndToEndTests;
 // sets a reminder targeting a colleague; the sweep fires it into the target's intray on the due date; cancel
 // removes a pending reminder; a ServiceAccount can't set one; a target who can't see the document is rejected.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class DocumentRemindersTests
 {
     private readonly E2EApiFactory _factory;

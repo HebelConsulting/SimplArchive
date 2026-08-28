@@ -8,6 +8,7 @@ namespace SimplArchive.EndToEndTests;
 // model. A save here REPLACES rather than merges, which is what "raw" has to mean and is also what removes the
 // safety net the merge provided, so the two refusals below are load-bearing rather than defensive.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class ItemSourceTests
 {
     private readonly E2EApiFactory _factory;

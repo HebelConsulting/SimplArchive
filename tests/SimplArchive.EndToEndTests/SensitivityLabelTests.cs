@@ -9,6 +9,7 @@ namespace SimplArchive.EndToEndTests;
 // the real API + Postgres + OpenSearch: a label is set + reflected on the document, validated, gated on
 // CanEditIndexData, and filterable in search (system[sensitivityLabel]).
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class SensitivityLabelTests
 {
     private readonly E2EApiFactory _factory;

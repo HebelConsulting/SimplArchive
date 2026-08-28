@@ -10,6 +10,7 @@ namespace SimplArchive.EndToEndTests;
 // migrations"): migrate a fresh database to an EARLY migration, insert a row, migrate the rest of the way to
 // head, and confirm the row survived with the later-added columns backfilled to their defaults. Self-contained
 // (its own throwaway Postgres container). Needs Docker.
+[Trait("Area", "e2e-1")]
 public class MigrationRoundTripTests : IAsyncLifetime
 {
     // The first migration that creates the Tenants table (Id/Name/Status/CreatedAt/DeactivatedAt).

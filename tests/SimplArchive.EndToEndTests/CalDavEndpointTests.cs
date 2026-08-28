@@ -10,6 +10,7 @@ namespace SimplArchive.EndToEndTests;
 // (one DavProtocol descriptor each), so the tests are a [Theory] over the pair: a divergence between them
 // is a bug by construction, and testing only one would hide it.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class CalDavEndpointTests
 {
     // The personal space is named after its owner (ADR 0671), so its WebDAV/IMAP path segment is

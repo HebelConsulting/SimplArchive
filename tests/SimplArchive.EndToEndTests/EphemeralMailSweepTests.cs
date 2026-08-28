@@ -16,6 +16,7 @@ namespace SimplArchive.EndToEndTests;
 // into the archive must still be readable afterwards, which is the failure the re-key exists to prevent
 // (ADR 0638) asserted from the other side.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class EphemeralMailSweepTests
 {
     private readonly E2EApiFactory _factory;

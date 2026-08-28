@@ -8,6 +8,7 @@ namespace SimplArchive.EndToEndTests;
 // renaming, assigning/clearing a mask, editing index data, and changing the document date each append an audit
 // event, readable through the CanViewAuditLog-gated log.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class AuditLifecycleCoverageTests
 {
     private readonly E2EApiFactory _factory;

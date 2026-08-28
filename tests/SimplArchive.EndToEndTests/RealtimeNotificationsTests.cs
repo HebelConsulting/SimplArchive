@@ -8,6 +8,7 @@ namespace SimplArchive.EndToEndTests;
 // notification for them (an ACL grant → AccessGranted), and the push reaches the live connection. Proves the hub
 // auth (token from the connection), the DbContext push choke point, and per-user targeting end-to-end.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class RealtimeNotificationsTests
 {
     private readonly E2EApiFactory _factory;

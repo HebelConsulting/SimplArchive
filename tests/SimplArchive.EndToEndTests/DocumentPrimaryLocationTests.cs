@@ -9,6 +9,7 @@ namespace SimplArchive.EndToEndTests;
 // drops the now-redundant target-side reference), and the guards (repository root / unchanged / missing If-Match)
 // reject as specified.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class DocumentPrimaryLocationTests
 {
     private readonly E2EApiFactory _factory;

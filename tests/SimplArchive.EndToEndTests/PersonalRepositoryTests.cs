@@ -8,6 +8,7 @@ namespace SimplArchive.EndToEndTests;
 // the shared GET /repositories list, a ServiceAccount has none (403), and — the key isolation guarantee — two
 // users each get their own private space and neither can see the other's personal documents.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class PersonalRepositoryTests
 {
     // The personal space is named after its owner (ADR 0671), so its WebDAV/IMAP path segment is

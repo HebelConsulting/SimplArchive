@@ -10,6 +10,7 @@ namespace SimplArchive.EndToEndTests;
 // snapshot, that a User holding CanViewAuditLog can read it (own ∪ groups via the resolver), that a User
 // without the right is forbidden, and that the action filter narrows the result.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class AuditTrailTests
 {
     private readonly E2EApiFactory _factory;

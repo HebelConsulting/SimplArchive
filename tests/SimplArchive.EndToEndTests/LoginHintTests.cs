@@ -6,6 +6,7 @@ namespace SimplArchive.EndToEndTests;
 // (ADR "Browser-only desktop login + login_hint") — so a returning desktop user, whose logon window passes the
 // remembered username as login_hint, doesn't retype it.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class LoginHintTests
 {
     private readonly E2EApiFactory _factory;

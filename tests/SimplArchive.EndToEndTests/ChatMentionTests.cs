@@ -10,6 +10,7 @@ namespace SimplArchive.EndToEndTests;
 // sends them a notification carrying its name, so accepting one for somebody who cannot see the document would
 // hand them both. The picker never offers such a user, which is exactly why the server must not rely on it.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class ChatMentionTests
 {
     private readonly E2EApiFactory _factory;

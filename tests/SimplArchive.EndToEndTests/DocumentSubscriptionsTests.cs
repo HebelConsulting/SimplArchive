@@ -7,6 +7,7 @@ namespace SimplArchive.EndToEndTests;
 // a user follows a document, a new version by someone else produces a SubscribedActivity notification, and
 // after unfollowing the next change is silent. A ServiceAccount can't subscribe (no in-app intray).
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class DocumentSubscriptionsTests
 {
     private readonly E2EApiFactory _factory;

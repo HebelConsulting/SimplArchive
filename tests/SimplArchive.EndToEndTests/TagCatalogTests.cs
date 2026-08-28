@@ -7,6 +7,7 @@ namespace SimplArchive.EndToEndTests;
 // tenant admin creates/renames/merges/retires catalog tags (rename + merge cascade the document tag strings),
 // a non-admin is refused, and the per-tenant enforcement toggle rejects a non-catalog tag.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class TagCatalogTests
 {
     private readonly E2EApiFactory _factory;

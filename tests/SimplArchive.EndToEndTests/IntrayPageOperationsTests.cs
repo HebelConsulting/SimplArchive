@@ -14,6 +14,7 @@ namespace SimplArchive.EndToEndTests;
 // implementation that returns three copies of page one, and "sorted" is satisfied by an implementation that
 // sorts nothing. Reading the widths back out of the resulting PDF says which page actually went where.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class IntrayPageOperationsTests
 {
     private readonly E2EApiFactory _factory;

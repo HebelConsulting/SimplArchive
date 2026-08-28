@@ -15,6 +15,7 @@ namespace SimplArchive.EndToEndTests;
 // the translation still 500s on any OTHER containment refusal, and the translation without the classifier fix
 // turns an ordinary drag into a legible failure rather than a success.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class TypedItemPlacementTests
 {
     private readonly E2EApiFactory _factory;

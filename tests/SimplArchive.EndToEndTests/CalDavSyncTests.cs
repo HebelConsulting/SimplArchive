@@ -8,6 +8,7 @@ namespace SimplArchive.EndToEndTests;
 // RFC 6578 sync-collection and WebDAV-Push registration (#564 slice 3, ADR 0622), driven over raw HTTP the way
 // DAVx⁵ and Apple's clients do. A [Theory] over both protocols, since one implementation serves both.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class CalDavSyncTests
 {
     private static readonly XNamespace Dav = "DAV:";

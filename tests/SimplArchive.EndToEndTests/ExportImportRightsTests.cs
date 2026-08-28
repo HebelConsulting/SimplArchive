@@ -9,6 +9,7 @@ namespace SimplArchive.EndToEndTests;
 // so a plain non-admin user granted CanExport can export and one granted CanImport can import — while a user
 // holding neither is refused. Proves the capability can be delegated without full admin.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class ExportImportRightsTests
 {
     private readonly E2EApiFactory _factory;

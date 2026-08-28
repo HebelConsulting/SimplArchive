@@ -17,6 +17,7 @@ namespace SimplArchive.EndToEndTests;
 // Driven over a real socket rather than by calling LmtpDelivery directly: the per-recipient reply after DATA
 // is the part of RFC 2033 most easily got wrong, and it is only observable on the wire.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class LmtpDeliveryTests
 {
     private readonly E2EApiFactory _factory;

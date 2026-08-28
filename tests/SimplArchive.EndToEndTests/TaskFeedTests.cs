@@ -11,6 +11,7 @@ namespace SimplArchive.EndToEndTests;
 // Nothing is stored: the items are composed from WorkflowState at read time, so these assertions are also the
 // only thing standing between the feed and a silent divergence from the tab it mirrors.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class TaskFeedTests
 {
     private readonly E2EApiFactory _factory;

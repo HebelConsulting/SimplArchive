@@ -7,6 +7,7 @@ namespace SimplArchive.EndToEndTests;
 // document's name stem + the version's file extension — the desktop "Open"/"Save as…" and the web download
 // both rely on this, so it's asserted once here at the API level.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class DocumentDownloadTests
 {
     private readonly E2EApiFactory _factory;

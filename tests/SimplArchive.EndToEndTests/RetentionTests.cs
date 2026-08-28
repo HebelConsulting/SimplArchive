@@ -8,6 +8,7 @@ namespace SimplArchive.EndToEndTests;
 // auto-soft-deleted by the sweep; a legal-held document is listed as suspended and spared; the schedule is
 // gated on CanManageClassification.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class RetentionTests
 {
     private readonly E2EApiFactory _factory;

@@ -9,6 +9,7 @@ namespace SimplArchive.EndToEndTests;
 // a CanLegalHold user places a hold on a document; while held, new versions / mask changes / deletion are all
 // refused (409 LEGAL_HOLD); releasing the hold unfreezes it. A non-CanLegalHold caller can't place holds.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class LegalHoldTests
 {
     private readonly E2EApiFactory _factory;

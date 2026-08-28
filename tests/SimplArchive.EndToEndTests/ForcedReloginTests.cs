@@ -10,6 +10,7 @@ namespace SimplArchive.EndToEndTests;
 // log in. prompt=login must force the login page even with a live cookie. This drives the raw OAuth endpoints
 // with a persistent cookie jar to prove both behaviours.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class ForcedReloginTests
 {
     private readonly E2EApiFactory _factory;

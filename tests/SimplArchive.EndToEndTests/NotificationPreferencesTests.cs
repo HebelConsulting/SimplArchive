@@ -8,6 +8,7 @@ namespace SimplArchive.EndToEndTests;
 // preferences"): a User reads their defaults (all mutable types emailed), mutes a type, reads it back, can't
 // mute a deadline/compliance escalation, and a ServiceAccount has no intray.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class NotificationPreferencesTests
 {
     private readonly E2EApiFactory _factory;

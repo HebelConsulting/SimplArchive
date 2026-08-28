@@ -6,6 +6,7 @@ namespace SimplArchive.EndToEndTests;
 // sorting"): a child listing carries the document type (assigned mask name), the latest version's document
 // date + byte size, and the tags — all derived/projected, no schema change.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class ListRowColumnsTests
 {
     private readonly E2EApiFactory _factory;

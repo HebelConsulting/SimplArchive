@@ -12,6 +12,7 @@ namespace SimplArchive.EndToEndTests;
 // administrator can hand back. The second test is the one that says so: same admin, same tenant, right revoked,
 // and the whole surface goes quiet rather than half-working.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-1")]
 public class AdminPersonalRepositoriesTests
 {
     private readonly E2EApiFactory _factory;

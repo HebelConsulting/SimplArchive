@@ -16,6 +16,7 @@ namespace SimplArchive.EndToEndTests;
 // The assertions are mostly about what must NOT happen: no new version appears (a save is not a publish), no
 // second document is created beside the first, and someone else's document is not quietly writable.
 [Collection(E2ECollection.Name)]
+[Trait("Area", "e2e-2")]
 public class WebDavImplicitCheckoutTests
 {
     // The personal space is named after its owner (ADR 0671), so its WebDAV/IMAP path segment is
