@@ -18,7 +18,7 @@ namespace SimplArchive.DesktopClient.Services;
 /// document resource itself advertised (ADR 0543/0555). The one composed URL the desktop ever had
 /// (<c>DocumentAddress</c>) is gone — a caller that holds only an id has nothing to call here, by design.
 /// </remarks>
-public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminders)
+public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> reminders)
 {
     private readonly ApiCore _core = core;
 

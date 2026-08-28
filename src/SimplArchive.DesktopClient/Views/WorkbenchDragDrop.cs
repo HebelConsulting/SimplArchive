@@ -172,14 +172,16 @@ internal sealed class WorkbenchDragDrop
         {
             var items = source.Where(n => !n.IsReference)
                 .Select(n => new DragOutItem(n.Name, n.IsFolder,
-                    n.Links?.GetValueOrDefault("versions"), n.Links?.GetValueOrDefault("children")))
+                    n.Links?.GetValueOrDefault("versions"), n.Links?.GetValueOrDefault("children"),
+                    n.Id, n.DocumentType))
                 .ToList();
             if (items.Count > 0)
             {
                 dragVm.Status = Strings.Get("StPreparingDrag");
                 try
                 {
-                    var files = await DragOutStager.StageAsync(dragApi, items);
+                    var files = await DragOutStager.StageAsync(dragApi, items,
+                        combinedStem: dragVm.CurrentFolderName); // the combined file is named for the folder it came from (#658)
                     if (files.Count > 0)
                     {
                         data.Set(DataFormats.FileNames, files);

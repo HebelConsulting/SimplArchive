@@ -4686,4 +4686,19 @@
   <data name="UgImapMailOnly" xml:space="preserve">
     <value>solo correos</value>
   </data>
+  <data name="CombinedContactsStem" xml:space="preserve">
+    <value>Contactos</value>
+  </data>
+  <data name="CombinedEventsStem" xml:space="preserve">
+    <value>Eventos</value>
+  </data>
+  <data name="BulkExport" xml:space="preserve">
+    <value>Exportar</value>
+  </data>
+  <data name="BulkExported" xml:space="preserve">
+    <value>{0} elemento(s) exportados como un solo archivo.</value>
+  </data>
+  <data name="BulkExportFailed" xml:space="preserve">
+    <value>La selección no se pudo exportar como un solo archivo.</value>
+  </data>
 </root>

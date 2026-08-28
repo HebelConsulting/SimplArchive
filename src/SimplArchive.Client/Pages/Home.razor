@@ -2708,6 +2708,9 @@
 
     private Task BulkDeleteAsync() => RunBulkAsync(Bulk.DeleteAsync(_bulkIds));
 
+    // One combined file from the selection (#658) — named for the folder it came from, like the desktop drag.
+    private Task BulkExportAsync() => Bulk.ExportAsync([.. _bulkIds], _selectedFolder?.Name ?? "export");
+
     private Task BulkAddTagsAsync() => RunBulkAsync(Bulk.AddTagsAsync(_bulkIds));
 
     private Task BulkSensitivityAsync() => RunBulkAsync(Bulk.SetSensitivityAsync(_bulkIds));

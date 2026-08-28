@@ -14,7 +14,8 @@ namespace SimplArchive.DesktopClient.Services;
 // The hrefs are the ROW's advertised addresses (ADR 0555): a document stages through its `versions`, a folder
 // recurses through its `children`; an item whose row did not carry the needed address is skipped (best-effort,
 // same as a failed download).
-public sealed record DragOutItem(string Name, bool IsFolder, string? VersionsHref, string? ChildrenHref);
+public sealed record DragOutItem(string Name, bool IsFolder, string? VersionsHref, string? ChildrenHref,
+    Guid Id = default, string DocumentType = "");
 
 // Stages contents-list items as **real OS files in a fresh temp folder** so they can be dragged out to the OS
 // filesystem (Finder/Explorer/desktop) — issue #266: a **document** → its current version file (`<stem><ext>`),
@@ -25,10 +26,38 @@ public sealed record DragOutItem(string Name, bool IsFolder, string? VersionsHre
 public static class DragOutStager
 {
     public static async Task<IReadOnlyList<string>> StageAsync(
-        SimplArchiveApiClient api, IReadOnlyList<DragOutItem> items, CancellationToken cancellationToken = default)
+        SimplArchiveApiClient api, IReadOnlyList<DragOutItem> items, CancellationToken cancellationToken = default,
+        string? combinedStem = null)
     {
         var dir = Path.Combine(Path.GetTempPath(), "simplarchive-dragout", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
+
+        // A uniform multi-selection of contacts or calendar entries stages ONE combined file (#658): both
+        // formats are record streams, and every consuming application expects many records in one file —
+        // thirty separate files is thirty imports. The mask name is the signal (a Contact IS a .vcf by
+        // classification); the server re-validates the stored extensions and refuses anything mixed, and a
+        // refusal falls through to the per-item staging below rather than an empty drag.
+        if (items.Count > 1 && items.All(i => !i.IsFolder && i.Id != default)
+            && items.Select(i => i.DocumentType).Distinct().SingleOrDefault() is "Contact" or "Appointment")
+        {
+            try
+            {
+                var kind = items[0].DocumentType;
+                // The key is picked OUTSIDE Strings.Get: the localisation-key scanner reads the first literal
+                // inside a Get(...) as the key, and a ternary there made it hunt for a key named "Contact".
+                var stemKey = kind == "Contact" ? "CombinedContactsStem" : "CombinedEventsStem";
+                var stem = combinedStem is { Length: > 0 } ? combinedStem : SimplArchive.Localization.Strings.Get(stemKey);
+                var (bytes, fileName) = await api.Documents.ExportCombinedAsync(
+                    items.Select(i => i.Id).ToList(), stem, cancellationToken);
+                var single = UniquePath(dir, Sanitize(Path.GetFileNameWithoutExtension(fileName)) + Path.GetExtension(fileName));
+                await File.WriteAllBytesAsync(single, bytes, cancellationToken);
+                return [single];
+            }
+            catch (Exception)
+            {
+                // Fall through: one file per item is always a correct answer.
+            }
+        }
 
         var staged = new List<string>();
         foreach (var item in items)

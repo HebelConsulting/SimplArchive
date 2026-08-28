@@ -3,6 +3,8 @@ using MudBlazor;
 using SimplArchive.Client.Hypermedia;
 using SimplArchive.Client.Dialogs;
 using SimplArchive.Localization;
+using SimplArchive.Client.Models;
+using Microsoft.JSInterop;
 
 namespace SimplArchive.Client.Services;
 
@@ -15,7 +17,7 @@ namespace SimplArchive.Client.Services;
 /// row and are offered by its context menu; these act on the set and are offered by the bulk bar. Each returns
 /// whether the caller should refresh, so the page keeps ownership of the selection and of what "refresh" means.
 /// </remarks>
-public sealed class BulkActions(HttpClient http, IDialogService dialogs, ISnackbar snackbar, DocumentActions actions, ApiRoot apiRoot)
+public sealed class BulkActions(HttpClient http, IDialogService dialogs, ISnackbar snackbar, DocumentActions actions, ApiRoot apiRoot, IJSRuntime js)
 {
     private IReadOnlyDictionary<string, string>? _rels;
 
@@ -38,6 +40,37 @@ public sealed class BulkActions(HttpClient http, IDialogService dialogs, ISnackb
         return _rels.TryGetValue(rel, out var href)
             ? href
             : throw new InvalidOperationException($"The bulk collection advertised no '{rel}' rel (ADR 0543).");
+    }
+
+    /// <summary>The combinable kind of a selection — "Contact" or "Appointment" when EVERY selected row is
+    /// one of them (the mask names are the signal), else null. Null hides the Export affordance entirely: an
+    /// action that can only answer 400 is exactly what ADR 0543 rules out.</summary>
+    public static string? ExportKind(IEnumerable<BrowseNode> selected)
+    {
+        var kinds = selected.Select(n => n.DocumentType).Distinct().Take(2).ToList();
+        return kinds is ["Contact"] or ["Appointment"] ? kinds[0] : null;
+    }
+
+    /// <summary>One combined .vcf/.ics from a uniform selection (#658), handed to the browser as a download.
+    /// The bytes ride a data: URL because a plain anchor carries no bearer token — the fetch happens on the
+    /// authed HttpClient and only the finished file reaches the DOM.</summary>
+    public async Task ExportAsync(IReadOnlyCollection<Guid> ids, string stem)
+    {
+        using var response = await http.PostAsJsonAsync(await HrefAsync("export"), new { ids = ids.ToList(), name = stem });
+        if (!response.IsSuccessStatusCode)
+        {
+            snackbar.Add(Strings.Get("BulkExportFailed"), Severity.Error);
+            return;
+        }
+
+        var fileName = response.Content.Headers.ContentDisposition?.FileNameStar
+            ?? response.Content.Headers.ContentDisposition?.FileName?.Trim('"')
+            ?? stem;
+        var contentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+        var base64 = Convert.ToBase64String(await response.Content.ReadAsByteArrayAsync());
+        await js.InvokeVoidAsync("eval",
+            $"(() => {{ const a = document.createElement('a'); a.href = 'data:{contentType};base64,{base64}'; a.download = {System.Text.Json.JsonSerializer.Serialize(fileName)}; document.body.appendChild(a); a.click(); a.remove(); }})()");
+        snackbar.Add(string.Format(Strings.Get("BulkExported"), ids.Count), Severity.Success);
     }
 
     /// <summary>Move the selected items into a folder the user picks. False if they cancelled.</summary>

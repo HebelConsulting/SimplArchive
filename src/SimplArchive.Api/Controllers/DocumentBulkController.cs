@@ -36,6 +36,7 @@ public class DocumentBulkController : ControllerBase
     private readonly IAuditRecorder _audit;
     private readonly IUserSystemRightsResolver _userSystemRights;
     private readonly Documents.DocumentMover _mover;
+    private readonly SimplArchive.Application.Abstractions.IObjectStorageClient _objectStorage;
 
     public DocumentBulkController(
         SimplArchiveDbContext dbContext,
@@ -46,8 +47,10 @@ public class DocumentBulkController : ControllerBase
         IDocumentIndexQueue queue,
         IAuditRecorder audit,
         IUserSystemRightsResolver userSystemRights,
-        Documents.DocumentMover mover)
+        Documents.DocumentMover mover,
+        SimplArchive.Application.Abstractions.IObjectStorageClient objectStorage)
     {
+        _objectStorage = objectStorage;
         _mover = mover;
         _dbContext = dbContext;
         _effectiveRightsCalculator = effectiveRightsCalculator;
@@ -57,6 +60,65 @@ public class DocumentBulkController : ControllerBase
         _queue = queue;
         _audit = audit;
         _userSystemRights = userSystemRights;
+    }
+
+    public class BulkExportRequest
+    {
+        public List<Guid> Ids { get; set; } = [];
+        public string? Name { get; set; }
+    }
+
+    /// <summary>
+    /// One combined file from a uniform .vcf or .ics selection (#658): every consuming application expects a
+    /// stream of records, not thirty files imported thirty times. STRICT, unlike the bulk mutations above: a
+    /// skipped item there is one move fewer, a skipped item HERE is a file that silently lacks a contact —
+    /// serving something else is worse than refusing, so any unreadable or non-combinable item refuses the
+    /// whole request with the reason.
+    /// </summary>
+    [HttpPost("export")]
+    public async Task<IActionResult> Export([FromBody] BulkExportRequest request, CancellationToken cancellationToken)
+    {
+        var ids = Distinct(request.Ids);
+        if (ids.Count == 0 || ids.Count > MaxItems)
+        {
+            return BadRequest();
+        }
+
+        var payloads = new List<byte[]>();
+        string? extension = null;
+        foreach (var id in ids)
+        {
+            if (await GetDocumentAsync(id, cancellationToken) is not { } document
+                || !(await GetCallerRightsAsync(id, cancellationToken)).CanReadContent)
+            {
+                return NotFound();
+            }
+
+            var version = await Infrastructure.Persistence.CurrentVersion.ResolveAsync(
+                _dbContext.DocumentVersions, id, document.CurrentVersionId, cancellationToken);
+            if (version?.ObjectKey is not { Length: > 0 } objectKey)
+            {
+                throw new Errors.Exceptions.Documents.BulkExportNotCombinableException();
+            }
+
+            var itemExtension = Path.GetExtension(objectKey);
+            if (itemExtension is not (".vcf" or ".ics") || (extension is not null && itemExtension != extension))
+            {
+                throw new Errors.Exceptions.Documents.BulkExportNotCombinableException();
+            }
+
+            extension = itemExtension;
+            await using var stream = await _objectStorage.GetObjectAsync(objectKey, cancellationToken);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer, cancellationToken);
+            payloads.Add(buffer.ToArray());
+        }
+
+        var combined = extension == ".vcf"
+            ? Documents.CombinedItemExport.CombineVcf(payloads)
+            : Documents.CombinedItemExport.CombineIcs(payloads);
+        var stem = string.IsNullOrWhiteSpace(request.Name) ? "export" : request.Name.Trim();
+        return File(combined, extension == ".vcf" ? "text/vcard" : "text/calendar", $"{stem}{extension}");
     }
 
     public class BulkMoveRequest
@@ -120,6 +182,7 @@ public class DocumentBulkController : ControllerBase
             new Link("delete", "/api/documents/bulk/delete", "POST"),
             new Link("tags", "/api/documents/bulk/tags", "POST"),
             new Link("sensitivity", "/api/documents/bulk/sensitivity", "POST"),
+            new Link("export", "/api/documents/bulk/export", "POST"),
         ],
     });
 
