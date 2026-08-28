@@ -1,0 +1,16 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.GoToLinkDialog"
+        Title="{loc:Tr GoToLinkTitle}" Width="460" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <!-- Paste-a-link entry (#761): accepts the https /go/{id} form and simplarchive://go/{id}. -->
+    <StackPanel Margin="16" Spacing="12">
+        <TextBlock Text="{loc:Tr GoToLinkPrompt}" TextWrapping="Wrap" />
+        <TextBox x:Name="LinkBox" Watermark="https://…/go/…" />
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+            <Button Content="{loc:Tr GoToLinkGo}" Click="OnGo" IsDefault="True" Classes="accent" />
+        </StackPanel>
+    </StackPanel>
+</Window>

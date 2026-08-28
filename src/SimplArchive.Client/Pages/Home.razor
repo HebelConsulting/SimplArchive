@@ -8,6 +8,7 @@
 @using SimplArchive.Client.Dialogs
 @inject HttpClient Http
 @inject IJSRuntime JS
+@inject NavigationManager Nav
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject SimplArchive.Client.Services.ImpersonationService ImpersonationSvc
@@ -663,6 +664,7 @@
                                 <MudMenuItem Icon="@Icons.Material.Filled.ArrowForward" OnClick="() => GoToAsync(node)">@Strings.Get("CtxGoTo")</MudMenuItem>
                                 <MudMenuItem Icon="@Icons.Material.Filled.LinkOff" OnClick="() => RemoveReferenceAsync(node)">@Strings.Get("CtxRemoveReference")</MudMenuItem>
                             }
+                            <MudMenuItem Icon="@Icons.Material.Filled.IosShare" OnClick="() => CopyDeepLinkAsync(node)">@Strings.Get("CtxCopyLink")</MudMenuItem>
                             @if (node.HasReferences)
                             {
                                 <MudMenuItem Icon="@Icons.Material.Filled.Share" OnClick="() => ShowReferencesForAsync(node)">@Strings.Get("CtxReferences")</MudMenuItem>
@@ -1210,6 +1212,24 @@
         await LoadTasksAsync(); // for the Tasks tab badge count
 
         AppNav.OpenDocumentRequested += OpenDocumentFromNotificationAsync; // ADR "Notification viewer + click-through"
+
+        // A deep link parked by the /go/{id} lander before this page existed (#761): consume exactly once,
+        // through the same open-and-select path the notification bell uses — deep-linking is NAVIGATING.
+        if (AppNav.TakePendingDeepLink() is { } deepLink)
+        {
+            await OpenDocumentFromNotificationAsync(deepLink.DocumentId, deepLink.ParentId);
+        }
+    }
+
+    // Copy a deep link (#761): the https app route /go/{id} — universally openable, and the desktop's
+    // scheme handler accepts it too. Addressed from the ROW the menu was opened on (ADR 0559), and a
+    // reference row links its TARGET: the link's promise is "this document", not "this appearance".
+    private async Task CopyDeepLinkAsync(BrowseNode node)
+    {
+        // node.Id is the DOCUMENT id even on a reference row (the row model's contract), which is exactly
+        // what the link should promise: this document, wherever its appearances live.
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", $"{Nav.BaseUri}go/{node.Id}");
+        Snackbar.Add(Strings.Get("DeepLinkCopied"), Severity.Success);
     }
 
     // A notification bell click (in MainLayout) asks the workbench to open the related document.
@@ -2456,11 +2476,6 @@
         DetailSaveFailure.ContentsSortOrderForbidden => "FolderSortNoPermission",
         _ => "SaveFailName",
     };
-
-    // ---- Automatic chat entries (ADR 0545) -----------------------------------------------------------
-
-
-
 
 
     // ---- Author identity card (ADR 0544) -------------------------------------------------------------

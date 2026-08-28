@@ -4686,6 +4686,36 @@
   <data name="UgImapMailOnly" xml:space="preserve">
     <value>e-mails only</value>
   </data>
+  <data name="CtxCopyLink" xml:space="preserve">
+    <value>Copy link</value>
+  </data>
+  <data name="DeepLinkCopied" xml:space="preserve">
+    <value>Link copied — anyone with access can open it.</value>
+  </data>
+  <data name="DeepLinkNoAccess" xml:space="preserve">
+    <value>You do not have access to this document. Ask the sender to grant you access.</value>
+  </data>
+  <data name="DeepLinkGone" xml:space="preserve">
+    <value>This link does not lead anywhere for you — the document may have been deleted, moved beyond your reach, or the link may be wrong. Ask the sender.</value>
+  </data>
+  <data name="DeepLinkBackToWorkbench" xml:space="preserve">
+    <value>Back to the workbench</value>
+  </data>
+  <data name="GoToLinkTitle" xml:space="preserve">
+    <value>Go to link</value>
+  </data>
+  <data name="GoToLinkPrompt" xml:space="preserve">
+    <value>Paste a SimplArchive link — the document opens in its folder, selected.</value>
+  </data>
+  <data name="GoToLinkGo" xml:space="preserve">
+    <value>Go</value>
+  </data>
+  <data name="DeepLinkInvalid" xml:space="preserve">
+    <value>That is not a SimplArchive link.</value>
+  </data>
+  <data name="RibbonGoToLink" xml:space="preserve">
+    <value>Go to link…</value>
+  </data>
   <data name="SearchSyntaxInfo" xml:space="preserve">
     <value>Type one or more words: they are matched as whole words in document names (weighted highest), index fields, annotations and the extracted text, best matches first. If nothing matches, a contains-search runs automatically. Operators such as quotes, AND or field:value are not interpreted — text is always searched as typed. Use the filters below to narrow by type, owner, year, tags or index fields. The Search chapter of the user manual describes all of this in detail.</value>
   </data>

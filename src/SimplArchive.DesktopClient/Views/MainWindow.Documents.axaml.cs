@@ -448,6 +448,30 @@ public partial class MainWindow
         await OpenWebDavAtAsync(vm, api, vm.WebDavFolderPath());
     });
 
+    // Copy a deep link for the selected row (#761): the https web-app URL — universally openable, and the
+    // simplarchive:// handler accepts it too. The context menu selects the row it opened on (the pane's
+    // existing contract), so the selection IS the row here.
+    internal void OnCopyDeepLink(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel { SelectedItem: { } node } vm
+            && GetTopLevel(this)?.Clipboard is { } clipboard)
+        {
+            await clipboard.SetTextAsync(MainWindowViewModel.DeepLinkFor(node));
+            vm.Status = Strings.Get("DeepLinkCopied");
+        }
+    });
+
+    // Paste-a-link navigation (#761) — the receiving half of Copy link, and the fallback that works even
+    // where no URL scheme is registered (an unbundled dotnet run).
+    internal void OnGoToLink(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel vm
+            && await new GoToLinkDialog().ShowDialog<string?>(this) is { Length: > 0 } text)
+        {
+            await vm.GoToDeepLinkAsync(text);
+        }
+    });
+
     internal void OnManageWebDav(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel { Api: { } api })

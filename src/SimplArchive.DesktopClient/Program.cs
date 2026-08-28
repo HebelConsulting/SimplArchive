@@ -45,6 +45,18 @@ internal static class Program
         // the flag a console to print into.
         Services.DesktopLog.Initialize(verbose: args.Contains("--verbose"));
 
+        // A simplarchive:// launch (#761): the OS hands the link as an argument. Parked on the view-model and
+        // consumed once the user is signed in and the workbench is loaded — a deep link cannot skip login.
+        if (args.FirstOrDefault(a => a.StartsWith($"{Services.DeepLinks.Scheme}://", StringComparison.OrdinalIgnoreCase)) is { } schemeLink)
+        {
+            Services.DesktopLog.Debug("Deep link: launched with {Link}", schemeLink);
+            ViewModels.MainWindowViewModel.PendingDeepLink = schemeLink;
+        }
+
+        // Registering the scheme is idempotent per-user work on Windows (HKCU needs no elevation); macOS reads
+        // it from the app bundle's Info.plist and Linux from the packaged .desktop file, both set at packaging.
+        Services.WindowsSchemeRegistration.EnsureRegistered();
+
         // Crash guard (ADR "Desktop crash guard"): surface unhandled background/unobserved exceptions in the
         // "lost connection" modal instead of taking the app down. UI-thread async-void handlers are guarded
         // separately via Safe.Fire.

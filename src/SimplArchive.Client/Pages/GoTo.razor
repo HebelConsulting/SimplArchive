@@ -1,0 +1,97 @@
+@page "/go/{Id:guid}"
+@using System.Net
+@using System.Text.Json
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@using SimplArchive.Client.Services
+@inject HttpClient Http
+@inject ApiRoot ApiRoot
+@inject AppNavigationState AppNav
+@inject NavigationManager Nav
+
+@* The deep-link lander (#761): the address a user pastes to a colleague — /go/{documentId}. Signed out, the
+   OIDC round-trip preserves this URL as the return target (RedirectToLogin below), so the recipient lands
+   back here after authenticating. Signed in, this resolves the document by expanding the root's TEMPLATED
+   `document` rel, follows the resource's `parent` rel for the containing folder, PARKS the target on
+   AppNavigationState, and forwards to the workbench — which consumes it after its own load. Deep-linking is
+   NAVIGATING, not revealing: the folder opens, the object is selected, the detail pane describes it.
+
+   The failure text deliberately does not distinguish "does not exist", "deleted" and "another tenant": the
+   tenant filter already folds foreign tenants into 404, and a sharper message would tell the recipient more
+   about somebody else's archive than they are entitled to learn. Actionable either way: ask the sender. *@
+
+<AuthorizeView>
+    <Authorized>
+        @if (_error is { } error)
+        {
+            <MudContainer MaxWidth="MaxWidth.Small" Class="pa-8">
+                <MudAlert Severity="Severity.Warning">@error</MudAlert>
+                <MudButton Class="mt-4" Variant="Variant.Outlined" OnClick="@(() => Nav.NavigateTo("/"))">@Strings.Get("DeepLinkBackToWorkbench")</MudButton>
+            </MudContainer>
+        }
+        else
+        {
+            <MudContainer MaxWidth="MaxWidth.Small" Class="pa-8"><MudProgressLinear Indeterminate="true" /></MudContainer>
+        }
+    </Authorized>
+    <NotAuthorized>
+        @* Straight into the sign-in round-trip, carrying THIS address as the return target — the recipient of
+           a pasted link is usually signed out, and a "please log in" pit stop is one more place to get lost.
+           The rest of the app shows a Login button instead because its pages are destinations a user chose;
+           this page is a corridor. *@
+        <MudContainer MaxWidth="MaxWidth.Small" Class="pa-8"><MudProgressLinear Indeterminate="true" /></MudContainer>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (AuthState is null || (await AuthState).User.Identity?.IsAuthenticated != true)
+        {
+            Nav.NavigateToLogin("authentication/login", new InteractiveRequestOptions
+            {
+                Interaction = InteractionType.SignIn,
+                ReturnUrl = Nav.Uri, // /go/{id} itself — the OIDC state carries it through the round-trip
+            });
+            return;
+        }
+
+        var template = await ApiRoot.RequireAsync("document");
+        using var response = await Http.GetAsync(template.Replace("{id}", Id.ToString()));
+        if (!response.IsSuccessStatusCode)
+        {
+            _error = Strings.Get(response.StatusCode == HttpStatusCode.Forbidden ? "DeepLinkNoAccess" : "DeepLinkGone");
+            return;
+        }
+
+        // The containing folder, by FOLLOWING the resource's `parent` rel — absent on a repository root, and
+        // treated as absent when the caller cannot see the parent (best effort beats a dead end: the workbench
+        // then opens the object the way it opens a root).
+        Guid? parentId = null;
+        using (var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync()))
+        {
+            var parentHref = doc.RootElement.GetProperty("links").EnumerateArray()
+                .Where(l => l.GetProperty("rel").GetString() == "parent")
+                .Select(l => l.GetProperty("href").GetString())
+                .FirstOrDefault();
+            if (parentHref is not null)
+            {
+                using var parentResponse = await Http.GetAsync(parentHref);
+                if (parentResponse.IsSuccessStatusCode)
+                {
+                    using var parent = JsonDocument.Parse(await parentResponse.Content.ReadAsStringAsync());
+                    parentId = parent.RootElement.GetProperty("id").GetGuid();
+                }
+            }
+        }
+
+        AppNav.PendingDeepLink = (Id, parentId);
+        Nav.NavigateTo("/");
+    }
+}

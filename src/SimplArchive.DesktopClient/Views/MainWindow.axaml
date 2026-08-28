@@ -85,6 +85,7 @@
                             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
                                 <Button Command="{Binding OpenCommand}" ToolTip.Tip="{x:Static vm:MainWindowViewModel.RibbonOpenTip}"><i:Icon Value="mdi-open-in-app" FontSize="18" /></Button>
                                 <Button IsEnabled="{Binding CanSaveAs}" Click="OnSaveAs" ToolTip.Tip="{loc:Tr RibbonSaveAs}"><i:Icon Value="mdi-content-save-outline" FontSize="18" /></Button>
+                                <Button Click="OnGoToLink" ToolTip.Tip="{loc:Tr RibbonGoToLink}"><i:Icon Value="mdi-link-variant" FontSize="18" /></Button>
                                 <Button IsEnabled="{Binding HasSelectedItem}" Click="OnRename" ToolTip.Tip="{loc:Tr RibbonRename}"><i:Icon Value="mdi-rename-box" FontSize="18" /></Button>
                                 <Button IsEnabled="{Binding HasSelectedItem}" Click="OnDelete" ToolTip.Tip="{loc:Tr RibbonDelete}"><i:Icon Value="mdi-delete" FontSize="18" /></Button>
                                 <Button IsEnabled="False" ToolTip.Tip="{loc:Tr RibbonUpload}"><i:Icon Value="mdi-upload" FontSize="18" /></Button>
@@ -336,6 +337,9 @@
                                          Ctrl elsewhere, which XAML cannot express (#482). -->
                                     <MenuItem x:Name="OpenMenuItem" Header="{loc:Tr MwOpen}" Click="OnOpen">
                                         <MenuItem.Icon><i:Icon Value="mdi-open-in-app" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="{loc:Tr CtxCopyLink}" Click="OnCopyDeepLink">
+                                        <MenuItem.Icon><i:Icon Value="mdi-link-variant" /></MenuItem.Icon>
                                     </MenuItem>
                                     <MenuItem Header="{loc:Tr RibbonSaveAs}" Click="OnSaveAs">
                                         <MenuItem.Icon><i:Icon Value="mdi-content-save-outline" /></MenuItem.Icon>

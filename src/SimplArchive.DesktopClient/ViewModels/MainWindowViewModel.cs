@@ -953,6 +953,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
             IsLoggedIn = true;
             await SetupUserContextAsync();
             await LoadRootAsync();
+
+            // A scheme-launched deep link (#761) parked by Program.Main waits for exactly this moment: the
+            // workbench is loaded and the tree exists to reveal into.
+            if (PendingDeepLink is { } pending)
+            {
+                PendingDeepLink = null;
+                await GoToDeepLinkAsync(pending);
+            }
         }
         catch (Exception e)
         {

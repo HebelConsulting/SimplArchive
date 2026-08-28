@@ -4686,6 +4686,36 @@
   <data name="UgImapMailOnly" xml:space="preserve">
     <value>nur E-Mails</value>
   </data>
+  <data name="CtxCopyLink" xml:space="preserve">
+    <value>Link kopieren</value>
+  </data>
+  <data name="DeepLinkCopied" xml:space="preserve">
+    <value>Link kopiert — jeder mit Zugriff kann ihn öffnen.</value>
+  </data>
+  <data name="DeepLinkNoAccess" xml:space="preserve">
+    <value>Sie haben keinen Zugriff auf dieses Dokument. Bitten Sie den Absender, Ihnen Zugriff zu geben.</value>
+  </data>
+  <data name="DeepLinkGone" xml:space="preserve">
+    <value>Dieser Link führt für Sie ins Leere — das Dokument wurde möglicherweise gelöscht, ist außerhalb Ihrer Reichweite oder der Link ist fehlerhaft. Fragen Sie den Absender.</value>
+  </data>
+  <data name="DeepLinkBackToWorkbench" xml:space="preserve">
+    <value>Zurück zur Arbeitsoberfläche</value>
+  </data>
+  <data name="GoToLinkTitle" xml:space="preserve">
+    <value>Link öffnen</value>
+  </data>
+  <data name="GoToLinkPrompt" xml:space="preserve">
+    <value>Fügen Sie einen SimplArchive-Link ein — das Dokument öffnet sich ausgewählt in seinem Ordner.</value>
+  </data>
+  <data name="GoToLinkGo" xml:space="preserve">
+    <value>Öffnen</value>
+  </data>
+  <data name="DeepLinkInvalid" xml:space="preserve">
+    <value>Das ist kein SimplArchive-Link.</value>
+  </data>
+  <data name="RibbonGoToLink" xml:space="preserve">
+    <value>Link öffnen…</value>
+  </data>
   <data name="SearchSyntaxInfo" xml:space="preserve">
     <value>Geben Sie ein oder mehrere Wörter ein: Sie werden als ganze Wörter in Dokumentnamen (am stärksten gewichtet), Indexfeldern, Anmerkungen und dem extrahierten Text gesucht, beste Treffer zuerst. Findet sich nichts, läuft automatisch eine Enthält-Suche. Operatoren wie Anführungszeichen, AND oder feld:wert werden nicht interpretiert — der Text wird immer so gesucht, wie er eingegeben wurde. Nutzen Sie die Filter darunter, um nach Typ, Besitzer, Jahr, Tags oder Indexfeldern einzugrenzen. Das Kapitel „Suche“ im Benutzerhandbuch beschreibt alles im Detail.</value>
   </data>

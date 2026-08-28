@@ -4686,6 +4686,36 @@
   <data name="UgImapMailOnly" xml:space="preserve">
     <value>solo e-mail</value>
   </data>
+  <data name="CtxCopyLink" xml:space="preserve">
+    <value>Copia collegamento</value>
+  </data>
+  <data name="DeepLinkCopied" xml:space="preserve">
+    <value>Collegamento copiato — chiunque abbia accesso può aprirlo.</value>
+  </data>
+  <data name="DeepLinkNoAccess" xml:space="preserve">
+    <value>Non hai accesso a questo documento. Chiedi al mittente di concederti l'accesso.</value>
+  </data>
+  <data name="DeepLinkGone" xml:space="preserve">
+    <value>Questo collegamento non porta da nessuna parte per te — il documento potrebbe essere stato eliminato, spostato fuori dalla tua portata, o il collegamento è errato. Chiedi al mittente.</value>
+  </data>
+  <data name="DeepLinkBackToWorkbench" xml:space="preserve">
+    <value>Torna all'area di lavoro</value>
+  </data>
+  <data name="GoToLinkTitle" xml:space="preserve">
+    <value>Vai al collegamento</value>
+  </data>
+  <data name="GoToLinkPrompt" xml:space="preserve">
+    <value>Incolla un collegamento SimplArchive — il documento si apre nella sua cartella, selezionato.</value>
+  </data>
+  <data name="GoToLinkGo" xml:space="preserve">
+    <value>Vai</value>
+  </data>
+  <data name="DeepLinkInvalid" xml:space="preserve">
+    <value>Questo non è un collegamento SimplArchive.</value>
+  </data>
+  <data name="RibbonGoToLink" xml:space="preserve">
+    <value>Vai al collegamento…</value>
+  </data>
   <data name="SearchSyntaxInfo" xml:space="preserve">
     <value>Digitare una o più parole: vengono cercate come parole intere nei nomi dei documenti (peso maggiore), nei campi indice, nelle annotazioni e nel testo estratto, prima i risultati migliori. Se non ci sono risultati, viene eseguita automaticamente una ricerca per contenuto. Gli operatori come virgolette, AND o campo:valore non vengono interpretati — il testo viene sempre cercato così com'è. Usare i filtri sottostanti per restringere per tipo, proprietario, anno, tag o campi indice. Il capitolo Ricerca del manuale utente descrive tutto in dettaglio.</value>
   </data>

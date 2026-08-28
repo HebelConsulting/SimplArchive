@@ -4686,6 +4686,36 @@
   <data name="UgImapMailOnly" xml:space="preserve">
     <value>solo correos</value>
   </data>
+  <data name="CtxCopyLink" xml:space="preserve">
+    <value>Copiar enlace</value>
+  </data>
+  <data name="DeepLinkCopied" xml:space="preserve">
+    <value>Enlace copiado — cualquiera con acceso puede abrirlo.</value>
+  </data>
+  <data name="DeepLinkNoAccess" xml:space="preserve">
+    <value>No tiene acceso a este documento. Pida acceso a quien le envió el enlace.</value>
+  </data>
+  <data name="DeepLinkGone" xml:space="preserve">
+    <value>Este enlace no lleva a ninguna parte para usted — puede que el documento se haya eliminado, movido fuera de su alcance, o que el enlace sea erróneo. Pregunte a quien se lo envió.</value>
+  </data>
+  <data name="DeepLinkBackToWorkbench" xml:space="preserve">
+    <value>Volver al área de trabajo</value>
+  </data>
+  <data name="GoToLinkTitle" xml:space="preserve">
+    <value>Ir al enlace</value>
+  </data>
+  <data name="GoToLinkPrompt" xml:space="preserve">
+    <value>Pegue un enlace de SimplArchive — el documento se abre en su carpeta, seleccionado.</value>
+  </data>
+  <data name="GoToLinkGo" xml:space="preserve">
+    <value>Ir</value>
+  </data>
+  <data name="DeepLinkInvalid" xml:space="preserve">
+    <value>Eso no es un enlace de SimplArchive.</value>
+  </data>
+  <data name="RibbonGoToLink" xml:space="preserve">
+    <value>Ir al enlace…</value>
+  </data>
   <data name="SearchSyntaxInfo" xml:space="preserve">
     <value>Escriba una o más palabras: se buscan como palabras completas en los nombres de documentos (mayor peso), campos de índice, anotaciones y el texto extraído, mejores resultados primero. Si no hay resultados, se ejecuta automáticamente una búsqueda por contenido. Los operadores como comillas, AND o campo:valor no se interpretan — el texto siempre se busca tal como se escribió. Use los filtros de abajo para acotar por tipo, propietario, año, etiquetas o campos de índice. El capítulo Búsqueda del manual de usuario lo describe todo en detalle.</value>
   </data>

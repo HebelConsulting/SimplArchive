@@ -278,6 +278,16 @@ public class DocumentsController : ControllerBase
             links.Add(new Link("acl-entries", $"/api/documents/{documentId}/acl-entries", "GET"));
         }
 
+        // Where this document LIVES (#761) — the rel Notifications, Reminders and LegalHolds items already
+        // hand out, now on the resource itself: the deep-link lander holds an id, resolves the document, and
+        // must open its containing folder without composing a URL or being told ParentId (which this resource
+        // deliberately does not expose — see the inheritance note above). Absent on a repository root, which
+        // IS the truthful answer: there is no containing folder to open.
+        if (document.ParentId is { } parentDocumentId)
+        {
+            links.Add(new Link("parent", $"/api/documents/{parentDocumentId}", "GET"));
+        }
+
         if (document.ParentId is not null && rights.CanManagePermissions)
         {
             links.Add(new Link("acl-inheritance", $"/api/documents/{documentId}/acl-entries/inheritance", "PUT"));

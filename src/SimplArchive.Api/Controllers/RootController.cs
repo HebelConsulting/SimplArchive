@@ -41,6 +41,12 @@ public class RootController : ControllerBase
                 new Link("search", "/api/search", "GET"),
                 // Acting on a SET of documents, and finding the ones that already exist by content hash —
                 // neither belongs to a resource a client would otherwise be holding (issue #416).
+                // TEMPLATED (RFC 6570), the root's only such link: a deep link (#761) is a human-carried URL
+                // whose only payload is a document id, so its lander legitimately holds an id and nothing
+                // else — the situation ADR 0543 otherwise ends by handing out full hrefs. Expanding a template
+                // the server itself advertised is FOLLOWING, not composing: the server still owns the path
+                // shape, and renaming the route only requires updating this one line.
+                new Link("document", "/api/documents/{id}", "GET"),
                 new Link("documentsBulk", "/api/documents/bulk", "GET"),
                 new Link("duplicates", "/api/duplicates", "GET"),
                 new Link("tasks", "/api/tasks", "GET"),
