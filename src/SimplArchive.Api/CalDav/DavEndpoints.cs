@@ -86,10 +86,18 @@ internal static class DavEndpoints
             : await context.Rights.GetEffectiveRightsAsync(context.UserId, folderId);
 
     /// <summary>The CTag / sync-token — computed from the caller's tasks for a feed, from the change log otherwise.</summary>
-    private static async Task<long> SequenceForAsync(DavControllerContext context, Guid folderId) =>
-        context.Protocol == DavProtocol.CalDav && TaskFeeds.KindOf(context.UserId, folderId) is not null
-            ? await TaskFeeds.ChangeSequenceAsync(context.Db, context.UserId, context.Cancellation)
-            : await DavChangeLog.CurrentAsync(context.Db, folderId, context.Cancellation);
+    private static async Task<long> SequenceForAsync(DavControllerContext context, Guid folderId)
+    {
+        if (context.Protocol == DavProtocol.CalDav && TaskFeeds.KindOf(context.UserId, folderId) is not null)
+        {
+            return await TaskFeeds.ChangeSequenceAsync(context.Db, context.UserId, context.Cancellation);
+        }
+
+        // Healed before it is read (#806): a CTag computed from a log the workbench outran would tell a
+        // polling client "nothing new" about a collection that has, in fact, changed.
+        await DavChangeLog.ReconcileAsync(context.Db, context.Protocol, context.TenantId, folderId, context.Cancellation);
+        return await DavChangeLog.CurrentAsync(context.Db, folderId, context.Cancellation);
+    }
 
     /// <summary>PROPFIND on one item.</summary>
     internal static async Task<IActionResult> ItemAsync(DavControllerContext context, Guid folderId, string resourceName)
@@ -142,6 +150,9 @@ internal static class DavEndpoints
         }
 
         var request = PropRequest.FromProp(body.Element(DavNames.Prop));
+
+        // Same healing before a sync answer (#806): the incremental branch below reads the log as the truth.
+        await DavChangeLog.ReconcileAsync(context.Db, context.Protocol, context.TenantId, folderId, context.Cancellation);
         var current = await DavChangeLog.CurrentAsync(context.Db, folderId, context.Cancellation);
 
         // The INITIAL sync — no token, or the zero token we hand out for an untouched collection — answers

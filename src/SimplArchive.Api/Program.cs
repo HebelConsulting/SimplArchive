@@ -199,6 +199,9 @@ builder.Services.Configure<SimplArchive.Api.CalDav.DavPushOptions>(
     builder.Configuration.GetSection(SimplArchive.Api.CalDav.DavPushOptions.SectionName));
 builder.Services.AddSingleton<SimplArchive.Api.CalDav.DavPushConfiguration>();
 builder.Services.AddScoped<SimplArchive.Api.CalDav.DavPushNotifier>();
+// The recorder's doorbell (#806): a FRESH scope per ring, because the ringing DbContext is mid-disposal of
+// its own scope and the notifier needs a context of its own to read subscriptions.
+builder.Services.AddSingleton<SimplArchive.Application.Abstractions.IDavChangeNotifier, SimplArchive.Api.CalDav.DavChangeNotifierAdapter>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.CalendarContactClassifier>();
 // Composing a note as the .eml a notes client expects (#564) — the workbench's "New note" meets the IMAP
 // write path at one shape, written down in one place.

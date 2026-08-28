@@ -45,16 +45,21 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
     // push (ADR "Real-time notifications (SignalR)") fires from the single SaveChangesAsync choke point below.
     private readonly IRealtimeNotifier? _realtimeNotifier;
 
+    // Recording is unconditional, the doorbell optional — see DavChangeRecorder (#806).
+    private readonly IDavChangeNotifier? _davChangeNotifier;
+
     public SimplArchiveDbContext(
         DbContextOptions<SimplArchiveDbContext> options,
         ICurrentTenantAccessor currentTenantAccessor,
         IRealtimeNotifier? realtimeNotifier = null,
-        IMaskContainmentProvider? containmentProvider = null)
+        IMaskContainmentProvider? containmentProvider = null,
+        IDavChangeNotifier? davChangeNotifier = null)
         : base(options)
     {
         _currentTenantAccessor = currentTenantAccessor;
         _realtimeNotifier = realtimeNotifier;
         _containmentProvider = containmentProvider ?? new MaskContainmentProvider();
+        _davChangeNotifier = davChangeNotifier;
     }
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
@@ -240,6 +245,7 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
         ValidateFieldValuesAsync(CancellationToken.None).GetAwaiter().GetResult();
         ValidateRequiredFieldsAsync(CancellationToken.None).GetAwaiter().GetResult();
         PrepareMaskVersionsAsync(CancellationToken.None).GetAwaiter().GetResult();
+        DavChangeRecorder.RecordAsync(this, CancellationToken.None).GetAwaiter().GetResult();
         RegenerateConcurrencyTokens();
         return base.SaveChanges();
     }
@@ -252,52 +258,19 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
         await ValidateFieldValuesAsync(cancellationToken);
         await ValidateRequiredFieldsAsync(cancellationToken);
         await PrepareMaskVersionsAsync(cancellationToken);
+
+        // DAV collection changes, recorded at the one door every write path uses (#806, DavChangeRecorder).
+        var davChanges = await DavChangeRecorder.RecordAsync(this, cancellationToken);
+
         RegenerateConcurrencyTokens();
 
         // Snapshot the notifications being inserted BEFORE the save (so the state is still Added), then push them
         // live AFTER the commit — a single choke point covering every write path (ADR "Real-time notifications").
-        var pushes = CollectNewNotifications();
+        var pushes = RealtimeChangePusher.Collect(_realtimeNotifier, ChangeTracker);
         var saved = await base.SaveChangesAsync(cancellationToken);
-        await PushRealtimeAsync(pushes, cancellationToken);
+        await RealtimeChangePusher.PushAsync(_realtimeNotifier, pushes, cancellationToken);
+        await DavChangeRecorder.NotifyAsync(_davChangeNotifier, davChanges, cancellationToken);
         return saved;
-    }
-
-    private List<(Guid UserId, RealtimeNotification Payload)> CollectNewNotifications()
-    {
-        if (_realtimeNotifier is null)
-        {
-            return [];
-        }
-
-        // Push a newly-inserted notification, and also a coalesced one — a Modified row whose EventCount changed
-        // (ADR "Notification digest / coalescing"), so a digest bump refreshes the bell live. A mark-read/email
-        // update (only ReadAt/EmailedAt modified, EventCount untouched) is deliberately not pushed.
-        return ChangeTracker.Entries<SimplArchive.Domain.Notifications.Notification>()
-            .Where(e => e.State == EntityState.Added
-                || (e.State == EntityState.Modified && e.Property(n => n.EventCount).IsModified))
-            .Select(e => (e.Entity.RecipientUserId, new RealtimeNotification(e.Entity.Title, e.Entity.Body)))
-            .ToList();
-    }
-
-    // Best-effort: a push failure (no connections, transient hub error) must never break the mutation.
-    private async Task PushRealtimeAsync(List<(Guid UserId, RealtimeNotification Payload)> pushes, CancellationToken cancellationToken)
-    {
-        if (_realtimeNotifier is null || pushes.Count == 0)
-        {
-            return;
-        }
-
-        foreach (var (userId, payload) in pushes)
-        {
-            try
-            {
-                await _realtimeNotifier.NotifyUserAsync(userId, payload, cancellationToken);
-            }
-            catch
-            {
-                // swallow — real-time delivery is best-effort; the notification is already persisted.
-            }
-        }
     }
 
     // Regenerates ConcurrencyToken to a fresh value for every Added/Modified IConcurrencyTracked entity —

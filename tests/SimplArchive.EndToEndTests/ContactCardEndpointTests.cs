@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using System.Net;
 using System.Xml.Linq;
 using System.Net.Http.Headers;
@@ -296,5 +298,107 @@ public class ContactCardEndpointTests
             .GetProperty("children").EnumerateArray()
             .Single(c => c.GetProperty("name").GetString() == "My Documents")
             .GetProperty("id").GetGuid();
+
+    // #806, end to end: a WORKBENCH edit reaches an already-synced DAV client. Before the SaveChanges-level
+    // recorder, the phone's incremental sync-collection replayed a log only the DAV endpoints fed, so a
+    // contact edited in the structured editor never arrived — no log entry, no CTag bump, no push. Measured
+    // live as its initial-sync sibling (#805); this is the incremental half.
+    [Fact]
+    public async Task A_workbench_edit_reaches_an_already_synced_client()
+    {
+        var (api, dav, auth, documentId, itemHref) = await ContactAsync();
+        using var _1 = api;
+        using var _2 = dav;
+        var collectionHref = itemHref[..(itemHref.LastIndexOf('/') + 1)];
+
+        // The client syncs and pockets its token — this is "the phone has everything as of now".
+        async Task<(string Token, XDocument Body)> SyncAsync(string token)
+        {
+            using var request = new HttpRequestMessage(new HttpMethod("REPORT"), collectionHref)
+            {
+                Content = new StringContent($"""
+                    <?xml version="1.0" encoding="utf-8"?>
+                    <D:sync-collection xmlns:D="DAV:">
+                      <D:sync-token>{token}</D:sync-token>
+                      <D:sync-level>1</D:sync-level>
+                      <D:prop><D:getetag/></D:prop>
+                    </D:sync-collection>
+                    """, Encoding.UTF8, "application/xml"),
+                Headers = { Authorization = auth },
+            };
+            request.Headers.TryAddWithoutValidation("Depth", "1");
+            var response = await dav.SendAsync(request);
+            var body = XDocument.Parse(await response.Content.ReadAsStringAsync());
+            XNamespace ns = "DAV:";
+            return (body.Descendants(ns + "sync-token").First().Value, body);
+        }
+
+        var (token, _) = await SyncAsync(string.Empty);
+
+        // The WORKBENCH edit: the structured card PUT — no DAV verb anywhere near it.
+        var card = await TestJson.Get(api, $"/api/documents/{documentId}/contact-card");
+        using (var put = new HttpRequestMessage(HttpMethod.Put, $"/api/documents/{documentId}/contact-card"))
+        {
+            put.Headers.TryAddWithoutValidation("If-Match", (await api.GetAsync($"/api/documents/{documentId}")).Headers.ETag!.Tag);
+            put.Content = JsonContent.Create(new
+            {
+                formattedName = "Edited From The Workbench",
+                organization = card.GetProperty("organization").GetString(),
+            });
+            (await api.SendAsync(put)).EnsureSuccessStatusCode();
+        }
+
+        // The client's next incremental sync — the old token — reports the item as changed.
+        var (next, delta) = await SyncAsync(token);
+        XNamespace davNs = "DAV:";
+        Assert.Contains(delta.Descendants(davNs + "href").Select(h => h.Value),
+            h => h.EndsWith(itemHref[(itemHref.LastIndexOf('/') + 1)..], StringComparison.Ordinal));
+        Assert.NotEqual(token, next);
+    }
+
+    // #806's belt: the reconciler heals a log that something bypassed. The log is gutted directly in the
+    // database — standing in for the raw-SQL migration or route-around-the-context path the recorder cannot
+    // see — and the next sync still answers from the collection's actual state.
+    [Fact]
+    public async Task A_gutted_change_log_heals_on_the_next_sync()
+    {
+        var (api, dav, auth, documentId, itemHref) = await ContactAsync();
+        using var _1 = api;
+        using var _2 = dav;
+        var collectionHref = itemHref[..(itemHref.LastIndexOf('/') + 1)];
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SimplArchive.Infrastructure.Persistence.SimplArchiveDbContext>();
+            var gutted = await db.DavCollectionChanges.IgnoreQueryFilters(["TenantFilter"]).ToListAsync();
+            db.DavCollectionChanges.RemoveRange(gutted);
+            await db.SaveChangesAsync();
+        }
+
+        using var request = new HttpRequestMessage(new HttpMethod("REPORT"), collectionHref)
+        {
+            Content = new StringContent("""
+                <?xml version="1.0" encoding="utf-8"?>
+                <D:sync-collection xmlns:D="DAV:">
+                  <D:sync-token/>
+                  <D:sync-level>1</D:sync-level>
+                  <D:prop><D:getetag/></D:prop>
+                </D:sync-collection>
+                """, Encoding.UTF8, "application/xml"),
+            Headers = { Authorization = auth },
+        };
+        request.Headers.TryAddWithoutValidation("Depth", "1");
+        var body = XDocument.Parse(await (await dav.SendAsync(request)).Content.ReadAsStringAsync());
+        XNamespace ns = "DAV:";
+        Assert.Contains(body.Descendants(ns + "href").Select(h => h.Value),
+            h => h.EndsWith(itemHref[(itemHref.LastIndexOf('/') + 1)..], StringComparison.Ordinal));
+
+        // …and the healed log carries the entry again, so the NEXT incremental sync works too.
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SimplArchive.Infrastructure.Persistence.SimplArchiveDbContext>();
+            Assert.True(await db.DavCollectionChanges.IgnoreQueryFilters(["TenantFilter"]).AnyAsync(c => c.DocumentId == documentId));
+        }
+    }
 
 }
