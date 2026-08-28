@@ -273,10 +273,16 @@
                              the header + the ListBox live in one horizontal ScrollViewer with a fixed total width
                              (ContentsTotalWidth), so they stay aligned when scrolled and a scrollbar appears once the
                              columns don't fit the pane. Each header cell carries a drag Thumb at its right edge. -->
-                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" SizeChanged="OnContentsPaneSizeChanged">
-                        <DockPanel Width="{Binding ContentsTotalWidth}">
+                        <!-- TWO scrollviewers, offset-synced in code-behind (OnContentsBodyScroll): the header strip
+                             hides its scrollbars and follows the body's X offset, while the body owns BOTH axes — which
+                             is what puts the VERTICAL scrollbar at the pane's right edge. With one combined scroller
+                             (the previous shape) the vertical bar belonged to the ListBox inside the width-fixed
+                             region, i.e. it sat at the right edge of the COLUMNS (~850px) and was scrolled out of view
+                             at every ordinary pane width — scrolling worked, the scrollbar was unreachable. -->
+                        <ScrollViewer x:Name="ContentsHeaderScroller" DockPanel.Dock="Top" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
+                        <StackPanel Width="{Binding ContentsTotalWidth}" HorizontalAlignment="Left">
                         <!-- Sortable column header (ADR "List-row columns and sorting") — click a header to sort the loaded rows. -->
-                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="6,2,0,0" Background="{DynamicResource WbChrome}">
+                        <StackPanel Orientation="Horizontal" Margin="6,2,0,0" Background="{DynamicResource WbChrome}">
                             <Grid Width="{Binding ColNameWidth}">
                                 <Button Content="{Binding NameHeader}" Command="{Binding SortContentsCommand}" CommandParameter="name" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="4,1" Background="Transparent" BorderThickness="0" FontSize="11" FontWeight="SemiBold" />
                                 <Thumb Classes="colgrip" Tag="0" DragDelta="OnColumnResize" DragCompleted="OnColumnResizeDone" Width="6" HorizontalAlignment="Right" Background="Transparent" Cursor="SizeWestEast" />
@@ -303,8 +309,24 @@
                                 <Thumb Classes="colgrip" Tag="5" DragDelta="OnColumnResize" DragCompleted="OnColumnResizeDone" Width="6" HorizontalAlignment="Right" Background="Transparent" Cursor="SizeWestEast" />
                             </Grid>
                         </StackPanel>
-                        <ListBox x:Name="ContentsList" AutomationProperties.AutomationId="tour:pane-list" DragDrop.AllowDrop="True" SelectionMode="Multiple"
-                                 ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}" DoubleTapped="OnListDoubleTapped"
+                        <!-- Column filters — the Tasks tab's pattern on the contents list: visible under the
+                             headers (ADR 0550), aligned by the same Col*Width bindings, narrowing the loaded
+                             rows by contained text. Date and Size keep spacers so the inputs stay under their
+                             columns; filtering those two is a range question, not a text one. -->
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="6,0,0,2" Background="{DynamicResource WbChrome}">
+                            <TextBox Width="{Binding ColNameWidth}" Text="{Binding ContentsFilterName}" v:SearchField.Clearable="True" Watermark="{loc:Tr FilterHint}" Padding="4,2" FontSize="11" AutomationProperties.AutomationId="contents-filter-name" />
+                            <TextBox Width="{Binding ColTypeWidth}" Text="{Binding ContentsFilterType}" v:SearchField.Clearable="True" Watermark="{loc:Tr FilterHint}" Padding="4,2" FontSize="11" />
+                            <Border Width="{Binding ColDateWidth}" />
+                            <Border Width="{Binding ColSizeWidth}" />
+                            <TextBox Width="{Binding ColTagsWidth}" Text="{Binding ContentsFilterTags}" v:SearchField.Clearable="True" Watermark="{loc:Tr FilterHint}" Padding="4,2" FontSize="11" />
+                            <TextBox Width="{Binding ColOwnerWidth}" Text="{Binding ContentsFilterOwner}" v:SearchField.Clearable="True" Watermark="{loc:Tr FilterHint}" Padding="4,2" FontSize="11" />
+                        </StackPanel>
+                        </StackPanel>
+                        </ScrollViewer>
+                        <ScrollViewer x:Name="ContentsBodyScroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" AllowAutoHide="False"
+                                      SizeChanged="OnContentsPaneSizeChanged" ScrollChanged="OnContentsBodyScroll">
+                        <ListBox x:Name="ContentsList" Width="{Binding ContentsTotalWidth}" HorizontalAlignment="Left" ScrollViewer.VerticalScrollBarVisibility="Disabled" ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.AutomationId="tour:pane-list" DragDrop.AllowDrop="True" SelectionMode="Multiple"
+                                 ItemsSource="{Binding VisibleItems}" SelectedItem="{Binding SelectedItem}" DoubleTapped="OnListDoubleTapped"
                                  SelectionChanged="OnContentsSelectionChanged"
                                  ContextRequested="OnContentsContextRequested" KeyDown="OnListKeyDown"
                                  PointerPressed="OnContentsBackgroundPressed">
@@ -402,7 +424,6 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
-                        </DockPanel>
                         </ScrollViewer>
                         </DockPanel>
 

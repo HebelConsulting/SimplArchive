@@ -71,6 +71,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         ContactsTab.StatusReporter = m => Status = m;
         CalendarTab.StatusReporter = m => Status = m;
         IntrayActions.Connect(() => _api, RefreshIntrayAsync, m => Status = m, () => _currentUserId);
+        WireContentsFilter(); // VisibleItems follows Items through every mutation site (see the partial)
     }
 
     // What a user can do TO a staged intray item — send it on, claim it, delete it, and take its pages apart or

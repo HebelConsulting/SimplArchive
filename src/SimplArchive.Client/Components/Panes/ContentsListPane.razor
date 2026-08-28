@@ -2,6 +2,45 @@
 @using SimplArchive.Client.Models
 @using SimplArchive.Client.Services
 
+<style>
+    /* Contents-list columns (ADR "List-row columns and sorting" + "Pane-adaptive contents columns") — a grid
+       modifier on .wb-list-row (higher specificity so it overrides the base flex layout), keeping the base
+       hover/cursor/selected + test hooks. Every track is minmax(0, …) so the cells SHRINK + ellipsize rather than
+       overflow the pane, and the trailing `auto` track is the ⋮ row-menu — it never shrinks and is always the last
+       visible column, so the menu can never be clipped/scrolled off. The `.wb-list` pane is an inline-size query
+       container (above), so the breakpoints below react to the *pane's own width*, not the viewport — collapsing
+       lower-priority columns as the user narrows the split, uniformly on computer/tablet/phone. */
+    .wb-list-row.wb-cols, .wb-chead, .wb-cfilters { display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 92px) minmax(0, 70px) minmax(0, 1.3fr) minmax(0, 1.1fr) auto; align-items: center; gap: 8px; }
+    .wb-cheadwrap { position: sticky; top: 0; z-index: 1; background: var(--mud-palette-surface); }
+    .wb-chead { padding: 4px 12px; font-size: .72rem; font-weight: 600; color: var(--mud-palette-text-secondary); }
+    .wb-cfilters { padding: 0 12px 3px 12px; border-bottom: 1px solid var(--mud-palette-lines-default); }
+    .wb-cfilters .mud-input-control { margin: 0; }
+    .wb-cfilters input { font-size: .75rem; padding: 3px 6px; }
+    .wb-chead > span { cursor: pointer; user-select: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .wb-ccell { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; color: var(--mud-palette-text-secondary); }
+    .wb-cname { display: flex; align-items: center; gap: 6px; color: var(--mud-palette-text-primary); font-size: unset; }
+    /* Wide-but-not-wide-enough: drop Owner (6th) first — it is the newest column and the least often the
+       reason someone widened the pane. */
+    @@container (max-width: 739px) {
+        .wb-list-row.wb-cols, .wb-chead, .wb-cfilters { grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 92px) minmax(0, 70px) minmax(0, 1.3fr) auto; }
+        .wb-list-row.wb-cols > :nth-child(6), .wb-chead > :nth-child(6), .wb-cfilters > :nth-child(6) { display: none; }
+    }
+    /* Medium pane: drop Size (4th) + Tags (5th), keeping Name · Type · Doc date · ⋮. */
+    @@container (max-width: 519px) {
+        .wb-list-row.wb-cols, .wb-chead, .wb-cfilters { grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 92px) auto; }
+        .wb-list-row.wb-cols > :nth-child(4), .wb-list-row.wb-cols > :nth-child(5), .wb-list-row.wb-cols > :nth-child(6),
+        .wb-chead > :nth-child(4), .wb-chead > :nth-child(5), .wb-chead > :nth-child(6),
+        .wb-cfilters > :nth-child(4), .wb-cfilters > :nth-child(5), .wb-cfilters > :nth-child(6) { display: none; }
+    }
+    /* Narrow pane: Name + ⋮ only (the menu stays — it isn't a .wb-ccell). */
+    @@container (max-width: 399px) {
+        .wb-list-row.wb-cols, .wb-chead, .wb-cfilters { grid-template-columns: minmax(0, 1fr) auto; }
+        .wb-list-row.wb-cols > .wb-ccell:not(.wb-cname), .wb-chead > span:not(:first-child),
+        .wb-cfilters > :not(:first-child) { display: none; }
+    }
+</style>
+
+
 @* The workbench's middle pane: what is in the open folder. It owns how a row is drawn and the ephemeral
    column-header ordering; WHAT a row offers, and what the bulk bar does, are the shell's (ADR 0558). The rows
    themselves stay in the shell — `_folderContents` answers "what is currently listed" for the drag handler, the
@@ -34,15 +73,29 @@
     }
     else
     {
-        @* Sortable column header (ADR "List-row columns and sorting"). *@
-        <div class="wb-chead">
-            <span @onclick="() => SortBy(ContentSort.Name)">@Strings.Get("Name") @SortArrow(ContentSort.Name)</span>
-            <span @onclick="() => SortBy(ContentSort.Type)">@Strings.Get("FacetType") @SortArrow(ContentSort.Type)</span>
-            <span @onclick="() => SortBy(ContentSort.Date)">@Strings.Get("SortDocDate") @SortArrow(ContentSort.Date)</span>
-            <span @onclick="() => SortBy(ContentSort.Size)">@Strings.Get("SortSize") @SortArrow(ContentSort.Size)</span>
-            <span @onclick="() => SortBy(ContentSort.Tags)">@Strings.Get("TagsLabel") @SortArrow(ContentSort.Tags)</span>
-            <span @onclick="() => SortBy(ContentSort.Owner)">@Strings.Get("SortOwner") @SortArrow(ContentSort.Owner)</span>
-            <span></span>
+        @* Sortable column header (ADR "List-row columns and sorting") + the filter row (the Tasks tab's
+           pattern on the contents list): both ride one sticky wrapper so scrolling the rows keeps the
+           filters reachable — a filter you must scroll back up to is an affordance behind a discovery step
+           (ADR 0550). Date and Size keep spacer cells: filtering them is a range question, not a text one. *@
+        <div class="wb-cheadwrap">
+            <div class="wb-chead">
+                <span @onclick="() => SortBy(ContentSort.Name)">@Strings.Get("Name") @SortArrow(ContentSort.Name)</span>
+                <span @onclick="() => SortBy(ContentSort.Type)">@Strings.Get("FacetType") @SortArrow(ContentSort.Type)</span>
+                <span @onclick="() => SortBy(ContentSort.Date)">@Strings.Get("SortDocDate") @SortArrow(ContentSort.Date)</span>
+                <span @onclick="() => SortBy(ContentSort.Size)">@Strings.Get("SortSize") @SortArrow(ContentSort.Size)</span>
+                <span @onclick="() => SortBy(ContentSort.Tags)">@Strings.Get("TagsLabel") @SortArrow(ContentSort.Tags)</span>
+                <span @onclick="() => SortBy(ContentSort.Owner)">@Strings.Get("SortOwner") @SortArrow(ContentSort.Owner)</span>
+                <span></span>
+            </div>
+            <div class="wb-cfilters">
+                <MudTextField T="string" @bind-Value="_filterName" Immediate="true" Placeholder="@Strings.Get("FilterHint")" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                <MudTextField T="string" @bind-Value="_filterType" Immediate="true" Placeholder="@Strings.Get("FilterHint")" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                <span></span>
+                <span></span>
+                <MudTextField T="string" @bind-Value="_filterTags" Immediate="true" Placeholder="@Strings.Get("FilterHint")" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                <MudTextField T="string" @bind-Value="_filterOwner" Immediate="true" Placeholder="@Strings.Get("FilterHint")" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                <span></span>
+            </div>
         </div>
         @foreach (var node in SortedContents())
         {
@@ -155,8 +208,28 @@
     private bool _contentSortAsc = true;
     private bool _headerSortActive;
 
-    /// <summary>Drops the header override, so the listing returns to the folder's persisted order.</summary>
-    public void ResetHeaderSort() => _headerSortActive = false;
+    private string _filterName = string.Empty;
+    private string _filterType = string.Empty;
+    private string _filterTags = string.Empty;
+    private string _filterOwner = string.Empty;
+
+    /// <summary>Drops the header override AND the column filters — both are ephemeral per-folder view state,
+    /// and a filter that silently survives into the next folder reads as missing rows, not as a filter.</summary>
+    public void ResetHeaderSort()
+    {
+        _headerSortActive = false;
+        _filterName = _filterType = _filterTags = _filterOwner = string.Empty;
+        // Called from OUTSIDE (the shell, via @ref) — Blazor does not re-render for an external method call,
+        // so without this the cleared filter still SHOWS its old text while no longer filtering anything:
+        // worse than either state (the [JSInvokable] lesson, generalised).
+        StateHasChanged();
+    }
+
+    private bool Matches(BrowseNode n) =>
+        (_filterName.Length == 0 || n.DisplayName.Contains(_filterName, StringComparison.OrdinalIgnoreCase))
+        && (_filterType.Length == 0 || n.DocumentType.Contains(_filterType, StringComparison.OrdinalIgnoreCase))
+        && (_filterTags.Length == 0 || n.TagList.Any(t => t.Contains(_filterTags, StringComparison.OrdinalIgnoreCase)))
+        && (_filterOwner.Length == 0 || n.CreatedBy.Contains(_filterOwner, StringComparison.OrdinalIgnoreCase));
 
     private void SortBy(ContentSort col)
     {
@@ -178,8 +251,9 @@
     {
         // Folders on top (always alphabetical, issue #339), then documents ordered by the active criterion (default
         // DocumentDate). A column-header click is an explicit ephemeral override of the whole list.
-        var folders = Rows.Where(n => n.IsFolder);
-        var docs = Rows.Where(n => !n.IsFolder);
+        var rows = Rows.Where(Matches).ToList();
+        var folders = rows.Where(n => n.IsFolder);
+        var docs = rows.Where(n => !n.IsFolder);
         if (_headerSortActive)
         {
             return ApplyHeaderSort(folders).Concat(ApplyHeaderSort(docs));

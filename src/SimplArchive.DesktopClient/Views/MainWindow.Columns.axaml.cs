@@ -38,4 +38,14 @@ public partial class MainWindow
             vm.ContentsPaneWidth = viewer.Viewport.Width > 0 ? viewer.Viewport.Width : viewer.Bounds.Width;
         }
     }
+
+    // The header strip follows the body's horizontal offset, so the column captions stay over their columns
+    // while the body alone carries the scrollbars (the vertical one at the pane's edge — see the axaml note).
+    private void OnContentsBodyScroll(object? sender, ScrollChangedEventArgs e)
+    {
+        if (sender is ScrollViewer body && this.FindControl<ScrollViewer>("ContentsHeaderScroller") is { } header)
+        {
+            header.Offset = new Avalonia.Vector(body.Offset.X, 0);
+        }
+    }
 }

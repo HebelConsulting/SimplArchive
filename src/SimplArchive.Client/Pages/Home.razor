@@ -252,35 +252,9 @@
         .wb-tab-label { display: none; }
     }
     .wb-bulk-bar { display: flex; align-items: center; gap: 4px; padding: 3px 8px; background: var(--mud-palette-primary-hover); border-bottom: 1px solid var(--mud-palette-lines-default); position: sticky; top: 0; z-index: 2; }
-    /* Contents-list columns (ADR "List-row columns and sorting" + "Pane-adaptive contents columns") — a grid
-       modifier on .wb-list-row (higher specificity so it overrides the base flex layout), keeping the base
-       hover/cursor/selected + test hooks. Every track is minmax(0, …) so the cells SHRINK + ellipsize rather than
-       overflow the pane, and the trailing `auto` track is the ⋮ row-menu — it never shrinks and is always the last
-       visible column, so the menu can never be clipped/scrolled off. The `.wb-list` pane is an inline-size query
-       container (above), so the breakpoints below react to the *pane's own width*, not the viewport — collapsing
-       lower-priority columns as the user narrows the split, uniformly on computer/tablet/phone. */
-    .wb-list-row.wb-cols, .wb-chead { display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 92px) minmax(0, 70px) minmax(0, 1.3fr) minmax(0, 1.1fr) auto; align-items: center; gap: 8px; }
-    .wb-chead { padding: 4px 12px; font-size: .72rem; font-weight: 600; color: var(--mud-palette-text-secondary); border-bottom: 1px solid var(--mud-palette-lines-default); position: sticky; top: 0; background: var(--mud-palette-surface); z-index: 1; }
-    .wb-chead > span { cursor: pointer; user-select: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .wb-ccell { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; color: var(--mud-palette-text-secondary); }
-    .wb-cname { display: flex; align-items: center; gap: 6px; color: var(--mud-palette-text-primary); font-size: unset; }
-    /* Wide-but-not-wide-enough: drop Owner (6th) first — it is the newest column and the least often the
-       reason someone widened the pane. */
-    @@container (max-width: 739px) {
-        .wb-list-row.wb-cols, .wb-chead { grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 92px) minmax(0, 70px) minmax(0, 1.3fr) auto; }
-        .wb-list-row.wb-cols > :nth-child(6), .wb-chead > :nth-child(6) { display: none; }
-    }
-    /* Medium pane: drop Size (4th) + Tags (5th), keeping Name · Type · Doc date · ⋮. */
-    @@container (max-width: 519px) {
-        .wb-list-row.wb-cols, .wb-chead { grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 92px) auto; }
-        .wb-list-row.wb-cols > :nth-child(4), .wb-list-row.wb-cols > :nth-child(5), .wb-list-row.wb-cols > :nth-child(6),
-        .wb-chead > :nth-child(4), .wb-chead > :nth-child(5), .wb-chead > :nth-child(6) { display: none; }
-    }
-    /* Narrow pane: Name + ⋮ only (the menu stays — it isn't a .wb-ccell). */
-    @@container (max-width: 399px) {
-        .wb-list-row.wb-cols, .wb-chead { grid-template-columns: minmax(0, 1fr) auto; }
-        .wb-list-row.wb-cols > .wb-ccell:not(.wb-cname), .wb-chead > span:not(:first-child) { display: none; }
-    }
+    /* The contents table's own rules (grid template, header, filters, container queries) live in
+       ContentsListPane.razor beside the markup they shape — moved there with the filter row so the shell
+       stops growing for pane-local concerns (ADR 0558). */
     .wb-list-row { display: flex; align-items: center; gap: 8px; padding: 5px 12px; cursor: pointer; user-select: none; }
     .wb-list-row:hover { background: var(--mud-palette-action-default-hover); }
     /* Touch (coarse pointer): enlarge the primary tap targets toward the ~44px guideline (#359). ADDITIVE — keyed
@@ -1817,6 +1791,10 @@
         _selectedFolder = folder;
         _currentRepositoryId = folder?.RepositoryId ?? Guid.Empty;
         ClearDetail();
+        // Opening ANOTHER folder ends the ephemeral header sort and the column filters (the pane's contract) —
+        // the row-drill path has always done this via OpenFolderContentsAsync; the tree-click path silently
+        // did not, so a sort or filter set in one folder kept narrowing the next one's rows.
+        _listPane?.ResetHeaderSort();
         _folderContents = folder is null ? [] : (await Browse.LoadContentsAsync(folder.Id, folder.RepositoryId, BrowseService.ChildrenHrefOf(folder), BrowseService.ReferencesHrefOf(folder))).Nodes;
 
         // A row selected WHILE this load was in flight survives it.
