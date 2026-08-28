@@ -304,4 +304,111 @@ public class CalDavEndpointTests
             .Single(r => r.Descendants(Dav + "displayname").Any(d => d.Value.EndsWith(protocol.DefaultFolder, StringComparison.Ordinal)))
             .Element(Dav + "href")!.Value;
     }
+    // The DAVx⁵ live find (#564's Android row): the seeded VOLMET contacts were invisible to the client while
+    // a contact IT created round-tripped. Same collection, same mask, healthy 207s throughout — so whatever
+    // differs is in the per-item CONTENT of the answers, and status codes cannot see it. This test creates one
+    // contact by each path — the demo seeder's (API child + upload + finalize) and the client's (CardDAV PUT)
+    // — and diffs what a syncing client is told about each.
+    [Fact]
+    public async Task A_seeded_contact_and_a_put_contact_answer_identically_to_a_syncing_client()
+    {
+        var (client, auth, email) = await SeedAsync();
+        using var _1 = client;
+        using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, "dav-1234"));
+        var personalId = (await TestJson.Post(api, "/api/me/personal-repository", new { })).GetProperty("id").GetGuid();
+        var bookId = (await TestJson.Get(api, $"/api/documents/{personalId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "My Addressbook").GetProperty("id").GetGuid();
+
+        // ---- Path 1: the demo seeder's shape — API child, uploaded bytes, shared finalizer ------------------
+        var seededCard = string.Join("\r\n",
+            "BEGIN:VCARD", "VERSION:3.0", "UID:volmet-geneva-6f1c2e40",
+            "PRODID:-//Apple Inc.//macOS 15.7.7//EN", "N:;;;;", "FN:VOLMET Geneva", "ORG:VOLMET Geneva;",
+            "TEL;type=WORK;type=VOICE;type=pref:+41 22 417 40 81",
+            "X-ABShowAs:COMPANY", "END:VCARD", "");
+        var docId = (await TestJson.Post(api, $"/api/documents/{bookId}/children", new { name = "VOLMET Geneva" })).GetProperty("id").GetGuid();
+        var version = await TestJson.Post(api, $"/api/documents/{docId}/versions", new { fileExtension = ".vcf" });
+        using (var storage = new HttpClient())
+        {
+            (await storage.PutAsync(version.GetProperty("uploadUrl").GetString()!,
+                new ByteArrayContent(Encoding.UTF8.GetBytes(seededCard)))).EnsureSuccessStatusCode();
+        }
+
+        await TestJson.Put(api, $"/api/documents/{docId}/versions/{version.GetProperty("id").GetGuid()}", new { });
+
+        // ---- Path 2: the client's shape — a CardDAV PUT, as DAVx⁵ files a new contact ----------------------
+        var putCard = string.Join("\r\n",
+            "BEGIN:VCARD", "VERSION:3.0", "UID:john-doe-1", "N:Doe;John;;;", "FN:John Doe", "END:VCARD", "");
+        using (var put = new HttpRequestMessage(HttpMethod.Put, $"/carddav/addressbooks/{bookId}/john-doe-1.vcf")
+        {
+            Content = new StringContent(putCard, Encoding.UTF8, "text/vcard"),
+            Headers = { Authorization = auth },
+        })
+        {
+            var putResponse = await client.SendAsync(put);
+            Assert.Equal(HttpStatusCode.Created, putResponse.StatusCode);
+        }
+
+        // ---- The syncing client's first move: PROPFIND Depth:1 asking etag + type --------------------------
+        var listing = await MultiStatusAsync(await SendAsync(client, auth, "PROPFIND", $"/carddav/addressbooks/{bookId}/", """
+            <?xml version="1.0" encoding="utf-8"?>
+            <D:propfind xmlns:D="DAV:"><D:prop><D:getetag/><D:getcontenttype/><D:resourcetype/></D:prop></D:propfind>
+            """));
+        var rows = listing.Descendants(Dav + "response")
+            .Where(r => !r.Element(Dav + "href")!.Value.TrimEnd('/').EndsWith(bookId.ToString(), StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(
+                r => r.Element(Dav + "href")!.Value,
+                r => new
+                {
+                    ETag = r.Descendants(Dav + "getetag").FirstOrDefault()?.Value,
+                    Type = r.Descendants(Dav + "getcontenttype").FirstOrDefault()?.Value,
+                });
+
+        Assert.Equal(2, rows.Count);
+        foreach (var (href, row) in rows)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(row.ETag), $"{href}: no getetag — a syncing client skips what it cannot version");
+            Assert.Contains("vcard", row.Type ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // ---- …then the multiget for the data. BOTH items must carry address-data. --------------------------
+        var hrefs = string.Concat(rows.Keys.Select(h => $"<D:href>{h}</D:href>"));
+        var multiget = await MultiStatusAsync(await SendAsync(client, auth, "REPORT", $"/carddav/addressbooks/{bookId}/", $"""
+            <?xml version="1.0" encoding="utf-8"?>
+            <R:addressbook-multiget xmlns:D="DAV:" xmlns:R="urn:ietf:params:xml:ns:carddav">
+              <D:prop><D:getetag/><R:address-data/></D:prop>
+              {hrefs}
+            </R:addressbook-multiget>
+            """));
+        var dataByHref = multiget.Descendants(Dav + "response").ToDictionary(
+            r => r.Element(Dav + "href")!.Value,
+            r => r.Descendants().FirstOrDefault(e => e.Name.LocalName == "address-data")?.Value);
+
+        foreach (var (href, data) in dataByHref)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(data), $"{href}: multiget returned no address-data");
+        }
+
+        Assert.Contains(dataByHref.Values, v => v!.Contains("volmet-geneva-6f1c2e40", StringComparison.Ordinal));
+        Assert.Contains(dataByHref.Values, v => v!.Contains("john-doe-1", StringComparison.Ordinal));
+
+        // ---- …and the verb DAVx⁵ ACTUALLY leads with: the initial sync-collection (RFC 6578) ---------------
+        // The change log is written at the DAV write path only, so a log-replayed initial sync listed the
+        // PUT contact and silently omitted the seeded one — the measured asymmetry. An empty token must
+        // answer with the collection's state, whatever road each item arrived by.
+        var sync = await MultiStatusAsync(await SendAsync(client, auth, "REPORT", $"/carddav/addressbooks/{bookId}/", """
+            <?xml version="1.0" encoding="utf-8"?>
+            <D:sync-collection xmlns:D="DAV:">
+              <D:sync-token/>
+              <D:sync-level>1</D:sync-level>
+              <D:prop><D:getetag/></D:prop>
+            </D:sync-collection>
+            """));
+        var syncHrefs = sync.Descendants(Dav + "href").Select(e => e.Value).ToList();
+        Assert.Contains(syncHrefs, h => h.Contains("volmet", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(syncHrefs, h => h.Contains("john-doe-1", StringComparison.Ordinal));
+        Assert.Contains(sync.Descendants(Dav + "sync-token"), t => !string.IsNullOrWhiteSpace(t.Value));
+    }
+
+
 }

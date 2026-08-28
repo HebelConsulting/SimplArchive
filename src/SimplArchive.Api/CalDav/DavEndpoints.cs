@@ -142,8 +142,24 @@ internal static class DavEndpoints
         }
 
         var request = PropRequest.FromProp(body.Element(DavNames.Prop));
-        var changes = await DavChangeLog.SinceAsync(context.Db, folderId, since ?? 0, context.Cancellation);
         var current = await DavChangeLog.CurrentAsync(context.Db, folderId, context.Cancellation);
+
+        // The INITIAL sync — no token, or the zero token we hand out for an untouched collection — answers
+        // with the collection's CURRENT STATE, never with a log replay (#564's DAVx⁵ live find). The change
+        // log is written at the DAV write path only, so an item that arrived any other way — the demo seeder,
+        // the workbench, an import — has no entry, and a log-replayed initial sync silently omits it. Measured
+        // as the perfect asymmetry: a contact the phone itself created synced (its PUT was logged) while the
+        // seeded ones never appeared, every response a healthy 207. RFC 6578 §3.4: an empty token asks for
+        // everything plus a token, and "everything" is what the collection holds, not what the log remembers.
+        if ((since ?? 0) == 0)
+        {
+            var everything = await DavTree.ItemsAsync(context.Db, context.Protocol, context.UserId, folderId, context.Cancellation);
+            var initial = MultiStatus.Build(request, [.. everything.Select(i => DavResources.Item(context.Protocol, i, data: null))]);
+            MultiStatus.WithSyncToken(initial, DavTokens.Format(current));
+            return DavXml.MultiStatus(initial);
+        }
+
+        var changes = await DavChangeLog.SinceAsync(context.Db, folderId, since ?? 0, context.Cancellation);
 
         var resources = new List<DavResource>();
         var removed = new List<string>();
