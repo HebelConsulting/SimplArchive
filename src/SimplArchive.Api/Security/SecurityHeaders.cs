@@ -165,7 +165,13 @@ public static class SecurityHeaders
             "worker-src 'self' blob:",
             "object-src 'none'",
             "base-uri 'self'",
-            "form-action 'self'",
+            // The desktop client's loopback is named here for the same reason the object-storage origin is
+            // named on connect-src: a browser has to REACH it for the product to work. Chrome enforces
+            // form-action across the redirect chain a form submission follows, so 'self' alone silently broke
+            // desktop sign-in in v0.10.0 — the login POST's final hop to the loopback listener was refused, with
+            // nothing wrong on the server. Taken from DesktopLoopback so this and the client registration cannot
+            // drift apart.
+            $"form-action 'self' {DesktopLoopback.Origin}",
             "frame-ancestors 'self'",
         ]);
     }

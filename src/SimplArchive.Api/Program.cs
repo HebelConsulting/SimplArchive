@@ -527,7 +527,7 @@ using (var scope = app.Services.CreateScope())
             ClientId = "simplarchive-desktop",
             ClientType = OpenIddictConstants.ClientTypes.Public,
             ConsentType = OpenIddictConstants.ConsentTypes.Implicit,
-            RedirectUris = { new Uri("http://127.0.0.1:8765/callback") },
+            RedirectUris = { new Uri(SimplArchive.Api.Security.DesktopLoopback.RedirectUri) },
             Permissions =
             {
                 OpenIddictConstants.Permissions.Endpoints.Authorization,

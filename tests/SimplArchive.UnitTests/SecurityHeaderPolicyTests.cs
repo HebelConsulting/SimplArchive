@@ -91,4 +91,22 @@ public class SecurityHeaderPolicyTests
         new ConfigurationBuilder()
             .AddInMemoryCollection(values.Select(v => new KeyValuePair<string, string?>(v.Key, v.Value)))
             .Build();
+
+    // The policy and the OpenIddict client registration have to agree about the desktop's loopback, and nothing
+    // else can hold that: the desktop end-to-end suite is Chrome-free by design (ADR 0378), so no test in this
+    // repository walks a real browser through a native-app sign-in. v0.10.0 shipped `form-action 'self'` and
+    // broke it — Chrome enforces form-action across the redirect chain a form submission follows, so the final
+    // hop to the loopback listener was refused with nothing wrong on the server.
+    //
+    // Asserting they come from the same constant is weaker than walking the flow, and it is what is available.
+    [Fact]
+    public void The_policy_lets_the_browser_reach_the_desktop_clients_loopback()
+    {
+        var csp = SecurityHeaders.ComposePolicy(null, null);
+
+        var formAction = csp.Split("; ").Single(d => d.StartsWith("form-action ", StringComparison.Ordinal));
+
+        Assert.Contains(DesktopLoopback.Origin, formAction, StringComparison.Ordinal);
+        Assert.StartsWith(DesktopLoopback.Origin, DesktopLoopback.RedirectUri, StringComparison.Ordinal);
+    }
 }
