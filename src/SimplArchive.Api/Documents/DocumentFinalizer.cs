@@ -27,6 +27,8 @@ public class DocumentFinalizer
     private readonly ChatSystemEntryRecorder _chatEntries;
     private readonly CalendarContactClassifier _calendarContactClassifier;
     private readonly SimplArchive.Infrastructure.Masks.IMaskContainmentProvider _containment;
+    private readonly IAuditRecorder _audit;
+    private readonly ILogger<DocumentFinalizer> _logger;
 
     // EVERY save here goes through SaveTranslatingContainmentAsync (#665). Several of them assign a mask or add
     // a child document, so any can trip the typed-folder invariant — and this class had none of them, which is
@@ -44,7 +46,9 @@ public class DocumentFinalizer
         INotificationService notifications,
         ChatSystemEntryRecorder chatEntries,
         CalendarContactClassifier calendarContactClassifier,
-        SimplArchive.Infrastructure.Masks.IMaskContainmentProvider containment)
+        SimplArchive.Infrastructure.Masks.IMaskContainmentProvider containment,
+        IAuditRecorder audit,
+        ILogger<DocumentFinalizer> logger)
     {
         _dbContext = dbContext;
         _objectStorageClient = objectStorageClient;
@@ -57,6 +61,8 @@ public class DocumentFinalizer
         _chatEntries = chatEntries;
         _calendarContactClassifier = calendarContactClassifier;
         _containment = containment;
+        _audit = audit;
+        _logger = logger;
     }
 
     // Extensions that trigger a searchable-PDF successor job. A TIFF always converts; a PDF is a *candidate* —
@@ -83,6 +89,11 @@ public class DocumentFinalizer
         string sha256Hash;
         bool? isSigned = null;
 
+        // The first bytes are kept for the content check below — the same read answers that question too, so it
+        // costs nothing extra here and would cost a second fetch of every object anywhere else.
+        var head = new byte[UploadContentPolicy.HeadBytes];
+        var headLength = 0;
+
         if (Path.GetExtension(version.ObjectKey).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
         {
             byte[] content;
@@ -93,14 +104,46 @@ public class DocumentFinalizer
                 content = buffer.ToArray();
             }
 
+            headLength = Math.Min(head.Length, content.Length);
+            content.AsSpan(0, headLength).CopyTo(head);
+
             sha256Hash = Convert.ToHexStringLower(SHA256.HashData(content));
             isSigned = DigitalSignature.IsSigned(content);
         }
         else
         {
             await using var stream = await _objectStorageClient.GetObjectAsync(version.ObjectKey, cancellationToken);
-            sha256Hash = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, cancellationToken));
+
+            // Hashed incrementally so the head can be kept without buffering the whole object: a version may be
+            // a multi-gigabyte archive, and reading it twice — or into memory once — to look at 64 bytes would
+            // be a poor trade.
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            headLength = await stream.ReadAtLeastAsync(head, head.Length, throwOnEndOfStream: false, cancellationToken);
+            hash.AppendData(head, 0, headLength);
+
+            var chunk = new byte[81920];
+            int read;
+            while ((read = await stream.ReadAsync(chunk, cancellationToken)) > 0)
+            {
+                hash.AppendData(chunk, 0, read);
+            }
+
+            sha256Hash = Convert.ToHexStringLower(hash.GetHashAndReset());
             isSigned = false; // examined, and this format cannot carry one — distinct from "never examined"
+        }
+
+        // What the archive will not store (ADR 0718). Checked HERE because this is the one place every upload
+        // path reaches — the versions endpoint, check-in, intray filing, WebDAV and the protocol edges — so the
+        // rule is stated once instead of at each entrance, where the entrance nobody remembered would be the
+        // gap. The version stays PENDING: the incomplete-upload cleanup already owns exactly that state, and
+        // deleting rows a caller is still holding would be a worse failure than leaving one to be swept.
+        if (UploadContentPolicy.Inspect(head.AsSpan(0, headLength), version.ObjectKey) is { } refusal)
+        {
+            _logger.LogWarning(
+                "Refused version {VersionId} of document {DocumentId}: {Reason}",
+                version.Id, version.DocumentId, refusal.Reason);
+
+            throw new SimplArchive.Api.Errors.Exceptions.Documents.UnsupportedUploadContentException(refusal.Reason);
         }
 
         version.IsSigned = isSigned;
@@ -406,6 +449,29 @@ public class DocumentFinalizer
 
         foreach (var attachment in attachments)
         {
+            // The message is KEPT and the attachment dropped (ADR 0718). Refusing the whole email would lose a
+            // business record because of one attachment, and archiving the attachment anyway would make the
+            // archive the distribution point this exists to prevent. So the correspondence survives, and the
+            // drop is SAID — in the email's own thread, where the person reading it is, and in the audit trail.
+            if (UploadContentPolicy.Inspect(attachment.Content, attachment.FileName) is { } refusal)
+            {
+                _logger.LogWarning(
+                    "Attachment {FileName} of document {DocumentId} was not archived: {Reason}",
+                    attachment.FileName, emailVersion.DocumentId, refusal.Reason);
+
+                await _chatEntries.RecordAttachmentRefusedAsync(emailVersion, attachment.FileName, cancellationToken);
+                await _audit.RecordAsync(
+                    SimplArchive.Api.Controllers.AuditActions.DocumentAttachmentRefused,
+                    targetType: "Document",
+                    targetId: emailVersion.DocumentId,
+                    targetName: attachment.FileName,
+                    details: refusal.Reason,
+                    tenantId: emailVersion.TenantId,
+                    cancellationToken: cancellationToken);
+
+                continue;
+            }
+
             try
             {
                 await FileAttachmentAsync(email, emailVersion.CreatedByUserId, emailVersion.CreatedByServiceAccountId, attachment, usedNames, cancellationToken);

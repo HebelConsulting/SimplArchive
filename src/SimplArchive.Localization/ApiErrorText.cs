@@ -40,6 +40,7 @@ public static class ApiErrorText
         "INVALID_MAIL_DOMAIN" => Strings.Get("ApiErrInvalidMailDomain"),
         "MAIL_DOMAIN_ALREADY_CLAIMED" => Strings.Get("ApiErrMailDomainAlreadyClaimed"),
         "MAIL_DOMAIN_NOT_VERIFIED" => Strings.Get("ApiErrMailDomainNotVerified"),
+        "UNSUPPORTED_UPLOAD_CONTENT" => Strings.Get("ApiErrUnsupportedUploadContent"),
         "EXTERNAL_LINKS_DISABLED" => Strings.Get("ApiErrExternalLinksDisabled"),
         "EXTERNAL_LINK_URL_NOT_SHOWN" => Strings.Get("ApiErrExternalLinkUrlNotShown"),
         "INSUFFICIENT_RIGHTS_TO_GRANT" => Strings.Get("ApiErrInsufficientRightsToGrant"),

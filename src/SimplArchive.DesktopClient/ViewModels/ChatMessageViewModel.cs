@@ -30,7 +30,8 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     // and that absence is what makes the name render as plain text rather than a link (ADR 0544).
     public string? AuthorCardHref { get; init; }
 
-    // What produced this entry (ADR 0545): 0 UserPost · 1 VersionFiled · 2 VersionActivated.
+    // What produced this entry (ADR 0545): 0 UserPost · 1 VersionFiled · 2 VersionActivated ·
+    // 3 AttachmentRefused (ADR 0718).
     public int Kind { get; init; }
 
     public int? VersionNumber { get; init; }
@@ -78,6 +79,9 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         1 => string.Format(
             Strings.Get(VersionNumber is null or <= 1 ? "ChatFiledNewDocument" : "ChatSavedNewVersion"), AuthorName),
         2 => string.Format(Strings.Get("ChatActivatedVersion"), AuthorName, VersionNumber),
+        // A refused attachment (ADR 0718): its {1} is the FILE NAME the body carries, not a version number —
+        // the entry is about something that never became a version.
+        3 => string.Format(Strings.Get("ChatAttachmentRefused"), AuthorName, Body),
         _ => Body,
     };
 

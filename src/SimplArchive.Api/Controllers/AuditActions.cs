@@ -26,6 +26,11 @@ public static class AuditActions
     public const string DocumentMaskCleared = "Document.MaskCleared";
     public const string DocumentIndexDataUpdated = "Document.IndexDataUpdated";
 
+    // An email attachment was refused by the upload content policy and not archived (ADR 0718). Recorded
+    // against the EMAIL, naming the attachment: the message survives, so the audit trail is where an
+    // administrator finds out what did not come with it.
+    public const string DocumentAttachmentRefused = "Document.AttachmentRefused";
+
     // External-system correlation key set/cleared on a document (ADR 0520).
     public const string DocumentOriginSet = "Document.OriginSet";
     public const string DocumentOriginCleared = "Document.OriginCleared";

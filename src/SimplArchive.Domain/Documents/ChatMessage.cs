@@ -60,4 +60,13 @@ public enum ChatMessageKind
     // An older version was made current again. Worth recording precisely because it changes what everyone else
     // sees as the document without adding anything to it.
     VersionActivated = 2,
+
+    // An email's attachment was refused by the upload content policy and NOT archived (ADR 0718). It names no
+    // version, because the thing it is about never became one — which is why the pairing constraint had to be
+    // widened rather than reused.
+    //
+    // The BODY carries the attachment's file name. That is the one datum a client cannot compose, and it is a
+    // datum rather than a sentence: the wording still lives in the clients' resources, so this does not put
+    // server-authored prose into the thread.
+    AttachmentRefused = 3,
 }

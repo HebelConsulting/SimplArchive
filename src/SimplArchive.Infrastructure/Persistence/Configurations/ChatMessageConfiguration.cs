@@ -30,11 +30,17 @@ public class ChatMessageConfiguration : IEntityTypeConfiguration<ChatMessage>
             // document, so it names no version; VersionFiled (1) and VersionActivated (2) are about a specific
             // version and cannot render their "Version N" label — or, for VersionFiled, even pick their
             // sentence — without one. Pairing them here means a system entry can never exist that the clients
-            // are unable to draw, and rules out the renumbered-away fourth kind by leaving no value for it.
+            // are unable to draw.
+            //
+            // AttachmentRefused (3) is the third shape and joins UserPost in naming no version (ADR 0718): it
+            // records an attachment that was refused, so there is no version for it to point at. The original
+            // constraint deliberately left no value for a fourth kind, which is exactly why widening it is a
+            // migration rather than an enum edit — the guard did its job.
             t.HasCheckConstraint(
                 "CK_ChatMessages_KindVersionPairing",
                 "(\"Kind\" = 0 AND \"DocumentVersionId\" IS NULL) OR " +
-                "(\"Kind\" IN (1, 2) AND \"DocumentVersionId\" IS NOT NULL)");
+                "(\"Kind\" IN (1, 2) AND \"DocumentVersionId\" IS NOT NULL) OR " +
+                "(\"Kind\" = 3 AND \"DocumentVersionId\" IS NULL)");
         });
 
         // Restrict, matching how annotations anchor a version: the document-delete cascade already removes the

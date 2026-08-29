@@ -190,7 +190,7 @@
     [Parameter] public EventCallback<string?> ComposeChanged { get; set; }
     [Parameter] public EventCallback<string?> ReplyChanged { get; set; }
 
-    private const int ChatUserPost = 0, ChatVersionFiled = 1, ChatVersionActivated = 2;
+    private const int ChatUserPost = 0, ChatVersionFiled = 1, ChatVersionActivated = 2, ChatAttachmentRefused = 3;
 
     // Renders a system entry's sentence from a LOCALIZED TEMPLATE, splicing the author in as a live element so
     // the name stays a clickable identity card. String.Format would flatten it to text and lose the card, which
@@ -204,10 +204,14 @@
             ChatVersionFiled => Strings.Get(
                 message.VersionNumber is null or <= 1 ? "ChatFiledNewDocument" : "ChatSavedNewVersion"),
             ChatVersionActivated => Strings.Get("ChatActivatedVersion"),
+            // An attachment the archive refused (ADR 0718). Its {1} is the FILE NAME rather than a version
+            // number — the entry names something that never became a version, which is the whole point of it.
+            ChatAttachmentRefused => Strings.Get("ChatAttachmentRefused"),
             _ => "{0}",
         };
 
-        // {0} is the author element; {1}, where a template has one, is the version number.
+        // {0} is the author element; {1}, where a template has one, is the version number — or, for a refused
+        // attachment, the file name the body carries.
         var sequence = 0;
         foreach (var part in SplitTemplate(template))
         {
@@ -217,7 +221,9 @@
                     builder.AddContent(sequence++, AuthorMarkup(message));
                     break;
                 case "{1}":
-                    builder.AddContent(sequence++, message.VersionNumber?.ToString() ?? "");
+                    builder.AddContent(
+                        sequence++,
+                        message.Kind == ChatAttachmentRefused ? message.Body : message.VersionNumber?.ToString() ?? "");
                     break;
                 default:
                     builder.AddContent(sequence++, part);

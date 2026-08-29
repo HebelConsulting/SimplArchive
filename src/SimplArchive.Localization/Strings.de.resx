@@ -1821,6 +1821,12 @@
   <data name="ChatSavedNewVersion" xml:space="preserve">
     <value>{0} hat eine neue Arbeitsversion dieses Dokuments gespeichert.</value>
   </data>
+  <data name="ChatAttachmentRefused" xml:space="preserve">
+    <value>{0} — der Anhang {1} wurde nicht archiviert, da das Archiv keine ausführbaren Inhalte speichert.</value>
+  </data>
+  <data name="ApiErrUnsupportedUploadContent" xml:space="preserve">
+    <value>Diese Art von Inhalt wird nicht archiviert.</value>
+  </data>
   <data name="ChatActivatedVersion" xml:space="preserve">
     <value>{0} hat Version {1} zur aktuellen Version gemacht.</value>
   </data>

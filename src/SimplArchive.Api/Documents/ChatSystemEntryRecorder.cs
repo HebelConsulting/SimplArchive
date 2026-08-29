@@ -59,6 +59,29 @@ public sealed class ChatSystemEntryRecorder
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    // Called when an email's attachment was refused by the upload content policy (ADR 0718). The BODY carries
+    // the attachment's file name — the one datum a client cannot compose — while the sentence around it stays
+    // in the clients' resources, like every other system entry. Dated from the email's own filing, so the note
+    // sits with the version it belongs to rather than at whatever moment the extraction happened to run.
+    public async Task RecordAttachmentRefusedAsync(
+        DocumentVersion emailVersion, string attachmentFileName, CancellationToken cancellationToken)
+    {
+        _dbContext.ChatMessages.Add(new ChatMessage
+        {
+            Id = Guid.NewGuid(),
+            TenantId = emailVersion.TenantId,
+            DocumentId = emailVersion.DocumentId,
+            Kind = ChatMessageKind.AttachmentRefused,
+            DocumentVersionId = null,
+            Body = attachmentFileName,
+            CreatedByUserId = emailVersion.CreatedByUserId,
+            CreatedByServiceAccountId = emailVersion.CreatedByServiceAccountId,
+            CreatedAt = emailVersion.CreatedAt,
+        });
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
     private void Add(Guid tenantId, Guid documentId, ChatMessageKind kind, Guid? documentVersionId, Guid? userId, Guid? serviceAccountId, DateTimeOffset at) =>
         _dbContext.ChatMessages.Add(new ChatMessage
         {

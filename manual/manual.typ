@@ -178,6 +178,12 @@ belongs to something already filed, and how many you have. They all end in the s
 proxies them). *The Intray* is a staging area: drop scans or files there, then classify each one (name, document
 type, index data) and *file* it into the archive.
 
+*What the archive will not keep.*#idx("Executable content") Programs and scripts are refused — an `.exe`, a `.bat`, a
+shell script, and anything that turns out to be a program whatever it has been named. Everything else is kept,
+including the formats a document system is often too narrow for: drawings, disk images, archives, video. When an
+*email's* attachment is refused the message itself is still archived, and a line in its chat thread names the
+attachment that was left out, so nothing goes missing quietly.
+
 *When the name is already taken.*#idx("Name conflict") A folder cannot hold two things of the same name, so filing
 `Invoice.pdf` where an `Invoice` already sits asks you what you meant rather than refusing:
 
