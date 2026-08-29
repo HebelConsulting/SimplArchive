@@ -93,3 +93,29 @@ public record TextLayoutWord
 
     public double Height { get; set; }
 }
+
+/// <summary>
+/// The document resource itself — the retention schedule, the sensitivity label, and the rels every other
+/// read in the detail pane follows (ADR 0543). Public since #784 moved the reads into
+/// <c>DetailLoader</c>; it was a private record in the workbench shell.
+/// </summary>
+public record DocumentDetailResponse
+{
+    public List<LinkResponse> Links { get; set; } = [];
+
+    public DetailRetentionDto? Retention { get; set; }
+
+    public Guid? SensitivityLabelId { get; set; }
+
+    public string SensitivityLabelName { get; set; } = "";
+
+    public string? SensitivityLabelColor { get; set; }
+
+    public bool SensitivityWatermark { get; set; }
+
+    public bool CanManagePermissions { get; set; }
+
+    public bool BreaksInheritance { get; set; }
+
+    public FolderContentsSortOrder ContentsSortOrder { get; set; }
+}

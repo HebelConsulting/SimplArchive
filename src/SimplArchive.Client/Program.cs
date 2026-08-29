@@ -98,6 +98,7 @@ builder.Services.AddScoped<SimplArchive.Client.Services.DetailState>();
 builder.Services.AddScoped<SimplArchive.Client.Services.IntrayUploads>();
 builder.Services.AddScoped<SimplArchive.Client.Services.DetailCatalogs>();
 builder.Services.AddScoped<SimplArchive.Client.Services.DetailEditor>();
+builder.Services.AddScoped<SimplArchive.Client.Services.DetailLoader>();
 
 // The annotation authoring mode, selection and clipboard (ADRs "Document annotations" / "Annotation
 // multi-select"). Scoped for rule 4's reason: the Repositories tab body is disposed on a tab switch, and a

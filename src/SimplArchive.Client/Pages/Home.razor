@@ -21,6 +21,7 @@
 @inject SimplArchive.Client.Services.TreeState Tree
 @inject SimplArchive.Client.Services.DetailState Detail
 @inject SimplArchive.Client.Services.DetailCatalogs Catalogs
+@inject SimplArchive.Client.Services.DetailLoader DetailLoad
 @inject SimplArchive.Client.Services.DetailEditor Editor
 @inject SimplArchive.Client.Services.AnnotationEditor Annotations
 @inject SimplArchive.Client.Services.IntrayUploads IntrayUploads
@@ -1078,6 +1079,11 @@
     // The node whose comment thread is shown — a selected folder OR document (comments work on any Document,
     // ADR 0222), unlike the index/preview panes which are document-only (_selectedItem).
     private BrowseNode? _selectedNode;
+
+    // The second of #784's two windows. DetailLoader's token stops an OLDER load from writing once a newer one
+    // began; it cannot help against a NEWER one, and a folder-open's tail legitimately starts one — so the open
+    // asks this counter whether the user has since selected something, and stands down if so.
+    private int _selectionEpoch;
     private List<ChatMessageResponse> _comments = [];
     private string _newComment = "";
     private Guid? _replyingTo;
@@ -1807,6 +1813,7 @@
         }
 
         _archiveDocument = null; // leave any archive-browsing view
+        var openedAt = _selectionEpoch; // read before the first await (#784)
         var cameFrom = _selectedFolder?.Id;
         _selectedFolder = folder;
         _currentRepositoryId = folder?.RepositoryId ?? Guid.Empty;
@@ -1854,6 +1861,15 @@
             // node already in the tree is found directly, and naming a parent that is not one would expand an
             // unrelated node in front of the user.
             _scrollTreeCurrent = await Tree.RevealAsync(folder.Id) || await Tree.RevealAsync(folder.Id, cameFrom);
+
+            // The rows have been on screen for a while, so the user may already have picked one — and this
+            // tail's load would be NEWER than theirs, replacing their document with the folder. Measured: the
+            // token alone left 3/60; this closed the rest (#784).
+            if (_selectionEpoch != openedAt)
+            {
+                return;
+            }
+
             await ShowFolderDetailAsync(folder);
         }
     }
@@ -2030,6 +2046,7 @@
     private async Task SelectContentFolderAsync(BrowseNode folder)
     {
         ClearDetail();
+        _selectionEpoch++;
         _selectedNode = folder;
         // No reveal, and no mark. Selecting a row in the list does not move you, so the tree has nothing to
         // say about it — the ring stays on the folder you are standing in. Revealing on selection made the
@@ -2046,16 +2063,19 @@
     private async Task SelectItemAsync(BrowseNode item)
     {
         ClearDetail();
+        _selectionEpoch++;
         _selectedItem = item;
         _selectedNode = item;
         await LoadDetailForAsync(item);
     }
 
     // Fills the detail pane for whatever it is describing — a document row, a folder row, or the open folder.
-    // ONE loader for all three, because they now render one pane (issue #408): a folder IS a Document with a mask,
-    // so every endpoint below applies to it unchanged. It was the pane, not the data, that used to differ.
+    // ONE loader for all three, because they now render one pane (issue #408). The READS live in DetailLoader
+    // (ADR 0558); what stays here is only what is coupled to rendering, plus the token that says whether this
+    // load is still the wanted one (#784).
     private async Task LoadDetailForAsync(BrowseNode item)
     {
+        var token = DetailLoad.Begin();
         Detail.Node = item;
 
         // A drag of the detail pane lasts only until the SELECTION changes (ADR 0550) — which is now, and is
@@ -2068,91 +2088,21 @@
             catch (JSDisconnectedException) { }
         }
 
-        // Set unconditionally, unlike the version-derived fields: a folder has a name to show but no version to
-        // derive one from, which is exactly why it used to fall out of this pane entirely.
-        Detail.SysName = Detail.OrigName = item.Name;
-
-        try
+        if (DetailLoad.Superseded(token))
         {
-            // The document resource first: it carries the computed retention schedule (ADR "Retention policies"),
-            // the sensitivity label (ADR "Data classification"), AND the rels for everything else this pane
-            // loads — so the calls below follow advertised addresses instead of composing them (ADR 0543, #416).
-            // Fetched before the others rather than after, which is the only change needed to make them follow.
-            // DocumentAddress, not `self`: on a REPOSITORY row `self` is the repository view, whose rels are a
-            // different set — reading it here silently cost the pane its document rels (contents-sort-order
-            // among them). ADR 0200 says a repository IS a document; only the server can say at which address.
-            if (DocumentActions.DocumentAddress(item) is not { } detailSelfHref)
-            {
-                return;
-            }
+            return;
+        }
 
-            var detail = await Http.GetFromJsonAsync<DocumentDetailResponse>(detailSelfHref);
-            Detail.Links = Links.RelMap(detail?.Links);
+        var loaded = await DetailLoad.LoadAsync(item, token);
+        if (loaded.Loaded)
+        {
+            _downloadUrl = loaded.DownloadUrl;
 
-            Detail.MaskId = null;
-            // mask + index-data come from the ROW's own rels — the listing advertises them, so no second fetch.
-            Detail.ApplyMask(await Http.GetFromJsonAsync<MaskResponse>(RowOrDetailHref(item, "mask")));
-
-            var index = await Http.GetFromJsonAsync<IndexDataResponse>(RowOrDetailHref(item, "index-data"));
-            Detail.IndexData = index?.Fields ?? [];
-
-            // Free-form tags (ADR "Document tags") — advertised on the resource, not on a listing row.
-            Detail.Tags = (await Http.GetFromJsonAsync<TagsResponse>(DetailHref("tags")))?.Tags ?? [];
-            Detail.Retention = detail?.Retention;
-            Detail.SensitivityId = detail?.SensitivityLabelId;
-            Detail.SensitivityName = detail?.SensitivityLabelName ?? "";
-            Detail.SensitivityColor = detail?.SensitivityLabelColor;
-            Detail.SensitivityWatermark = detail?.SensitivityWatermark ?? false;
-            Detail.CanManagePermissions = detail?.CanManagePermissions ?? false;
-            Detail.BreaksInheritance = detail?.BreaksInheritance ?? false;
-            // A FOLDER's own contents order, which now travels with its details — the pane for a child folder is
-            // opened from its parent's listing, where the child's setting was never fetched (issue #408).
-            Detail.SortOrder = detail?.ContentsSortOrder ?? FolderContentsSortOrder.Name;
-            // Captured from the resource's own rel (ADR 0543/0546) — the external-links dialog takes the href
-            // rather than composing one, and its absence simply means the affordance isn't offered.
-            Detail.ExternalLinksHref = Links.Href(detail?.Links, "external-links");
-            await Catalogs.EnsureSensitivityAsync();
-
-            // Whether the current user follows this document (ADR "Document subscriptions").
-            Detail.Subscribed = await Actions.IsSubscribedAsync(DetailHref("subscription"));
-
-            var versions = await Http.GetFromJsonAsync<VersionListResponse>(DetailHref("versions"));
-            var confirmed = versions?.Versions?.Where(v => v.Status == "Confirmed").ToList() ?? [];
-            var latest = VersionListResponse.PickCurrent(confirmed, versions?.CurrentVersionId);
-            string? textLayoutUrl = null;
-            string? previewUrl = null;
-            var converted = false;
-            if (latest is not null)
-            {
-                previewUrl = Http.Absolute(Links.Href(latest.Links, "preview"));
-                _downloadUrl = Http.Absolute(Links.Href(latest.Links, "download"));
-                converted = latest.PreviewConverted;
-                textLayoutUrl = Links.Href(latest.Links, "text-layout");
-                Annotations.UseCollection(Links.Href(latest.Links, "annotations"));
-            }
-
-            DeriveSystemFields(item, confirmed, versions?.CurrentVersionId);
-            // The transitions the pane may offer (#691) — followed from the current version's own workflow rel,
-            // and skipped for the states that offer nothing (see WorkflowTransitionsAsync: ADR 0557).
-            Detail.WorkflowLinks = await Actions.WorkflowTransitionsAsync(
-                Detail.SysWorkflowStatus, latest is null ? null : Links.Href(latest.Links, "workflow"));
             // The pane may not EXIST yet: @ref is assigned after a render, and the two ways a document is
             // opened from elsewhere — a search hit, a notification — call SetTab(Repositories) and select in the
             // same synchronous run, with no render in between. Rendering straight into a null ref would lose the
             // preview silently on exactly those paths, so defer to OnAfterRenderAsync when it is not there yet.
-            await ShowPreviewAsync(previewUrl, textLayoutUrl, converted, latest is not null);
-        }
-        catch (HttpRequestException)
-        {
-            Detail.IndexData ??= [];
-        }
-        catch (InvalidOperationException)
-        {
-            // A rel this pane expected was not advertised. Degrade the PANE — never let it escape: this runs on
-            // a render path, so an unhandled exception blanks the whole workbench, list and tree included, not
-            // just the part that could not load. That is exactly what happened when tree roots were built
-            // without their links (#416): one missing rel took the entire page down.
-            Detail.IndexData ??= [];
+            await ShowPreviewAsync(loaded.PreviewUrl, loaded.TextLayoutUrl, loaded.Converted, loaded.HasVersion);
         }
 
         await LoadCommentsAsync(item);
@@ -2296,35 +2246,6 @@
         var text = System.Net.WebUtility.HtmlEncode($"{Detail.SensitivityName} · {_viewerName}");
         var svg = $"<svg xmlns='http://www.w3.org/2000/svg' width='360' height='200'><text x='10' y='150' fill='rgba(130,130,130,0.20)' font-size='20' font-family='sans-serif' transform='rotate(-28 10 150)'>{text}</text></svg>";
         return $"background-image:url(\"data:image/svg+xml,{Uri.EscapeDataString(svg)}\");";
-    }
-    private record DocumentDetailResponse { public List<LinkResponse> Links { get; set; } = []; public DetailRetentionDto? Retention { get; set; } public Guid? SensitivityLabelId { get; set; } public string SensitivityLabelName { get; set; } = ""; public string? SensitivityLabelColor { get; set; } public bool SensitivityWatermark { get; set; } public bool CanManagePermissions { get; set; } public bool BreaksInheritance { get; set; } public FolderContentsSortOrder ContentsSortOrder { get; set; } }
-
-    // Derives the always-shown system fields from the confirmed versions (ADR 0273): the current version's
-    // Created/Created-by/Document-date/File-extension, and the OCR override + TIFF-source from the latest TIFF.
-    private void DeriveSystemFields(BrowseNode item, List<VersionResponse> confirmed, Guid? currentVersionId)
-    {
-        var current = VersionListResponse.PickCurrent(confirmed, currentVersionId);
-        if (current is null)
-        {
-            return; // a folder or a document with no confirmed version yet
-        }
-
-        static bool IsTiff(string? key) => key is not null && (key.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) || key.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase));
-        var tiff = confirmed.Where(v => IsTiff(v.ObjectKey)).OrderByDescending(v => v.VersionNumber ?? 0).FirstOrDefault();
-
-        Detail.SysHasVersion = true;
-        Detail.SysWorkflowStatus = current.WorkflowStatus;
-        Detail.SysCurrentVersionId = current.Id;
-        Detail.SysDocumentDateHref = Links.Href(current.Links, "document-date");
-        Detail.SysCurrentVersion = current.VersionNumber;
-        Detail.VersionCount = confirmed.Count;
-        Detail.SysName = item.Name;
-        Detail.SysFileExtension = current.FileExtension ?? "";
-        Detail.SysDocumentDate = DateTime.TryParse(current.DocumentDate, out var d) ? d.Date : null;
-        Detail.SysCreated = current.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
-        Detail.SysCreatedBy = current.CreatedByName ?? "";
-        Detail.SysHasTiff = tiff is not null;
-        Detail.SysOcrCodes = string.IsNullOrWhiteSpace(tiff?.OcrLanguages) ? [] : tiff!.OcrLanguages!.Split('+', StringSplitOptions.RemoveEmptyEntries).ToList();
     }
 
     // ---- Single pane-level edit (ADR 0278): Name/date/OCR/mask/index-data all editable at once -----------
@@ -3398,14 +3319,6 @@
     // Collection-level rels, captured where each collection is read (ADR 0543, issue #416). Null until then,
     // which is what disables the action rather than the client composing a path for it.
 
-    private string DetailHref(string rel) => Links.Required(Detail.Links, rel);
-
-    // The row's own advertised rel when it has one — no extra call — else the OPEN RESOURCE's, which this pane
-    // has already fetched. Not every BrowseNode comes from a listing: a reference row, or a node built from an
-    // id when navigating to a referencing folder, carries nothing. Those are exactly the "I hold an id, not a
-    // resource" case, and the answer is to follow the resource we just fetched — never to compose (ADR 0543).
-    private string RowOrDetailHref(BrowseNode item, string rel) =>
-        item.Links is not null && item.Links.TryGetValue(rel, out var href) ? href : DetailHref(rel);
 
 
     private record ArchiveEntriesResponse { public List<ArchiveEntryDto> Entries { get; set; } = []; }
