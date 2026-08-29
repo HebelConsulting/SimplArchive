@@ -32,8 +32,14 @@ public sealed class HttpAuditWebhookSender : IAuditWebhookSender
         }
         catch (Exception ex) when (cancellationToken.IsCancellationRequested is false)
         {
-            // Unreachable / timeout / DNS — recorded + retried with backoff.
-            return WebhookSendResult.Fail(ex.Message);
+            // Unreachable / timeout / DNS / refused by the outbound-address policy — recorded + retried with
+            // backoff. The INNERMOST message, because the handler wraps everything it raises in a generic
+            // "An error occurred while sending the request", and that is what the administrator reads in
+            // tenant settings as AuditWebhookLastError. A cause they cannot see is a cause they cannot fix.
+            return WebhookSendResult.Fail(Innermost(ex).Message);
         }
     }
+
+    private static Exception Innermost(Exception exception) =>
+        exception.InnerException is { } inner ? Innermost(inner) : exception;
 }

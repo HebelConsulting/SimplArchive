@@ -239,7 +239,10 @@ builder.Services.AddScoped<ITenantProvisioningService, TenantProvisioningService
 builder.Services.Configure<SimplArchive.Api.CalDav.DavPushOptions>(
     builder.Configuration.GetSection(SimplArchive.Api.CalDav.DavPushOptions.SectionName));
 builder.Services.AddSingleton<SimplArchive.Api.CalDav.DavPushConfiguration>();
-builder.Services.AddScoped<SimplArchive.Api.CalDav.DavPushNotifier>();
+builder.Services.AddHttpClient<SimplArchive.Api.CalDav.DavPushNotifier>()
+    .ConfigurePrimaryHttpMessageHandler(provider =>
+        SimplArchive.Infrastructure.Http.GuardedOutboundHandler.Create(
+            provider.GetRequiredService<SimplArchive.Application.Abstractions.IOutboundAddressPolicy>()));
 // The recorder's doorbell (#806): a FRESH scope per ring, because the ringing DbContext is mid-disposal of
 // its own scope and the notifier needs a context of its own to read subscriptions.
 builder.Services.AddSingleton<SimplArchive.Application.Abstractions.IDavChangeNotifier, SimplArchive.Api.CalDav.DavChangeNotifierAdapter>();

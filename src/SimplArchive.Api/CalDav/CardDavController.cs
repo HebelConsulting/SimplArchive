@@ -93,7 +93,7 @@ public sealed class CardDavController : DavControllerBase
     // WebDAV-Push: a client POSTs push-register to the COLLECTION, and deletes the returned URL to stop.
     [HttpPost("~/carddav/addressbooks/{folderId:guid}")]
     public Task<IActionResult> RegisterPush(Guid folderId) =>
-        DavPushRegistration.RegisterAsync(Context(), _push, folderId);
+        DavPushRegistration.RegisterAsync(Context(), _push, _services.GetRequiredService<IOutboundAddressPolicy>(), folderId);
 
     [HttpDelete("~/carddav/addressbooks/{folderId:guid}/{resourceName}")]
     public Task<IActionResult> Delete(Guid folderId, string resourceName) =>

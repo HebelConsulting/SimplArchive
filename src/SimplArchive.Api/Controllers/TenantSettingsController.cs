@@ -33,6 +33,7 @@ public class TenantSettingsController : ControllerBase
     private readonly ITransitEncryptor _transit;
     private readonly IObjectStorageClient _objectStorage;
     private readonly IAuditWebhookSender _webhookSender;
+    private readonly IOutboundAddressPolicy _outbound;
     private readonly IAuditRecorder _audit;
 
     public TenantSettingsController(
@@ -43,6 +44,7 @@ public class TenantSettingsController : ControllerBase
         ITransitEncryptor transit,
         IObjectStorageClient objectStorage,
         IAuditWebhookSender webhookSender,
+        IOutboundAddressPolicy outbound,
         IAuditRecorder audit)
     {
         _dbContext = dbContext;
@@ -52,6 +54,7 @@ public class TenantSettingsController : ControllerBase
         _transit = transit;
         _objectStorage = objectStorage;
         _webhookSender = webhookSender;
+        _outbound = outbound;
         _audit = audit;
     }
 
@@ -388,9 +391,17 @@ public class TenantSettingsController : ControllerBase
         {
             // Audit webhook (ADR "Audit webhook streaming"): validate + set the URL; the secret is encrypted at rest.
             var webhookUrl = string.IsNullOrWhiteSpace(request.AuditWebhookUrl) ? null : request.AuditWebhookUrl.Trim();
-            if (webhookUrl is not null && !(Uri.TryCreate(webhookUrl, UriKind.Absolute, out var wu) && (wu.Scheme == Uri.UriSchemeHttp || wu.Scheme == Uri.UriSchemeHttps)))
+            if (webhookUrl is not null)
             {
-                throw new InvalidWebhookUrlException();
+                // The scheme check this replaces let a tenant administrator point the installation at its own
+                // loopback, its neighbours, or the cloud metadata service (ADR 0717). Refusing here is for the
+                // administrator's benefit — the control that actually holds is the re-resolve-and-pin at
+                // delivery, because a name can answer differently a minute after it was saved.
+                var verdict = await _outbound.ValidateAsync(webhookUrl, cancellationToken);
+                if (!verdict.Allowed)
+                {
+                    throw new InvalidWebhookUrlException(verdict.Reason);
+                }
             }
 
             if (webhookUrl is null)

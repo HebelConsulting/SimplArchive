@@ -164,6 +164,16 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         Environment.SetEnvironmentVariable("ObjectStorage__SecretKey", StoragePassword);
         // The IMAP endpoint (#562): on, plaintext, on an OS-assigned ephemeral port — tests read the bound
         // port back from the ImapServer singleton and drive it with a real mail-client library (MailKit).
+        // The stub SIEM receiver the webhook tests stand up lives on loopback, which the outbound-address
+        // policy refuses by default (ADR 0717) — so this fixture configures the allowlist exactly as an
+        // operator with an on-premises collector would. It is the mechanism under test, not a bypass: the
+        // cloud-metadata addresses stay refused underneath it, and the tests assert that they do.
+        // Both families: "localhost" resolves to ::1 as well as 127.0.0.1 on a normal machine, and the policy
+        // requires EVERY resolved address to be permitted — one public answer beside a private one is the shape
+        // of a rebinding attack. Allowlisting only the IPv4 half would refuse the very receiver it stood up.
+        Environment.SetEnvironmentVariable("OutboundHttp__AllowedNetworks__0", "127.0.0.0/8");
+        Environment.SetEnvironmentVariable("OutboundHttp__AllowedNetworks__1", "::1/128");
+
         Environment.SetEnvironmentVariable("Lmtp__Enabled", "true");
         Environment.SetEnvironmentVariable("Lmtp__Port", "-1");
         Environment.SetEnvironmentVariable("Imap__Enabled", "true");

@@ -13,12 +13,16 @@ public sealed class DavPushNotifier
 {
     private readonly SimplArchiveDbContext _dbContext;
     private readonly DavPushConfiguration _push;
+    // The GUARDED client (ADR 0717): the endpoint is the client's, so the delivery re-resolves and pins at
+    // connect time and refuses a redirect. The library would otherwise create an unguarded client of its own.
+    private readonly HttpClient _http;
     private readonly ILogger<DavPushNotifier> _logger;
 
-    public DavPushNotifier(SimplArchiveDbContext dbContext, DavPushConfiguration push, ILogger<DavPushNotifier> logger)
+    public DavPushNotifier(SimplArchiveDbContext dbContext, DavPushConfiguration push, HttpClient http, ILogger<DavPushNotifier> logger)
     {
         _dbContext = dbContext;
         _push = push;
+        _http = http;
         _logger = logger;
     }
 
@@ -44,7 +48,7 @@ public sealed class DavPushNotifier
         }
 
         var payload = $"""<?xml version="1.0" encoding="utf-8"?><P:push-message xmlns:D="DAV:" xmlns:P="{DavNames.Push.NamespaceName}"><D:propstat><D:prop><D:sync-token>{DavTokens.Format(syncSequence)}</D:prop></D:propstat></P:push-message>""";
-        var client = new WebPushClient();
+        var client = new WebPushClient(_http);
         var vapid = new VapidDetails(_push.Subject, _push.VapidPublicKey, _push.VapidPrivateKey);
         var gone = new List<DavPushSubscription>();
 

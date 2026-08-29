@@ -126,10 +126,22 @@ public static class DependencyInjection
         services.AddScoped<IAuditWormArchiver, Audit.AuditWormArchiver>();
         services.AddHostedService<Audit.AuditWormWorker>();
 
+        // What this installation may call outbound (ADR 0717) — the one answer shared by every sink that
+        // accepts a caller-supplied URL. A singleton: it parses its allowlist once and holds no per-request
+        // state.
+        services.Configure<Http.OutboundHttpOptions>(configuration.GetSection(Http.OutboundHttpOptions.SectionName));
+        services.AddSingleton<IOutboundAddressPolicy, Http.OutboundAddressPolicy>();
+
         // Audit webhook / SIEM streaming (ADR "Audit webhook streaming"). Registered unconditionally — the worker
         // is idle until a tenant configures a webhook URL; the HTTP sender is a typed client.
+        //
+        // Its handler is the GUARDED one (ADR 0717): the URL is a tenant administrator's, so the request has to
+        // re-resolve and pin at connect time and must not follow a redirect. Registration-time validation alone
+        // is bypassed by a name that answers publicly while it is being saved.
         services.AddScoped<IAuditWebhookDispatcher, Audit.AuditWebhookDispatcher>();
-        services.AddHttpClient<IAuditWebhookSender, Audit.HttpAuditWebhookSender>();
+        services.AddHttpClient<IAuditWebhookSender, Audit.HttpAuditWebhookSender>()
+            .ConfigurePrimaryHttpMessageHandler(provider =>
+                Http.GuardedOutboundHandler.Create(provider.GetRequiredService<IOutboundAddressPolicy>()));
         services.AddHostedService<Audit.AuditWebhookWorker>();
         services.AddScoped<ISensitivityLabelSeeder, Documents.SensitivityLabelSeeder>();
         services.AddScoped<INotificationService, Notifications.NotificationService>();

@@ -7,6 +7,7 @@ using System.Xml.Linq;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.CalDav.Xml;
+using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.CalDav;
 
 namespace SimplArchive.Api.CalDav;
@@ -14,7 +15,7 @@ namespace SimplArchive.Api.CalDav;
 internal static class DavPushRegistration
 {
     internal static async Task<IActionResult> RegisterAsync(
-        DavControllerContext context, DavPushConfiguration push, Guid folderId)
+        DavControllerContext context, DavPushConfiguration push, IOutboundAddressPolicy outbound, Guid folderId)
     {
         // Not-available and not-permitted answer alike: whether a collection exists is not something an
         // unauthorised caller should learn from the push endpoint either.
@@ -36,6 +37,16 @@ internal static class DavPushRegistration
         var auth = subscription?.Element(DavNames.Push + "auth-secret")?.Value.Trim();
 
         if (endpoint is not { Length: > 0 } || p256dh is not { Length: > 0 } || auth is not { Length: > 0 })
+        {
+            return new BadRequestResult();
+        }
+
+        // The endpoint is supplied by the CLIENT and this server will POST to it, so it is the same sink as a
+        // tenant's audit webhook and gets the same guard (ADR 0717). Lower severity — the payload is encrypted
+        // and the caller is authenticated — but identical in kind, and an installation that allowlists its LAN
+        // for a self-hosted push service says so in one place for both.
+        var verdict = await outbound.ValidateAsync(endpoint, context.Cancellation);
+        if (!verdict.Allowed)
         {
             return new BadRequestResult();
         }

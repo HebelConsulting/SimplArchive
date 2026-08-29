@@ -151,6 +151,10 @@ rolls the Deployment automatically (the pod template changes). Secrets come from
   value: {{ include "simplarchive.ocrUrl" . | quote }}
 - name: ConnectionStrings__Valkey
   value: {{ include "simplarchive.valkeyConn" . | quote }}
+{{- range $index, $network := .Values.config.outboundAllowedNetworks }}
+- name: OutboundHttp__AllowedNetworks__{{ $index }}
+  value: {{ $network | quote }}
+{{- end }}
 - name: Smtp__Host
   value: {{ .Values.config.smtp.host | quote }}
 - name: Smtp__Port

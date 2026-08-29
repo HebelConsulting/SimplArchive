@@ -54,6 +54,12 @@ config:
   # holds the sign-in throttle's counters (ADR 0716), which are per-POD without it — leaving an attacker one
   # guessing budget per replica. Unset ⇒ in-process only (correct only at 1 replica).
   valkeyConnectionString: ""   # e.g. "valkey:6379" or "valkey.internal:6379,password=...,ssl=true"
+  # Networks a caller-supplied outbound URL may reach even though they are otherwise refused (ADR 0717) — an
+  # audit webhook pointing at an on-premises log collector, a self-hosted push service on the LAN. Deployment
+  # configuration on purpose: a tenant administrator can register a webhook URL but must not be able to widen
+  # what the network permits. The cloud-metadata addresses stay refused however this is set.
+  #   outboundAllowedNetworks: ["10.0.0.0/8", "fd00::/8"]
+  outboundAllowedNetworks: []
   smtp:
     host: ""              # notification email (optional; unset disables email, in-app notifications still work)
     port: 587

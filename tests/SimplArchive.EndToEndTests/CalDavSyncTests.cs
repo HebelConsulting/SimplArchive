@@ -176,4 +176,33 @@ public class CalDavSyncTests
         Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(client, auth, "DELETE", location)).StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(client, auth, "DELETE", location)).StatusCode);
     }
+
+    [Theory]
+    [MemberData(nameof(Protocols))]
+    public async Task A_push_endpoint_this_installation_may_not_call_is_refused(string protocolName)
+    {
+        var protocol = Of(protocolName);
+        var (client, auth) = await SeedAsync();
+        using var _1 = client;
+        var collectionHref = await CollectionHrefAsync(client, auth, protocol);
+
+        // The push endpoint is chosen by the CLIENT and this server POSTs to it, so it is the same
+        // server-side-request-forgery sink as a tenant's audit webhook and gets the same guard (ADR 0717).
+        // Lower severity — the payload is encrypted and the caller is authenticated — but identical in kind.
+        var register = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <P:push-register xmlns:D="DAV:" xmlns:P="https://bitfire.at/webdav-push">
+              <P:subscription>
+                <P:web-push-subscription>
+                  <P:push-resource>http://169.254.169.254/latest/meta-data/</P:push-resource>
+                  <P:subscription-public-key>BF3xY2y7c1kQ0m9j0f4pQ2m8n7k6l5j4h3g2f1d0s9a8</P:subscription-public-key>
+                  <P:auth-secret>c2VjcmV0LWF1dGgtdmFsdWU</P:auth-secret>
+                </P:web-push-subscription>
+              </P:subscription>
+            </P:push-register>
+            """;
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await SendAsync(client, auth, "POST", collectionHref, register)).StatusCode);
+    }
 }
+
