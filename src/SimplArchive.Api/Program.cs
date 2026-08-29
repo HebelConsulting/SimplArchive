@@ -68,6 +68,17 @@ ProductionReadinessValidator.ThrowIfNotProductionReady(builder.Configuration, bu
 // SupportedMediaTypes so ASP.NET Core's built-in negotiation (matching Accept/Content-Type against these
 // lists) picks the right formatter without needing any header rewriting. Only v1 exists today; a future
 // version would add its own entries here.
+// CORS registration is conditional on configuration, so the default deployment carries no policy at all (#844).
+var corsOrigins = builder.Configuration
+    .GetSection(SimplArchive.Api.Security.SecurityHeaderOptions.SectionName)
+    .Get<SimplArchive.Api.Security.SecurityHeaderOptions>()?.CorsOrigins ?? [];
+if (corsOrigins.Length > 0)
+{
+    builder.Services.AddCors(options => options.AddPolicy(
+        SimplArchive.Api.Security.SecurityHeaders.CorsPolicyName,
+        policy => policy.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
+}
+
 builder.Services.AddControllers()
     .AddXmlSerializerFormatters()
     // Every inbound timestamp is normalised to UTC before it reaches a handler: Postgres stores an instant and
@@ -585,6 +596,10 @@ if (app.Configuration.GetValue<bool>("App:TrustProxyHeaders"))
 
 app.UseExceptionHandler();
 
+// The browser-hardening headers, on every response including the static client files — so they must sit ahead
+// of UseBlazorFrameworkFiles/UseStaticFiles, not with the API middleware further down (ADR 0084, #844).
+SimplArchive.Api.Security.SecurityHeaders.UseSecurityHeaders(app);
+
 // Request localization for the server-rendered pages (the /Account/Login OAuth surface, ADR "Server login-page
 // localization"): the culture is selected from the browser's Accept-Language header (the SPA + desktop apply their
 // own in-app language client-side, so this only governs the login round-trip). Supported: en (default)/de/it/es —
@@ -681,6 +696,13 @@ if (downloadDir is not null)
 // browser runs, and the static-file family no-ops when an endpoint is selected (so /download/ would fall to the
 // SPA instead of listing).
 app.UseRouting();
+
+// CORS only when a deployment asked for it. The shipped topology serves the client from this same deployable,
+// so the honest default is no policy at all rather than a permissive one nobody revisits (#844).
+if (corsOrigins.Length > 0)
+{
+    app.UseCors(SimplArchive.Api.Security.SecurityHeaders.CorsPolicyName);
+}
 
 // SignalR hub handshake (ADR "Real-time notifications (SignalR)"): a browser WebSocket can't set the
 // Authorization header, so the access token arrives as ?access_token=. Copy it into the header for /hubs/* before

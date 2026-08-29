@@ -175,7 +175,7 @@
     @* Apply a previously-chosen language (persisted in localStorage by the SPA / the selector below) before the
        page paints: if it differs from what the server rendered, hop through /Account/SetLanguage to set the culture
        cookie, then return. No stored choice → the server's Accept-Language (else English) default already applied. *@
-    <script>
+    <script nonce="@SimplArchive.Api.Security.SecurityHeaders.Nonce(ViewContext.HttpContext)">
         (function () {
             try {
                 var supported = ['en', 'de', 'it', 'es'];
@@ -301,7 +301,7 @@
             @if (Model.ShowPasskey)
             {
                 <script src="/webauthn.js"></script>
-                <script>
+                <script nonce="@SimplArchive.Api.Security.SecurityHeaders.Nonce(ViewContext.HttpContext)">
                     document.getElementById('passkeyButton').addEventListener('click', async function () {
                         this.disabled = true;
                         try {
@@ -364,7 +364,7 @@
             @if (Model.PasskeyLoginOptionsJson is not null)
             {
                 <script src="/webauthn.js"></script>
-                <script>
+                <script nonce="@SimplArchive.Api.Security.SecurityHeaders.Nonce(ViewContext.HttpContext)">
                     (function () {
                         var section = document.getElementById('passkeyLoginSection');
                         var btn = document.getElementById('passkeyLoginButton');

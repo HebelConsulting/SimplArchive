@@ -164,7 +164,7 @@
     </main>
 
     <script src="/webauthn.js"></script>
-    <script>
+    <script nonce="@SimplArchive.Api.Security.SecurityHeaders.Nonce(ViewContext.HttpContext)">
         (function () {
             var btn = document.getElementById('addButton');
             if (!btn) { return; }

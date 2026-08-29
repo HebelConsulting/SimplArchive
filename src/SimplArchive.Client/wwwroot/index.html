@@ -6,7 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SimplArchive.Client</title>
     <base href="/" />
-    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
     <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
     <!-- The design tokens as CSS custom properties (ADR 0578), before app.css so its rules can use them.
          The SERVER also serves this at /api/theme.css with any installation override applied; this static copy
@@ -45,9 +44,9 @@
     <script src="filePicker.js"></script>
     <script src="desktopPromo.js"></script>
     <script src="webauthn.js"></script>
-    <script>
-        Blazor.start({ applicationCulture: window.simplArchiveLang.preferred() });
-    </script>
+    <!-- In a FILE, not inline: an inline script would force `script-src 'unsafe-inline'` into the content
+         security policy, which is most of what that policy is for (ADR 0084, #844). -->
+    <script src="boot.js"></script>
 </body>
 
 </html>

@@ -31,7 +31,43 @@ public static class SimplArchiveTheme
     {
         PaletteLight = Palette(tokens.Light),
         PaletteDark = PaletteDark(tokens.Dark),
+        Typography = Typography(),
     };
+
+    /// <summary>
+    /// The font stack, stated rather than inherited (issue #844).
+    /// </summary>
+    /// <remarks>
+    /// The component library's default typography asks for a font this app never shipped, which the page used to
+    /// fetch from a third-party font CDN. That was worth removing on three counts, none of them typographic: it
+    /// sent every visitor's address to a third party on every page load — awkward for a product whose default
+    /// region is chosen for data residency; it made an air-gapped installation depend on reaching the public
+    /// internet; and it forced the content-security policy to name an external origin (ADR 0084).
+    ///
+    /// The stack below is what <c>app.css</c> already declared for the page body, so this makes the two agree
+    /// rather than changing the design: previously the components asked for the CDN font and the body did not.
+    /// </remarks>
+    private static Typography Typography()
+    {
+        string[] stack = ["Helvetica Neue", "Helvetica", "Arial", "sans-serif"];
+        return new Typography
+        {
+            Default = new DefaultTypography { FontFamily = stack },
+            H1 = new H1Typography { FontFamily = stack },
+            H2 = new H2Typography { FontFamily = stack },
+            H3 = new H3Typography { FontFamily = stack },
+            H4 = new H4Typography { FontFamily = stack },
+            H5 = new H5Typography { FontFamily = stack },
+            H6 = new H6Typography { FontFamily = stack },
+            Subtitle1 = new Subtitle1Typography { FontFamily = stack },
+            Subtitle2 = new Subtitle2Typography { FontFamily = stack },
+            Body1 = new Body1Typography { FontFamily = stack },
+            Body2 = new Body2Typography { FontFamily = stack },
+            Button = new ButtonTypography { FontFamily = stack },
+            Caption = new CaptionTypography { FontFamily = stack },
+            Overline = new OverlineTypography { FontFamily = stack },
+        };
+    }
 
     private static PaletteLight Palette(ThemePalette palette) => new()
     {
