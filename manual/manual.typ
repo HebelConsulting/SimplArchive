@@ -922,6 +922,342 @@ printed to the terminal as it happens — useful when reproducing a problem step
 Without the flag a terminal shows only the important lines; the file always carries everything, flag or no
 flag.
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+#pagebreak()
+= Appendix — who does what <usecases>
+
+A short inventory of what each kind of participant can do, for readers who need the shape of the system before
+its detail: an evaluator sizing it up, an administrator planning a rollout, or anyone deciding which chapter of
+this manual they actually need. Everything here is described properly in the chapters above; this is the map,
+not the territory.
+
+*Everybody's rights are per document.* None of the lists below overrides that. What a person may do to a
+particular document comes from that document’s permissions (and the groups they belong to), inherited down the
+tree unless a folder breaks the inheritance. An action missing from the interface is usually not a missing
+feature — it is the server declining to offer it here, to you, now.
+
+== The everyday user
+
+#table(
+  columns: (auto, 1fr),
+  stroke: 0.5pt + luma(80%),
+  inset: 6pt,
+  [*Find and read*], [Browse the tree, open a folder, preview a document without downloading it, search by
+   content or index data, jump to a search hit inside the page, and follow references to wherever else a
+   document is filed.],
+  [*Add and change*], [Upload by drag or from the ribbon, add a new *version* to an existing document, stage
+   work in the *Intray* until it is ready to file, check a document *out* and back *in*, and edit index data.],
+  [*Organise*], [Create folders, move documents, place a *reference* so one document appears in a second
+   folder, tag, and classify with a *document type* (mask).],
+  [*Collaborate*], [Comment in a document's chat and mention colleagues, annotate a page, subscribe to a
+   document to hear about changes, set a reminder, and act on the tasks a workflow sends you.],
+  [*Share*], [Create an *external link* for someone without an account — time-limited and access-limited — and
+   revoke it.],
+  [*Work elsewhere*], [Mount the archive in the operating system's file manager, sync contacts and calendars to
+   a phone, read the archive's mail folders in a mail client, and open a document in its native desktop
+   application from the desktop client.],
+  [*Their own account*], [Language and appearance, profile photo, password, two-factor authentication and
+   passkeys, and the separate app passwords their devices use.],
+)
+
+== The tenant administrator
+
+Everything above, plus the settings that govern their own organisation. A tenant administrator can reach every
+document in their tenant: the bypass is deliberate, and what they *do* with it is audited like anything else.
+
+#table(
+  columns: (auto, 1fr),
+  stroke: 0.5pt + luma(80%),
+  inset: 6pt,
+  [*People*], [Create and deactivate users, build groups, grant the system rights that let somebody administer
+   users, view the audit log, import, or manage records — and issue *service accounts* for integrations.],
+  [*Document types*], [Define masks and their index fields, which folders they may live in, what they may
+   contain, their retention period and their default sensitivity label.],
+  [*Records*], [Place and lift *legal holds*, review documents that have reached the end of their retention
+   before they are disposed of, and purge when that is the decision.],
+  [*Oversight*], [Read, filter, export and verify the *audit log*, and stream it to a SIEM over a signed
+   webhook.],
+  [*Policy*], [Require multi-factor authentication for everybody, cap storage, allow or forbid external links
+   and bound their lifetime, restrict tags to a catalogue, and set the retention and check-out defaults.],
+)
+
+== The platform administrator
+
+Runs the *installation* rather than any one organisation in it. They create and suspend tenants and provision
+the first administrator of each. They deliberately belong to no tenant, so they do not see documents; the
+separation is the point, and it is why a platform administrator cannot quietly read a customer's archive.
+
+== The service account
+
+A machine identity for an integration — a scanner, a line-of-business system, a script. It authenticates with
+a client id and secret rather than a password, holds exactly the rights it was granted (and never more than
+the person who granted them held), and appears in the audit log under its own name. It is the supported way to
+put documents in automatically, and it is why nobody needs to share a human's credentials with a robot.
+
+== The recipient of an external link
+
+Somebody with no account at all, holding a URL. They can open the one document it names — and no other —
+until the link expires or its permitted number of uses runs out. Nothing else in the archive is reachable from
+it, and the link can be revoked the moment it turns out it should not have been sent.
+
+== Programs, not people
+
+#table(
+  columns: (auto, 1fr),
+  stroke: 0.5pt + luma(80%),
+  inset: 6pt,
+  [*A file manager*], [Mounts the archive over WebDAV and shows exactly the tree the workbench shows. Opening,
+   editing and saving a file works the way it does on a network drive.],
+  [*A phone or a calendar program*], [Syncs contacts and calendars over CardDAV and CalDAV. What it changes,
+   the archive keeps — and versions.],
+  [*A mail client*], [Reads the archive's mail folders over IMAP, and can file a message into the archive by
+   copying it there.],
+  [*A mail server*], [Delivers mail straight into a user's Intray, so an address can be filed simply by being
+   written to.],
+)
+
+#note[
+  All four use *app-specific passwords*#idx("App password"), issued from the account menu and revocable one at a time — never the
+  password used to sign in. A lost phone costs one revocation, not a password change.
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
+#pagebreak()
+= Appendix — how SimplArchive is put together <domainmodel>
+
+The vocabulary the system actually thinks in. Worth ten minutes if you are evaluating it, integrating with it,
+or wondering why something behaves the way it does — several of the answers in this manual are consequences of
+the shape below rather than of any particular screen.
+
+== The document is the spine
+
+Almost everything is a *document*. A document has a name, a place in the tree, permissions of its own, and —
+usually — content.
+
+#table(
+  columns: (auto, 1fr),
+  stroke: 0.5pt + luma(80%),
+  inset: 6pt,
+  [*A folder*], [A document with no content. That is the whole difference: folders are not a separate species,
+   which is why a folder has index data, permissions, a chat thread and a history like anything else.],
+  [*A repository*], [A document with no parent — a root. Again not a separate species, which is why the same
+   permission rules reach the top of the tree without a special case.],
+  [*Your own space*], [A repository belonging to one person, provisioned for them, holding their *Intray* and
+   their checked-out documents. It is why every user has somewhere to put something before deciding where it
+   belongs.],
+)
+
+== Content lives in versions
+
+A document's file is a *version*, and versions are immutable. Uploading again adds a new one; the old one stays
+readable. This is what makes "restore an old version" honest — nothing is overwritten, so nothing has to be
+recovered.
+
+#note[
+  *Metadata belongs to the document, content belongs to the version.* Rename a document, re-classify it or edit
+  its index data and the history is untouched; upload a new file and the metadata carries across. That split is
+  why re-filing a document never costs its history, and why a version can be restored without copying anything.
+]
+
+== Document types and index data
+
+A *mask* is a document type: a named set of *index fields* with their types, validation and defaults. Assigning a
+mask to a document decides what may be recorded about it, and — through the mask — where it may live and what
+it may contain.
+
+Masks are *versioned and immutable*. Changing one publishes a new version; documents already classified keep
+the version they were classified under. A field's meaning therefore never changes retrospectively, which is
+what makes a ten-year-old document still readable on its own terms.
+
+== Who may do what
+
+Permissions are an *access-control list per document* — a set of rights granted to a user, a group or a service
+account. Rights inherit down the tree until a folder is set to break inheritance, at which point that subtree
+starts again from what is granted there.
+
+Two rules are worth knowing because they explain refusals:
+
+- *Nobody can grant a right they do not hold.* An administrator of a folder cannot manufacture access to it for
+  someone else beyond their own.
+- *A deactivated user and a suspended tenant have no rights at all*, decided before any administrator bypass —
+  so deactivating an account is immediate and total rather than a matter of stripping grants one at a time.
+
+== One installation, many organisations
+
+A *tenant* is an organisation. Every row that belongs to one carries its tenant, and the isolation is enforced
+in a single place — a filter the database context applies to every query — rather than by each feature
+remembering. Users, groups, masks, documents, tags and audit events are all tenant-scoped; a *platform
+administrator* deliberately belongs to no tenant.
+
+== The things that hang off a document
+
+#table(
+  columns: (auto, 1fr),
+  stroke: 0.5pt + luma(80%),
+  inset: 6pt,
+  [*Chat, mentions*], [The conversation about a document, and the system entries that record what happened to
+   it — a version filed, an older one made current, an attachment refused.],
+  [*Annotations*], [Marks on a page, anchored to the version they were drawn on.],
+  [*References*], [The same document appearing in a second folder. One document, two places — not a copy, so
+   there is nothing to diverge.],
+  [*Tags*], [Free or catalogue-restricted labels, orthogonal to the tree.],
+  [*Subscriptions, reminders*], [Who wants to hear about changes, and when somebody wants to be reminded.],
+  [*External links*], [Time-limited, use-limited access for somebody with no account.],
+  [*Legal holds, retention*], [A freeze that blocks change and deletion, and a policy that eventually disposes
+   of what is no longer needed. A hold always wins.],
+  [*Workflow*], [The state a document is in, and the trail of transitions that got it there.],
+  [*Audit events*], [What was done, by whom, to what — hash-chained so a gap or an edit is detectable.],
+)
+
+== What the archive stores it in
+
+Content goes to object storage, never through the application: the browser and the desktop client transfer
+bytes directly against a short-lived signed URL. Metadata, permissions and the audit trail go to PostgreSQL.
+Full-text search is a separate index built from the extracted text, and the archive works without it — search
+falls back to metadata alone rather than failing.
+
+#note[
+  Nothing above is peculiar to the web client or the desktop client. Both are views onto the same model, which
+  is why a document filed from a phone's calendar, a mail server, a file manager and the workbench are the same
+  kind of thing afterwards — and why the permissions on it mean the same thing in all four.
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
+#pagebreak()
+= Appendix — security posture <security>
+
+A self-assessment against the *OWASP Top 10 (2021)* and a summary against *ASVS Level 2*, for readers who have
+to answer for what they deploy.
+
+#note[
+  *What this is, and is not.* It is a structured review of the software by the people who wrote it, kept current
+  with the code. It is *not* a penetration test and not a third-party certification, and it says nothing about
+  any particular installation's network, backups or operating procedures. The distinction the project holds
+  elsewhere applies here too: the product is production software; the public demonstration instance is not, and
+  is documented as such.
+]
+
+== The finding that mattered
+
+The review's most useful result was not any single weakness. It was a *pattern*: the four gaps it ranked
+highest had all been *decided, written down, and never built*. Response headers, sign-in throttling, an
+outbound-request guard and an upload content check each had an architecture record specifying them — in one
+case naming the exact four controls — and none of the four existed in the code. Nothing was visibly broken,
+which is precisely why they survived: the absence of a preventive control is invisible until the day it is
+needed.
+
+All four are now built, each with its own record explaining what was decided and what it concedes. The lesson
+is kept: a decision recorded is not a decision delivered, and only a test can tell the two apart.
+
+== OWASP Top 10 (2021)
+
+#table(
+  columns: (auto, 1fr),
+  stroke: 0.5pt + luma(80%),
+  inset: 6pt,
+  [*A01 Broken access control*], [Permissions are an access-control list per document, resolved by one
+   calculator that every caller goes through — with group expansion, inheritance and explicit breaks. Nobody
+   can grant a right they do not hold. A deactivated user or suspended organisation has no rights at all,
+   decided *before* any administrator bypass. Multi-tenant isolation is a query filter applied in a single
+   place rather than remembered per feature, and a test suite asserts a tenant cannot reach another's data.],
+  [*A02 Cryptographic failures*], [Passwords are stored only as hashes, and never logged. Secrets — database
+   credentials, object-storage keys, token-signing certificates — come from a secrets manager when one is
+   configured, with the database credential issued afresh at every start-up and the application never using the
+   database superuser. Transport security is relaxed only when the application is run in *development* mode:
+   the relaxation is tied to that mode rather than to a setting, so there is no configuration switch that turns
+   it off in a deployed installation.],
+  [*A03 Injection*], [Data access is exclusively through a typed query layer: the application contains *no raw or
+   string-concatenated SQL anywhere outside its schema migrations*. Output in both clients is framework-escaped, and the response-header
+   policy blocks inline script rather than allowing it. XML from the protocol endpoints is parsed with
+   document-type definitions disabled by framework default.],
+  [*A04 Insecure design*], [Progressive throttling of credential guessing at every door that verifies one; an
+   upload content check that refuses executables and scripts by their bytes as well as their names; storage
+   quotas; connection caps on the mail endpoint; page-size clamps on every listing. The archive's own invariants
+   — no cycles in the tree, no duplicate sibling names, immutable document types — are enforced at the single
+   point where data is saved, not by each caller.],
+  [*A05 Security misconfiguration*], [A start-up gate refuses to run outside development when any
+   development-grade setting is present — development certificates, bootstrap secrets, default storage
+   credentials, an unstamped build — and there is *no flag to bypass it*. Responses carry a content-security
+   policy, frame and referrer restrictions and content-type pinning; each header is set only if absent, so a
+   deployment that owns its own edge keeps ownership.],
+  [*A06 Vulnerable and outdated components*], [Every build scans the dependency tree for known vulnerabilities
+   and fails on a finding; the container image is scanned separately; dependency updates are proposed
+   automatically each week. A licence gate additionally fails the build on any dependency outside the allowed
+   set.],
+  [*A07 Identification and authentication failures*], [Standards-based sign-in with proof-key exchange for the
+   interactive clients. Second factors are supported as time-based codes and as passkeys, including passwordless
+   sign-in, and an organisation can require them for everybody. Failed attempts are progressively refused per
+   account *and* per source, with blocks that expire on their own rather than needing an administrator.],
+  [*A08 Software and data integrity failures*], [Uploaded content is re-read and hashed by the server rather
+   than trusted from the client. Versions can be locked immutable in storage for a retention period. The audit
+   log is hash-chained, so an altered or missing entry is detectable. Schema migrations are checked for
+   data-destroying operations, and a destructive one must be listed with a reason before the build will pass.],
+  [*A09 Security logging and monitoring failures*], [Every user-facing change is audited to an append-only,
+   hash-chained log with a retention policy, write-once archival segments, export, and signed streaming to a
+   SIEM. Requests carry a correlation identifier end to end, and every external seam can be traced in full
+   detail when needed. Logs never contain a password, a token or a signed URL.],
+  [*A10 Server-side request forgery*], [The two places that accept a caller-supplied URL — an organisation's
+   audit webhook and a client's push endpoint — are checked when the URL is registered *and again at the moment
+   of connecting*, against the address actually resolved, connecting to that address so nothing can be
+   re-pointed in between. Redirects are refused. Private ranges are refused unless the deployment's own
+   configuration permits them, and the cloud metadata addresses are refused regardless.],
+)
+
+== ASVS Level 2, in summary
+
+#table(
+  columns: (auto, 1fr),
+  stroke: 0.5pt + luma(80%),
+  inset: 6pt,
+  [*Architecture*], [Layering is enforced by tests rather than convention; every architectural decision is
+   recorded, including the ones later reversed.],
+  [*Authentication*], [Standards-based, second factors supported and enforceable, throttled. Password
+   *composition* rules are the one substantial item still open.],
+  [*Session management*], [Server-issued tokens with bounded lifetimes; signing out clears both the server's
+   session and the client's cached token.],
+  [*Access control*], [Per-object, deny by default, and evaluated *server-side on every
+   request* — the clients never decide it. They additionally hide an action the server did not advertise, so a
+   user is rarely offered something that would be refused; but the hiding is courtesy, and the refusal is the
+   control.],
+  [*Validation & encoding*], [Typed data access, framework-escaped output, content checked on upload, and
+   uploads that never pass through the application.],
+  [*Logging*], [Structured, correlated, redaction-conscious; the audit trail is separate from the operational
+   log and is tamper-evident.],
+  [*Data protection*], [Content in object storage reached only by short-lived signed URLs; deletion is a
+   two-stage process with a recycle bin, and disposal is auditable.],
+  [*Communications*], [Transport security enforced outside development; the demonstration stack's relaxations
+   are development-only by construction.],
+  [*Configuration*], [Dependency, licence, secret and image scanning on every build; a start-up gate that
+   refuses development settings in production.],
+)
+
+== What is still open
+
+An assessment that reports nothing outstanding is one to distrust. These are tracked, and none of them is a
+remotely exploitable defect in the shipped configuration:
+
+- *Password composition* — no minimum length or breached-password check yet. Throttling bounds how fast a
+  password can be guessed; it does nothing about one that is already on a public list.
+- *Token lifetimes and refresh-token reuse detection* — lifetimes sit at framework defaults, and a replayed
+  refresh token is not yet detected as a replay.
+- *Two secrets at rest* — one-time-code seeds and external-link tokens are stored as issued unless a secrets
+  manager is configured. Reading them requires database access.
+- *Authentication events in the audit trail* — a failed sign-in is a log line, not yet an audit event.
+- *Supply-chain attestation* — images are scanned but not signed, and no bill of materials is published.
+- *Explicit XML hardening* — safe today by framework default rather than by assertion, which means nothing
+  would notice if the default changed.
+- *Proxy trust* — when the reverse-proxy header option is enabled it trusts any proxy, which is right for a
+  local test network and too broad for production.
+
+== How this stays true
+
+Every one of the claims above is held by something that runs on each change: a test, a gate, or both. The build
+fails on a dependency with a known vulnerability, on a licence outside the allowed set, on a leaked secret, on
+a destructive migration without a stated reason, and on a compiler warning. The rest is held by roughly two
+thousand automated tests, including end-to-end suites that drive the real application over HTTP and a real
+browser. That is the only reason a document like this one can be published rather than merely written.
+
 // ─────────────────────────────────────────────────────────────────────────────
 #pagebreak()
 = Index
