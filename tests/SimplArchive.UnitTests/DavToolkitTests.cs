@@ -5,8 +5,9 @@ using SimplArchive.Api.CalDav.Xml;
 namespace SimplArchive.UnitTests;
 
 // The DAV XML toolkit ported from SimplCalCon (ADR 0621). These are the pieces the hand-rolled middleware
-// never had — it ignored the request body and always answered a fixed property set — so they are covered
-// here before the controllers that depend on them arrive.
+// never had — it ignored the request body and always answered a fixed property set — covered here before the
+// controllers that depend on them arrived. Since then the WebDAV gateway itself parses with PropRequest too
+// (issue #801, ADR 0713), so this parser now answers the property question for every DAV surface.
 public class DavToolkitTests
 {
     [Fact]

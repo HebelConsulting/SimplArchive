@@ -73,9 +73,9 @@ internal static class WebDavTrace
 
     /// <summary>What the client ASKED FOR — the half of a PROPFIND that headers cannot show.</summary>
     /// <remarks>
-    /// Worth its own line because the gateway currently ignores it: it answers with a fixed property set no
-    /// matter which properties were requested, and never emits the <c>404</c> propstat RFC 4918 §9.1 requires
-    /// for ones it does not have. Whether a client minds is exactly the sort of interop question that must be
+    /// Worth its own line because the answer MIRRORS it (issue #801, ADR 0713): the requested properties come
+    /// back in the <c>200</c> propstat and the ones we lack in a <c>404</c> propstat naming them (RFC 4918
+    /// §9.1), so which question produced which partition is exactly the sort of interop question that must be
     /// answerable from a log rather than from a packet capture (ADR 0626).
     /// </remarks>
     internal static void RequestBody(ILogger logger, string method, string path, string body)

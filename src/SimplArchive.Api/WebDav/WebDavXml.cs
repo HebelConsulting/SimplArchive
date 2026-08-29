@@ -1,5 +1,6 @@
 using System.Text;
 using System.Xml;
+using SimplArchive.Api.CalDav.Xml;
 
 namespace SimplArchive.Api.WebDav;
 
@@ -10,16 +11,31 @@ internal static class WebDavXml
 {
     internal static async Task WriteMultiStatusAsync(HttpContext context, List<PropStatXml> responses)
     {
+        // For a PROPFIND, the answer mirrors the QUESTION (issue #801): each composed propstat is partitioned
+        // against the requested property set — known properties in the 200 propstat, requested-but-unknown ones
+        // in a 404 propstat naming them (RFC 4918 §9.1). Filtered here because this is the one place every
+        // emitter's multistatus passes through, so the tree, the special folders and the safe-save branches
+        // cannot drift apart in how they honor a request. A PROPPATCH 207 answers the update it was sent, not a
+        // property question, and passes through unfiltered.
+        var request = string.Equals(context.Request.Method, "PROPFIND", StringComparison.OrdinalIgnoreCase)
+            ? await WebDavPropFind.ReadRequestAsync(context)
+            : null;
+
         var sb = new StringBuilder();
         sb.Append("<?xml version=\"1.0\" encoding=\"utf-8\"?><D:multistatus xmlns:D=\"DAV:\">");
         foreach (var r in responses)
         {
             sb.Append("<D:response>");
             sb.Append($"<D:href>{Xml(r.Href)}</D:href>");
-            sb.Append("<D:propstat>");
-            sb.Append($"<D:prop>{r.Props}</D:prop>");
-            sb.Append($"<D:status>{r.Status}</D:status>");
-            sb.Append("</D:propstat></D:response>");
+            foreach (var (status, props) in request is null ? [(r.Status, r.Props)] : WebDavPropFind.Apply(request, r))
+            {
+                sb.Append("<D:propstat>");
+                sb.Append($"<D:prop>{props}</D:prop>");
+                sb.Append($"<D:status>{status}</D:status>");
+                sb.Append("</D:propstat>");
+            }
+
+            sb.Append("</D:response>");
         }
 
         sb.Append("</D:multistatus>");
