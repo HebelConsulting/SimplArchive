@@ -50,9 +50,11 @@ public sealed class AdminClient(ApiCore core)
 
     // A machine-to-machine service account (ADR 0203/0534). ClientId is the OAuth client_id; the client_secret is
     // only ever returned once on create/rotate (see NewSecret) and is never carried on a list/read.
-    // A REVOKED account advertises none of edit/revoke/rotate-secret, so the row's actions disable from the
-    // server's answer rather than from IsActive re-derived here (issue #416).
-    public sealed record ServiceAccountInfo(Guid Id, string Name, string ClientId, bool IsActive,
+    // The row's actions disable from the SERVER's answer rather than from IsActive re-derived here (#416).
+    // That answer used to be the absence of edit/revoke; it is now CanManage, because those two rels sat on
+    // `self`'s own address and said nothing the method did not carry (ADR 0719). `rotate-secret` is still a
+    // rel — a different address — and is still absent on a revoked account.
+    public sealed record ServiceAccountInfo(Guid Id, string Name, string ClientId, bool IsActive, bool CanManage,
         bool CanManageRepositories, bool CanManageMasks, bool CanManageServiceAccounts, bool CanImport, bool CanExport,
         IReadOnlyDictionary<string, string>? Links = null)
     {
@@ -363,7 +365,8 @@ public sealed class AdminClient(ApiCore core)
     // Edit an existing account's name + rights (PUT, ADR 0534) — escalation-capped server-side like create.
     public async Task UpdateServiceAccountAsync(ServiceAccountInfo account, string name, SystemRightsData rights, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PutAsJsonAsync(RequireHref(account, "edit"), ToServiceAccountBody(name, rights), cancellationToken);
+        // PUT at the account's own address (ADR 0719); whether it may be edited is CanManage's answer.
+        using var response = await _core.Http.PutAsJsonAsync(RequireHref(account, "self"), ToServiceAccountBody(name, rights), cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException($"A service account named '{name}' already exists.");
@@ -394,7 +397,7 @@ public sealed class AdminClient(ApiCore core)
     // Revoke — one-way, sets IsActive = false; the credentials stop working immediately.
     public async Task RevokeServiceAccountAsync(ServiceAccountInfo account, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.DeleteAsync(RequireHref(account, "revoke"), cancellationToken);
+        using var response = await _core.Http.DeleteAsync(RequireHref(account, "self"), cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to manage service accounts.");
@@ -411,6 +414,7 @@ public sealed class AdminClient(ApiCore core)
             e.GetProperty("name").GetString() ?? "",
             e.TryGetProperty("clientId", out var c) ? c.GetString() ?? "" : "",
             !e.TryGetProperty("isActive", out var a) || a.ValueKind == JsonValueKind.True,
+            B("canManage"),
             B("canManageRepositories"), B("canManageMasks"), B("canManageServiceAccounts"), B("canImport"), B("canExport"),
             ApiCore.ParseLinks(e));
     }

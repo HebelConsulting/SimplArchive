@@ -67,6 +67,18 @@ public class ServiceAccountsController : ControllerBase
 
         public bool IsActive { get; set; }
 
+        /// <summary>
+        /// Whether the caller may change this account — edit it, revoke it, rotate its secret. The SERVER's
+        /// answer, not a re-derivation of <see cref="IsActive"/> by the client (issue #416): the rule that a
+        /// revoked account cannot be edited belongs here, and can change here, without every client learning it.
+        /// </summary>
+        /// <remarks>
+        /// This is ADR 0719's second half. `edit[PUT]` and `revoke[DELETE]` used to say it by being *absent*,
+        /// which conflated two facts in one signal — where the resource is, and whether you may act on it. One
+        /// rel now carries the address and this flag carries the permission.
+        /// </remarks>
+        public bool CanManage { get; set; }
+
         public bool CanManageRepositories { get; set; }
 
         public bool CanManageMasks { get; set; }
@@ -202,6 +214,9 @@ public class ServiceAccountsController : ControllerBase
             ClientId = clientId,
             ClientSecret = clientSecret,
             IsActive = serviceAccount.IsActive,
+            // The server's answer to "may this be changed?" (ADR 0719). Today it is exactly IsActive — but it
+            // is computed HERE, so tightening the rule never means teaching two clients a new one.
+            CanManage = serviceAccount.IsActive,
             CanManageRepositories = serviceAccount.CanManageRepositories,
             CanManageMasks = serviceAccount.CanManageMasks,
             CanManageServiceAccounts = serviceAccount.CanManageServiceAccounts,
@@ -439,21 +454,27 @@ public class ServiceAccountsController : ControllerBase
             Name = serviceAccount.Name,
             ClientId = serviceAccount.OpenIddictApplicationClientId,
             IsActive = serviceAccount.IsActive,
+            // The server's answer to "may this be changed?" (ADR 0719). Today it is exactly IsActive — but it
+            // is computed HERE, so tightening the rule never means teaching two clients a new one.
+            CanManage = serviceAccount.IsActive,
             CanManageRepositories = serviceAccount.CanManageRepositories,
             CanManageMasks = serviceAccount.CanManageMasks,
             CanManageServiceAccounts = serviceAccount.CanManageServiceAccounts,
             CanImport = serviceAccount.CanImport,
             CanExport = serviceAccount.CanExport,
 
-            // The three management actions as rels (issue #416). Only a LIVE account offers them: rotating the
-            // secret of a revoked account, or revoking it twice, are affordances whose outcome is already
-            // decided, and ADR 0543 makes their absence the client's cue to disable rather than to try.
+            // ONE rel for this address; the method says which action (ADR 0719). `edit[PUT]` and
+            // `revoke[DELETE]` sat beside `self[GET]` on the same URL and said nothing the method did not
+            // already carry — so what they really encoded was CanManage, by being absent on a revoked account.
+            // That is now stated as the capability it is, which keeps the server the one deciding (issue #416)
+            // while letting the address be advertised once.
+            //
+            // `rotate-secret` stays a rel: it is a DIFFERENT address, and it stays conditional because an
+            // affordance whose outcome is already decided should be absent rather than offered (ADR 0543).
             Links = serviceAccount.IsActive
                 ?
                 [
                     new Link("self", $"/api/service-accounts/{serviceAccount.Id}", "GET"),
-                    new Link("edit", $"/api/service-accounts/{serviceAccount.Id}", "PUT"),
-                    new Link("revoke", $"/api/service-accounts/{serviceAccount.Id}", "DELETE"),
                     new Link("rotate-secret", $"/api/service-accounts/{serviceAccount.Id}/rotate-secret", "POST"),
                 ]
                 : [new Link("self", $"/api/service-accounts/{serviceAccount.Id}", "GET")],

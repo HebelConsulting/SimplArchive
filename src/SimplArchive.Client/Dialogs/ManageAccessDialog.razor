@@ -405,7 +405,7 @@
         var (type, id) = _editing.IsNew ? Split(_editing.PrincipalKey) : (_editing.PrincipalType, _editing.PrincipalId);
         var target = _editing.IsNew
             ? Rel(_principals.FirstOrDefault(p => p.Type == type && p.Id == id)?.Links, "grant")
-            : Rel(_entries.FirstOrDefault(e => e.PrincipalType == type && e.PrincipalId == id)?.Links, "edit");
+            : Rel(_entries.FirstOrDefault(e => e.PrincipalType == type && e.PrincipalId == id)?.Links, "self");
         if (target is null) { return; }
 
         _busy = true;
@@ -449,7 +449,7 @@
         _busy = true;
         try
         {
-            if (Rel(e.Links, "remove") is not { } removeHref) { return; }
+            if (Rel(e.Links, "self") is not { } removeHref) { return; }
 
             var response = await Http.DeleteAsync(removeHref);
             response.EnsureSuccessStatusCode();

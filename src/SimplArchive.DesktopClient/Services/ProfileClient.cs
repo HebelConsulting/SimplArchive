@@ -162,13 +162,15 @@ public sealed class ProfileClient(ApiCore core)
 
     public async Task<ImapAccessInfo> GenerateImapPasswordAsync(ImapAccessInfo status, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsync(status.Href("generate") ?? throw new InvalidOperationException("The IMAP access resource advertised no 'generate' rel (ADR 0543)."), null, cancellationToken);
+        // POST at the resource's own address (ADR 0719) — the method is the action. Whether the button was
+        // offered at all is `Available`'s job, not a rel's.
+        using var response = await _core.Http.PostAsync(status.Href("self") ?? throw new InvalidOperationException("The IMAP access resource advertised no 'self' rel (ADR 0543)."), null, cancellationToken);
         response.EnsureSuccessStatusCode();
         return ParseImapAccess(await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken));
     }
 
     public async Task RevokeImapPasswordAsync(ImapAccessInfo status, CancellationToken cancellationToken = default) =>
-        (await _core.Http.DeleteAsync(status.Href("revoke") ?? throw new InvalidOperationException("The IMAP access resource advertised no 'revoke' rel (ADR 0543)."), cancellationToken)).EnsureSuccessStatusCode();
+        (await _core.Http.DeleteAsync(status.Href("self") ?? throw new InvalidOperationException("The IMAP access resource advertised no 'self' rel (ADR 0543)."), cancellationToken)).EnsureSuccessStatusCode();
 
     public async Task SetImapShowAllDocumentsAsync(ImapAccessInfo status, bool showAllDocuments, CancellationToken cancellationToken = default) =>
         (await _core.Http.PutAsJsonAsync(status.Href("settings") ?? throw new InvalidOperationException("The IMAP access resource advertised no 'settings' rel (ADR 0543)."), new { showAllDocuments }, cancellationToken)).EnsureSuccessStatusCode();

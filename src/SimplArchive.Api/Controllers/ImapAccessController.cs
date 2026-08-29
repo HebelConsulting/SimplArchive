@@ -163,9 +163,12 @@ public class ImapAccessController : ControllerBase
             ShowAllDocuments = user.ImapShowAllDocuments,
             Links =
             [
+                // ONE rel for this address; the method says which action (ADR 0719). GET reads the status,
+                // POST issues a password, DELETE revokes it — and `generate`/`revoke` said nothing the method
+                // did not already carry. What gates the two buttons is `available` and `enabled` below, which
+                // the dialog already used: the rels were never the signal, which is why removing them costs
+                // nothing. `settings` stays a rel of its own — it is a different address.
                 new Link("self", "/api/me/imap-access", "GET"),
-                new Link("generate", "/api/me/imap-access", "POST"),
-                new Link("revoke", "/api/me/imap-access", "DELETE"),
                 new Link("settings", "/api/me/imap-access/settings", "PUT"),
             ],
         };

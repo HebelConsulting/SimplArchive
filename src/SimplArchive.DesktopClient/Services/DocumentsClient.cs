@@ -1348,7 +1348,7 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
 
     public async Task RevokeAclEntryAsync(AclEntryInfo entry, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.DeleteAsync(ApiCore.RequireHref(entry, "remove"), cancellationToken);
+        using var response = await _core.Http.DeleteAsync(ApiCore.RequireHref(entry, "self"), cancellationToken);
         await ApiCore.ThrowIfProblemAsync(response, Strings.Get("MaLoadFailed"), cancellationToken);
     }
 
@@ -1438,13 +1438,13 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         var resp = await _core.Http.PostAsJsonAsync(await _core.RootHrefAsync("tags", cancellationToken), new { name, color }, cancellationToken);
         if (!resp.IsSuccessStatusCode) throw new ApiActionException(await SimplArchiveApiClient.ErrorMessageAsync(resp, "Could not add the tag."));
     }
-    // Writes the rights at the address the ROW gave us for writing them — `grant` on a principal being added,
-    // `edit` on an entry already there. One method, because it is one operation: the two rels differ only in
-    // which side of the same address the server chose to advertise (ADR 0555).
+    // Writes the rights at the address the ROW gave us — `grant` on a principal being added, `self` on an
+    // entry already there; RevokeAclEntryAsync above DELETEs that same `self`. One rel, the method says which
+    // action (ADR 0719); `grant` is not its verb pair — it is emitted only while there is no entry yet.
     public async Task SetAclEntryAsync(IAdvertisesLinks row, AclRights rights, CancellationToken cancellationToken = default)
     {
-        var href = row.Href("grant") ?? row.Href("edit")
-            ?? throw new InvalidOperationException($"The row '{row.Name}' advertised neither 'grant' nor 'edit' — you may not change its access (ADR 0543/0555).");
+        var href = row.Href("grant") ?? row.Href("self")
+            ?? throw new InvalidOperationException($"The row '{row.Name}' advertised neither 'grant' nor 'self' — you may not change its access (ADR 0543/0555).");
         using var response = await _core.Http.PutAsJsonAsync(href, rights, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {

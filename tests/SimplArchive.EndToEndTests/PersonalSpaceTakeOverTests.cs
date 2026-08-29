@@ -71,8 +71,21 @@ public class PersonalSpaceTakeOverTests
             .Single(e => e.GetProperty("principalId").GetGuid() == adminId);
 
         Assert.True(granted.GetProperty("canManagePermissions").GetBoolean());
-        Assert.Contains(granted.GetProperty("links").EnumerateArray(),
-            l => l.GetProperty("rel").GetString() == "remove");
+
+        // Revoked the ordinary way — proven by DOING it, not by naming a rel. This asserted the presence of a
+        // `remove` rel until ADR 0719 collapsed the entry's three same-address rels into `self` (the method is
+        // the action); following the address and checking the grant is gone survives that rename and states the
+        // property the test is actually about, which naming a rel never did.
+        var address = granted.GetProperty("links").EnumerateArray()
+            .Single(l => l.GetProperty("rel").GetString() == "self").GetProperty("href").GetString()!;
+        (await admin.DeleteAsync(address)).EnsureSuccessStatusCode();
+
+        // Read back as the OWNER, not the admin: revoking that grant is what the admin's own access to this
+        // space rested on, so asking them to observe the result is asking them to look through the door they
+        // just closed. The owner is the honest witness — and the one who cares.
+        var after = await TestJson.Get(owner, $"/api/documents/{ownerRepo}/acl-entries");
+        Assert.DoesNotContain(
+            after.GetProperty("entries").EnumerateArray(), e => e.GetProperty("principalId").GetGuid() == adminId);
     }
 
     [Fact]

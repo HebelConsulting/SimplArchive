@@ -909,13 +909,16 @@ public class AclEntriesController : ControllerBase
             CanManagePermissions = entry.CanManagePermissions,
             CanMove = entry.CanMove,
             CanAnnotate = entry.CanAnnotate,
-            // The grant's own address: read it, replace it, remove it. One rel per verb, so the dialog's Save and
-            // Remove follow a link rather than rebuilding /acl-entries/{type}/{id} twice over (issue #416).
+            // The grant's own address, advertised ONCE: read it with GET, replace it with PUT, remove it with
+            // DELETE (ADR 0719). `edit` and `remove` were the same URL under two more names, and the method
+            // already said which was which. Reaching this collection at all requires CanManagePermissions, so
+            // there is no narrower right for a capability flag to carry here.
+            //
+            // The `grant` on a PRINCIPAL row is deliberately NOT folded in: it is emitted only for a principal
+            // that has no entry yet, so its presence names an available transition rather than a verb.
             Links =
             [
                 new Link("self", $"/api/documents/{entry.DocumentId}/acl-entries/{principalType}/{principalId}", "GET"),
-                new Link("edit", $"/api/documents/{entry.DocumentId}/acl-entries/{principalType}/{principalId}", "PUT"),
-                new Link("remove", $"/api/documents/{entry.DocumentId}/acl-entries/{principalType}/{principalId}", "DELETE"),
             ],
         };
     }

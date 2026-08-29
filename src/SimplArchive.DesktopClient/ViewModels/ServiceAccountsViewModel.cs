@@ -79,6 +79,11 @@ public sealed class ServiceAccountRowViewModel
     public string ClientId => Info.ClientId;
     public bool IsActive => Info.IsActive;
 
+    // What the server says may be done to this account (ADR 0719). The three row buttons bind to it: before,
+    // they were enabled unconditionally and failed on click for a revoked account — the affordance ADR 0543
+    // exists to prevent, sitting in plain sight because nothing in the markup mentioned a rel at all.
+    public bool CanManage => Info.CanManage;
+
     public string RightsSummary => string.Join(", ", RightLabels());
 
     private IEnumerable<string> RightLabels()
