@@ -74,23 +74,32 @@ public sealed class PersonalRepositoryProvisioner
     /// (the "backfill existing" behaviour), not only freshly-created ones.
     /// </summary>
     public async Task<Document> EnsureAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken,
-        Func<string, Guid>? idFor = null)
+        Func<string, Guid>? idFor = null, DateTimeOffset? createdAt = null)
     {
+        // createdAt rides along with idFor (#832): a reseeded demo space must not wear the boot minute as its
+        // folders' Created stamps, or every manual capture renders different dates. Real users keep real time.
+        //
+        // Each folder gets its own millisecond off the base instant, because listings order by
+        // (CreatedAt, Id) and a real user's ids are random: with all three folders on ONE instant, the tie
+        // fell to the ids and the tree showed My Addressbook before My Calendar on some machines and not
+        // others — the very coin flip this parameter exists to remove, reintroduced one level down
+        // (CI caught it as PersonalRepositoryTests expecting the creation order).
+        var at = createdAt ?? DateTimeOffset.UtcNow;
         // idFor (#781): the demo seeder derives the space's folder ids from stable slugs so the kiosk's nightly
         // reseed keeps every client-visible identity. Null for real users — their recreated space must READ as
         // recreated (a fresh id is what moves UIDVALIDITY and the DAV collection identity).
-        var root = await EnsureRootAsync(userId, tenantId, cancellationToken, idFor?.Invoke("root"));
+        var root = await EnsureRootAsync(userId, tenantId, cancellationToken, idFor?.Invoke("root"), at);
         // My Documents goes through the same helper as the other two now: it used to have a near-copy of its
         // own, differing only in that it stamped the plain Folder mask. It wears its OWN mask since #634, and
         // restampFromMaskId is what moves an already-provisioned one off Folder — a space created before that
         // mask existed has a correctly-typed folder by the old rule and a wrongly-typed one by the new.
-        await EnsureTypedFolderAsync(root, tenantId, userId, MyDocumentsFolderName, WellKnownMaskIds.MyDocuments, cancellationToken, restampFromMaskId: WellKnownMaskIds.Folder, id: idFor?.Invoke("my-documents"));
-        await EnsureTypedFolderAsync(root, tenantId, userId, MyCalendarFolderName, WellKnownMaskIds.Calendar, cancellationToken, id: idFor?.Invoke("my-calendar"));
-        await EnsureTypedFolderAsync(root, tenantId, userId, MyAddressbookFolderName, WellKnownMaskIds.Addressbook, cancellationToken, LegacyMyContactsFolderName, id: idFor?.Invoke("my-addressbook"));
+        await EnsureTypedFolderAsync(root, tenantId, userId, MyDocumentsFolderName, WellKnownMaskIds.MyDocuments, cancellationToken, at.AddMilliseconds(1), restampFromMaskId: WellKnownMaskIds.Folder, id: idFor?.Invoke("my-documents"));
+        await EnsureTypedFolderAsync(root, tenantId, userId, MyCalendarFolderName, WellKnownMaskIds.Calendar, cancellationToken, at.AddMilliseconds(2), id: idFor?.Invoke("my-calendar"));
+        await EnsureTypedFolderAsync(root, tenantId, userId, MyAddressbookFolderName, WellKnownMaskIds.Addressbook, cancellationToken, at.AddMilliseconds(3), LegacyMyContactsFolderName, id: idFor?.Invoke("my-addressbook"));
         return root;
     }
 
-    private async Task<Document> EnsureRootAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken, Guid? id = null)
+    private async Task<Document> EnsureRootAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken, Guid? id, DateTimeOffset at)
     {
         var existing = await _dbContext.Documents.SingleOrDefaultAsync(d => d.PersonalOfUserId == userId, cancellationToken);
         if (existing is not null)
@@ -121,7 +130,7 @@ public sealed class PersonalRepositoryProvisioner
             MaskVersionId = await FolderMask.CurrentVersionIdAsync(_dbContext, tenantId, WellKnownMaskIds.UserFolder, cancellationToken)
                 ?? await FolderMask.CurrentVersionIdAsync(_dbContext, tenantId, cancellationToken),
             CreatedByUserId = userId,
-            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = at,
         };
         _dbContext.Documents.Add(document);
 
@@ -140,7 +149,7 @@ public sealed class PersonalRepositoryProvisioner
             CanManagePermissions = true,
             CanMove = true,
             CanAnnotate = true,
-            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = at,
         });
 
         try
@@ -167,7 +176,7 @@ public sealed class PersonalRepositoryProvisioner
     /// </summary>
     private async Task EnsureTypedFolderAsync(
         Document root, Guid tenantId, Guid userId, string name, Guid folderMaskId, CancellationToken cancellationToken,
-        string? legacyName = null, Guid? restampFromMaskId = null, Guid? id = null)
+        DateTimeOffset at, string? legacyName = null, Guid? restampFromMaskId = null, Guid? id = null)
     {
         var maskVersionId = await FolderMask.CurrentVersionIdAsync(_dbContext, tenantId, folderMaskId, cancellationToken);
 
@@ -223,7 +232,7 @@ public sealed class PersonalRepositoryProvisioner
             Name = name,
             MaskVersionId = maskVersionId,
             CreatedByUserId = userId,
-            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = at,
         });
 
         try

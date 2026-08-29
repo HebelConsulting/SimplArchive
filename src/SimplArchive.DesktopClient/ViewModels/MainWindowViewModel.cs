@@ -5125,7 +5125,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
         TenantIncompleteUploadCleanupDays = 7;
         _tenantStagedOcrCodes = ["eng", "deu", "fra", "ita"];
         TenantOcrDisplay = "English, German, French, Italian";
-        TenantId = Guid.NewGuid().ToString();
+        // Fixed, not minted (#832): the figure regenerates on every manual build, and a fresh GUID here made
+        // desktop-tenant.png differ per run with nothing changed. This is the demo tenant's real (derived) id.
+        TenantId = "746a22de-2d1c-5b70-8888-ea12c0c8ffec";
         TenantStatus = "Active";
         TenantCreated = ScreenshotClock.AddMonths(-8).LocalDateTime.ToString("yyyy-MM-dd HH:mm");
         TenantSettingsLoaded = true;

@@ -43,7 +43,8 @@ public interface ITenantProvisioningService
         string? repositoryName,
         string? administratorPassword,
         CancellationToken cancellationToken = default,
-        Func<string, Guid>? idFor = null);
+        Func<string, Guid>? idFor = null,
+        DateTimeOffset? createdAt = null);
 }
 
 public sealed class TenantProvisioningService : ITenantProvisioningService
@@ -77,8 +78,15 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
         string? repositoryName,
         string? administratorPassword,
         CancellationToken cancellationToken = default,
-        Func<string, Guid>? idFor = null)
+        Func<string, Guid>? idFor = null,
+        DateTimeOffset? createdAt = null)
     {
+        // createdAt rides along with idFor (#832, same reason as #781's ids): the demo tenant is torn down
+        // and reseeded nightly, and a real-clock Created stamp made every reseed — and every manual capture —
+        // produce a tenant "created" at whatever minute the process booted. Null everywhere else: a real
+        // tenant's Created is genuinely the moment of this call.
+        var at = createdAt ?? DateTimeOffset.UtcNow;
+
         var tenant = new Tenant
         {
             // idFor (#781): a config-declared tenant (the demo) derives its ids from stable slugs, so a nightly
@@ -89,7 +97,7 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             Id = idFor?.Invoke("tenant") ?? Guid.NewGuid(),
             Name = name,
             Status = TenantStatus.Active,
-            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = at,
         };
 
         _dbContext.Tenants.Add(tenant);
@@ -149,7 +157,7 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             // Mail routing is part of founding a tenant too: the first administrator must be able to give a
             // department a mailbox without a second principal existing yet to grant it from (#703).
             CanManageMailRouting = true,
-            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = at,
         };
 
         var password = administratorPassword ?? Convert.ToBase64String(RandomNumberGenerator.GetBytes(18));
@@ -172,7 +180,7 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
         // rather than on first sign-in (#634) — the first level is closed now, and My Documents is the only home
         // for their own content.
         await _personalSpaces.EnsureAsync(administrator.Id, tenant.Id, cancellationToken,
-            idFor is null ? null : slug => idFor($"personal/admin/{slug}"));
+            idFor is null ? null : slug => idFor($"personal/admin/{slug}"), createdAt);
 
         var repository = new Document
         {
@@ -190,7 +198,7 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             MaskVersionId = await Documents.FolderMask.CurrentVersionIdAsync(
                 _dbContext, tenant.Id, Domain.Masks.WellKnownMaskIds.Repository, cancellationToken),
             CreatedByUserId = administrator.Id,
-            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = at,
         };
 
         _dbContext.Documents.Add(repository);
@@ -208,7 +216,7 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             CanDelete = true,
             CanCreateSubItems = true,
             CanManagePermissions = true,
-            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = at,
         });
 
         // No app-level pre-check needed for the repository's own name: it's a brand-new tenant, so no

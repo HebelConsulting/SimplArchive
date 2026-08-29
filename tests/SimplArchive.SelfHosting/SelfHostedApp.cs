@@ -253,6 +253,14 @@ public sealed class SelfHostedApp : IAsyncDisposable
         var env = new Dictionary<string, string>
         {
             ["ASPNETCORE_ENVIRONMENT"] = "Development",
+            // No MSBuild node reuse for this child (#832's collateral find): `dotnet run` normally parks
+            // worker nodes (nodeReuse:true) that INHERIT this process's redirected pipes and outlive it. A
+            // killed test run then leaves orphaned nodes a later launch tries to attach to — observed as
+            // `dotnet run` going silent for exactly the node-reuse idle timeout (~15 min), which presents as
+            // "API did not become ready" with a healthy-looking log. Thirteen such orphans were live when
+            // this was diagnosed. The cost is a few seconds of MSBuild startup per app boot; the benefit is
+            // that no killed run can wedge every boot after it.
+            ["MSBUILDDISABLENODEREUSE"] = "1",
             ["ConnectionStrings__Default"] = _postgres.Value.GetConnectionString(),
             ["App__ApplyMigrationsAtStartup"] = "true",
             // The retention sweep's first run must land beyond any test leg's lifetime. Its default

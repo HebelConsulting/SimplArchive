@@ -43,7 +43,22 @@ public static partial class WebCapture
         Console.WriteLine($"[web] app ready at {app.BaseUrl}");
 
         using var playwright = await Playwright.CreateAsync();
-        await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Channel = "chrome", Headless = true });
+        // Software rasterization (#832): GPU compositing rounds an overlay's alpha blend ±1/255 differently
+        // per run — the tablet figure's standing touch affordance (a composited circle) was the last file
+        // that would not byte-stabilize, its entire diff single-LSB. CPU raster is deterministic.
+        await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
+        {
+            Channel = "chrome",
+            Headless = true,
+            Args =
+            [
+                "--disable-gpu", "--disable-gpu-compositing",
+                // Chromium's own pixel-test determinism set: without it, anti-aliased edges blend ±1/255
+                // differently per run (measured: two figures whose entire diff was single-LSB).
+                "--deterministic-mode", "--force-color-profile=srgb", "--disable-lcd-text",
+                "--disable-partial-raster", "--disable-skia-runtime-opts", "--force-device-scale-factor=1",
+            ],
+        });
         var context = await browser.NewContextAsync(new BrowserNewContextOptions
         {
             ViewportSize = new ViewportSize { Width = ViewportWidth, Height = ViewportHeight },
@@ -285,6 +300,7 @@ public static partial class WebCapture
             // pre-generation dialog with nothing in the filename to say so.
             await dialog.GetByText("won't be shown again").WaitForAsync(new() { Timeout = 15000 });
             await page.WaitForTimeoutAsync(600);
+            await NormalizeRunSpecificTextAsync(page);
 
             await ShotAsync(page, outDir, "webdav");
             await DismissAnyDialogAsync(page);
@@ -536,6 +552,7 @@ public static partial class WebCapture
             var url = await dialog.Locator("input").EvaluateAllAsync<string>(
                 "els => { const f = els.find(e => (e.value || '').startsWith('http')); return f ? f.value : ''; }");
             await page.WaitForTimeoutAsync(600);
+            await NormalizeRunSpecificTextAsync(page);
             await ShotAsync(page, outDir, "external-link-create");
 
             await DismissAnyDialogAsync(page);
@@ -601,7 +618,13 @@ public static partial class WebCapture
                     var doc = page.Locator(".wb-list-row").Filter(new() { HasText = "Invoice 2026-003" });
                     await doc.First.WaitForAsync(new() { Timeout = 15000 });
                     await doc.First.ClickAsync();
-                    await page.Locator(".wb-sysfields").First.WaitForAsync(new() { Timeout = 15000 });
+                    // Not `.wb-sysfields` alone: the FOLDER's detail is already on screen and satisfies that
+                    // instantly, so one run shot Acme Corp's pane and the next the invoice's (#832's last
+                    // straggler). The wait must name the subject the figure is about.
+                    await page.Locator(".wb-sysfields").GetByText("Invoice 2026-003").First.WaitForAsync(new() { Timeout = 15000 });
+                    // The chat pane fills asynchronously after the detail — one run shot the seeded thread,
+                    // the next "No messages yet" (#832). The invoice's seeded approval message is the anchor.
+                    await page.Locator("[data-pane='chat']").GetByText("Approved for payment").First.WaitForAsync(new() { Timeout = 15000 });
                     // Wait for the PDF preview + the annotation markers to render.
                     try { await page.Locator(".wb-pv-note").First.WaitForAsync(new() { Timeout = 8000 }); } catch { /* preview still shown */ }
                     await page.WaitForTimeoutAsync(2000);
@@ -650,6 +673,43 @@ public static partial class WebCapture
         return false;
     }
 
+    // Freezes every CSS animation and transition (#832): a MudBlazor ripple or fade caught mid-flight is a
+    // different alpha value per run, and four figures churned on nothing else. Elements jump straight to
+    // their settled state, which is also the state a figure should show.
+    private static async Task FreezeMotionAsync(IPage page) =>
+        await page.AddStyleTagAsync(new()
+        {
+            Content =
+            "*, *::before, *::after { animation: none !important; transition: none !important; }"
+            // The icon-button hover/focus circle is a composited overlay whose alpha blend lands ±1/255
+            // differently per run (the tablet figure churned by exactly that, 372 pixels of it). An idle
+            // figure has no pointer on it, so the circle is not content — suppress it for shots.
+            + " .mud-icon-button:hover, .mud-icon-button:focus, .mud-icon-button:focus-visible { background-color: transparent !important; }"
+            + " .mud-ripple::after, .mud-ripple-icon::after { display: none !important; }"
+        });
+
+    // Rewrites the run-specific values a figure must not depend on (#832): the app's ephemeral port becomes
+    // the documented compose port, and freshly-minted secrets (the WebDAV password, an external link's token)
+    // become fixed representative ones. The flows still RUN for real — only the displayed secret is replaced,
+    // which is also one secret fewer printed in a public PDF. Same licence as the desktop harness's synthetic
+    // admits list: the figure documents how the dialog RENDERS, not which random value this boot produced.
+    private static async Task NormalizeRunSpecificTextAsync(IPage page) =>
+        await page.EvaluateAsync(@"() => {
+            const fixText = s => s
+                .replace(/\/\/localhost:\d+/g, '//localhost:8080')
+                .replace(/\b[0-9a-f]{24,}\b/g, '2fd4e1c67a2d28fced849ee1bb76e739')
+                .replace(/(external-links\/)[A-Za-z0-9_-]{8,}/g, '$1wG2tP8rXo4kQhN0yLzB5aA');
+            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+            for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+                const v = fixText(n.nodeValue || '');
+                if (v !== n.nodeValue) { n.nodeValue = v; }
+            }
+            for (const i of document.querySelectorAll('input')) {
+                const v = fixText(i.value || '');
+                if (v !== i.value) { i.value = v; }
+            }
+        }");
+
     private static async Task LoginAsync(IPage page)
     {
         await page.GetByText(LoginRegex()).First.ClickAsync();
@@ -659,10 +719,20 @@ public static partial class WebCapture
         await page.ClickAsync("button[type='submit'], input[type='submit']");
         // Back in the SPA, authenticated — the display name shows in the app bar.
         await page.Locator(".wb-appbar").GetByText(SelfHostedApp.AdminDisplayName).WaitForAsync();
+
+        // Every logged-in page — main, touch tiers — renders motion-free (#832).
+        await FreezeMotionAsync(page);
     }
 
     private static async Task ShotAsync(IPage page, string outDir, string name)
     {
+        // Drop focus and park the pointer before every shot (#832): where focus and the mouse happen to
+        // rest after the setup clicks is a race — a focus ring, a blinking caret, or a hover tint that wins
+        // it in one run and loses it in the next is a byte-difference with nothing behind it (the webdav
+        // figure churned by exactly a button's hover edges after the dialog relayouted under the pointer).
+        // The figures document content, not the pointer's history.
+        await page.EvaluateAsync("() => { const a = document.activeElement; if (a && a !== document.body) { a.blur(); } }");
+        await page.Mouse.MoveAsync(0, 0);
         // Defensive: reset any horizontal scroll so every shot frames the workbench from the left.
         await page.EvaluateAsync("() => { window.scrollTo(0, 0); document.querySelectorAll('.wb, [data-pane]').forEach(e => e.scrollLeft = 0); }");
         var path = Path.Combine(outDir, $"web-{name}.png");

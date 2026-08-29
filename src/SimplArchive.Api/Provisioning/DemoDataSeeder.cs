@@ -94,7 +94,10 @@ public static class DemoDataSeeder
             configuration["Demo:Administrator:DisplayName"] ?? "Demo Admin",
             configuration["Demo:RepositoryName"],
             demoAdminPassword,
-            idFor: slug => slug == "tenant" ? demoTenantId : DemoId.For(demoTenantId, slug));
+            idFor: slug => slug == "tenant" ? demoTenantId : DemoId.For(demoTenantId, slug),
+            // createdAt (#832): the Tenant tab renders Created, and a real-clock stamp made every reseed —
+            // and every manual capture — show the boot minute there.
+            createdAt: clock.GetUtcNow());
 
         // The sample tree reads masks/field definitions and relies on SaveChanges' required-field validation, all
         // tenant-filtered — so set the tenant on the accessor the DbContext reads from (nothing did, since this
@@ -189,9 +192,14 @@ public static class DemoDataSeeder
             new DateOnly(2026, 3, 20), finalizer);
 
         var offer = await AddDocumentAsync(dbContext, objectStorage, assembly, tenantId, acmeCorp.Id,
-            "Offer 2026-014", adminId, now, basicEntryVersion.Id, "DemoOfferV1.pdf", ".pdf", "application/pdf",
+            "Offer 2026-014", adminId, now.AddHours(-4), basicEntryVersion.Id, "DemoOfferV1.pdf", ".pdf", "application/pdf",
             new DateOnly(2026, 1, 14), finalizer, "Initial draft sent to the customer.");
-        offer.CurrentVersionId = (await AddVersionAsync(dbContext, objectStorage, assembly, offer, adminId, now,
+        // v2 lands two hours after v1, and the conversation below follows it (#832): with every entry on one
+        // frozen instant, the thread's (CreatedAt, Id) order compared the messages' fixed ids against the
+        // system entries' random ones — a different order every boot, and the manual's chat figure with it.
+        // Every offset is NEGATIVE: the chronology lives strictly in the past, because a future-dated entry
+        // is a claim about time that has not happened, and due/overdue semantics may read it that way.
+        offer.CurrentVersionId = (await AddVersionAsync(dbContext, objectStorage, assembly, offer, adminId, now.AddHours(-2),
             offer.StorageFolderId, "DemoOfferV2.pdf", ".pdf", "application/pdf",
             new DateOnly(2026, 1, 14), finalizer, "Price corrected after the framework-agreement review.")).Id;
         await dbContext.SaveChangesAsync();
@@ -224,7 +232,7 @@ public static class DemoDataSeeder
         foreach (var (userSlug, userId) in new[] { ("admin", adminId), ("anna", annaId), ("tom", tomId) })
         {
             await mailboxes.EnsureMailboxAsync(tenantId, userId, CancellationToken.None,
-                slug => DemoId.For(tenantId, $"personal/{userSlug}/{slug}"));
+                slug => DemoId.For(tenantId, $"personal/{userSlug}/{slug}"), createdAt: now);
         }
 
         // A real conversation on the offer (issue #380). The thread already carries the automatic entries — filed,
@@ -242,7 +250,7 @@ public static class DemoDataSeeder
             DocumentId = offer.Id,
             Body = "Customer came back on the price — version 2 has the corrected figure.",
             CreatedByUserId = adminId,
-            CreatedAt = now,
+            CreatedAt = now.AddHours(-1),
         };
         dbContext.ChatMessages.Add(offerThread);
         dbContext.ChatMessages.Add(new ChatMessage
@@ -253,7 +261,7 @@ public static class DemoDataSeeder
             ParentMessageId = offerThread.Id,
             Body = "Checked it against the framework agreement — the new figure is right.",
             CreatedByUserId = annaId,
-            CreatedAt = now,
+            CreatedAt = now.AddMinutes(-30),
         });
         dbContext.ChatMessages.Add(new ChatMessage
         {
@@ -262,7 +270,7 @@ public static class DemoDataSeeder
             DocumentId = invoice.Id,
             Body = "Approved for payment — see the stamp on page 1.",
             CreatedByUserId = adminId,
-            CreatedAt = now,
+            CreatedAt = now.AddMinutes(-45),
         });
         await dbContext.SaveChangesAsync();
 
@@ -327,8 +335,8 @@ public static class DemoDataSeeder
         async Task<Document> FolderAsync(Guid parentId, string name, string slug) =>
             await AddFolderAsync(dbContext, tenantId, parentId, name, adminId, now, folderMaskVersionId, slug);
 
-        Task<Document> DocAsync(Guid parentId, string name, string resource, string ext, string contentType, DateOnly date) =>
-            AddDocumentAsync(dbContext, storage, assembly, tenantId, parentId, name, adminId, now, basicEntryVersionId, resource, ext, contentType, date, finalizer);
+        Task<Document> DocAsync(Guid parentId, string name, string resource, string ext, string contentType, DateOnly date, DateTimeOffset? at = null) =>
+            AddDocumentAsync(dbContext, storage, assembly, tenantId, parentId, name, adminId, at ?? now, basicEntryVersionId, resource, ext, contentType, date, finalizer);
 
         // Business Years / 2026 / 01..12 <Month>.
         var businessYears = await FolderAsync(repositoryId, "Business Years", "business-years");
@@ -345,8 +353,8 @@ public static class DemoDataSeeder
 
         // March holds the chocolate-gift invoice as a PDF with TWO versions + a highlight and a sticky note — a
         // second Compare-versions + annotations sample living inside the Business Years tree (for the manual).
-        var chocolate = await DocAsync(monthFolders[3].Id, "Invoice for customer's chocolate gift", "DemoChocInvoiceV1.pdf", ".pdf", "application/pdf", new DateOnly(2026, 3, 16));
-        var chocV2 = await AddVersionAsync(dbContext, storage, assembly, chocolate, adminId, now, chocolate.StorageFolderId, "DemoChocInvoiceV2.pdf", ".pdf", "application/pdf", new DateOnly(2026, 3, 16), finalizer,
+        var chocolate = await DocAsync(monthFolders[3].Id, "Invoice for customer's chocolate gift", "DemoChocInvoiceV1.pdf", ".pdf", "application/pdf", new DateOnly(2026, 3, 16), at: now.AddHours(-3));
+        var chocV2 = await AddVersionAsync(dbContext, storage, assembly, chocolate, adminId, now.AddHours(-1), chocolate.StorageFolderId, "DemoChocInvoiceV2.pdf", ".pdf", "application/pdf", new DateOnly(2026, 3, 16), finalizer,
             "Re-scanned — the first scan cut off the footer.");
         chocolate.CurrentVersionId = chocV2.Id;
         await dbContext.SaveChangesAsync();
@@ -681,7 +689,7 @@ public static class DemoDataSeeder
         // asks for it, and this is that something. Idempotent, so a restart against an existing volume is safe.
         var personal = await services.GetRequiredService<Documents.PersonalRepositoryProvisioner>()
             .EnsureAsync(adminId, tenantId, CancellationToken.None,
-                slug => DemoId.For(tenantId, $"personal/admin/{slug}"));
+                slug => DemoId.For(tenantId, $"personal/admin/{slug}"), createdAt: now);
 
         var addressbookId = await dbContext.Documents
             .Where(d => d.ParentId == personal.Id && d.Name == PersonalFolders.MyAddressbook)

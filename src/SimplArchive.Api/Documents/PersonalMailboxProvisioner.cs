@@ -80,10 +80,11 @@ public sealed class PersonalMailboxProvisioner
 
     /// <summary>The user's mailbox, creating it (and the personal space it hangs in) if it is not there yet.</summary>
     public async Task<Document> EnsureMailboxAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken,
-        Func<string, Guid>? idFor = null)
+        Func<string, Guid>? idFor = null, DateTimeOffset? createdAt = null)
     {
-        // idFor (#781): see PersonalRepositoryProvisioner.EnsureAsync — the demo seeder's slugs, null elsewhere.
-        var personal = await _personalSpace.EnsureAsync(userId, tenantId, cancellationToken, idFor);
+        // idFor (#781) and createdAt (#832): see PersonalRepositoryProvisioner.EnsureAsync — the demo seeder's
+        // slugs and frozen clock, null elsewhere.
+        var personal = await _personalSpace.EnsureAsync(userId, tenantId, cancellationToken, idFor, createdAt);
 
         var mailboxVersionIds = await _dbContext.MaskVersions.IgnoreQueryFilters(["TenantFilter"])
             .Where(v => v.TenantId == tenantId && v.MaskId == WellKnownMaskIds.Mailbox)
@@ -120,27 +121,34 @@ public sealed class PersonalMailboxProvisioner
             Name = PersonalRepositoryProvisioner.MyMailboxFolderName,
             MaskVersionId = mailboxVersionIds.FirstOrDefault(),
             CreatedByUserId = userId,
-            CreatedAt = DateTimeOffset.UtcNow,
+            // +4ms: after the personal space's three folders (each a millisecond apart, see
+            // PersonalRepositoryProvisioner) — listings order by (CreatedAt, Id), and ties fall to random ids.
+            CreatedAt = (createdAt ?? DateTimeOffset.UtcNow).AddMilliseconds(4),
         };
 
         _dbContext.Documents.Add(mailbox);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        await EnsureStandingFoldersAsync(mailbox, tenantId, userId, cancellationToken, idFor);
+        await EnsureStandingFoldersAsync(mailbox, tenantId, userId, cancellationToken, idFor, createdAt);
         return mailbox;
     }
 
     /// <summary>The six standing mailboxes, created or healed. Idempotent, and safe to call on every path.</summary>
     private async Task EnsureStandingFoldersAsync(Document mailbox, Guid tenantId, Guid userId, CancellationToken cancellationToken,
-        Func<string, Guid>? idFor = null)
+        Func<string, Guid>? idFor = null, DateTimeOffset? createdAt = null)
     {
+        var order = 0;
         foreach (var name in StandingFolderNames)
         {
+            order++;
             await EnsureStandingFolderAsync(
                 mailbox, tenantId, userId, name, WellKnownMaskIds.ImapSpecial, cancellationToken,
                 // Only the inbox has a former name to answer to; the other four are new.
                 legacyName: name == InboxFolderName ? LegacyInboxFolderName : null,
-                id: idFor?.Invoke($"mailbox/{name}"));
+                id: idFor?.Invoke($"mailbox/{name}"),
+                // A millisecond per folder keeps the declared order under (CreatedAt, Id) listings —
+                // ties fall to ids, which are random for a real user.
+                createdAt: createdAt?.AddMilliseconds(4 + order));
         }
     }
 
@@ -177,11 +185,12 @@ public sealed class PersonalMailboxProvisioner
     /// <see cref="WellKnownMaskIds.TypedFolderRules"/> is what makes that placement the only one.
     /// </remarks>
     public async Task<Guid> EnsureNotebookAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken,
-        Func<string, Guid>? idFor = null) =>
+        Func<string, Guid>? idFor = null, DateTimeOffset? createdAt = null) =>
         await EnsureStandingFolderAsync(
-            await EnsureMailboxAsync(tenantId, userId, cancellationToken, idFor),
+            await EnsureMailboxAsync(tenantId, userId, cancellationToken, idFor, createdAt),
             tenantId, userId, PersonalRepositoryProvisioner.NotebookFolderName, WellKnownMaskIds.Notebook, cancellationToken,
-            id: idFor?.Invoke($"mailbox/{PersonalRepositoryProvisioner.NotebookFolderName}"));
+            id: idFor?.Invoke($"mailbox/{PersonalRepositoryProvisioner.NotebookFolderName}"),
+            createdAt: createdAt);
 
     // One find-or-create for both standing folders. They differ only in name and mask, so a second copy would
     // be a place for the heal below to exist in one and not the other.
@@ -189,7 +198,8 @@ public sealed class PersonalMailboxProvisioner
     // re-entering itself once per folder.
     private async Task<Guid> EnsureStandingFolderAsync(
         Document mailbox, Guid tenantId, Guid? userId, string name, Guid maskId, CancellationToken cancellationToken,
-        string? legacyName = null, Guid? createdByServiceAccountId = null, Guid? id = null)
+        string? legacyName = null, Guid? createdByServiceAccountId = null, Guid? id = null,
+        DateTimeOffset? createdAt = null)
     {
         var maskVersionId = await FolderMask.CurrentVersionIdAsync(_dbContext, tenantId, maskId, cancellationToken);
 
@@ -230,7 +240,7 @@ public sealed class PersonalMailboxProvisioner
             MaskVersionId = maskVersionId,
             CreatedByUserId = userId,
             CreatedByServiceAccountId = createdByServiceAccountId,
-            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = createdAt ?? DateTimeOffset.UtcNow,
         };
 
         _dbContext.Documents.Add(folder);

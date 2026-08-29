@@ -40,6 +40,10 @@ echo "==> Capturing screenshots ($mode)…"
 # shellcheck disable=SC2086
 dotnet run --project tests/SimplArchive.ManualCapture --no-build -- $mode --out manual/screenshots
 
+# A regenerated PNG whose every pixel is within ±1 of the committed one is raster noise, not a change (#832).
+# Runs BEFORE the compile below, so neither the PNG nor the PDF that embeds it churns over nothing.
+python3 scripts/keep-unchanged-screenshots.py manual/screenshots
+
 echo "==> Compiling the Typst manual → $pdf_out"
 # Reproducible build (ADR 0510): pin the compile timestamp so the PDF's internal CreationDate/ModDate and the
 # `datetime.today()` copyright year are byte-stable, not the wall clock. Matches the fixed demo/screenshot clock

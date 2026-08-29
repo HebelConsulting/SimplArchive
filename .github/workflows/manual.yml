@@ -152,6 +152,13 @@ jobs:
         if: ${{ github.event_name == 'push' }}
         run: dotnet run --project tests/SimplArchive.ManualCapture --no-build -- --web
 
+      # A regenerated PNG whose every pixel is within ±1 of the committed one is raster noise, not a change
+      # (#832) — revert those BEFORE the compile, so neither the PNG nor the PDF that embeds it re-commits
+      # over nothing. A real UI change moves pixels by far more and still commits.
+      - name: Drop raster-noise screenshot regenerations
+        if: ${{ github.event_name == 'push' }}
+        run: python3 scripts/keep-unchanged-screenshots.py manual/screenshots
+
       # Fails if a screen was renamed/removed so a figure has no PNG — the anti-staleness lock.
       # SOURCE_DATE_EPOCH pins the PDF's internal timestamps + the datetime.today() year to the fixed
       # capture clock (ADR 0510) so a rebuild with no content change is byte-identical — no spurious commits.
