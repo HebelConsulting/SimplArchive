@@ -315,6 +315,20 @@
                              rows by contained text. Date and Size keep spacers so the inputs stay under their
                              columns; filtering those two is a range question, not a text one. -->
                         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="6,0,0,2" Background="{DynamicResource WbChrome}">
+                            <!-- The inputs carry the LIST's rhythm, not a form's. Avalonia's TextBox theme has a
+                                 32px MinHeight sized for a dialog, and left at it the filter row stood twice the
+                                 height of the 16px header above it and half again the 21px rows below — reading
+                                 as a control borrowed from another screen, and spending pane height the list
+                                 wants (the same reasoning as ADR 0550's "no vertical space it does not need").
+                                 24px is the pane-collapse marker's height, so the row lines up with the chrome
+                                 already beside it. Set once here rather than on each input: four copies of a
+                                 dimension drift, and the columns must stay on one baseline. -->
+                            <StackPanel.Styles>
+                                <Style Selector="TextBox">
+                                    <Setter Property="MinHeight" Value="0" />
+                                    <Setter Property="Height" Value="24" />
+                                </Style>
+                            </StackPanel.Styles>
                             <TextBox Width="{Binding ColNameWidth}" Text="{Binding ContentsFilterName}" v:SearchField.Clearable="True" Watermark="{loc:Tr FilterHint}" Padding="4,2" FontSize="11" AutomationProperties.AutomationId="contents-filter-name" />
                             <TextBox Width="{Binding ColTypeWidth}" Text="{Binding ContentsFilterType}" v:SearchField.Clearable="True" Watermark="{loc:Tr FilterHint}" Padding="4,2" FontSize="11" />
                             <Border Width="{Binding ColDateWidth}" />
