@@ -9,7 +9,7 @@
 #   - Packaged with the built-in `hdiutil` (no Homebrew dependency); each .dmg contains the .app plus an
 #     /Applications symlink for drag-to-install.
 #   - UNSIGNED in the Developer-ID sense / NOT notarized — Gatekeeper warns on first open (this fits the
-#     project's "Not for production" showcase posture; the workaround is printed at the end).
+#     certificates are paid and this build does not carry one; the workaround is printed at the end).
 #
 # Usage:   scripts/package-macos-dmg.sh [version] [--upload]
 #            version   optional (default 0.1.0) — stamped into the bundle + the .dmg file names.

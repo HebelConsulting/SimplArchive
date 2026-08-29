@@ -18,7 +18,9 @@ These are deliberately trivial, publicly posted credentials on a throwaway demo 
 
 It resets to a clean, known state every night, so feel free to create, upload, workflow, and delete anything. The user manual is one click away at [demo.simplarchive.dev/download/manual/](https://demo.simplarchive.dev/download/manual/).
 
-> **Not for production as shipped.** The default stack uses development certificates and fixed demo credentials. It is an enterprise-grade *architecture and feature* showcase; a real production posture still requires hardening the deployment (real secrets/certificates, managed dependencies, and load/scale validation).
+> **This demo is not a deployment.** The kiosk above runs in Development with development certificates, a published password and a nightly wipe — it is furniture for exploring, and nothing about it describes how the product is deployed.
+>
+> **The product itself is built to run for real:** a Helm chart for Kubernetes, a fully automated AWS installation, secrets and certificates from OpenBao, backup/DR scripts, and a readiness gate that **refuses to start outside Development** when any dev-grade setting is present — with no bypass flag. What remains ahead is operational maturity (live-cluster HA/DR validation, scheduled offsite backups, zero-downtime schema changes), not basic readiness.
 
 ## 🎙 Let your AI give you the tour
 

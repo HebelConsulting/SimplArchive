@@ -1,7 +1,9 @@
 namespace SimplArchive.Api.Configuration;
 
 // Fail-fast production hardening (ADR "Fail-fast production hardening"): refuses to start outside Development
-// when a dev-grade setting is present, turning the "Not for production" guardrails from prose into enforced
+// when a dev-grade setting is present. This check is WHY the product can be called production software rather
+// than merely hoped to be one (ADR 0714): the dev-grade defaults exist for the demo stack, and this is what
+// stops them reaching anywhere else — prose turned into enforced
 // checks. Runs only when the environment isn't Development, so local dev + the (Development-hosted) test suites
 // are unaffected. Every violation is a real misconfiguration — there is deliberately no bypass flag.
 public static class ProductionReadinessValidator

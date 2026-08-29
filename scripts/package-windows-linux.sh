@@ -9,7 +9,8 @@
 #     Windows box or extra tooling needed, just the .NET SDK plus `zip` and `tar`.
 #   - Portable, not an installer: unzip/untar and run. UNSIGNED — Windows SmartScreen warns on first run
 #     ("More info" → "Run anyway"); on Linux mark it executable (the tar preserves the bit, but a browser
-#     download may drop it: `chmod +x SimplArchive.DesktopClient`). Fits the "Not for production" showcase.
+#     download may drop it: `chmod +x SimplArchive.DesktopClient`). Unsigned because a code-signing
+#     certificate is a paid, annual thing — not because the build is unfit to run (ADR 0714).
 #
 # Usage:   scripts/package-windows-linux.sh [version]
 #            version  optional (default 0.1.0) — stamped into the assembly + the archive file names.
@@ -68,7 +69,7 @@ Linux:    run  ./${EXE_NAME}
            The binary stays where you unpacked it, so do not move it afterwards.)
 
 The client connects to a SimplArchive API; pick/enter the server on the logon window.
-Not for production — a showcase build.
+Unsigned — a code-signing certificate is a paid, annual thing (ADR 0714).
 README
 
   # Linux desktop integration (issue #429): a binary in a tarball has no menu entry, no dock icon and nothing

@@ -2,7 +2,7 @@
 # `docker compose up --build` brings up the Api (built from the repo Dockerfile) plus its two
 # dependencies (PostgreSQL, SeaweedFS object storage) and works out of the box: migrations auto-apply, the
 # storage bucket is created by a one-shot init service, and a first PlatformAdministrator is seeded from the
-# env below so you can immediately create tenants. NOT for production — it runs in the Development
+# env below so you can immediately create tenants. NOT for production — THIS STACK runs in the Development
 # environment (OpenIddict dev certificates, plain HTTP) and ships fixed dev credentials in plaintext.
 #
 # Podman parity (docs/adr/0313-podman-compose-parity.md): this SAME file also runs under Podman via
