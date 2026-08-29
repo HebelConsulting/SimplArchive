@@ -2118,6 +2118,9 @@
   <data name="LoginPasskeySignInFailedAlert" xml:space="preserve">
     <value>L'accesso con passkey è stato annullato o non è riuscito.</value>
   </data>
+  <data name="LoginErrTooManyAttempts" xml:space="preserve">
+    <value>Troppi tentativi non riusciti. Attenda qualche minuto e riprovi.</value>
+  </data>
   <data name="LoginErrInvalidCreds" xml:space="preserve">
     <value>Email o password non validi.</value>
   </data>

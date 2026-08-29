@@ -2118,6 +2118,9 @@
   <data name="LoginPasskeySignInFailedAlert" xml:space="preserve">
     <value>Passkey-Anmeldung wurde abgebrochen oder ist fehlgeschlagen.</value>
   </data>
+  <data name="LoginErrTooManyAttempts" xml:space="preserve">
+    <value>Zu viele fehlgeschlagene Versuche. Bitte warten Sie einige Minuten und versuchen Sie es erneut.</value>
+  </data>
   <data name="LoginErrInvalidCreds" xml:space="preserve">
     <value>Ungültige E-Mail oder Passwort.</value>
   </data>

@@ -96,6 +96,11 @@ your e-mail and password. Your organisation may additionally require a second fa
 passkey). You can pick the interface *language* (English, German, Italian, Spanish) and switch between a *light*
 and *dark* appearance at any time.
 
+*If sign-in suddenly refuses everything*, you have most likely mistyped several times in a row. Repeated failed
+attempts are turned away for a short while#idx("Sign-in throttling") — about a minute at first, longer if they keep coming — and the wait
+clears on its own, so there is nobody to ring and nothing to reset. A passkey keeps working throughout, which is
+the quickest way back in if you have one.
+
 *The workbench.* After signing in you land on the *Repositories* workbench, laid out as: the *tree* of
 repositories and folders, the *contents* list of the selected folder, the *detail* pane (index data) over the
 *preview*#idx("Preview"), and — along the bottom — the *tab bar* that switches between Repositories, Intray, Search, Tasks and the

@@ -42,6 +42,9 @@ public sealed class ImapSession
     // one line with an outcome, rather than a running commentary at Information.
     private readonly long _startedAt = Stopwatch.GetTimestamp();
     private string _email = "anonymous";
+    // The peer's address, for the sign-in throttle's per-address spray counter (ADR 0716). Read once at
+    // accept: a socket that has been closed no longer has a remote endpoint to ask.
+    private string? _address;
     private int _commands;
     private int _refused;
 
@@ -60,6 +63,7 @@ public sealed class ImapSession
         try
         {
             using var _ = client;
+            _address = (client.Client.RemoteEndPoint as System.Net.IPEndPoint)?.Address.ToString();
             Stream raw = client.GetStream();
             if (_tlsCertificate is not null)
             {
@@ -488,10 +492,24 @@ public sealed class ImapSession
 
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+        var throttle = scope.ServiceProvider.GetRequiredService<SimplArchive.Api.Security.ISignInThrottle>();
 
         // The login runs before any tenant is known — the same cross-tenant email resolution as the login page
         // (the tenant filter's TenantId == null predicate would otherwise match nothing).
         var normalized = email.Trim().ToUpperInvariant();
+
+        // Asked before the lookup and before the hash (ADR 0716, #843). A raw socket is the cheapest door in
+        // the building to hammer — no page to render, no form to post — so it is the one that most needs the
+        // wall. The refusal is worded exactly like the failure below in everything but its response code, so
+        // it still tells a prober nothing about which accounts exist.
+        var verdict = await throttle.CheckAsync(SimplArchive.Api.Security.SignInSurface.Imap, normalized, _address);
+        if (!verdict.Allowed)
+        {
+            await WriteLineAsync($"{tag} NO [UNAVAILABLE] too many failed attempts, try again later");
+
+            return;
+        }
+
         var user = await db.Users.IgnoreQueryFilters(["TenantFilter"])
             .FirstOrDefaultAsync(u => u.NormalizedEmail == normalized && u.IsActive);
 
@@ -505,6 +523,7 @@ public sealed class ImapSession
             // One failure message for every cause — a prober learns nothing about which accounts exist or
             // have IMAP enabled. The failed attempt is Warning-logged for SIEM aggregation, like a failed login.
             _logger.LogWarning("IMAP authentication failed for {Email}", email);
+            await throttle.RecordFailureAsync(SimplArchive.Api.Security.SignInSurface.Imap, normalized, _address);
             await WriteLineAsync($"{tag} NO authentication failed");
             return;
         }
@@ -517,6 +536,8 @@ public sealed class ImapSession
             await WriteLineAsync($"{tag} NO too many connections for this user");
             return;
         }
+
+        await throttle.RecordSuccessAsync(SimplArchive.Api.Security.SignInSurface.Imap, normalized, _address);
 
         _userId = user.Id;
         _tenantId = user.TenantId;

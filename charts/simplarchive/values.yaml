@@ -49,8 +49,10 @@ config:
   tikaUrl: ""             # content extraction + OCR (optional)
   tikaOcrLanguages: "eng+deu+fra+ita"
   ocrUrl: ""              # searchable-PDF sidecar (optional)
-  # SignalR Valkey/Redis backplane (ADR "SignalR Valkey backplane") — REQUIRED once replicaCount / the HPA scales
-  # past 1, so real-time notification pushes fan out across pods. Unset ⇒ in-process only (correct only at 1 replica).
+  # Valkey/Redis — REQUIRED once replicaCount / the HPA scales past 1, now for TWO reasons. It is the SignalR
+  # backplane (ADR "SignalR Valkey backplane"), so real-time notification pushes fan out across pods; and it
+  # holds the sign-in throttle's counters (ADR 0716), which are per-POD without it — leaving an attacker one
+  # guessing budget per replica. Unset ⇒ in-process only (correct only at 1 replica).
   valkeyConnectionString: ""   # e.g. "valkey:6379" or "valkey.internal:6379,password=...,ssl=true"
   smtp:
     host: ""              # notification email (optional; unset disables email, in-app notifications still work)

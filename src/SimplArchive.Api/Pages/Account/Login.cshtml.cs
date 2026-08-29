@@ -52,11 +52,13 @@ public class LoginModel : PageModel
     // Carries the *discoverable* (usernameless) passkey-login options — no user bound, unlike _passkeyProtector.
     private readonly ITimeLimitedDataProtector _passkeyLoginlessProtector;
     private readonly ILogger<LoginModel> _logger;
+    private readonly SimplArchive.Api.Security.ISignInThrottle _throttle;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
-    public LoginModel(SimplArchiveDbContext dbContext, IAuditRecorder audit, MfaService mfa, ITransitEncryptor transit, Fido2NetLib.IFido2 fido2, IDataProtectionProvider dataProtection, ILogger<LoginModel> logger)
+    public LoginModel(SimplArchiveDbContext dbContext, IAuditRecorder audit, MfaService mfa, ITransitEncryptor transit, Fido2NetLib.IFido2 fido2, IDataProtectionProvider dataProtection, SimplArchive.Api.Security.ISignInThrottle throttle, ILogger<LoginModel> logger)
     {
         _dbContext = dbContext;
+        _throttle = throttle;
         _audit = audit;
         _mfa = mfa;
         _transit = transit;
@@ -188,6 +190,19 @@ public class LoginModel : PageModel
 
         var normalizedEmail = Input.Email.ToUpperInvariant();
 
+        // Asked BEFORE the lookup and before the hash is verified (ADR 0716, #843): a throttled attempt must
+        // cost an attacker a rejection, not a database read and a KDF. The answer is the same whether or not
+        // the account exists — this page's whole refusal vocabulary is one message, and a throttle that only
+        // engaged for real accounts would turn it back into an existence oracle.
+        if (!await ThrottleAllowsAsync(normalizedEmail))
+        {
+            // A person locked out of their password may still hold a working key, and this is the one moment
+            // they need it — so the passwordless option is prepared here exactly as on any other refusal.
+            PreparePasskeyLoginOption();
+
+            return Page();
+        }
+
         // IgnoreQueryFilters(["TenantFilter"]) — no tenant is known yet at login time (this request is
         // fully anonymous), so the automatic tenant filter's TenantId == null predicate would otherwise
         // exclude every real row — same bug class as WellKnownMaskSeeder's own fix, ADR "Tenant onboarding
@@ -207,6 +222,7 @@ public class LoginModel : PageModel
             // A failed login is a security signal — Warning so a SIEM can aggregate repeated failures into a
             // brute-force alert (ADR "Enterprise-grade structured logging with Serilog"). Never log the password.
             _logger.LogWarning("Failed login for {Email}: no active credentialed user", normalizedEmail);
+            await RecordFailureAsync(normalizedEmail);
             Error = SimplArchive.Localization.Strings.Get("LoginErrInvalidCreds");
             PreparePasskeyLoginOption();
 
@@ -218,6 +234,7 @@ public class LoginModel : PageModel
         if (verification == PasswordVerificationResult.Failed)
         {
             _logger.LogWarning("Failed login for user {UserId}: incorrect password", user.Id);
+            await RecordFailureAsync(normalizedEmail);
             Error = SimplArchive.Localization.Strings.Get("LoginErrInvalidCreds");
             PreparePasskeyLoginOption();
 
@@ -301,6 +318,17 @@ public class LoginModel : PageModel
             return Page();
         }
 
+        // The second step is its own POST, reachable in a loop with a held ticket — so it needs its own check,
+        // not just the one the password step passed. On a refusal the challenge is re-rendered rather than
+        // dropped, so a legitimate user's ticket survives the wait.
+        if (!await ThrottleAllowsAsync(user.NormalizedEmail))
+        {
+            MfaTicket = _ticketProtector.Protect($"{user.Id}|{ReturnUrl}", MfaTicketLifetime);
+            await RerenderChallengeAsync(user);
+
+            return Page();
+        }
+
         if (string.IsNullOrWhiteSpace(Code) || !await VerifySecondFactorAsync(user, Code))
         {
             // A wrong SECOND factor is a failed authentication with exactly the SIEM value of a wrong
@@ -311,6 +339,10 @@ public class LoginModel : PageModel
             // The code itself is never logged. It is a credential for its window, and a log is the wrong place
             // for it even after it expires.
             _logger.LogWarning("Failed second factor for user {UserId}: incorrect or missing code", user.Id);
+
+            // Counted against the same identity as the password step, deliberately: six digits are the easier
+            // half to guess, and reaching this step means the attacker already holds the password.
+            await RecordFailureAsync(user.NormalizedEmail);
 
             Error = SimplArchive.Localization.Strings.Get("LoginErrInvalidCode");
             // Re-issue a fresh ticket + re-render the challenge (incl. the passkey option) for a retry.
@@ -658,6 +690,34 @@ public class LoginModel : PageModel
         }
     }
 
+    /// <summary>The client this attempt came from, for the throttle's per-address spray counter.</summary>
+    private string? ClientAddress => HttpContext.Connection.RemoteIpAddress?.ToString();
+
+    /// <summary>
+    /// Whether this attempt may be made at all, setting the "too many attempts" message when it may not. The
+    /// caller re-renders its own step: the two steps show different things, and neither may be dropped for a
+    /// refusal that lasts a minute.
+    /// </summary>
+    private async Task<bool> ThrottleAllowsAsync(string normalizedEmail)
+    {
+        var verdict = await _throttle.CheckAsync(
+            SimplArchive.Api.Security.SignInSurface.Login, normalizedEmail, ClientAddress, HttpContext.RequestAborted);
+
+        if (verdict.Allowed)
+        {
+            return true;
+        }
+
+        Error = SimplArchive.Localization.Strings.Get("LoginErrTooManyAttempts");
+        PreparePasskeyLoginOption();
+
+        return false;
+    }
+
+    private Task RecordFailureAsync(string normalizedEmail) =>
+        _throttle.RecordFailureAsync(
+            SimplArchive.Api.Security.SignInSurface.Login, normalizedEmail, ClientAddress, HttpContext.RequestAborted);
+
     private async Task<IActionResult> SignInAndRedirectAsync(User user)
     {
         var identity = new ClaimsIdentity(CookieAuthenticationDefaults.AuthenticationScheme);
@@ -675,6 +735,11 @@ public class LoginModel : PageModel
             AuditActions.LoggedIn);
 
         _logger.LogInformation("User {UserId} signed in to tenant {TenantId}", user.Id, user.TenantId);
+
+        // Every route into a signed-in session ends here — password, second factor, passwordless passkey — so
+        // this is the one place that has to forget the failures that preceded it.
+        await _throttle.RecordSuccessAsync(
+            SimplArchive.Api.Security.SignInSurface.Login, user.NormalizedEmail, ClientAddress, HttpContext.RequestAborted);
 
         return LocalRedirect(string.IsNullOrEmpty(ReturnUrl) ? "/" : ReturnUrl);
     }

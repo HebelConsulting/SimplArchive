@@ -2118,6 +2118,9 @@
   <data name="LoginPasskeySignInFailedAlert" xml:space="preserve">
     <value>Passkey sign-in was cancelled or failed.</value>
   </data>
+  <data name="LoginErrTooManyAttempts" xml:space="preserve">
+    <value>Too many failed attempts. Please wait a few minutes and try again.</value>
+  </data>
   <data name="LoginErrInvalidCreds" xml:space="preserve">
     <value>Invalid email or password.</value>
   </data>

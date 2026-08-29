@@ -2118,6 +2118,9 @@
   <data name="LoginPasskeySignInFailedAlert" xml:space="preserve">
     <value>El inicio de sesión con passkey se canceló o falló.</value>
   </data>
+  <data name="LoginErrTooManyAttempts" xml:space="preserve">
+    <value>Demasiados intentos fallidos. Espere unos minutos e inténtelo de nuevo.</value>
+  </data>
   <data name="LoginErrInvalidCreds" xml:space="preserve">
     <value>Correo electrónico o contraseña no válidos.</value>
   </data>

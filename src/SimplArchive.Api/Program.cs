@@ -156,6 +156,36 @@ if (!string.IsNullOrWhiteSpace(valkeyConnection))
         options.Configuration.ChannelPrefix = StackExchange.Redis.RedisChannel.Literal("simplarchive-signalr"));
 }
 
+// Sign-in throttling (ADR 0716, issue #843) — progressive refusal of credential guessing at every door that
+// verifies one: the login page, the token endpoint, DAV Basic and IMAP. Its counters live in the SAME Valkey
+// the backplane above uses when one is configured, because a throttle counting per replica hands an attacker
+// one budget per replica; without Valkey they live in this process, which for a single-replica install IS the
+// installation. Nothing is written to Postgres: a row per failed attempt would make the database the amplifier
+// of the flood this exists to stop.
+builder.Services.Configure<SimplArchive.Api.Security.SignInThrottleOptions>(
+    builder.Configuration.GetSection(SimplArchive.Api.Security.SignInThrottleOptions.SectionName));
+
+if (!string.IsNullOrWhiteSpace(valkeyConnection))
+{
+    builder.Services.AddSingleton<StackExchange.Redis.IConnectionMultiplexer>(_ =>
+    {
+        // AbortOnConnectFail=false so a Valkey that is slow to come up (or briefly gone) does not stop the API:
+        // the throttle fails OPEN and says so, which is a weakened defence rather than a sign-in outage.
+        var options = StackExchange.Redis.ConfigurationOptions.Parse(valkeyConnection);
+        options.AbortOnConnectFail = false;
+
+        return StackExchange.Redis.ConnectionMultiplexer.Connect(options);
+    });
+
+    builder.Services.AddSingleton<SimplArchive.Api.Security.IThrottleCounterStore, SimplArchive.Api.Security.ValkeyThrottleCounterStore>();
+}
+else
+{
+    builder.Services.AddSingleton<SimplArchive.Api.Security.IThrottleCounterStore, SimplArchive.Api.Security.InMemoryThrottleCounterStore>();
+}
+
+builder.Services.AddSingleton<SimplArchive.Api.Security.ISignInThrottle, SimplArchive.Api.Security.SignInThrottle>();
+
 builder.Services.AddSingleton<Microsoft.AspNetCore.SignalR.IUserIdProvider, SimplArchive.Api.Realtime.SubjectUserIdProvider>();
 builder.Services.AddSingleton<SimplArchive.Application.Abstractions.IRealtimeNotifier, SimplArchive.Api.Realtime.SignalRRealtimeNotifier>();
 
@@ -627,6 +657,11 @@ app.UseSerilogRequestLogging(options =>
         if (services.GetService<ICurrentServiceAccountAccessor>()?.ServiceAccountId is { } saId) diagnostic.Set("ServiceAccountId", saId);
     };
 });
+
+// Sign-in throttling for the two HTTP doors whose refusal is legible from the response (ADR 0716): the token
+// endpoint, and HTTP Basic — which is every DAV gateway below. Ahead of them all, so a blocked caller is
+// refused before any password is verified. The login page throttles itself: its failure answers 200.
+app.UseMiddleware<SimplArchive.Api.Security.SignInThrottleMiddleware>();
 
 // The WebDAV gateway (ADRs "WebDAV gateway" / 0509) handles /SimplArchive (and the /webdav alias) with its own
 // HTTP Basic auth, ahead of the normal OIDC/JWT pipeline; it short-circuits for those and passes the rest through.
