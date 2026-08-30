@@ -44,6 +44,17 @@ public record BrowseNode(Guid Id, string Name, bool HasChildren, bool HasVersion
     // The latest confirmed version's CreatedAt (filing timestamp) — the "Created" contents-sort key (ADR
     // "Per-folder contents sort order"). Null for a folder / version-less doc.
     DateTimeOffset? VersionCreatedAt = null,
+    // What the SERVER says this caller may do to this row (#858) — the gates for Delete, Rename/Sort order and
+    // Move to. Default FALSE, which is the safe direction and the honest one: a node built from a listing that
+    // does not carry them has not been told the caller may, and ADR 0543 makes that mean "not available".
+    //
+    // The cost of that default is that FORGETTING to populate a construction site silently hides the actions
+    // rather than wrongly offering them — which is the failure mode of #416's tree roots, in the other
+    // direction. All four sites that build a node from a real server listing populate them: the children
+    // listing, the repositories listing, the admin personal-repositories listing, and the single-document read
+    // behind Go to / a search hit. The synthetic nodes (Administration, the Personal groupings) keep false
+    // because they are not documents and have nothing to delete.
+    bool CanDelete = false, bool CanEditIndexData = false, bool CanMove = false, bool CanManagePermissions = false,
     // The thread's URL as the SERVER advertised it (the "chat" rel), not one this client composed — see
     // ADR 0543. Null for a synthetic tree node, and for a node from a list that doesn't emit the rel yet;
     // those fall back to a composed URL, which is what the hypermedia guard's allowlist is burning down.

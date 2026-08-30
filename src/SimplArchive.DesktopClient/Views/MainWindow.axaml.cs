@@ -915,6 +915,11 @@ public partial class MainWindow : Window
             // last finished loading, which during a load is a different folder than the one under the cursor.
             vm.TreeContextCanCreateChild = node.HasRel("create-child");
             vm.TreeContextCanTakeOver = node.HasRel("take-over");
+            // The destructive half, from the same right-clicked node and for the same reason (#858).
+            vm.TreeContextCanEditIndexData = node.CanEditIndexData;
+            vm.TreeContextCanMove = node.CanMove;
+            vm.TreeContextCanDelete = node.CanDelete;
+            vm.TreeContextCanManageAccess = node.CanManagePermissions;
 
             // Built from what the node ADMITS rather than from rels the client knows by name (#673): the server
             // sends the label and the address, so this loop needs no case per family and a mask nobody

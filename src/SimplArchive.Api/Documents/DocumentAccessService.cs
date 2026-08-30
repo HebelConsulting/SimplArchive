@@ -42,6 +42,34 @@ public sealed class DocumentAccessService(
         return new EffectiveRights(false, false, false, false, false, false, false, false, false);
     }
 
+    /// <summary>The same question for a whole page of documents, in one batch (#858).</summary>
+    /// <remarks>
+    /// The three-way principal branch is identical to the single-document form above — ServiceAccount first,
+    /// then User, else nothing — because a listing must gate on exactly the rights the endpoints enforce, and
+    /// a second answer to "who is calling" is how those two come apart.
+    ///
+    /// The no-principal case returns an entry per id rather than an empty map, so a caller can read every row's
+    /// answer without deciding what a MISSING entry meant. That distinction matters: absent and false would
+    /// both disable the affordance today, and would stop agreeing the moment someone treated absent as "not
+    /// computed, ask again".
+    /// </remarks>
+    public async Task<IReadOnlyDictionary<Guid, EffectiveRights>> GetCallerRightsForManyAsync(
+        IReadOnlyCollection<Guid> documentIds, CancellationToken cancellationToken)
+    {
+        if (currentServiceAccountAccessor.ServiceAccountId is { } serviceAccountId)
+        {
+            return await effectiveRightsCalculator.GetEffectiveRightsForManyForServiceAccountAsync(serviceAccountId, documentIds, cancellationToken);
+        }
+
+        if (currentUserAccessor.UserId is { } userId)
+        {
+            return await effectiveRightsCalculator.GetEffectiveRightsForManyAsync(userId, documentIds, cancellationToken);
+        }
+
+        var none = new EffectiveRights(false, false, false, false, false, false, false, false, false);
+        return documentIds.Distinct().ToDictionary(id => id, _ => none);
+    }
+
     public async Task<bool> CanSeeAsync(Guid documentId, CancellationToken cancellationToken) =>
         (await GetCallerRightsAsync(documentId, cancellationToken)).CanSee;
 

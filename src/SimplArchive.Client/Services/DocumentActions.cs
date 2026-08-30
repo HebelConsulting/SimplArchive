@@ -426,7 +426,10 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
         var (etag, moveHref) = await FetchETagAndRelAsync(selfHref, "move");
         if (moveHref is null)
         {
-            snackbar.Add("Can't move the item there.", Severity.Error);
+            // Since #858 the rel's absence means "you may not move THIS item", which is a different sentence
+            // from the one this used to show — "Can't move the item there" pointed at the target, and the
+            // target is not what was refused.
+            snackbar.Add(Strings.Get("MoveNotPermitted"), Severity.Error);
             return false;
         }
 

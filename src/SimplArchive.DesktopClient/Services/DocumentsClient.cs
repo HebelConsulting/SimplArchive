@@ -611,7 +611,17 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
     public async Task MoveAsync(string documentSelfHref, Guid newParentId, CancellationToken cancellationToken = default)
     {
         var (links, etag) = await GetLinksAndETagAsync(documentSelfHref, cancellationToken);
-        using var request = new HttpRequestMessage(HttpMethod.Put, links.TryGetValue("move", out var h) ? h : throw new InvalidOperationException("The document advertised no 'move' rel (ADR 0543)."))
+
+        // The `move` rel is CONDITIONAL since #858 — absent when the caller may not move this item. That is an
+        // answer, not a fault: it earns the same sentence the server's 403 would have, rather than the crash
+        // dialog an InvalidOperationException gets from the global handler (ADR 0275). The menu should not have
+        // offered it, and gating it there is the follow-up; this is the floor beneath that.
+        if (!links.TryGetValue("move", out var h))
+        {
+            throw new ApiActionException(Strings.Get("MoveNotPermitted"));
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Put, h)
         {
             Content = JsonContent.Create(new { parentId = newParentId }),
         };
@@ -783,7 +793,17 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         // is exactly what shipped in 2aeaae0, because the edit that added it silently did not apply.
         ApiCore.ParseLinks(item),
         ParseAdmits(item),
-        item.TryGetProperty("icon", out var ic) && ic.ValueKind == JsonValueKind.String ? ic.GetString() : null);
+        item.TryGetProperty("icon", out var ic) && ic.ValueKind == JsonValueKind.String ? ic.GetString() : null,
+        // The row's capability answers (#858). Read here, in the parser BOTH the repositories and children
+        // listings go through, so there is no per-listing site to forget — which is how the web side nearly
+        // shipped with the admin tree missing them.
+        //
+        // ParseReference below deliberately does NOT set them: a shortcut is renamed, moved and deleted through
+        // its target, not through the row, and both clients' menus already exclude a reference from those three.
+        item.TryGetProperty("canDelete", out var cd) && cd.ValueKind == JsonValueKind.True,
+        item.TryGetProperty("canEditIndexData", out var ce) && ce.ValueKind == JsonValueKind.True,
+        item.TryGetProperty("canMove", out var cm) && cm.ValueKind == JsonValueKind.True,
+        item.TryGetProperty("canManagePermissions", out var cmp) && cmp.ValueKind == JsonValueKind.True);
 
     // What this folder will accept, with the address for each (#673). An absent or empty array means the
     // client offers no creates here — the same reading as a missing rel: not available to you, here, now.
@@ -1220,30 +1240,6 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         return ReadTags(await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken));
     }
 
-    // ---- Tag catalog admin (ADR "Tag controlled vocabulary") ----------------------------------------
-    // The catalog lists LIVE tags, each advertising self (rename/recolour), retire and merge (issue #416).
-    public sealed record TagCatalogItem(Guid Id, string Name, string? Color,
-        IReadOnlyDictionary<string, string>? Links = null)
-    {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
-    }
-
-    public async Task UpdateTagAsync(TagCatalogItem tag, string? name, string? color, CancellationToken cancellationToken = default)
-    {
-        var resp = await _core.Http.PutAsJsonAsync(RequireHref(tag, "self"), new { name, color }, cancellationToken);
-        if (!resp.IsSuccessStatusCode) throw new ApiActionException(await SimplArchiveApiClient.ErrorMessageAsync(resp, "Could not update the tag."));
-    }
-
-    public async Task RetireTagAsync(TagCatalogItem tag, CancellationToken cancellationToken = default) =>
-        (await _core.Http.DeleteAsync(RequireHref(tag, "retire"), cancellationToken)).EnsureSuccessStatusCode();
-
-    /// <summary>Merges one tag into another, following the source row's own `merge` rel.</summary>
-    public async Task MergeTagAsync(TagCatalogItem tag, Guid intoId, CancellationToken cancellationToken = default)
-    {
-        var resp = await _core.Http.PostAsJsonAsync(RequireHref(tag, "merge"), new { intoId }, cancellationToken);
-        if (!resp.IsSuccessStatusCode) throw new ApiActionException(await SimplArchiveApiClient.ErrorMessageAsync(resp, "Could not merge the tags."));
-    }
-
     public async Task<BulkResult> BulkReferenceAsync(IEnumerable<Guid> ids, Guid parentId, CancellationToken cancellationToken = default) =>
         await PostBulkAsync(await BulkRelAsync("reference", cancellationToken), new { ids = ids.ToArray(), parentId }, cancellationToken);
 
@@ -1342,35 +1338,10 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         }
     }
 
-    private static string RequireHref(TagCatalogItem tag, string rel) =>
-        tag.Href(rel)
-        ?? throw new InvalidOperationException($"The tag '{tag.Name}' advertised no '{rel}' rel (ADR 0543/0555).");
-
     public async Task RevokeAclEntryAsync(AclEntryInfo entry, CancellationToken cancellationToken = default)
     {
         using var response = await _core.Http.DeleteAsync(ApiCore.RequireHref(entry, "self"), cancellationToken);
         await ApiCore.ThrowIfProblemAsync(response, Strings.Get("MaLoadFailed"), cancellationToken);
-    }
-
-    public sealed record TagCatalog(IReadOnlyList<TagCatalogItem> Items, bool CanManage);
-
-    public async Task<TagCatalog> GetTagCatalogWithColorsAsync(CancellationToken cancellationToken = default)
-    {
-        var json = await _core.Http.GetFromJsonAsync<JsonElement>(await _core.RootHrefAsync("tags", cancellationToken), cancellationToken);
-        var items = new List<TagCatalogItem>();
-        if (json.TryGetProperty("catalog", out var arr) && arr.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var e in arr.EnumerateArray())
-            {
-                items.Add(new TagCatalogItem(
-                    e.GetProperty("id").GetGuid(),
-                    e.GetProperty("name").GetString() ?? "",
-                    e.TryGetProperty("color", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null,
-                    ApiCore.ParseLinks(e)));
-            }
-        }
-
-        return new TagCatalog(items, json.TryGetProperty("canManage", out var cm) && cm.GetBoolean());
     }
 
     /// <summary>
@@ -1433,11 +1404,6 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         return bytes;
     }
 
-    public async Task CreateTagAsync(string name, string? color, CancellationToken cancellationToken = default)
-    {
-        var resp = await _core.Http.PostAsJsonAsync(await _core.RootHrefAsync("tags", cancellationToken), new { name, color }, cancellationToken);
-        if (!resp.IsSuccessStatusCode) throw new ApiActionException(await SimplArchiveApiClient.ErrorMessageAsync(resp, "Could not add the tag."));
-    }
     // Writes the rights at the address the ROW gave us — `grant` on a principal being added, `self` on an
     // entry already there; RevokeAclEntryAsync above DELETEs that same `self`. One rel, the method says which
     // action (ADR 0719); `grant` is not its verb pair — it is emitted only while there is no entry yet.

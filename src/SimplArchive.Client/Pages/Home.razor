@@ -553,14 +553,36 @@
                                 <MudMenuItem Icon="@Icons.Material.Filled.Upload" OnClick="() => UploadAsync(tn)">@Strings.Get("Upload")</MudMenuItem>
                             }
                             <MudDivider />
-                            <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => RunAndRefreshAsync(Actions.RenameAsync(tn))">@Strings.Get("CtxRename")</MudMenuItem>
-                            <MudMenuItem Icon="@Icons.Material.Filled.DriveFileMove" OnClick="() => RunAndRefreshAsync(Actions.MoveAsync(tn))">@Strings.Get("CtxMoveTo")</MudMenuItem>
+                            @* Gated on what the SERVER said about THIS node (#858), not on its shape. Rename and
+                               the contents order are both CanEditIndexData — the same right the PUT enforces —
+                               so they appear and disappear together, which is the truth rather than a tidy
+                               grouping. A missing capability means "not available to you, here, now" (ADR 0543),
+                               so the entry is absent rather than present-and-refused. *@
+                            @if (tn.CanEditIndexData)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => RunAndRefreshAsync(Actions.RenameAsync(tn))">@Strings.Get("CtxRename")</MudMenuItem>
+                            }
+                            @if (tn.CanMove)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.DriveFileMove" OnClick="() => RunAndRefreshAsync(Actions.MoveAsync(tn))">@Strings.Get("CtxMoveTo")</MudMenuItem>
+                            }
                             @* Opens the ONE detail edit on this folder (issue #408) — the contents order is a
                                field in that pane now, not a mode of its own. *@
-                            <MudMenuItem Icon="@Icons.Material.Filled.Sort" OnClick="@(() => BeginFolderSortEditAsync(tn))">@Strings.Get("FolderSortLabel")</MudMenuItem>
-                            <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error" OnClick="() => DeleteRowAsync(tn)">@Strings.Get("UgDelete")</MudMenuItem>
+                            @if (tn.CanEditIndexData)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Sort" OnClick="@(() => BeginFolderSortEditAsync(tn))">@Strings.Get("FolderSortLabel")</MudMenuItem>
+                            }
+                            @if (tn.CanDelete)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error" OnClick="() => DeleteRowAsync(tn)">@Strings.Get("UgDelete")</MudMenuItem>
+                            }
                             <MudDivider />
-                            <MudMenuItem Icon="@Icons.Material.Filled.Security" OnClick="() => Actions.OpenManageAccessAsync(tn)">@Strings.Get("MaManageAccess")</MudMenuItem>
+                            @* Manage access had TWO answers for one action: ungated here, flag-gated in the
+                               detail pane (ADR 0511's split-surface drift). The pane's answer was the right one. *@
+                            @if (tn.CanManagePermissions)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Security" OnClick="() => Actions.OpenManageAccessAsync(tn)">@Strings.Get("MaManageAccess")</MudMenuItem>
+                            }
                             @if (_canLegalHold)
                             {
                                 <MudMenuItem Icon="@Icons.Material.Filled.Gavel" OnClick="() => RunAndRefreshAsync(Actions.PlaceLegalHoldAsync(tn))">@Strings.Get("CtxPlaceLegalHold")</MudMenuItem>
@@ -612,10 +634,16 @@
                             {
                                 <div class="wb-bulk-bar">
                                     <span style="flex:1 1 auto; font-size:.8rem; font-weight:600;">@string.Format(Strings.Get("BulkSelected"), _bulkIds.Count)</span>
-                                    <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.DriveFileMove" OnClick="BulkMoveAsync">@Strings.Get("BulkMove")</MudButton>
-                                    <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Label" OnClick="BulkAddTagsAsync">@Strings.Get("BulkTag")</MudButton>
-                                    <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Shield" OnClick="BulkSensitivityAsync">@Strings.Get("BulkSensLabel")</MudButton>
-                                    <MudButton Size="Size.Small" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="BulkDeleteAsync">@Strings.Get("UgDelete")</MudButton>
+                                    @* Each bulk action is offered only when EVERY selected row permits it — the
+                                       owner's decision over reporting per-item outcomes afterwards. It keeps the
+                                       affordance honest (ADR 0543) at the cost of not saying WHICH row blocked
+                                       it; the alternative was a button that promises N deletions and performs
+                                       some. Tag and Sensitivity are CanEditIndexData: both write index data,
+                                       which is the right their endpoints enforce. *@
+                                    <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.DriveFileMove" Disabled="@(!BulkAll(n => n.CanMove))" OnClick="BulkMoveAsync">@Strings.Get("BulkMove")</MudButton>
+                                    <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Label" Disabled="@(!BulkAll(n => n.CanEditIndexData))" OnClick="BulkAddTagsAsync">@Strings.Get("BulkTag")</MudButton>
+                                    <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Shield" Disabled="@(!BulkAll(n => n.CanEditIndexData))" OnClick="BulkSensitivityAsync">@Strings.Get("BulkSensLabel")</MudButton>
+                                    <MudButton Size="Size.Small" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" Disabled="@(!BulkAll(n => n.CanDelete))" OnClick="BulkDeleteAsync">@Strings.Get("UgDelete")</MudButton>
                                     <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="() => { _bulkIds.Clear(); }" title="@Strings.Get("BulkClearSelection")" />
                                 </div>
                             }
@@ -642,9 +670,16 @@
                             }
                         </ArchiveView>
                         <RowMenu Context="node">
-                            @if (!node.IsReference)
+            @* `IsReference` stays as well as the capability, and the two say different things: the capability
+               answers "may this caller", the shape answers "is this row the document at all" — a shortcut is
+               renamed and moved through its target, not through the row (#858). Dropping either check would be
+               wrong in a different way. *@
+                            @if (!node.IsReference && node.CanEditIndexData)
                             {
                                 <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => RunAndRefreshAsync(Actions.RenameAsync(node))">@Strings.Get("CtxRename")</MudMenuItem>
+                            }
+                            @if (!node.IsReference && node.CanMove)
+                            {
                                 <MudMenuItem Icon="@Icons.Material.Filled.DriveFileMove" OnClick="() => RunAndRefreshAsync(Actions.MoveAsync(node))">@Strings.Get("CtxMoveTo")</MudMenuItem>
                             }
                             @if (!node.IsReference && _canLegalHold)
@@ -678,9 +713,12 @@
                             {
                                 <MudMenuItem Icon="@Icons.Material.Filled.AccountTree" OnClick="() => OpenWorkflowAsync(node)">@Strings.Get("CtxWorkflow")</MudMenuItem>
                             }
-                            @if (!node.IsReference)
+                            @if (!node.IsReference && node.CanManagePermissions)
                             {
                                 <MudMenuItem Icon="@Icons.Material.Filled.Security" OnClick="() => Actions.OpenManageAccessAsync(node)">@Strings.Get("MaManageAccess")</MudMenuItem>
+                            }
+                            @if (!node.IsReference && node.CanDelete)
+                            {
                                 <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error" OnClick="() => DeleteRowAsync(node)">@Strings.Get("UgDelete")</MudMenuItem>
                             }
                         </RowMenu>
@@ -2149,6 +2187,7 @@
         // and opened the dialog on the last subject's grants.
         Detail.Links = null;
         Detail.CanManagePermissions = false;
+        Detail.CanEditIndexData = false;
         Detail.BreaksInheritance = false;
         Detail.ExternalLinksHref = null;
         Detail.MaskDefinitionHref = null;
@@ -2640,6 +2679,16 @@
     // The selection is the PAGE's — it is drawn by the list and read by the drag handler — so the page holds it
     // and hands the ids to the shared service, then decides what "refresh" means (see BulkActions).
 
+    /// <summary>Does EVERY row in the bulk selection permit this? (#858)</summary>
+    /// <remarks>
+    /// The owner chose all-permit over offer-and-report, so a bulk button is disabled the moment one selected
+    /// row would refuse. A row that is selected but no longer in the loaded list counts as NOT permitting:
+    /// unknown is not permission, and the safe direction is the one that cannot promise what the server refuses.
+    /// </remarks>
+    private bool BulkAll(Func<BrowseNode, bool> permits) =>
+        _bulkIds.Count > 0
+        && _bulkIds.All(id => _folderContents.FirstOrDefault(n => n.Id == id) is { } node && permits(node));
+
     private Task BulkMoveAsync() => RunBulkAsync(Bulk.MoveAsync(_bulkIds));
 
     private Task BulkDeleteAsync() => RunBulkAsync(Bulk.DeleteAsync(_bulkIds));
@@ -2806,7 +2855,15 @@
         // arrived address-less: LoadContentsAsync re-fetched the same resource for `children`, and every
         // rel-gated affordance read as unavailable on a folder reached by Go to or a search hit.
         var doc = await FetchFolderAsync(folderId);
+        // The capabilities come from that SAME read (#858). Leaving them at their defaults here would repeat,
+        // for the gates, exactly the bug the comment above describes for the links: a folder reached by Go to or
+        // a search hit would show Rename / Move to / Delete as unavailable while the identical folder reached
+        // through the tree offered them.
         await SelectFolderAsync(new BrowseNode(folderId, doc?.Name ?? "(folder)", true, false, false,
+            CanDelete: doc?.CanDelete ?? false,
+            CanEditIndexData: doc?.CanEditIndexData ?? false,
+            CanMove: Links.Href(doc?.Links, "move") is not null,
+            CanManagePermissions: doc?.CanManagePermissions ?? false,
             Links: Links.RelMap(doc?.Links)));
 
         // Prefer the item's real row; fall back to its reference (shortcut) row when the folder holds only a

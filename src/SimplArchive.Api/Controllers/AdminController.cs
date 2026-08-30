@@ -30,23 +30,40 @@ public class AdminController : ControllerBase
     private readonly IUserSystemRightsResolver _userSystemRights;
     private readonly IAuditRecorder _auditRecorder;
     private readonly INotificationService _notifications;
+    private readonly Documents.DocumentAccessService _access;
 
     public AdminController(
         SimplArchiveDbContext dbContext,
         ICurrentUserAccessor currentUserAccessor,
         IUserSystemRightsResolver userSystemRights,
         IAuditRecorder auditRecorder,
-        INotificationService notifications)
+        INotificationService notifications,
+        Documents.DocumentAccessService access)
     {
         _dbContext = dbContext;
         _currentUserAccessor = currentUserAccessor;
         _userSystemRights = userSystemRights;
         _auditRecorder = auditRecorder;
         _notifications = notifications;
+        _access = access;
     }
 
-    public class PersonalRepositoryItem
+    public class PersonalRepositoryItem : Hypermedia.ICarriesRowCapabilities
     {
+        // The same three answers the other listings carry (#858). This listing builds TREE nodes, and a tree
+        // node gets the destructive context menu — so omitting them here would have been the "a rel present on
+        // three of six surfaces" defect #638 exists to prevent, hiding Rename/Move/Delete on every personal
+        // space in the administration branch while the other listings offered them correctly.
+        public bool CanDelete { get; set; }
+
+        public bool CanEditIndexData { get; set; }
+
+        public bool CanMove { get; set; }
+
+        /// <summary>May the caller manage this row's permissions? (#858)</summary>
+        public bool CanManagePermissions { get; set; }
+
+
         public Guid UserId { get; set; }
         public string DisplayName { get; set; } = "";
         public string Email { get; set; } = "";
@@ -128,6 +145,9 @@ public class AdminController : ControllerBase
             .OrderBy(x => x.DisplayName)
             .ThenBy(x => x.Email)
             .ToListAsync(cancellationToken);
+
+        // One batch for the page, not a lookup per row (#858).
+        await Hypermedia.RowCapabilities.StampAsync(items, r => r.RepositoryId, _access, cancellationToken);
 
         var canTakeOver = await CanManageUsersAsync(cancellationToken);
 

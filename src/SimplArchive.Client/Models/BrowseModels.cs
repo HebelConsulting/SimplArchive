@@ -22,6 +22,15 @@ public record DocumentChildrenResponse
 /// <summary>A child row as a listing described it — the shape <see cref="BrowseNode"/> is built from.</summary>
 public record DocumentSummary
 {
+    // What the server says this caller may do to this row (#858) — the Delete / Rename / Move gates.
+    public bool CanDelete { get; set; }
+
+    public bool CanEditIndexData { get; set; }
+
+    public bool CanMove { get; set; }
+
+    public bool CanManagePermissions { get; set; }
+
     public Guid Id { get; set; }
     public string Name { get; set; } = "";
     public bool HasChildren { get; set; }
@@ -116,6 +125,15 @@ public record PersonalRepositoryResponse
 public sealed class DocumentLinksResponse
 {
     public string Name { get; set; } = string.Empty;
+
+    // The capability flags the document resource carries (#858). Read HERE because the Go to / search-hit path
+    // builds its tree node from this response rather than from a listing row — the one surface where forgetting
+    // them would make the same folder behave differently depending on how the user arrived at it.
+    public bool CanDelete { get; set; }
+
+    public bool CanEditIndexData { get; set; }
+
+    public bool CanManagePermissions { get; set; }
 
     public List<LinkResponse>? Links { get; set; }
 }

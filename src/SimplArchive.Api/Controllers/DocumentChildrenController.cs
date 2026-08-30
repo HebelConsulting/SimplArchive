@@ -62,8 +62,33 @@ public class DocumentChildrenController : ControllerBase
         _containment = containment;
     }
 
-    public class DocumentSummaryResource : HypermediaResource
+    public class DocumentSummaryResource : HypermediaResource, Hypermedia.ICarriesRowCapabilities
     {
+        /// <summary>May the caller DELETE this row? (#858)</summary>
+        /// <remarks>
+        /// A flag, not a rel: <c>DELETE</c> is at this item's own address, so a <c>delete</c> rel beside
+        /// <c>self</c> would be the same URL under a second name (ADR 0719). Absence means the same as a
+        /// missing rel — not available to you, here, now (ADR 0543) — so a client disables Delete rather than
+        /// offering it and handling a 403.
+        /// </remarks>
+        public bool CanDelete { get; set; }
+
+        /// <summary>May the caller rename this row, or change its index data or contents order? (#858)</summary>
+        /// <remarks>Named for the RIGHT the <c>PUT</c> enforces, so the gate and the refusal cannot drift.</remarks>
+        public bool CanEditIndexData { get; set; }
+
+        /// <summary>May this item be moved? (#858)</summary>
+        /// <remarks>
+        /// Says the ITEM may be moved, never that a given move will succeed: a move also needs
+        /// <c>CanCreateSubItems</c> on the TARGET, which no row can answer before a target is chosen — the
+        /// picker owns that half (ADR 0689).
+        /// </remarks>
+        public bool CanMove { get; set; }
+
+        /// <summary>May the caller manage this row's permissions? (#858)</summary>
+        public bool CanManagePermissions { get; set; }
+
+
         public Guid Id { get; set; }
 
         public string Name { get; set; } = "";
@@ -262,58 +287,71 @@ public class DocumentChildrenController : ControllerBase
         // creates is actually attempted.
         var rules = await _containment.ForAsync(_dbContext, _currentTenantAccessor.TenantId!.Value, cancellationToken);
 
+        var children = page.Select(d => new DocumentSummaryResource
+        {
+            Id = d.Id,
+            Name = d.Name,
+            HasChildren = d.HasChildren,
+            HasVersions = d.HasVersions,
+            HasSubfolders = d.HasSubfolders,
+            HasReferences = d.HasReferences,
+            OnLegalHold = d.OnLegalHold,
+            CheckedOut = d.CheckedOutByUserId != null,
+            CheckedOutByMe = d.CheckedOutByUserId == _currentUserAccessor.UserId,
+            CheckedOutByName = d.CheckedOutByName ?? "",
+            FileExtension = Path.GetExtension(d.LatestObjectKey ?? ""),
+            DocumentType = d.DocumentType ?? "",
+            DocumentDate = d.DocumentDate,
+            SizeBytes = d.SizeBytes,
+            Tags = tagsByDoc.TryGetValue(d.Id, out var tags) ? tags : [],
+            CreatedBy = d.CreatedByName ?? "",
+            // isPersonalRoot is false by construction: a personal space is a ROOT document, so it is never
+            // itself a listed child. Its own resource answers this separately.
+            Admits = CreatableChildren.For(rules, d.Id, d.MaskId, isPersonalRoot: false),
+            // From the rules object already loaded for this page — the mask facts are all in one place, so
+            // the icon costs no query.
+            Icon = rules.IconOf(d.MaskId),
+            SensitivityLabelId = d.SensitivityLabelId,
+            SensitivityLabelName = d.SensitivityLabelName ?? "",
+            SensitivityLabelColor = d.SensitivityLabelColor,
+            VersionCount = d.VersionCount,
+            VersionCreatedAt = d.VersionCreatedAt,
+            // A listed item advertises its own UNCONDITIONAL sub-resources, not just self+chat (issue #416).
+            //
+            // Without these a client holding a listing has an id and no addresses, so every sub-resource call
+            // it makes has to be composed from a template — which is most of what the ADR 0543 ledger is still
+            // counting. Fetching `self` first instead would cost a round trip per row, and paying two calls to
+            // follow one rel is the usual reason a codebase abandons hypermedia and goes back to string paths.
+            //
+            // Rels that depend on the CALLER'S RIGHTS or the item's STATE are deliberately absent —
+            // checkout/checkin, external-links, acl-inheritance. Each is a question the full document
+            // resource computes once, so those affordances still require the resource itself, and their
+            // absence here must NOT be read as "not available" (ADR 0543's rule applies to a resource, not
+            // to a summary).
+            //
+            // That used to be argued as "a listing is the wrong place to answer 'may I?'", and the premise
+            // has since changed rather than the conclusion: the objection was COST — a rights resolution
+            // per row — and GetCallerRightsForManyAsync now answers a whole page in about the queries one
+            // document took. So the three rights a destructive menu needs ARE answered here, as the
+            // CanDelete/CanEditIndexData/CanMove flags above (#858). What stays out is the rest, which no
+            // menu gates on, and the distinction to hold is between a flag (a yes/no this listing can
+            // afford) and a rel (an ADDRESS, which a row should not multiply).
+            //
+            // A MASK-DERIVED rel is not one of those, and the distinction matters (#564). Whether a folder
+            // holds sections and notes is a property of its mask, not of who is asking — and the query is
+            // already joining MaskVersions to produce DocumentType, so it costs nothing to answer here.
+            // The alternative was for a client to fetch each row's resource when its context menu opens,
+            // which is exactly the per-rel round trip ADR 0557 exists to prevent.
+            Links = RowLinks(d),
+        }).ToList();
+
+        // The per-row rights, in ONE batch for the page (#858) — this is what lets a client gate Delete/Rename/
+        // Move honestly instead of offering them to anyone who can see a row and answering with a 403.
+        await Hypermedia.RowCapabilities.StampAsync(children, r => r.Id, _access, cancellationToken);
+
         return Ok(new DocumentChildrenResource
         {
-            Children = page.Select(d => new DocumentSummaryResource
-            {
-                Id = d.Id,
-                Name = d.Name,
-                HasChildren = d.HasChildren,
-                HasVersions = d.HasVersions,
-                HasSubfolders = d.HasSubfolders,
-                HasReferences = d.HasReferences,
-                OnLegalHold = d.OnLegalHold,
-                CheckedOut = d.CheckedOutByUserId != null,
-                CheckedOutByMe = d.CheckedOutByUserId == _currentUserAccessor.UserId,
-                CheckedOutByName = d.CheckedOutByName ?? "",
-                FileExtension = Path.GetExtension(d.LatestObjectKey ?? ""),
-                DocumentType = d.DocumentType ?? "",
-                DocumentDate = d.DocumentDate,
-                SizeBytes = d.SizeBytes,
-                Tags = tagsByDoc.TryGetValue(d.Id, out var tags) ? tags : [],
-                CreatedBy = d.CreatedByName ?? "",
-                // isPersonalRoot is false by construction: a personal space is a ROOT document, so it is never
-                // itself a listed child. Its own resource answers this separately.
-                Admits = CreatableChildren.For(rules, d.Id, d.MaskId, isPersonalRoot: false),
-                // From the rules object already loaded for this page — the mask facts are all in one place, so
-                // the icon costs no query.
-                Icon = rules.IconOf(d.MaskId),
-                SensitivityLabelId = d.SensitivityLabelId,
-                SensitivityLabelName = d.SensitivityLabelName ?? "",
-                SensitivityLabelColor = d.SensitivityLabelColor,
-                VersionCount = d.VersionCount,
-                VersionCreatedAt = d.VersionCreatedAt,
-                // A listed item advertises its own UNCONDITIONAL sub-resources, not just self+chat (issue #416).
-                //
-                // Without these a client holding a listing has an id and no addresses, so every sub-resource call
-                // it makes has to be composed from a template — which is most of what the ADR 0543 ledger is still
-                // counting. Fetching `self` first instead would cost a round trip per row, and paying two calls to
-                // follow one rel is the usual reason a codebase abandons hypermedia and goes back to string paths.
-                //
-                // Rels that depend on the CALLER'S RIGHTS or the item's STATE are deliberately absent —
-                // checkout/checkin, external-links, acl-inheritance. Each is a question the full document
-                // resource computes once and a listing would have to compute per row. A listing is the wrong
-                // place to answer "may I?", so those affordances still require the resource itself, and their
-                // absence here must NOT be read as "not available" (ADR 0543's rule applies to a resource, not
-                // to a summary).
-                //
-                // A MASK-DERIVED rel is not one of those, and the distinction matters (#564). Whether a folder
-                // holds sections and notes is a property of its mask, not of who is asking — and the query is
-                // already joining MaskVersions to produce DocumentType, so it costs nothing to answer here.
-                // The alternative was for a client to fetch each row's resource when its context menu opens,
-                // which is exactly the per-rel round trip ADR 0557 exists to prevent.
-                Links = RowLinks(d),
-            }).ToList(),
+            Children = children,
             ContentsSortOrder = folderSortOrder,
             Links = links,
         });

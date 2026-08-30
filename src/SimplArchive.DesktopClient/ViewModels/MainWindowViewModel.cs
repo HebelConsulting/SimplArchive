@@ -750,9 +750,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // "References …" appears only for an item that at least one reference targets.
     public bool SelectedHasReferences => SelectedItem is { HasReferences: true };
 
-    // "Manage access …" appears for any real folder or document (not a reference/archive row). ACLs apply to
-    // folders and documents alike; the dialog self-gates on the caller's CanManagePermissions (ADR 0486).
-    public bool CanManageAccess => SelectedItem is { IsReference: false, IsArchiveEntry: false, IsArchiveBack: false };
+    // "Manage access …" appears for any real folder or document (not a reference/archive row) that ADVERTISED
+    // the acl-entries rel. The shape check alone was the row menu's answer while the detail pane gated on a
+    // server flag — one action with two answers, which is the split-surface drift ADR 0511 warns about (#858).
+    // The dialog still self-gates on CanManagePermissions (ADR 0486); this stops the menu offering it first.
+    public bool CanManageAccess => SelectedItem is { IsReference: false, IsArchiveEntry: false, IsArchiveBack: false }
+        && SelectedItem.CanManagePermissions;
+
+    // Rename and Delete, from what the server said about THIS row rather than from its shape (#858). A caller
+    // who could merely SEE a row was offered both and learned otherwise from a 403.
+    public bool CanRenameSelected => SelectedItem is { IsReference: false, IsArchiveEntry: false, IsArchiveBack: false, CanEditIndexData: true };
+
+    public bool CanDeleteSelected => SelectedItem is { IsReference: false, IsArchiveEntry: false, IsArchiveBack: false, CanDelete: true };
 
     // The tree context menu's "References …" entry mirrors SelectedHasReferences, but for the RIGHT-CLICKED tree
     // node rather than the contents-list selection (ADR "Tree-pane context menu"). MainWindow sets it before the
@@ -778,6 +787,23 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // anything — each time offering an action the server refuses. The rel's absence says "not available to you,
     // here, now" (ADR 0543), which is the whole point of asking the server rather than guessing.
     [ObservableProperty] private bool _treeContextCanCreateChild;
+
+    // The DESTRUCTIVE half, which #634 never converted (#858): Rename, Move to, Sort order and Delete showed
+    // unconditionally on every tree node, so a caller who could merely SEE a folder was offered Delete on it and
+    // learned otherwise from a 403 — the broken promise ADR 0543 exists to prevent, sitting three lines from the
+    // create gate that already did it right.
+    //
+    // Rename and Sort order share CanEditIndexData because that is the one right their PUT enforces; they
+    // therefore appear and disappear together, which is the truth rather than a tidy grouping.
+    [ObservableProperty] private bool _treeContextCanEditIndexData;
+
+    [ObservableProperty] private bool _treeContextCanMove;
+
+    [ObservableProperty] private bool _treeContextCanDelete;
+
+    // Manage access had TWO answers for one action — ungated in this menu, flag-gated in the detail pane. The
+    // pane's was right (ADR 0511's split-surface drift).
+    [ObservableProperty] private bool _treeContextCanManageAccess;
 
     // Whether the right-clicked node advertised `take-over` (ADR 0672) — only a user's personal space does, and
     // only for a caller who may perform it. Read from the NODE, so the menu describes what was clicked.
@@ -844,6 +870,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedIsReference));
         OnPropertyChanged(nameof(SelectedHasReferences));
         OnPropertyChanged(nameof(CanManageAccess));
+        OnPropertyChanged(nameof(CanRenameSelected));
+        OnPropertyChanged(nameof(CanDeleteSelected));
         OnPropertyChanged(nameof(CanCheckOut));
         OnPropertyChanged(nameof(CanOverrideSelected));
         OnPropertyChanged(nameof(DetailIsFolder)); // the pane's subject changed, and with it the folder-only row
@@ -1086,7 +1114,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
             // (ADR "GUI-tree Personal space grouping"), even before any real subfolder exists — and its children
             // load through the loader that adds them.
             Tree.Add(root.Selectable
-                ? new TreeNodeViewModel(repository.Id, repository.Name, repository.HasSubfolders, LoadTreeChildrenAsync, links: repository.Links, hasReferences: repository.HasReferences, hasChildren: repository.HasChildren, admits: repository.Admits, icon: repository.Icon)
+                ? new TreeNodeViewModel(repository.Id, repository.Name, repository.HasSubfolders, LoadTreeChildrenAsync, links: repository.Links, hasReferences: repository.HasReferences, hasChildren: repository.HasChildren, admits: repository.Admits, icon: repository.Icon,
+                    canDelete: repository.CanDelete, canEditIndexData: repository.CanEditIndexData, canMove: repository.CanMove, canManagePermissions: repository.CanManagePermissions)
                 : new TreeNodeViewModel(repository.Id, repository.Name, hasSubfolders: true, LoadPersonalChildrenAsync, links: repository.Links, isPersonal: true));
         }
 
@@ -1159,7 +1188,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
             hasChildren: r.HasChildren,
             // Carries `take-over` when this caller may perform it (ADR 0672) — absent otherwise, so the menu
             // item is simply not drawn rather than offering a button that answers 403.
-            links: r.Links));
+            links: r.Links,
+            canDelete: r.CanDelete, canEditIndexData: r.CanEditIndexData, canMove: r.CanMove, canManagePermissions: r.CanManagePermissions));
     }
 
     // The Personal repository nests the Intray + Check-out launcher nodes above its real subfolders, mirroring
@@ -1186,7 +1216,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var folderNodes = children
             .Where(c => !c.HasVersions)
             .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(c => new TreeNodeViewModel(c.Id, c.Name, c.HasSubfolders, LoadTreeChildrenAsync, links: c.Links, hasReferences: c.HasReferences, hasChildren: c.HasChildren, admits: c.Admits, icon: c.Icon));
+            .Select(c => new TreeNodeViewModel(c.Id, c.Name, c.HasSubfolders, LoadTreeChildrenAsync, links: c.Links, hasReferences: c.HasReferences, hasChildren: c.HasChildren, admits: c.Admits, icon: c.Icon,
+                canDelete: c.CanDelete, canEditIndexData: c.CanEditIndexData, canMove: c.CanMove, canManagePermissions: c.CanManagePermissions));
 
         // Shortcuts, or none where the folder advertises none — see TreeReferenceNodes for why that is not the
         // same question as `children` above, and for the crash it stopped being (#735).
@@ -1260,6 +1291,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 Items.Add(new NodeViewModel
                 {
                     Links = child.Links,
+                    CanDelete = child.CanDelete,
+                    CanEditIndexData = child.CanEditIndexData,
+                    CanMove = child.CanMove,
+                    CanManagePermissions = child.CanManagePermissions,
                     Id = child.Id,
                     Name = child.Name,
                     HasChildren = child.HasChildren,

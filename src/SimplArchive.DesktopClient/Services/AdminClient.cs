@@ -618,7 +618,10 @@ public sealed class AdminClient(ApiCore core)
 
     // Links carries the repository's advertised addresses (`document`, `children`) — see #443.
     public sealed record AdminPersonalRepoInfo(Guid UserId, string DisplayName, string Email, bool UserIsActive, Guid RepositoryId, bool HasChildren, bool HasSubfolders,
-        IReadOnlyDictionary<string, string>? Links = null)
+        IReadOnlyDictionary<string, string>? Links = null,
+        // The capability answers for the tree node this row becomes (#858) — a tree node gets the Rename /
+        // Move to / Delete menu, so this listing has to carry them like the others do.
+        bool CanDelete = false, bool CanEditIndexData = false, bool CanMove = false, bool CanManagePermissions = false)
     {
         public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
     }
@@ -654,7 +657,11 @@ public sealed class AdminClient(ApiCore core)
                     r.GetProperty("repositoryId").GetGuid(),
                     r.TryGetProperty("hasChildren", out var hc) && hc.GetBoolean(),
                     r.TryGetProperty("hasSubfolders", out var hs) && hs.GetBoolean(),
-                    ApiCore.ParseLinks(r)));
+                    ApiCore.ParseLinks(r),
+                    r.TryGetProperty("canDelete", out var cd) && cd.ValueKind == System.Text.Json.JsonValueKind.True,
+                    r.TryGetProperty("canEditIndexData", out var ce) && ce.ValueKind == System.Text.Json.JsonValueKind.True,
+                    r.TryGetProperty("canMove", out var cm) && cm.ValueKind == System.Text.Json.JsonValueKind.True,
+                    r.TryGetProperty("canManagePermissions", out var cmp) && cmp.ValueKind == System.Text.Json.JsonValueKind.True));
             }
         }
         return list;

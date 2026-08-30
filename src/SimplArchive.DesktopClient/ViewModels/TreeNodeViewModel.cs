@@ -14,7 +14,8 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     private readonly Func<TreeNodeViewModel, Task<IEnumerable<TreeNodeViewModel>>>? _loadChildren;
     private bool _loaded;
 
-    public TreeNodeViewModel(Guid id, string name, bool hasSubfolders, Func<TreeNodeViewModel, Task<IEnumerable<TreeNodeViewModel>>>? loadChildren, bool isReference = false, bool isPersonal = false, string? syntheticIcon = null, string? personalKind = null, bool hasReferences = false, bool hasChildren = true, IReadOnlyDictionary<string, string>? links = null, IReadOnlyList<Services.CreatableChild>? admits = null, string? icon = null)
+    public TreeNodeViewModel(Guid id, string name, bool hasSubfolders, Func<TreeNodeViewModel, Task<IEnumerable<TreeNodeViewModel>>>? loadChildren, bool isReference = false, bool isPersonal = false, string? syntheticIcon = null, string? personalKind = null, bool hasReferences = false, bool hasChildren = true, IReadOnlyDictionary<string, string>? links = null, IReadOnlyList<Services.CreatableChild>? admits = null, string? icon = null,
+        bool canDelete = false, bool canEditIndexData = false, bool canMove = false, bool canManagePermissions = false)
     {
         Id = id;
         Name = name;
@@ -27,6 +28,10 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         HasChildren = hasChildren;
         Links = links;
         Admits = admits ?? [];
+        CanDelete = canDelete;
+        CanEditIndexData = canEditIndexData;
+        CanMove = canMove;
+        CanManagePermissions = canManagePermissions;
         MaskIconToken = icon;
 
         // A placeholder child makes the expander appear before the real children are loaded.
@@ -65,6 +70,19 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     /// reaches exists here at all. Ask this before offering the action; a missing rel means "not available to
     /// you, here, now" (ADR 0543), and <see cref="Href"/> deliberately throws rather than answering it.
     /// </summary>
+    /// <summary>What the server said this caller may do to THIS node (#858).</summary>
+    /// <remarks>
+    /// False on a synthetic node (Administration, the Personal launchers) and on demo/harness nodes, which is
+    /// correct rather than incidental: those are not documents and have nothing to rename, move or delete.
+    /// </remarks>
+    public bool CanDelete { get; }
+
+    public bool CanEditIndexData { get; }
+
+    public bool CanMove { get; }
+
+    public bool CanManagePermissions { get; }
+
     public bool HasRel(string rel) => Links is not null && Links.ContainsKey(rel);
 
     /// <summary>The advertised href for <paramref name="rel"/>; throws rather than composing one.</summary>

@@ -48,7 +48,9 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
                 foreach (var r in page?.Repositories ?? [])
                 {
                     // A repository is its own repository scope.
-                    shared.Add(BrowseService.ToTreeItem(new BrowseNode(r.Id, r.Name, r.HasChildren, r.HasVersions, r.HasSubfolders, RepositoryId: r.Id, Links: Links.RelMap(r.Links), Admits: r.Admits, Icon: r.Icon)));
+                    shared.Add(BrowseService.ToTreeItem(new BrowseNode(r.Id, r.Name, r.HasChildren, r.HasVersions, r.HasSubfolders, RepositoryId: r.Id,
+                CanDelete: r.CanDelete, CanEditIndexData: r.CanEditIndexData, CanMove: r.CanMove, CanManagePermissions: r.CanManagePermissions,
+                Links: Links.RelMap(r.Links), Admits: r.Admits, Icon: r.Icon)));
                 }
                 url = Links.Href(page?.Links, "next");
             }
@@ -257,6 +259,7 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
         return (page?.Repositories ?? []).Select(r => new TreeItemData<BrowseNode>
         {
             Value = new BrowseNode(r.RepositoryId, r.DisplayName, r.HasChildren, false, r.HasSubfolders, RepositoryId: r.RepositoryId,
+                CanDelete: r.CanDelete, CanEditIndexData: r.CanEditIndexData, CanMove: r.CanMove, CanManagePermissions: r.CanManagePermissions,
                 Links: r.Links.ToDictionary(l => l.Rel, l => l.Href)),
             Expandable = r.HasSubfolders,
             Text = r.UserIsActive ? r.DisplayName : $"{r.DisplayName} (inactive)",
@@ -292,6 +295,18 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
 
     private record AdminPersonalRepo
     {
+        // The three answers this row carries so the tree's context menu can gate on them (#858). A tree node
+        // gets Rename / Move to / Delete, so an admin listing that omitted them would hide those on every
+        // personal space while the other listings offered them correctly — the "present on three of six
+        // surfaces" defect #638 exists to prevent.
+        public bool CanDelete { get; set; }
+
+        public bool CanEditIndexData { get; set; }
+
+        public bool CanMove { get; set; }
+
+        public bool CanManagePermissions { get; set; }
+
         public Guid UserId { get; set; }
         public string DisplayName { get; set; } = "";
         public string Email { get; set; } = "";

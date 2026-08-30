@@ -161,6 +161,8 @@ public sealed class DetailState
     public bool Subscribed { get; set; }
     public DetailRetentionDto? Retention { get; set; }
     public bool CanManagePermissions { get; set; }
+
+    public bool CanEditIndexData { get; set; }
     public bool BreaksInheritance { get; set; }
     public Guid? SensitivityId { get; set; }
     public string SensitivityName { get; set; } = "";

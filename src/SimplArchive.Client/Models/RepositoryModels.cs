@@ -17,6 +17,16 @@ public record RepositoryListResponse
 /// <summary>One repository row — a document with no parent (ADR 0200).</summary>
 public record RepositorySummary
 {
+    // What the server says this caller may do to this repository (#858) — the tree root's Delete / Rename /
+    // Move gates.
+    public bool CanDelete { get; set; }
+
+    public bool CanEditIndexData { get; set; }
+
+    public bool CanMove { get; set; }
+
+    public bool CanManagePermissions { get; set; }
+
     public Guid Id { get; set; }
 
     public string Name { get; set; } = "";

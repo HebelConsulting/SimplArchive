@@ -98,7 +98,12 @@ public class OverLimitFileCeilingTests
         // Type / Doc date / Size / Tags cells beside a real row that filled them, on both clients, because a
         // reference was projected as a stub. Assigning the columns is what a row costs; the projection itself
         // became one shared definition (DocumentSummaryQueries) rather than a second copy.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 7_041,
+        // 7,041 → 7,070 for #858's destructive gating (owner-confirmed 2026-08-30): four TreeContext* flags plus
+        // CanRenameSelected/CanDeleteSelected, set from the right-clicked node. Raised rather than extracted
+        // because MainWindow's menu bindings read these properties directly — moving them to another type would
+        // put a gate at arm's length from the menu it gates, which is the coupling this change exists to remove.
+        // #517's per-tab view-model burn-down is still the plan for this file.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 7_070,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
         // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —
@@ -118,7 +123,17 @@ public class OverLimitFileCeilingTests
         // Type / Doc date / Size / Tags cells beside a real row that filled them, on both clients, because a
         // reference was projected as a stub. Assigning the columns is what a row costs; the projection itself
         // became one shared definition (DocumentSummaryQueries) rather than a second copy.
-        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1_456,
+        // 1,456 → 1,412: #858 needed ten lines here for the conditional `move` rel, and rather than raise the
+        // ceiling for them the tag-CATALOG admin surface moved out to DocumentsClient.Tags.cs (the
+        // DocumentsClient.Export.cs precedent). Those members were interleaved with unrelated ones rather than
+        // sitting in a block, which is why a section header three-quarters down the file had stopped describing
+        // where its members were. Owner-confirmed 2026-08-30.
+        // 1,412 → 1,422 for #858 (owner-confirmed 2026-08-30): three capability fields in ParseNode, the one
+        // parser BOTH the repositories and children listings go through. That single parser is precisely why
+        // the desktop had no per-listing site to forget, so splitting it to save ten lines would trade the
+        // property that made this change safe for a smaller number. The file already paid down 1,466 → 1,412
+        // this session by extracting the tag-catalog surface.
+        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1_422,
 
         // Re-entered 2026-08-17 (ADR 0613): burned down to 967 in an earlier pass, back to 1,156 since — the
         // handlers here are what #519 moves into per-tab UserControls, which is what takes it under again.

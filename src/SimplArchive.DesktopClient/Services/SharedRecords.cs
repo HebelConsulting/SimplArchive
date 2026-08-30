@@ -51,7 +51,14 @@ public sealed record Node(Guid Id, string Name, bool HasChildren, bool HasVersio
     IReadOnlyList<CreatableChild>? Admits = null,
     // What this row is DRAWN as — the mask's icon token, or null to keep the generic glyph. A token rather
     // than an MDI name, because the web client draws from a different set entirely.
-    string? Icon = null)
+    string? Icon = null,
+    // What the SERVER says this caller may do to this row (#858): the Delete, Rename/Sort-order and Move-to
+    // gates. Flags rather than rels because DELETE and PUT live at the row's own address (ADR 0719), and false
+    // by default because absence means "not available to you, here, now" (ADR 0543) — the safe direction.
+    bool CanDelete = false,
+    bool CanEditIndexData = false,
+    bool CanMove = false,
+    bool CanManagePermissions = false)
 {
     /// <summary>The advertised href for <paramref name="rel"/>.</summary>
     /// <remarks>

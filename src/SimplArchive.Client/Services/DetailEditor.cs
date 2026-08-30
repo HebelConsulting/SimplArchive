@@ -70,8 +70,19 @@ public sealed record DetailSaveOutcome(
 /// </remarks>
 public sealed class DetailEditor(HttpClient http, DetailState detail, DetailCatalogs catalogs, DocumentActions actions)
 {
-    /// <summary>Whether the pane can enter edit: there is a subject, and no edit is already open.</summary>
-    public bool CanEdit => detail.Node is not null && !detail.IsEditing;
+    /// <summary>
+    /// Whether the pane can enter edit: there is a subject, no edit is already open, and — the part that was
+    /// missing — the SERVER said this caller may change it.
+    /// </summary>
+    /// <remarks>
+    /// This was `Node is not null && !IsEditing`, with no server input at all, so the pencil rendered for a
+    /// read-only caller and the refusal arrived at Save (#859). It sat directly beside `CanManagePermissions`,
+    /// which is a real server flag — the file held both the pattern and its counter-example.
+    ///
+    /// `CanEditIndexData` is the right the `PUT` on the document's own address enforces, so the gate and the
+    /// refusal are the same fact and cannot drift apart.
+    /// </remarks>
+    public bool CanEdit => detail.Node is not null && !detail.IsEditing && detail.CanEditIndexData;
 
     private string Href(string rel) => Links.Required(detail.Links, rel);
 

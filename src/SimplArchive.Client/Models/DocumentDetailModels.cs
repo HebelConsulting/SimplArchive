@@ -115,6 +115,15 @@ public record DocumentDetailResponse
 
     public bool CanManagePermissions { get; set; }
 
+    // The server's answer to "may this caller change the name and index data?" (#858/#859). Read rather than
+    // inferred: the pencil used to render whenever a document was loaded, so a read-only caller got it and
+    // found out at Save.
+    public bool CanEditIndexData { get; set; }
+
+    // The same for delete. Read here rather than only on listing rows because a folder reached by Go to or a
+    // search hit is built from THIS resource, not from a listing (#858).
+    public bool CanDelete { get; set; }
+
     public bool BreaksInheritance { get; set; }
 
     public FolderContentsSortOrder ContentsSortOrder { get; set; }

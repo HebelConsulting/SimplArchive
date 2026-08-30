@@ -38,8 +38,56 @@ public class EffectiveRightsCalculator : IEffectiveRightsCalculator
     // nearest ancestor that does, ultimately falling back to the root document's own grants if no override
     // exists anywhere in the chain (a root document IS "the repository" now, so this is exactly the old
     // Repository-level fallback, just expressed as "the walk reached a document with no parent").
-    public async Task<EffectiveRights> GetEffectiveRightsAsync(Guid userId, Guid documentId, CancellationToken cancellationToken = default)
+    public async Task<EffectiveRights> GetEffectiveRightsAsync(Guid userId, Guid documentId, CancellationToken cancellationToken = default) =>
+        (await GetEffectiveRightsForManyAsync(userId, [documentId], cancellationToken))[documentId];
+
+    /// <summary>
+    /// Exactly what <see cref="GetEffectiveRightsAsync"/> answers, for a whole page of documents at once.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// It exists because a listing needs a rights answer PER ROW to gate the destructive affordances (#858),
+    /// and the per-document method costs roughly five constant queries plus one per ancestor level — so a
+    /// 50-row page would have paid several hundred round trips on the hottest read in the app. That price is
+    /// what turns a rule like "gate Delete on what the server allows" into something nobody implements.
+    /// </para>
+    /// <para>
+    /// The saving comes from noticing which inputs are per-PRINCIPAL and which are per-DOCUMENT. The user row,
+    /// the tenant row, the expanded group set, the group-conferred admin flag, the clearance ceiling and
+    /// CanAccessWithoutGrant are all constant across the page and are read once. Only three things vary per
+    /// document — where it sits in a personal space, its own sensitivity label, and its governing ACL scope —
+    /// and each collapses into a single set-based query.
+    /// </para>
+    /// <para>
+    /// The ancestor walk is done LEVEL BY LEVEL over the whole set rather than per document: every id still
+    /// walking advances one parent per query, so the cost is the tree's DEPTH regardless of page size. A
+    /// recursive CTE would be one query instead of a handful, and is deliberately not used — the model must
+    /// stay provider-agnostic (PostgreSQL in production, SQLite in the integration tests), and a raw recursive
+    /// query is exactly the provider-specific SQL that rules out.
+    /// </para>
+    /// <para>
+    /// The ORDER of the checks is load-bearing and mirrors the single-document path exactly: tenant/user
+    /// active first (ADRs 0174/0153 — neither bypass below may resurrect access for a deactivated holder),
+    /// then the foreign-personal-space narrowing (ADR 0670), then the admin bypasses, then clearance, then the
+    /// ACL match, with the CanAccessWithoutGrant top-up last. A batch that reordered them would be a second,
+    /// subtly different answer to the same question, which is the whole reason the single-document method now
+    /// delegates here instead of keeping its own copy.
+    /// </para>
+    /// <para>
+    /// One consequence worth stating, because it is observable: a caller who bypasses as admin never reaches
+    /// the walk, so a nonexistent document id returns admin rights rather than throwing — the same as before,
+    /// since the old code returned before walking too.
+    /// </para>
+    /// </remarks>
+    public async Task<IReadOnlyDictionary<Guid, EffectiveRights>> GetEffectiveRightsForManyAsync(
+        Guid userId, IReadOnlyCollection<Guid> documentIds, CancellationToken cancellationToken = default)
     {
+        var ids = documentIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return new Dictionary<Guid, EffectiveRights>();
+        }
+
         var user = await _dbContext.Users
             .Where(u => u.Id == userId)
             .Select(u => new { u.TenantId, u.IsActive, u.IsTenantAdmin, u.ClearanceRank, u.CanAccessWithoutGrant })
@@ -50,46 +98,49 @@ public class EffectiveRightsCalculator : IEffectiveRightsCalculator
             .Select(t => new { t.Status, t.EnforceClearance })
             .SingleAsync(cancellationToken);
 
-        // Tenant/User active checks and IsTenantAdmin bypass are identical regardless of the document — see ADR
-        // "Tenant deactivation cascade to users", ADR "EffectiveRightsCalculator vs deactivated users", ADR
-        // "Tenant admin ACL bypass". A tenant admin also bypasses clearance (ADR "Sensitivity clearance
-        // enforcement"), which is why the clearance check below only runs on the non-admin path.
-        //
-        // This runs FIRST and must stay first (ADRs 0174/0153): neither the bypass below nor
-        // CanAccessWithoutGrant may resurrect access for a deactivated holder.
+        // FIRST, and must stay first (ADRs 0174/0153).
         if (tenant.Status == TenantStatus.Deactivated || !user.IsActive)
         {
-            return NoRights;
+            return ids.ToDictionary(id => id, _ => NoRights);
         }
 
-        // ...but the bypass is no longer unconditional: inside SOMEBODY ELSE'S personal space an admin is an
-        // ordinary caller in every respect — no ACL bypass and no clearance bypass (ADR 0670). What they keep
-        // there is CanAccessWithoutGrant, which promotion grants and which they can revoke from themselves.
-        // One column read rather than a walk to the root; see Document.PersonalRootOwnerId.
-        var personalRootOwnerId = await PersonalRootOwnerOfAsync(documentId, cancellationToken);
-        var insideForeignPersonalSpace = personalRootOwnerId is { } owner && owner != userId;
-
-        if (user.IsTenantAdmin && !insideForeignPersonalSpace)
-        {
-            return TenantAdminRights;
-        }
+        // Per-document: whose personal space each id sits in (ADR 0670). One column read for the whole page.
+        var personalRootOwners = await _dbContext.Documents
+            .IgnoreQueryFilters(["SoftDeleteFilter"])
+            .Where(d => ids.Contains(d.Id))
+            .Select(d => new { d.Id, d.PersonalRootOwnerId })
+            .ToDictionaryAsync(x => x.Id, x => x.PersonalRootOwnerId, cancellationToken);
 
         var effectiveGroupIds = await GroupMembershipExpansion.GetEffectiveGroupIdsForUserAsync(_dbContext, userId, cancellationToken);
 
-        // A group flagged IsTenantAdmin confers the same total ACL bypass (and clearance bypass) on its members
-        // as an own IsTenantAdmin — see ADR "Enforce group system rights for members". Checked here (after the
-        // own-admin short-circuit) so the expanded group set is computed once and reused for the clearance
-        // ceiling and the AclEntry match below. Narrowed identically: a group-conferred admin is no more
-        // entitled to read somebody's personal space than a directly-flagged one.
-        if (!insideForeignPersonalSpace && await AnyGroupIsTenantAdminAsync(effectiveGroupIds, cancellationToken))
+        // Own IsTenantAdmin and a group-conferred one are the same total bypass, and both are per-principal —
+        // so the group lookup happens once here rather than once per row.
+        var isAdmin = user.IsTenantAdmin || await AnyGroupIsTenantAdminAsync(effectiveGroupIds, cancellationToken);
+
+        var results = new Dictionary<Guid, EffectiveRights>(ids.Count);
+        var remaining = new List<Guid>(ids.Count);
+
+        foreach (var id in ids)
         {
-            return TenantAdminRights;
+            personalRootOwners.TryGetValue(id, out var owner);
+            var insideForeignPersonalSpace = owner is { } ownerId && ownerId != userId;
+
+            // The bypass is narrowed per document, which is exactly why this cannot be hoisted out of the loop.
+            if (isAdmin && !insideForeignPersonalSpace)
+            {
+                results[id] = TenantAdminRights;
+            }
+            else
+            {
+                remaining.Add(id);
+            }
         }
 
-        // Data-classification clearance (ADR "Sensitivity clearance enforcement"): when the tenant enforces it,
-        // a non-admin can't see a document whose sensitivity-label Rank exceeds their effective clearance (own ⊔
-        // groups). "No CanSee" — returning NoRights hides it from every read/content/mutation path that
-        // authorizes through this calculator. Off by default (labels stay informational).
+        if (remaining.Count == 0)
+        {
+            return results;
+        }
+
         if (tenant.EnforceClearance)
         {
             var clearance = user.ClearanceRank;
@@ -102,27 +153,59 @@ public class EffectiveRightsCalculator : IEffectiveRightsCalculator
                 clearance = Math.Max(clearance, groupMax);
             }
 
-            if (await IsBlockedByClearanceAsync(documentId, clearance, cancellationToken))
+            var blocked = await BlockedByClearanceAsync(remaining, clearance, cancellationToken);
+            if (blocked.Count > 0)
             {
-                return NoRights;
+                foreach (var id in blocked)
+                {
+                    results[id] = NoRights;
+                }
+
+                remaining = [.. remaining.Where(id => !blocked.Contains(id))];
             }
         }
 
-        var governingDocumentId = await ResolveGoverningAclScopeAsync(documentId, cancellationToken);
+        if (remaining.Count == 0)
+        {
+            return results;
+        }
+
+        var governingScopes = await ResolveGoverningAclScopesAsync(remaining, cancellationToken);
+        var distinctScopes = governingScopes.Values.Distinct().ToList();
 
         var matchingEntries = await _dbContext.AclEntries
-            .Where(a => a.DocumentId == governingDocumentId
+            .Where(a => distinctScopes.Contains(a.DocumentId)
                 && (a.UserId == userId || (a.GroupId.HasValue && effectiveGroupIds.Contains(a.GroupId.Value))))
             .ToListAsync(cancellationToken);
 
-        var rights = BuildEffectiveRights(matchingEntries);
+        var entriesByScope = matchingEntries
+            .GroupBy(a => a.DocumentId)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
-        // CanAccessWithoutGrant (ADR 0670): see + read where no grant exists, and NOTHING else. Applied last, so
-        // it is reached only by a caller who is active, whose tenant is active, and who has passed clearance —
-        // the right widens what a caller may READ, never who they are.
-        return rights.CanSee || !await HoldsAccessWithoutGrantAsync(user.CanAccessWithoutGrant, effectiveGroupIds, cancellationToken)
-            ? rights
-            : rights with { CanSee = true, CanReadContent = true };
+        // Per-principal, so it is resolved at most once for the page — and only if some row actually lacks
+        // CanSee, preserving the single-document path's "don't ask unless it matters".
+        bool? holdsAccessWithoutGrant = null;
+
+        foreach (var id in remaining)
+        {
+            var rights = BuildEffectiveRights(
+                entriesByScope.TryGetValue(governingScopes[id], out var entries) ? entries : []);
+
+            if (!rights.CanSee)
+            {
+                holdsAccessWithoutGrant ??=
+                    await HoldsAccessWithoutGrantAsync(user.CanAccessWithoutGrant, effectiveGroupIds, cancellationToken);
+
+                if (holdsAccessWithoutGrant.Value)
+                {
+                    rights = rights with { CanSee = true, CanReadContent = true };
+                }
+            }
+
+            results[id] = rights;
+        }
+
+        return results;
     }
 
     // Deliberately conditioned on "lacks CanSee" rather than topping every right up: a caller granted CanSee
@@ -149,15 +232,25 @@ public class EffectiveRightsCalculator : IEffectiveRightsCalculator
     // reads the target document's label, not the governing document. Unlabelled (SensitivityLabelId == null) ⇒
     // rank 0 ⇒ never blocked. IgnoreQueryFilters(["SoftDeleteFilter"]) mirrors ResolveGoverningAclScopeAsync so
     // a rights check against an already-soft-deleted document (e.g. restore) still resolves the label.
-    private async Task<bool> IsBlockedByClearanceAsync(Guid documentId, int effectiveClearance, CancellationToken cancellationToken)
-    {
-        var labelRank = await _dbContext.Documents
-            .IgnoreQueryFilters(["SoftDeleteFilter"])
-            .Where(d => d.Id == documentId && d.SensitivityLabelId != null)
-            .Join(_dbContext.SensitivityLabelDefinitions, d => d.SensitivityLabelId, l => l.Id, (d, l) => (int?)l.Rank)
-            .FirstOrDefaultAsync(cancellationToken);
+    private async Task<bool> IsBlockedByClearanceAsync(Guid documentId, int effectiveClearance, CancellationToken cancellationToken) =>
+        (await BlockedByClearanceAsync([documentId], effectiveClearance, cancellationToken)).Count > 0;
 
-        return labelRank is int rank && rank > effectiveClearance;
+    // The same question for a whole page, in one query: which of these documents does this clearance not reach?
+    // Unlabelled (SensitivityLabelId == null) never appears, which is what makes "absent" mean rank 0.
+    private async Task<HashSet<Guid>> BlockedByClearanceAsync(
+        IReadOnlyCollection<Guid> documentIds, int effectiveClearance, CancellationToken cancellationToken)
+    {
+        var ids = documentIds.ToList();
+
+        var blocked = await _dbContext.Documents
+            .IgnoreQueryFilters(["SoftDeleteFilter"])
+            .Where(d => ids.Contains(d.Id) && d.SensitivityLabelId != null)
+            .Join(_dbContext.SensitivityLabelDefinitions, d => d.SensitivityLabelId, l => l.Id, (d, l) => new { d.Id, l.Rank })
+            .Where(x => x.Rank > effectiveClearance)
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        return [.. blocked];
     }
 
     private async Task<bool> AnyGroupIsTenantAdminAsync(HashSet<Guid> effectiveGroupIds, CancellationToken cancellationToken) =>
@@ -178,25 +271,64 @@ public class EffectiveRightsCalculator : IEffectiveRightsCalculator
     // chain is also soft-deleted, so the walk needs to see them too, or it throws for exactly the documents
     // a restore's own rights check needs to resolve — see ADR "Document delete/restore (recycle bin)
     // implementation".
-    private async Task<Guid> ResolveGoverningAclScopeAsync(Guid documentId, CancellationToken cancellationToken)
+    private async Task<Guid> ResolveGoverningAclScopeAsync(Guid documentId, CancellationToken cancellationToken) =>
+        (await ResolveGoverningAclScopesAsync([documentId], cancellationToken))[documentId];
+
+    /// <summary>The same walk for many documents at once — one query per tree LEVEL, not per document.</summary>
+    /// <remarks>
+    /// Every id still walking advances one parent per round, so a page of 50 siblings costs the same as one
+    /// document at the same depth. Deliberately NOT a recursive CTE: the model stays provider-agnostic across
+    /// PostgreSQL and SQLite, and raw recursive SQL is precisely what that rules out.
+    ///
+    /// Siblings converge on the same ancestor after one round, so the per-round id set collapses fast — which
+    /// is also why the caller can group the ACL read by the DISTINCT scopes rather than per row.
+    ///
+    /// Terminates without a cycle guard for the same reason the single-document walk did: Document cycles are
+    /// rejected at write time (ADR "Document parent integrity and sibling name uniqueness").
+    /// </remarks>
+    private async Task<Dictionary<Guid, Guid>> ResolveGoverningAclScopesAsync(
+        IReadOnlyCollection<Guid> documentIds, CancellationToken cancellationToken)
     {
-        var currentId = documentId;
+        var resolved = new Dictionary<Guid, Guid>(documentIds.Count);
 
-        while (true)
+        // original id -> where its walk currently stands.
+        var walking = documentIds.Distinct().ToDictionary(id => id, id => id);
+
+        while (walking.Count > 0)
         {
-            var current = await _dbContext.Documents
-                .IgnoreQueryFilters(["SoftDeleteFilter"])
-                .Where(d => d.Id == currentId)
-                .Select(d => new { d.ParentId, d.BreaksInheritance })
-                .SingleAsync(cancellationToken);
+            var level = walking.Values.Distinct().ToList();
 
-            if (current.BreaksInheritance || current.ParentId is not { } parentId)
+            var rows = await _dbContext.Documents
+                .IgnoreQueryFilters(["SoftDeleteFilter"])
+                .Where(d => level.Contains(d.Id))
+                .Select(d => new { d.Id, d.ParentId, d.BreaksInheritance })
+                .ToDictionaryAsync(d => d.Id, cancellationToken);
+
+            var next = new Dictionary<Guid, Guid>();
+
+            foreach (var (original, currentId) in walking)
             {
-                return currentId;
+                if (!rows.TryGetValue(currentId, out var current))
+                {
+                    // The single-document walk used SingleAsync here, which threw for a missing row; keep that.
+                    throw new InvalidOperationException(
+                        $"Document {currentId} was not found while resolving the governing ACL scope of {original}.");
+                }
+
+                if (current.BreaksInheritance || current.ParentId is not { } parentId)
+                {
+                    resolved[original] = currentId;
+                }
+                else
+                {
+                    next[original] = parentId;
+                }
             }
 
-            currentId = parentId;
+            walking = next;
         }
+
+        return resolved;
     }
 
     // See ADR "ServiceAccount effective rights computation", ADR "ServiceAccount Document-scope effective
@@ -204,8 +336,25 @@ public class EffectiveRightsCalculator : IEffectiveRightsCalculator
     // expansion (GroupMembership.UserId is a real FK to User, not polymorphic, so a ServiceAccount cannot
     // belong to a Group at all) — just Tenant/ServiceAccount active checks, then a direct
     // AclEntry.ServiceAccountId match against the governing document.
-    public async Task<EffectiveRights> GetEffectiveRightsForServiceAccountAsync(Guid serviceAccountId, Guid documentId, CancellationToken cancellationToken = default)
+    public async Task<EffectiveRights> GetEffectiveRightsForServiceAccountAsync(Guid serviceAccountId, Guid documentId, CancellationToken cancellationToken = default) =>
+        (await GetEffectiveRightsForManyForServiceAccountAsync(serviceAccountId, [documentId], cancellationToken))[documentId];
+
+    /// <summary>The page-at-once form, for the same reason as the User one — a listing gates per row (#858).</summary>
+    /// <remarks>
+    /// Simpler than the User path in exactly the two ways the single-document version already was: a
+    /// ServiceAccount cannot belong to a Group, so there is no expansion and no group-conferred bypass, and it
+    /// has no IsTenantAdmin equivalent, so clearance always applies and nothing short-circuits ahead of it.
+    /// That also means there is no per-document admin narrowing here, so every id walks.
+    /// </remarks>
+    public async Task<IReadOnlyDictionary<Guid, EffectiveRights>> GetEffectiveRightsForManyForServiceAccountAsync(
+        Guid serviceAccountId, IReadOnlyCollection<Guid> documentIds, CancellationToken cancellationToken = default)
     {
+        var ids = documentIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return new Dictionary<Guid, EffectiveRights>();
+        }
+
         var serviceAccount = await _dbContext.ServiceAccounts
             .Where(s => s.Id == serviceAccountId)
             .Select(s => new { s.TenantId, s.IsActive, s.ClearanceRank, s.CanAccessWithoutGrant })
@@ -218,28 +367,55 @@ public class EffectiveRightsCalculator : IEffectiveRightsCalculator
 
         if (tenant.Status == TenantStatus.Deactivated || !serviceAccount.IsActive)
         {
-            return NoRights;
+            return ids.ToDictionary(id => id, _ => NoRights);
         }
 
-        // No IsTenantAdmin-equivalent bypass exists for a ServiceAccount (ADR "ServiceAccount effective rights
-        // computation"), so clearance always applies (when enforced). Its clearance is just its own rank — a
-        // ServiceAccount can't belong to a group.
-        if (tenant.EnforceClearance && await IsBlockedByClearanceAsync(documentId, serviceAccount.ClearanceRank, cancellationToken))
+        var results = new Dictionary<Guid, EffectiveRights>(ids.Count);
+        var remaining = ids;
+
+        if (tenant.EnforceClearance)
         {
-            return NoRights;
+            var blocked = await BlockedByClearanceAsync(remaining, serviceAccount.ClearanceRank, cancellationToken);
+            if (blocked.Count > 0)
+            {
+                foreach (var id in blocked)
+                {
+                    results[id] = NoRights;
+                }
+
+                remaining = [.. remaining.Where(id => !blocked.Contains(id))];
+            }
         }
 
-        var governingDocumentId = await ResolveGoverningAclScopeAsync(documentId, cancellationToken);
+        if (remaining.Count == 0)
+        {
+            return results;
+        }
 
-        var matchingEntries = await GetMatchingEntriesForServiceAccountAsync(serviceAccountId, governingDocumentId, cancellationToken);
+        var governingScopes = await ResolveGoverningAclScopesAsync(remaining, cancellationToken);
+        var distinctScopes = governingScopes.Values.Distinct().ToList();
 
-        var rights = BuildEffectiveRights(matchingEntries);
+        var matchingEntries = await _dbContext.AclEntries
+            .Where(a => distinctScopes.Contains(a.DocumentId) && a.ServiceAccountId == serviceAccountId)
+            .ToListAsync(cancellationToken);
 
-        // CanAccessWithoutGrant (ADR 0670), same shape as the User path — no group union, because a
-        // ServiceAccount can't belong to a group, so its own column is the whole answer.
-        return rights.CanSee || !serviceAccount.CanAccessWithoutGrant
-            ? rights
-            : rights with { CanSee = true, CanReadContent = true };
+        var entriesByScope = matchingEntries
+            .GroupBy(a => a.DocumentId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        foreach (var id in remaining)
+        {
+            var rights = BuildEffectiveRights(
+                entriesByScope.TryGetValue(governingScopes[id], out var entries) ? entries : []);
+
+            // CanAccessWithoutGrant (ADR 0670): its own column is the whole answer — no group union, because a
+            // ServiceAccount cannot belong to a group.
+            results[id] = rights.CanSee || !serviceAccount.CanAccessWithoutGrant
+                ? rights
+                : rights with { CanSee = true, CanReadContent = true };
+        }
+
+        return results;
     }
 
     private async Task<List<AclEntry>> GetMatchingEntriesForServiceAccountAsync(

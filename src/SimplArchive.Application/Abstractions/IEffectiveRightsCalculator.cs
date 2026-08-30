@@ -19,6 +19,20 @@ public interface IEffectiveRightsCalculator
     // effective rights computation", ADR "ServiceAccount Document-scope effective rights".
     Task<EffectiveRights> GetEffectiveRightsForServiceAccountAsync(Guid serviceAccountId, Guid documentId, CancellationToken cancellationToken = default);
 
+    // The page-at-once forms of the two above (#858). A listing has to answer "may this caller delete/rename/
+    // move THIS row?" per row to gate the destructive affordances honestly (ADR 0543), and the per-document
+    // methods cost ~5 constant queries plus one per ancestor level — several hundred round trips for a 50-row
+    // page, on the hottest read in the app. These collapse the per-principal work to once and resolve the
+    // per-document parts set-based, so a page costs about the same as a single document at the same depth.
+    //
+    // Returns one entry per DISTINCT id; the single-document methods now delegate here rather than keeping a
+    // second implementation of the same rules, so the two cannot drift.
+    Task<IReadOnlyDictionary<Guid, EffectiveRights>> GetEffectiveRightsForManyAsync(
+        Guid userId, IReadOnlyCollection<Guid> documentIds, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyDictionary<Guid, EffectiveRights>> GetEffectiveRightsForManyForServiceAccountAsync(
+        Guid serviceAccountId, IReadOnlyCollection<Guid> documentIds, CancellationToken cancellationToken = default);
+
     // Indexed-ACL support (ADR "Indexed ACL in search"). The prefixed principal tokens (u:/g:/s:) granted
     // CanSee on a document's *governing* ACL scope — indexed as the document's allowedPrincipals so search
     // can pre-filter by visibility instead of post-filtering each hit.

@@ -52,7 +52,8 @@ public class RepositoriesController : ControllerBase
         Documents.DocumentPurger purger,
         Documents.RepositoryImporter importer,
         Documents.IClearanceScopeResolver clearanceScope,
-        SimplArchive.Infrastructure.Masks.IMaskContainmentProvider containment)
+        SimplArchive.Infrastructure.Masks.IMaskContainmentProvider containment,
+        Documents.DocumentAccessService access)
     {
         _dbContext = dbContext;
         _clearanceScope = clearanceScope;
@@ -66,6 +67,7 @@ public class RepositoriesController : ControllerBase
         _purger = purger;
         _importer = importer;
         _containment = containment;
+        _access = access;
     }
 
     private readonly IDocumentIndexQueue _queue;
@@ -74,8 +76,36 @@ public class RepositoriesController : ControllerBase
     private readonly Documents.DocumentPurger _purger;
     private readonly Documents.RepositoryImporter _importer;
 
-    public class RepositoryResource : HypermediaResource
+    // The shared caller-access service (ADR 0571). This controller still has its own private
+    // GetCallerRightsAsync below — one of the copies the extraction set out to remove and this one did not
+    // reach — so the batch is taken from the shared service rather than growing a SECOND local copy beside it.
+    private readonly Documents.DocumentAccessService _access;
+
+    public class RepositoryResource : HypermediaResource, Hypermedia.ICarriesRowCapabilities
     {
+        /// <summary>May the caller DELETE this repository? (#858)</summary>
+        /// <remarks>
+        /// A tree ROOT is where the destructive gap was most visible: both clients offered Delete, Rename and
+        /// Move on a repository's context menu with no gate at all. Flags rather than rels for ADR 0719's
+        /// reason — DELETE and PUT are at the item's own address.
+        /// </remarks>
+        public bool CanDelete { get; set; }
+
+        /// <summary>May the caller rename this repository or change its index data / contents order? (#858)</summary>
+        public bool CanEditIndexData { get; set; }
+
+        /// <summary>May this repository be moved (i.e. DEMOTED under a folder)? (#858)</summary>
+        /// <remarks>
+        /// For a root this is the demotion case, which needs the CanManageRepositories system right on top of
+        /// CanMove — so it is emphatically not "has a parent". The row reports CanMove alone; the system right
+        /// is already in the client's hands from whoami, and the server enforces both.
+        /// </remarks>
+        public bool CanMove { get; set; }
+
+        /// <summary>May the caller manage this row's permissions? (#858)</summary>
+        public bool CanManagePermissions { get; set; }
+
+
         public Guid Id { get; set; }
 
         public string Name { get; set; } = "";
@@ -159,6 +189,16 @@ public class RepositoriesController : ControllerBase
                 _dbContext.MaskVersions.Where(mv => mv.Id == d.MaskVersionId).Select(mv => (Guid?)mv.MaskId).FirstOrDefault()))
             .ToListAsync(cancellationToken);
 
+        // Every candidate's rights in ONE batch (#858), replacing a CanSeeAsync per row.
+        //
+        // This endpoint is the per-item-ACL-filtered exception (ADR "Pagination for list endpoints"), and the
+        // candidate set above is deliberately UNBOUNDED — it has to walk until the page fills, because whether
+        // a row is visible cannot be expressed in the query. So the old shape cost one rights resolution per
+        // root document in the TENANT for a caller who can see few of them, each ~5 queries plus one per
+        // ancestor level. Batching makes the whole walk cost about what a single document did, and it is what
+        // makes the three capability flags below free rather than a reason not to emit them.
+        var candidateRights = await _access.GetCallerRightsForManyAsync([.. candidates.Select(c => c.Id)], cancellationToken);
+
         var visible = new List<RepositoryResource>();
         DateTimeOffset? lastExaminedCreatedAt = null;
         Guid? lastExaminedId = null;
@@ -168,7 +208,7 @@ public class RepositoriesController : ControllerBase
         {
             if (visible.Count >= pageSize)
             {
-                if (await CanSeeAsync(candidate.Id, cancellationToken))
+                if (candidateRights[candidate.Id].CanSee)
                 {
                     hasMore = true;
                     break;
@@ -180,7 +220,7 @@ public class RepositoriesController : ControllerBase
                 continue;
             }
 
-            if (await CanSeeAsync(candidate.Id, cancellationToken))
+            if (candidateRights[candidate.Id].CanSee)
             {
                 // "New subfolder" on a repository root (#634). It belongs on the ROW because that is where both
                 // clients' top-level tree nodes get their links (ADR 0555/0557) — a rel that lived only on the
@@ -190,16 +230,18 @@ public class RepositoriesController : ControllerBase
                 //
                 // parentIsPersonalRoot is false by construction: this listing excludes personal repositories
                 // (see the query above), and PersonalRepositoryController deliberately withholds the rel.
-                // Mask-only, as on the children listing: this endpoint already resolves CanSee per row, and
-                // per-row rights beyond that is a query per row; a caller without CanCreateSubItems still meets
-                // a 403.
+                // Mask-only, as on the children listing: a caller without CanCreateSubItems still meets a 403.
+                // (This used to add "per-row rights beyond that is a query per row" — no longer true, and it was
+                // the objection that kept the destructive affordances ungated. See the batch above.)
                 //
                 // A repository root is where the tree starts, so its row also carries the address of what a
                 // client does next — list its children. Without it the client has an id and no address and
                 // composes the path (ADR 0543, issue #416); fetching `self` first would cost a round trip
                 // per row. Otherwise unconditional rels only, as on the children listing: checkout/external-
-                // links/acl-inheritance depend on per-row rights a listing does not compute, and a listing is
-                // the wrong place to answer "may I?" — so their absence here does NOT mean "not available".
+                // links/acl-inheritance are answered by the document resource, so their absence here does NOT
+                // mean "not available". The three rights a destructive menu needs ARE answered, as the
+                // CanDelete/CanEditIndexData/CanMove flags — a flag is a yes/no this listing can now afford,
+                // where a rel is an address a row should not multiply (#858).
                 var rowLinks = new List<Link>
                 {
                         new Link("self", Url.Action(nameof(Get), new { repositoryId = candidate.Id })!, "GET"),
@@ -226,10 +268,16 @@ public class RepositoriesController : ControllerBase
                     rowLinks.Add(new Link("create-child", $"/api/documents/{candidate.Id}/children", "POST"));
                 }
 
+                var rights = candidateRights[candidate.Id];
+
                 visible.Add(new RepositoryResource
                 {
                     Id = candidate.Id,
                     Name = candidate.Name,
+                    CanDelete = rights.CanDelete,
+                    CanEditIndexData = rights.CanEditIndexData,
+                    CanMove = rights.CanMove,
+                    CanManagePermissions = rights.CanManagePermissions,
                     HasChildren = candidate.HasChildren,
                     HasVersions = candidate.HasVersions,
                     HasSubfolders = candidate.HasSubfolders,
@@ -451,8 +499,33 @@ public class RepositoriesController : ControllerBase
         return NoContent();
     }
 
-    public class DocumentSummaryResource : HypermediaResource
+    public class DocumentSummaryResource : HypermediaResource, Hypermedia.ICarriesRowCapabilities
     {
+        /// <summary>May the caller DELETE this row? (#858)</summary>
+        /// <remarks>
+        /// A flag, not a rel: <c>DELETE</c> is at this item's own address, so a <c>delete</c> rel beside
+        /// <c>self</c> would be the same URL under a second name (ADR 0719). Absence means the same as a
+        /// missing rel — not available to you, here, now (ADR 0543) — so a client disables Delete rather than
+        /// offering it and handling a 403.
+        /// </remarks>
+        public bool CanDelete { get; set; }
+
+        /// <summary>May the caller rename this row, or change its index data or contents order? (#858)</summary>
+        /// <remarks>Named for the RIGHT the <c>PUT</c> enforces, so the gate and the refusal cannot drift.</remarks>
+        public bool CanEditIndexData { get; set; }
+
+        /// <summary>May this item be moved? (#858)</summary>
+        /// <remarks>
+        /// Says the ITEM may be moved, never that a given move will succeed: a move also needs
+        /// <c>CanCreateSubItems</c> on the TARGET, which no row can answer before a target is chosen — the
+        /// picker owns that half (ADR 0689).
+        /// </remarks>
+        public bool CanMove { get; set; }
+
+        /// <summary>May the caller manage this row's permissions? (#858)</summary>
+        public bool CanManagePermissions { get; set; }
+
+
         public Guid Id { get; set; }
 
         public string Name { get; set; } = "";

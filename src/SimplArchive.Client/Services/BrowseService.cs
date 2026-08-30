@@ -108,7 +108,9 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
             order ??= page?.ContentsSortOrder;
             foreach (var c in page?.Children ?? [])
             {
-                nodes.Add(new BrowseNode(c.Id, c.Name, c.HasChildren, c.HasVersions, c.HasSubfolders, c.HasReferences, RepositoryId: repositoryId, FileExtension: c.FileExtension, OnLegalHold: c.OnLegalHold,
+                nodes.Add(new BrowseNode(c.Id, c.Name, c.HasChildren, c.HasVersions, c.HasSubfolders, c.HasReferences, RepositoryId: repositoryId,
+                CanDelete: c.CanDelete, CanEditIndexData: c.CanEditIndexData, CanMove: c.CanMove, CanManagePermissions: c.CanManagePermissions,
+                FileExtension: c.FileExtension, OnLegalHold: c.OnLegalHold,
                     CheckedOut: c.CheckedOut, CheckedOutByMe: c.CheckedOutByMe, CheckedOutByName: c.CheckedOutByName,
                     DocumentType: c.DocumentType, DocumentDate: c.DocumentDate, SizeBytes: c.SizeBytes, Tags: c.Tags, CreatedBy: c.CreatedBy, SensitivityLabelName: c.SensitivityLabelName, SensitivityLabelColor: c.SensitivityLabelColor, VersionCount: c.VersionCount, VersionCreatedAt: c.VersionCreatedAt,
                     ChatHref: Links.Href(c.Links, "chat"),

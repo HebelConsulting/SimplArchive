@@ -91,6 +91,10 @@ public sealed class DetailLoader(
             detail.SensitivityColor = document?.SensitivityLabelColor;
             detail.SensitivityWatermark = document?.SensitivityWatermark ?? false;
             detail.CanManagePermissions = document?.CanManagePermissions ?? false;
+            // Cleared to FALSE with the rest when the subject changes (ADR 0559): during a load the honest
+            // answer is "not available to you, here, now", and inheriting the previous document's answer is a
+            // claim about the wrong object.
+            detail.CanEditIndexData = document?.CanEditIndexData ?? false;
             detail.BreaksInheritance = document?.BreaksInheritance ?? false;
 
             // A FOLDER's own contents order, which now travels with its details — the pane for a child folder is

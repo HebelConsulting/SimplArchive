@@ -3264,6 +3264,9 @@
   <data name="MaRightManagePermissions" xml:space="preserve">
     <value>Berechtigungen verwalten</value>
   </data>
+  <data name="MoveNotPermitted" xml:space="preserve">
+    <value>Sie haben keine Berechtigung, dieses Element zu verschieben.</value>
+  </data>
   <data name="MaInsufficientRights" xml:space="preserve">
     <value>Sie können nur Berechtigungen erteilen, die Sie selbst besitzen.</value>
   </data>

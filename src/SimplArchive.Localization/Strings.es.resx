@@ -3264,6 +3264,9 @@
   <data name="MaRightManagePermissions" xml:space="preserve">
     <value>Gestionar permisos</value>
   </data>
+  <data name="MoveNotPermitted" xml:space="preserve">
+    <value>No tiene permiso para mover este elemento.</value>
+  </data>
   <data name="MaInsufficientRights" xml:space="preserve">
     <value>Solo puedes conceder permisos que tú mismo posees.</value>
   </data>

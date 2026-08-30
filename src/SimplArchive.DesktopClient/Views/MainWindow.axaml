@@ -178,20 +178,20 @@
                                         <MenuItem.Icon><i:Icon Value="mdi-upload-outline" /></MenuItem.Icon>
                                     </MenuItem>
                                     <Separator />
-                                    <MenuItem Header="{loc:Tr CtxRename}" Click="OnTreeRename">
+                                    <MenuItem Header="{loc:Tr CtxRename}" Click="OnTreeRename" IsVisible="{Binding TreeContextCanEditIndexData}">
                                         <MenuItem.Icon><i:Icon Value="mdi-rename-box" /></MenuItem.Icon>
                                     </MenuItem>
-                                    <MenuItem Header="{loc:Tr CtxMoveTo}" Click="OnTreeMove">
+                                    <MenuItem Header="{loc:Tr CtxMoveTo}" Click="OnTreeMove" IsVisible="{Binding TreeContextCanMove}">
                                         <MenuItem.Icon><i:Icon Value="mdi-file-move-outline" /></MenuItem.Icon>
                                     </MenuItem>
-                                    <MenuItem Header="{loc:Tr FolderSortLabel}" Click="OnTreeFolderSort">
+                                    <MenuItem Header="{loc:Tr FolderSortLabel}" Click="OnTreeFolderSort" IsVisible="{Binding TreeContextCanEditIndexData}">
                                         <MenuItem.Icon><i:Icon Value="mdi-sort" /></MenuItem.Icon>
                                     </MenuItem>
-                                    <MenuItem Header="{loc:Tr UgDelete}" Click="OnTreeDelete">
+                                    <MenuItem Header="{loc:Tr UgDelete}" Click="OnTreeDelete" IsVisible="{Binding TreeContextCanDelete}">
                                         <MenuItem.Icon><i:Icon Value="mdi-delete" /></MenuItem.Icon>
                                     </MenuItem>
                                     <Separator />
-                                    <MenuItem Header="{loc:Tr MaManageAccess}" Click="OnTreeManageAccess">
+                                    <MenuItem Header="{loc:Tr MaManageAccess}" Click="OnTreeManageAccess" IsVisible="{Binding TreeContextCanManageAccess}">
                                         <MenuItem.Icon><i:Icon Value="mdi-shield-account-outline" /></MenuItem.Icon>
                                     </MenuItem>
                                     <MenuItem Header="{loc:Tr CtxPlaceLegalHold}" Click="OnTreePlaceLegalHold" IsVisible="{Binding CanLegalHold}">
@@ -365,10 +365,10 @@
                                         <MenuItem.Icon><i:Icon Value="mdi-compare" /></MenuItem.Icon>
                                     </MenuItem>
                                     <Separator />
-                                    <MenuItem Header="{loc:Tr CtxRename}" Click="OnRename">
+                                    <MenuItem Header="{loc:Tr CtxRename}" Click="OnRename" IsVisible="{Binding CanRenameSelected}">
                                         <MenuItem.Icon><i:Icon Value="mdi-rename-box" /></MenuItem.Icon>
                                     </MenuItem>
-                                    <MenuItem Header="{loc:Tr UgDelete}" Click="OnDelete">
+                                    <MenuItem Header="{loc:Tr UgDelete}" Click="OnDelete" IsVisible="{Binding CanDeleteSelected}">
                                         <MenuItem.Icon><i:Icon Value="mdi-delete" /></MenuItem.Icon>
                                     </MenuItem>
                                     <Separator IsVisible="{Binding CanManageAccess}" />

@@ -61,6 +61,17 @@ public sealed class NodeViewModel
 
     // True when directly under an active legal hold (ADR "Legal hold & retention enforcement") — the row shows
     // a lock and a "Place legal hold" / "Remove from hold" is offered.
+    // What the SERVER says this caller may do to this row (#858) — the Rename and Delete gates. False by
+    // default, which is the safe direction: absence means "not available to you, here, now" (ADR 0543), and a
+    // synthetic row (an archive entry, the archive back-link, demo data) has nothing to rename or delete.
+    public bool CanDelete { get; init; }
+
+    public bool CanEditIndexData { get; init; }
+
+    public bool CanMove { get; init; }
+
+    public bool CanManagePermissions { get; init; }
+
     public bool OnLegalHold { get; init; }
 
     // Check-out state (ADR "Document check-out / check-in"): CheckedOut drives a lock glyph, CheckedOutByMe

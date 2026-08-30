@@ -132,6 +132,31 @@ public class DocumentsController : ControllerBase
         // gates the clients' "Manage access…" affordance without a trial 403.
         public bool CanManagePermissions { get; set; }
 
+        /// <summary>
+        /// Whether the caller may DELETE this item — the right the delete endpoint itself enforces.
+        /// </summary>
+        /// <remarks>
+        /// A flag rather than a rel, and that is ADR 0719 deciding rather than taste: `DELETE` lives at this
+        /// resource's own address, so a `delete` rel beside `self` would be the same URL under a second name
+        /// with the method already saying which action it is.
+        ///
+        /// It exists because the destructive affordances were the half of ADR 0543 nobody converted (#858): the
+        /// create path is gated on `create-child` while Delete was offered to anyone who could SEE a row, and
+        /// answered with a 403 the menu had promised would not come.
+        /// </remarks>
+        public bool CanDelete { get; set; }
+
+        /// <summary>
+        /// Whether the caller may change this item's name, index data and — on a folder — its contents order:
+        /// `CanEditIndexData`, the right the `PUT` on this address enforces.
+        /// </summary>
+        /// <remarks>
+        /// Named after the RIGHT rather than after an affordance, so a client gate and the server's refusal
+        /// cannot drift apart while both still look correct. Also a flag for ADR 0719's reason: that `PUT` is
+        /// this resource's own address.
+        /// </remarks>
+        public bool CanEditIndexData { get; set; }
+
         // True when this item ignores its ancestors' ACL and uses only its own grants (ADR "Document ACL
         // inheritance resolution") — the read-only inheritance indicator in the Manage-access dialog.
         public bool BreaksInheritance { get; set; }
@@ -234,9 +259,8 @@ public class DocumentsController : ControllerBase
             new("chat", $"/api/documents/{documentId}/chat", "GET"),
             new("references", $"/api/documents/{documentId}/references", "GET"),
             new("referencing-folders", Url.Action(nameof(DocumentChildrenController.ListReferencingFolders), "DocumentChildren", new { documentId })!, "GET"),
-            new("move", Url.Action(nameof(Move), new { documentId })!, "PUT"),
-            // This subtree as a downloadable archive (ADR "Repository export"). STATIC, like `move` and a
-            // version's `restore` beside it: the gate is the CanExport SYSTEM right, which a client already
+            // This subtree as a downloadable archive (ADR "Repository export"). STATIC, like a version's
+            // `restore`: the gate is the CanExport SYSTEM right, which a client already
             // holds from /diagnostics/whoami and uses to draw the affordance — so making the rel conditional
             // would buy nothing the client doesn't know and would put two system-rights lookups on the
             // hottest read in the app. The conditional rels here are the ones a client CANNOT work out for
@@ -292,6 +316,27 @@ public class DocumentsController : ControllerBase
         if (document.ParentId is not null && rights.CanManagePermissions)
         {
             links.Add(new Link("acl-inheritance", $"/api/documents/{documentId}/acl-entries/inheritance", "PUT"));
+        }
+
+        // Re-filing this item. The rel is not new — it was emitted UNCONDITIONALLY, which is why both clients
+        // offered "Move to…" on documents the server would refuse to move (#858). Its presence is now the
+        // answer, which is what ADR 0543 asks of a rel.
+        //
+        // A rel and not a flag, unlike CanDelete and CanEditIndexData beside it: this endpoint has an address
+        // of its own, so ADR 0719's rule points the other way here.
+        //
+        // The condition mirrors the endpoint, INCLUDING the part that is easy to miss: a root has no parent, so
+        // moving one demotes a repository and needs CanManageRepositories on top of CanMove. Gating on
+        // `ParentId is not null` alone would have hidden a legitimate action from the people entitled to it.
+        //
+        // What its presence promises is `CanMove` on THIS item, which is only half of what the endpoint
+        // enforces: a move also needs CanCreateSubItems on the TARGET, and no rel can answer that before a
+        // target is chosen — the picker owns that half (ADR 0689). So the rel means "this item may be moved",
+        // never "this move will succeed".
+        if (rights.CanMove
+            && (document.ParentId is not null || await _access.HasManageRepositoriesRightAsync(cancellationToken)))
+        {
+            links.Add(new Link("move", Url.Action(nameof(Move), new { documentId })!, "PUT"));
         }
 
         // Editable metadata, advertised only where the edit would actually be accepted (ADR 0554). Each gate
@@ -425,6 +470,8 @@ public class DocumentsController : ControllerBase
             CheckedOut = checkedOut,
             Retention = await BuildRetentionInfoAsync(documentId, cancellationToken),
             CanManagePermissions = rights.CanManagePermissions,
+            CanDelete = rights.CanDelete,
+            CanEditIndexData = rights.CanEditIndexData,
             BreaksInheritance = document.BreaksInheritance,
             ContentsSortOrder = document.ContentsSortOrder,
             Links = links,
