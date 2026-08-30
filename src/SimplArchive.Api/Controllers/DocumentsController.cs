@@ -90,7 +90,8 @@ public class DocumentsController : ControllerBase
         return new RetentionInfo
         {
             RetentionYears = row.RetentionYears,
-            DispositionDate = anchor.AddYears(row.RetentionYears).ToString("yyyy-MM-dd"),
+            // The shared rule, not a third copy of it (#871).
+            DispositionDate = Documents.RetentionSchedule.DispositionDateOf(anchor, row.RetentionYears).ToString("yyyy-MM-dd"),
             SuspendedByHold = await _legalHold.IsFrozenAsync(documentId, cancellationToken),
         };
     }

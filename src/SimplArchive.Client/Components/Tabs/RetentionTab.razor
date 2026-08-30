@@ -27,7 +27,7 @@
                                title="@Strings.Get("RetExtend")" aria-label="@Strings.Get("RetExtend")">
                         <MudIcon Icon="@Icons.Material.Filled.MoreTime" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RetExtend")</span>
                     </MudButton>
-                    <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(_retSelected is not { Overdue: true, SuspendedByHold: false })"
+                    <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(_retSelected?.Href("dispose") is null)"
                                OnClick="@(() => DisposeRetentionAsync(_retSelected!))"
                                title="@Strings.Get("RetDispose")" aria-label="@Strings.Get("RetDispose")">
                         <MudIcon Icon="@Icons.Material.Filled.AutoDelete" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RetDispose")</span>
@@ -80,10 +80,15 @@
                                 }
                             </MudTd>
                             @* What can be done to THIS row lives in its ⋮ menu — the toolbar's twins act on
-                               the selection (#521's split). Dispose only where the server offered it. *@
+                               the selection (#521's split). Dispose only where the server offered it — which
+                               this now actually checks. It used to say this while gating on `Overdue &&
+                               !SuspendedByHold`, a re-derivation missing the server's RequireDispositionReview
+                               condition, so the rel check happened only at DisposeRetentionAsync — after the
+                               confirmation dialog — and the user confirmed a disposition that silently did
+                               nothing (#870). *@
                             <MudTd Style="text-align:right;" @onclick:stopPropagation="true">
                                 <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomLeft">
-                                    @if (row.Overdue && !row.SuspendedByHold)
+                                    @if (row.Href("dispose") is not null)
                                     {
                                         <MudMenuItem Icon="@Icons.Material.Filled.AutoDelete" OnClick="() => DisposeRetentionAsync(row)">@Strings.Get("RetDispose")</MudMenuItem>
                                     }
@@ -151,7 +156,14 @@
             return;
         }
 
-        if (row.Href("dispose") is not { } disposeHref) { return; }
+        // Unreachable now that both entry points gate on this rel — kept as a guard, not as the gate. If it
+        // ever fires, the affordance was rendered against a stale row, which is a bug here rather than a
+        // condition to swallow: say so rather than returning silently (#863).
+        if (row.Href("dispose") is not { } disposeHref)
+        {
+            Snackbar.Add(Strings.Get("StErrDispose"), Severity.Warning);
+            return;
+        }
 
         using var resp = await Http.PostAsync(disposeHref, null);
         if (resp.IsSuccessStatusCode)

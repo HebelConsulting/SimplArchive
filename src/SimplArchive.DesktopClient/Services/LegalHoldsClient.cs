@@ -18,9 +18,16 @@ public sealed class LegalHoldsClient(ApiCore core)
         hold.Href(rel)
         ?? throw new InvalidOperationException($"The legal hold '{hold.Name}' advertised no '{rel}' rel — a RELEASED hold offers neither release nor add-item (ADR 0543/0555).");
 
+    // ApiActionException, deliberately, and not InvalidOperationException (#870): the retention commands catch
+    // the former and put it on the status line, while the latter escapes to the global crash guard — so a
+    // missing rel used to give the user a CRASH DIALOG for a records action.
+    //
+    // The gate makes this unreachable (RetentionRowViewModel.CanDispose now reads the rel), so this is the floor
+    // beneath the gate rather than the gate itself. A floor is still worth having: the row could be stale, and
+    // "this document can no longer be disposed" is a sentence, whereas a crash dialog is an incident.
     private static string RequireHref(RetentionItemInfo item, string rel) =>
         item.Href(rel)
-        ?? throw new InvalidOperationException($"'{item.DocumentName}' advertised no '{rel}' rel — a hold or a required review withholds it (ADR 0543/0555).");
+        ?? throw new ApiActionException($"'{item.DocumentName}' can no longer be {(rel == "dispose" ? "disposed" : "extended")} — a legal hold or a required review withholds it (ADR 0543/0555).");
     // ---- Legal holds (ADR "Legal hold & retention enforcement") -------------------------------------
 
     // A hold, carrying the addresses its own row advertised (ADR 0543/0555): `self`, plus `release`/`add-item`

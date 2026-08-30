@@ -217,7 +217,13 @@ public sealed class CheckoutClient(ApiCore core)
 
     private static string RequireHref(CheckoutItem checkout, string rel) =>
         checkout.Href(rel)
-        ?? throw new InvalidOperationException($"The check-out on '{checkout.Name}' advertised no '{rel}' rel — `compare` is absent with no stash to diff (ADR 0543/0555).");
+        ?? throw new InvalidOperationException($"The check-out on '{checkout.Name}' advertised no '{rel}' rel (ADR 0543/0555).");
+    // The message used to add "`compare` is absent with no stash to diff", which was false in two ways (#871):
+    // this helper is GENERIC over every rel, and `compare` is emitted unconditionally because the endpoint always
+    // answers — 200 with `Available: false` when there is no stash. That is deliberate: a machine-readable "there
+    // is nothing to diff" is more useful than an absent rel, and withholding it would duplicate `Available` as a
+    // second signal for one fact. A hard-coded claim about one rel inside a helper shared by all of them is how a
+    // comment ends up contradicting the server it describes.
 
     public async Task<VersionComparison> GetCheckoutComparisonAsync(CheckoutItem checkout, CancellationToken cancellationToken = default)
     {

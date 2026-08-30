@@ -16,8 +16,18 @@ public sealed class RetentionRowViewModel(Guid documentId, string documentName, 
     public bool Overdue { get; } = overdue;
     public bool SuspendedByHold { get; } = suspendedByHold;
 
-    // Disposable now = past its (override-adjusted) disposition date and not legal-held.
-    public bool CanDispose => Overdue && !SuspendedByHold;
+    /// <summary>Disposable now — as the SERVER says, not as this row recomputes it.</summary>
+    /// <remarks>
+    /// This was <c>Overdue &amp;&amp; !SuspendedByHold</c>, a re-derivation of the server's rule that omitted its
+    /// third condition: the tenant-wide <c>RequireDispositionReview</c> policy, for which the server
+    /// deliberately withholds <c>dispose</c> (ADR 0385/0543). So with review switched on, an overdue un-held row
+    /// showed an ENABLED Dispose whose click reached <c>RequireHref</c> and threw
+    /// <c>InvalidOperationException</c> — not the <c>ApiActionException</c> the command catches, so it escaped
+    /// to the crash guard and the user got a crash dialog for a records action (#870).
+    ///
+    /// The row already carries <c>Item</c> whole precisely so its actions can follow the server's answer.
+    /// </remarks>
+    public bool CanDispose => Item.Href("dispose") is not null;
 
     public string Status => SuspendedByHold ? "Suspended (legal hold)" : Overdue ? "Due for disposition" : "Scheduled";
 }

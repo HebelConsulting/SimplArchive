@@ -7,7 +7,7 @@
              x:DataType="vm:MainWindowViewModel">
     <!-- Retention ribbon (#530, tranche 2). Single-select by decision: disposition is a records call made
          document-by-document, and the server offers no bulk endpoints here — so the ribbon acts on THE
-         selected row, greyed when there is none or when the server did not offer dispose for it (the row menu
+         selected row, greyed when there is none or when the server did not offer dispose for it — BOTH halves now implemented (#870) (the row menu
          hides the same cases). Dispose sits in its own group: it is the destructive one, and it would
          otherwise sit beside the button that keeps the document longer. -->
     <Border Classes="ribbon" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">

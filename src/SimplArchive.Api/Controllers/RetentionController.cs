@@ -112,18 +112,16 @@ public class RetentionController : ControllerBase
         {
             var currentVersion = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, candidate.Id, candidate.CurrentVersionId, cancellationToken);
             var anchor = currentVersion?.DocumentDate ?? DateOnly.FromDateTime(candidate.CreatedAt.UtcDateTime);
-            var dispositionDate = anchor.AddYears(candidate.RetentionYears);
-
-            // A manager's extension pushes the effective disposition date out — that's what "overdue" compares.
-            var effectiveDate = candidate.RetentionOverrideUntil is { } o && o > dispositionDate ? o : dispositionDate;
 
             items.Add(new RetentionItemResource
             {
                 DocumentId = candidate.Id,
                 DocumentName = candidate.Name,
                 RetentionYears = candidate.RetentionYears,
-                DispositionDate = dispositionDate.ToString("yyyy-MM-dd"),
-                Overdue = effectiveDate <= today,
+                DispositionDate = Documents.RetentionSchedule.DispositionDateOf(anchor, candidate.RetentionYears).ToString("yyyy-MM-dd"),
+                // The SAME call the dispose endpoint's eligibility check makes (#871) — not a second computation
+                // that happens to agree, because the `dispose` rel below promises the endpoint will accept.
+                Overdue = Documents.RetentionSchedule.IsDue(anchor, candidate.RetentionYears, candidate.RetentionOverrideUntil, today),
                 SuspendedByHold = await _legalHold.IsFrozenAsync(candidate.Id, cancellationToken),
                 RetentionOverrideUntil = candidate.RetentionOverrideUntil?.ToString("yyyy-MM-dd"),
             });
@@ -135,18 +133,28 @@ public class RetentionController : ControllerBase
         var requiresReview = _currentTenantAccessor.TenantId is { } tenantId
             && await _dbContext.Tenants.Where(t => t.Id == tenantId).Select(t => t.RequireDispositionReview).FirstOrDefaultAsync(cancellationToken);
 
-        // Each due document carries the two things that can be done to it. Dispose is only offered where the
-        // tenant does NOT require a review first — an affordance whose outcome is already decided is exactly
-        // what a missing rel is for (ADR 0543, issue #416).
+        // `dispose` is offered exactly where the endpoint will accept it, which takes THREE conditions and used
+        // to take one (#871). The tenant-wide review policy was the only one applied, so the rel appeared on
+        // rows that are not yet due and on rows frozen by a legal hold — and a client that trusted it, as ADR
+        // 0543 says a client should, was told an action would work that the endpoint refuses.
+        //
+        // The per-row halves mirror `IsEligibleForDispositionAsync` and the legal-hold check in Dispose, via the
+        // shared rule rather than a second computation (RetentionSchedule) — the rel is a PROMISE, and a promise
+        // backed by a copy is only as good as the copies agreeing.
+        //
+        // `extend` stays unconditional: extending is what a not-yet-due or held document is FOR, and it is the
+        // one action review-before-disposition never blocks.
         foreach (var item in items)
         {
-            item.Links = requiresReview
-                ? [new Link("extend", $"/api/retention/{item.DocumentId}/extend", "POST")]
-                :
+            var mayDispose = !requiresReview && item.Overdue && !item.SuspendedByHold;
+
+            item.Links = mayDispose
+                ?
                 [
                     new Link("dispose", $"/api/retention/{item.DocumentId}/dispose", "POST"),
                     new Link("extend", $"/api/retention/{item.DocumentId}/extend", "POST"),
-                ];
+                ]
+                : [new Link("extend", $"/api/retention/{item.DocumentId}/extend", "POST")];
         }
 
         return Ok(new RetentionScheduleResource
@@ -258,10 +266,9 @@ public class RetentionController : ControllerBase
 
         var currentVersion = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, document.Id, document.CurrentVersionId, cancellationToken);
         var anchor = currentVersion?.DocumentDate ?? DateOnly.FromDateTime(document.CreatedAt.UtcDateTime);
-        var dispositionDate = anchor.AddYears(years);
-        var effectiveDate = document.RetentionOverrideUntil is { } o && o > dispositionDate ? o : dispositionDate;
 
-        return effectiveDate <= DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime);
+        // The same call the schedule makes when it decides whether to advertise `dispose` (#871).
+        return Documents.RetentionSchedule.IsDue(anchor, years, document.RetentionOverrideUntil, Documents.RetentionSchedule.Today());
     }
 
     private async Task<bool> CanManageClassificationAsync(CancellationToken cancellationToken)
