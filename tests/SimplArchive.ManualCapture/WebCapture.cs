@@ -735,6 +735,13 @@ public static partial class WebCapture
         await page.Mouse.MoveAsync(0, 0);
         // Defensive: reset any horizontal scroll so every shot frames the workbench from the left.
         await page.EvaluateAsync("() => { window.scrollTo(0, 0); document.querySelectorAll('.wb, [data-pane]').forEach(e => e.scrollLeft = 0); }");
+        // A transient toast is the same class of race as focus and hover above, and it is worse: it does not
+        // shift a few pixels, it COVERS the thing being documented. The v0.11.0 cut regenerated
+        // web-tablet-portrait.png with a "Review overdue" workflow reminder sitting across the ribbon, hiding
+        // Refresh / WebDAV / My external links — a defaced figure that would have shipped in the manual with
+        // nothing failing. Which notifications happen to fire while the app is being photographed is not
+        // something the figures document, so remove them before the shot rather than hoping the timing misses.
+        await page.EvaluateAsync("() => { document.querySelectorAll('.mud-snackbar, .mud-snackbar-container').forEach(e => e.remove()); }");
         var path = Path.Combine(outDir, $"web-{name}.png");
         await page.ScreenshotAsync(new PageScreenshotOptions { Path = path });
         Console.WriteLine($"[web] {name} → {Path.GetFileName(path)}");
