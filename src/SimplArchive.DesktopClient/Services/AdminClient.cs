@@ -54,6 +54,14 @@ public sealed class AdminClient(ApiCore core)
     // That answer used to be the absence of edit/revoke; it is now CanManage, because those two rels sat on
     // `self`'s own address and said nothing the method did not carry (ADR 0719). `rotate-secret` is still a
     // rel — a different address — and is still absent on a revoked account.
+    /// <summary>Which service-account rights THIS caller may confer (#864) — the server's advertised cap.</summary>
+    /// <remarks>
+    /// Rides on the COLLECTION rather than each row: the cap is a property of the caller, identical for
+    /// creating an account and for editing any of them.
+    /// </remarks>
+    public sealed record GrantableServiceAccountRights(
+        bool CanManageRepositories, bool CanManageMasks, bool CanManageServiceAccounts, bool CanImport, bool CanExport);
+
     public sealed record ServiceAccountInfo(Guid Id, string Name, string ClientId, bool IsActive, bool CanManage,
         bool CanManageRepositories, bool CanManageMasks, bool CanManageServiceAccounts, bool CanImport, bool CanExport,
         IReadOnlyDictionary<string, string>? Links = null)
@@ -342,6 +350,33 @@ public sealed class AdminClient(ApiCore core)
 
     public async Task<List<ServiceAccountInfo>> GetServiceAccountsAsync(CancellationToken cancellationToken = default) =>
         await _core.LoadPagedAsync(await _core.RootHrefAsync("serviceAccounts", cancellationToken), "serviceAccounts", ParseServiceAccount, cancellationToken);
+
+    /// <summary>The rights this caller may confer on a service account (#864).</summary>
+    /// <remarks>
+    /// Its own read because <see cref="ApiCore.LoadPagedAsync"/> returns the ITEMS and drops everything else the
+    /// collection said — the cap is a collection-level fact. One extra request on an admin window, which is a
+    /// fair price and not the per-rel round trip ADR 0557 warns about: it is one call for the whole window, not
+    /// one per row.
+    ///
+    /// All-false when the field is absent, so a server that has not been updated caps everything rather than
+    /// offering everything — the safe direction if the two ever ship out of step.
+    /// </remarks>
+    public async Task<GrantableServiceAccountRights> GetGrantableServiceAccountRightsAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _core.Http.GetFromJsonAsync<JsonElement>(await _core.RootHrefAsync("serviceAccounts", cancellationToken), cancellationToken);
+
+        if (!json.TryGetProperty("grantableRights", out var g))
+        {
+            return new GrantableServiceAccountRights(false, false, false, false, false);
+        }
+
+        static bool Read(JsonElement o, string name) =>
+            o.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.True;
+
+        return new GrantableServiceAccountRights(
+            Read(g, "canManageRepositories"), Read(g, "canManageMasks"),
+            Read(g, "canManageServiceAccounts"), Read(g, "canImport"), Read(g, "canExport"));
+    }
 
     // Create a service account with its rights; returns the one-time client_id + client_secret (shown once).
     public async Task<ServiceAccountSecret> CreateServiceAccountAsync(string name, SystemRightsData rights, CancellationToken cancellationToken = default)

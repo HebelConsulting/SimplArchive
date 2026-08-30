@@ -101,6 +101,48 @@ public class AclEntriesController : ControllerBase
     public class AclEntriesListResource : HypermediaResource
     {
         public List<AclEntryResource> Entries { get; set; } = [];
+
+        /// <summary>Which rights THIS caller may grant on THIS document (#877).</summary>
+        /// <remarks>
+        /// <para>
+        /// <c>EffectiveRights.Covers</c> caps a grant at the caller's own effective rights and answers a
+        /// violation with <c>403 INSUFFICIENT_RIGHTS_TO_GRANT</c> — but the API advertised no cap, so the
+        /// manage-access dialog offered all nine rights uncapped and learned otherwise on save. Unlike the rest
+        /// of this epic that could not be fixed in the client: the answer was not on the wire at all.
+        /// </para>
+        /// <para>
+        /// Per DOCUMENT rather than per row, because that is the scope <c>Covers</c> works at: the cap is the
+        /// caller's rights on this item, identical for every principal being granted and for a new grant that
+        /// has no row yet.
+        /// </para>
+        /// <para>
+        /// It costs nothing: <c>List</c> already resolves these rights to authorize itself, so the advertised
+        /// cap is the same value the enforcement uses rather than a second computation that agrees (ADR 0722).
+        /// </para>
+        /// </remarks>
+        public GrantableAclRights GrantableRights { get; set; } = new();
+    }
+
+    /// <summary>The nine document rights, as booleans the caller may confer (#877).</summary>
+    public class GrantableAclRights
+    {
+        public bool CanSee { get; set; }
+
+        public bool CanReadContent { get; set; }
+
+        public bool CanEditContent { get; set; }
+
+        public bool CanEditIndexData { get; set; }
+
+        public bool CanDelete { get; set; }
+
+        public bool CanCreateSubItems { get; set; }
+
+        public bool CanManagePermissions { get; set; }
+
+        public bool CanMove { get; set; }
+
+        public bool CanAnnotate { get; set; }
     }
 
     public class SetInheritanceRequest
@@ -175,7 +217,10 @@ public class AclEntriesController : ControllerBase
             return NotFound();
         }
 
-        if (!await CanManagePermissionsAsync(documentId, cancellationToken))
+        // Resolved ONCE and used twice: to authorize this read, and as the cap advertised below (#877). The
+        // alternative — gate here, recompute there — is the pattern ADR 0722 forbids.
+        var callerRights = await GetCallerRightsAsync(documentId, cancellationToken);
+        if (callerRights is not { CanManagePermissions: true })
         {
             return Forbid();
         }
@@ -212,6 +257,18 @@ public class AclEntriesController : ControllerBase
         return Ok(new AclEntriesListResource
         {
             Entries = page.Select(BuildResource).ToList(),
+            GrantableRights = new GrantableAclRights
+            {
+                CanSee = callerRights.CanSee,
+                CanReadContent = callerRights.CanReadContent,
+                CanEditContent = callerRights.CanEditContent,
+                CanEditIndexData = callerRights.CanEditIndexData,
+                CanDelete = callerRights.CanDelete,
+                CanCreateSubItems = callerRights.CanCreateSubItems,
+                CanManagePermissions = callerRights.CanManagePermissions,
+                CanMove = callerRights.CanMove,
+                CanAnnotate = callerRights.CanAnnotate,
+            },
             Links = links,
         });
     }

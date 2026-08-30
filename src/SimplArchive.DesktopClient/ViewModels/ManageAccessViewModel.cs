@@ -175,6 +175,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
                 return;
             }
 
+            Grantable = info.GrantableRights;
             BreaksInheritance = info.BreaksInheritance;
             InheritanceHref = info.InheritanceHref;
             _principals = info.Principals;
@@ -367,6 +368,53 @@ public sealed partial class ManageAccessViewModel : ObservableObject
 
     private bool AnyRight() =>
         CanSee || CanReadContent || CanEditContent || CanEditIndexData || CanCreateSubItems || CanDelete || CanMove || CanAnnotate || CanManagePermissions;
+
+    // ---- what THIS caller may confer (#877) ----
+
+    /// <summary>The server's cap, from the ACL collection's `grantableRights` (EffectiveRights.Covers).</summary>
+    /// <remarks>
+    /// All-false until a load says otherwise, which is both the safe reading and the honest one: before the
+    /// answer arrives the caller has not been told they may grant anything (ADR 0543/0559).
+    /// </remarks>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MayGrantSee), nameof(MayGrantReadContent), nameof(MayGrantEditContent))]
+    [NotifyPropertyChangedFor(nameof(MayGrantEditIndexData), nameof(MayGrantCreateSubItems), nameof(MayGrantDelete))]
+    [NotifyPropertyChangedFor(nameof(MayGrantMove), nameof(MayGrantAnnotate), nameof(MayGrantManagePermissions))]
+    [NotifyPropertyChangedFor(nameof(MayApplyViewer), nameof(MayApplyEditor), nameof(MayApplyManager))]
+    private AclRights? _grantable;
+
+    public bool MayGrantSee => Grantable?.CanSee ?? false;
+    public bool MayGrantReadContent => Grantable?.CanReadContent ?? false;
+    public bool MayGrantEditContent => Grantable?.CanEditContent ?? false;
+    public bool MayGrantEditIndexData => Grantable?.CanEditIndexData ?? false;
+    public bool MayGrantCreateSubItems => Grantable?.CanCreateSubItems ?? false;
+    public bool MayGrantDelete => Grantable?.CanDelete ?? false;
+    public bool MayGrantMove => Grantable?.CanMove ?? false;
+    public bool MayGrantAnnotate => Grantable?.CanAnnotate ?? false;
+    public bool MayGrantManagePermissions => Grantable?.CanManagePermissions ?? false;
+
+    /// <summary>A preset is offered only when the caller may grant EVERY right in it.</summary>
+    /// <remarks>
+    /// Deliberately not "apply the intersection": a button labelled *Manager* that quietly produced something
+    /// less than manager would be the lying-state failure of ADR 0724 — the user reads the label, not the nine
+    /// checkboxes it moved. Disabled says "not yours to give"; a reduced grant says nothing at all.
+    /// </remarks>
+    public bool MayApplyViewer => Covers(ViewerBundle());
+    public bool MayApplyEditor => Covers(EditorBundle());
+    public bool MayApplyManager => Covers(ManagerBundle());
+
+    // The client half of EffectiveRights.Covers, and the only place it is written here: one predicate the three
+    // presets share, rather than three hand-expanded conditions that could disagree about the same bundle.
+    private bool Covers(AclRights bundle) =>
+        (!bundle.CanSee || MayGrantSee)
+        && (!bundle.CanReadContent || MayGrantReadContent)
+        && (!bundle.CanEditContent || MayGrantEditContent)
+        && (!bundle.CanEditIndexData || MayGrantEditIndexData)
+        && (!bundle.CanCreateSubItems || MayGrantCreateSubItems)
+        && (!bundle.CanDelete || MayGrantDelete)
+        && (!bundle.CanMove || MayGrantMove)
+        && (!bundle.CanAnnotate || MayGrantAnnotate)
+        && (!bundle.CanManagePermissions || MayGrantManagePermissions);
 
     private static AclRights ViewerBundle() => new(true, true, false, false, false, false, false, false, false);
     private static AclRights EditorBundle() => new(true, true, true, true, true, false, true, true, false);

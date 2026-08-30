@@ -22,6 +22,15 @@ public sealed partial class ServiceAccountsViewModel : ObservableObject
 
     public SimplArchiveApiClient Client => _client;
 
+    /// <summary>The rights this caller may confer on a service account (#864).</summary>
+    /// <remarks>
+    /// Asked when the editor opens rather than cached with the list: the cap depends on the CALLER's rights,
+    /// which an administrator can change from another window in the same session, and a stale cap fails in the
+    /// direction that offers too much.
+    /// </remarks>
+    public Task<AdminClient.GrantableServiceAccountRights> GetGrantableRightsAsync() =>
+        _client.Admin.GetGrantableServiceAccountRightsAsync();
+
     public ObservableCollection<ServiceAccountRowViewModel> Accounts { get; } = [];
 
     // The create form. Only the five grantable rights (the server caps them at the caller's own).

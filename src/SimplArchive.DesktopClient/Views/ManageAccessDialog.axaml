@@ -77,25 +77,32 @@
                         <TextBlock Text="{Binding PresetLabel}" FontWeight="SemiBold" VerticalAlignment="Center" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <Button Content="{loc:Tr MaRoleViewer}" Command="{Binding ApplyViewerCommand}" />
-                        <Button Content="{loc:Tr MaRoleEditor}" Command="{Binding ApplyEditorCommand}" />
-                        <Button Content="{loc:Tr MaRoleManager}" Command="{Binding ApplyManagerCommand}" />
+                        <!-- A preset is offered only where the caller may grant EVERY right in it. Applying
+                             the intersection instead would move nine checkboxes and leave the button's label
+                             describing something the user did not get. -->
+                        <Button Content="{loc:Tr MaRoleViewer}" Command="{Binding ApplyViewerCommand}" IsEnabled="{Binding MayApplyViewer}" />
+                        <Button Content="{loc:Tr MaRoleEditor}" Command="{Binding ApplyEditorCommand}" IsEnabled="{Binding MayApplyEditor}" />
+                        <Button Content="{loc:Tr MaRoleManager}" Command="{Binding ApplyManagerCommand}" IsEnabled="{Binding MayApplyManager}" />
                     </StackPanel>
 
                     <Expander Header="{loc:Tr MaAdvanced}">
                         <Grid ColumnDefinitions="*,*" Margin="0,4,0,0">
+                            <!-- Each right is DISABLED where the caller may not confer it (#877). Disabled
+                                 rather than hidden, because the box must still show the entry's CURRENT value:
+                                 hiding it would report a right the entry holds as absent, which is ADR 0724's
+                                 lying state wearing a different costume. -->
                             <StackPanel Grid.Column="0" Spacing="2">
-                                <CheckBox Content="{loc:Tr MaRightCanSee}" IsChecked="{Binding CanSee}" />
-                                <CheckBox Content="{loc:Tr MaRightReadContent}" IsChecked="{Binding CanReadContent}" />
-                                <CheckBox Content="{loc:Tr MaRightEditContent}" IsChecked="{Binding CanEditContent}" />
-                                <CheckBox Content="{loc:Tr MaRightEditIndexData}" IsChecked="{Binding CanEditIndexData}" />
-                                <CheckBox Content="{loc:Tr MaRightCreateSubItems}" IsChecked="{Binding CanCreateSubItems}" />
+                                <CheckBox Content="{loc:Tr MaRightCanSee}" IsChecked="{Binding CanSee}" IsEnabled="{Binding MayGrantSee}" />
+                                <CheckBox Content="{loc:Tr MaRightReadContent}" IsChecked="{Binding CanReadContent}" IsEnabled="{Binding MayGrantReadContent}" />
+                                <CheckBox Content="{loc:Tr MaRightEditContent}" IsChecked="{Binding CanEditContent}" IsEnabled="{Binding MayGrantEditContent}" />
+                                <CheckBox Content="{loc:Tr MaRightEditIndexData}" IsChecked="{Binding CanEditIndexData}" IsEnabled="{Binding MayGrantEditIndexData}" />
+                                <CheckBox Content="{loc:Tr MaRightCreateSubItems}" IsChecked="{Binding CanCreateSubItems}" IsEnabled="{Binding MayGrantCreateSubItems}" />
                             </StackPanel>
                             <StackPanel Grid.Column="1" Spacing="2">
-                                <CheckBox Content="{loc:Tr MaRightAnnotate}" IsChecked="{Binding CanAnnotate}" />
-                                <CheckBox Content="{loc:Tr MaRightMove}" IsChecked="{Binding CanMove}" />
-                                <CheckBox Content="{loc:Tr MaRightDelete}" IsChecked="{Binding CanDelete}" />
-                                <CheckBox Content="{loc:Tr MaRightManagePermissions}" IsChecked="{Binding CanManagePermissions}" />
+                                <CheckBox Content="{loc:Tr MaRightAnnotate}" IsChecked="{Binding CanAnnotate}" IsEnabled="{Binding MayGrantAnnotate}" />
+                                <CheckBox Content="{loc:Tr MaRightMove}" IsChecked="{Binding CanMove}" IsEnabled="{Binding MayGrantMove}" />
+                                <CheckBox Content="{loc:Tr MaRightDelete}" IsChecked="{Binding CanDelete}" IsEnabled="{Binding MayGrantDelete}" />
+                                <CheckBox Content="{loc:Tr MaRightManagePermissions}" IsChecked="{Binding CanManagePermissions}" IsEnabled="{Binding MayGrantManagePermissions}" />
                             </StackPanel>
                         </Grid>
                     </Expander>

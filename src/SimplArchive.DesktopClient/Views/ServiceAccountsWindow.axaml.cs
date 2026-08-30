@@ -52,9 +52,14 @@ public partial class ServiceAccountsWindow : Window
             return;
         }
 
+        // The server's cap (#864) — read here rather than assumed, so the editor offers only what this caller
+        // may actually confer instead of collecting five rights and meeting a 403.
+        var grantable = await vm.GetGrantableRightsAsync();
+
         var result = await new ServiceAccountEditDialog(row.Name,
             row.Info.CanExport, row.Info.CanImport, row.Info.CanManageRepositories,
-            row.Info.CanManageMasks, row.Info.CanManageServiceAccounts).ShowDialog<ServiceAccountEditDialog.Result?>(this);
+            row.Info.CanManageMasks, row.Info.CanManageServiceAccounts,
+            grantable).ShowDialog<ServiceAccountEditDialog.Result?>(this);
         if (result is null)
         {
             return;

@@ -88,24 +88,33 @@
 
                         <MudSelect T="string" Value="@PresetOf(_editing.Rights)" ValueChanged="ApplyPreset" Label="@Strings.Get("MaRole")"
                                    Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined" Class="mt-2">
-                            <MudSelectItem T="string" Value="@("Viewer")">@Strings.Get("MaRoleViewer")</MudSelectItem>
-                            <MudSelectItem T="string" Value="@("Editor")">@Strings.Get("MaRoleEditor")</MudSelectItem>
-                            <MudSelectItem T="string" Value="@("Manager")">@Strings.Get("MaRoleManager")</MudSelectItem>
+                            @if (Covers(ViewerBundle()))
+                            {
+                                <MudSelectItem T="string" Value="@("Viewer")">@Strings.Get("MaRoleViewer")</MudSelectItem>
+                            }
+                            @if (Covers(EditorBundle()))
+                            {
+                                <MudSelectItem T="string" Value="@("Editor")">@Strings.Get("MaRoleEditor")</MudSelectItem>
+                            }
+                            @if (Covers(ManagerBundle()))
+                            {
+                                <MudSelectItem T="string" Value="@("Manager")">@Strings.Get("MaRoleManager")</MudSelectItem>
+                            }
                             <MudSelectItem T="string" Value="@("Custom")">@Strings.Get("MaRoleCustom")</MudSelectItem>
                         </MudSelect>
 
                         <MudExpansionPanels Class="mt-2" Elevation="0">
                             <MudExpansionPanel Text="@Strings.Get("MaAdvanced")" Dense="true">
                                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:0 12px;">
-                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanSee" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightCanSee")" />
-                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanReadContent" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightReadContent")" />
-                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanEditContent" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightEditContent")" />
-                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanEditIndexData" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightEditIndexData")" />
-                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanCreateSubItems" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightCreateSubItems")" />
-                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanAnnotate" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightAnnotate")" />
-                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanMove" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightMove")" />
-                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanDelete" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightDelete")" />
-                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanManagePermissions" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightManagePermissions")" />
+                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanSee" Disabled="@(!_grantable.CanSee)" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightCanSee")" />
+                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanReadContent" Disabled="@(!_grantable.CanReadContent)" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightReadContent")" />
+                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanEditContent" Disabled="@(!_grantable.CanEditContent)" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightEditContent")" />
+                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanEditIndexData" Disabled="@(!_grantable.CanEditIndexData)" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightEditIndexData")" />
+                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanCreateSubItems" Disabled="@(!_grantable.CanCreateSubItems)" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightCreateSubItems")" />
+                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanAnnotate" Disabled="@(!_grantable.CanAnnotate)" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightAnnotate")" />
+                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanMove" Disabled="@(!_grantable.CanMove)" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightMove")" />
+                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanDelete" Disabled="@(!_grantable.CanDelete)" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightDelete")" />
+                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanManagePermissions" Disabled="@(!_grantable.CanManagePermissions)" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightManagePermissions")" />
                                 </div>
                             </MudExpansionPanel>
                         </MudExpansionPanels>
@@ -200,6 +209,23 @@
     [Parameter] public string? DocumentHref { get; set; }
 
     private string? _grantablePrincipalsHref;
+
+    // What this caller may grant here (#877) — EffectiveRights.Covers, advertised by the collection.
+    private RightsModel _grantable = new();
+
+    // A preset is offered only when the caller may grant EVERY right in it. Applying the intersection would
+    // move nine checkboxes and leave the label describing something the user did not get (ADR 0724's lying
+    // state) — so the choice is offer-in-full or not at all.
+    private bool Covers(RightsModel b) =>
+        (!b.CanSee || _grantable.CanSee)
+        && (!b.CanReadContent || _grantable.CanReadContent)
+        && (!b.CanEditContent || _grantable.CanEditContent)
+        && (!b.CanEditIndexData || _grantable.CanEditIndexData)
+        && (!b.CanCreateSubItems || _grantable.CanCreateSubItems)
+        && (!b.CanAnnotate || _grantable.CanAnnotate)
+        && (!b.CanMove || _grantable.CanMove)
+        && (!b.CanDelete || _grantable.CanDelete)
+        && (!b.CanManagePermissions || _grantable.CanManagePermissions);
     private string? _effectiveHref;
 
     private async Task LoadAsync()
@@ -236,6 +262,9 @@
             listResponse.EnsureSuccessStatusCode();
             var list = await listResponse.Content.ReadFromJsonAsync<AclListDto>();
             _entries = list?.Entries ?? [];
+            // The server's cap on what this caller may confer (#877). Absent => all false, which caps everything
+            // rather than offering everything: the safe direction if client and server ship out of step.
+            _grantable = list?.GrantableRights ?? new RightsModel();
             _grantablePrincipalsHref = Rel(list?.Links, "grantable-principals");
             _effectiveHref = Rel(list?.Links, "effective");
             _principals = _grantablePrincipalsHref is null
@@ -569,7 +598,9 @@
             && CanMove == o.CanMove && CanAnnotate == o.CanAnnotate && CanManagePermissions == o.CanManagePermissions;
     }
 
-    private sealed class AclListDto { public List<AclEntryDto> Entries { get; set; } = []; public List<LinkDto>? Links { get; set; } }
+    // GrantableRights is the server's EffectiveRights.Covers cap (#877) — null on a server that predates it,
+    // which the caller turns into an all-false model so nothing is offered rather than everything.
+    private sealed class AclListDto { public List<AclEntryDto> Entries { get; set; } = []; public RightsModel? GrantableRights { get; set; } public List<LinkDto>? Links { get; set; } }
 
     private static string? Rel(List<LinkDto>? links, string rel)
     {

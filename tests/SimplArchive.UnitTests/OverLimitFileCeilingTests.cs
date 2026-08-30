@@ -133,7 +133,12 @@ public class OverLimitFileCeilingTests
         // the desktop had no per-listing site to forget, so splitting it to save ten lines would trade the
         // property that made this change safe for a smaller number. The file already paid down 1,466 → 1,412
         // this session by extracting the tag-catalog surface.
-        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1_422,
+        // 1,422 → 1,281. #877 needed the ACL collection's grantable-rights cap plumbed through this file, and rather
+        // than raise the ceiling a THIRD time today the whole ACL surface moved to DocumentsClient.Acl.cs —
+        // GetAcl/SetAclEntry/RevokeAclEntry/GetEffectiveAccess/SetInheritance plus ReadRights, which nothing else
+        // used. Owner-confirmed 2026-08-30. The file has now paid down 1,466 → 1,412 → 1,281 in one day, both
+        // times by extracting a cohesive surface rather than by moving the line.
+        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1_281,
 
         // Re-entered 2026-08-17 (ADR 0613): burned down to 967 in an earlier pass, back to 1,156 since — the
         // handlers here are what #519 moves into per-tab UserControls, which is what takes it under again.

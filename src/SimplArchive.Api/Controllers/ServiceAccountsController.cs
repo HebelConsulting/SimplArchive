@@ -100,6 +100,46 @@ public class ServiceAccountsController : ControllerBase
     public class ServiceAccountsListResource : HypermediaResource
     {
         public List<ServiceAccountResource> ServiceAccounts { get; set; } = [];
+
+        /// <summary>Which rights THIS caller may confer on a service account (#864).</summary>
+        /// <remarks>
+        /// <para>
+        /// The server caps a grant at what the caller holds — "can't hand out more than you hold", the same
+        /// philosophy as <c>EffectiveRights.Covers</c> — and answers a violation with
+        /// <c>403 INSUFFICIENT_RIGHTS_TO_GRANT</c>. Until now it advertised **nothing**, so the edit dialog
+        /// offered all five rights uncapped and its own code-behind admitted it: *"the API caps… this dialog
+        /// just collects"*. That is the promise ADR 0543 exists to prevent, and unlike the other findings in
+        /// this epic it could not be fixed client-side, because the answer genuinely was not on the wire.
+        /// </para>
+        /// <para>
+        /// It rides on the COLLECTION, not on each row: the cap is a property of the caller, identical for
+        /// creating a new account and for editing any existing one. Per row it would be the same answer
+        /// repeated, and a reader would reasonably wonder why two rows might differ.
+        /// </para>
+        /// <para>
+        /// A right absent here means the caller may not grant it — nor revoke it, since the check is on the
+        /// VALUE changing, not on its direction.
+        /// </para>
+        /// </remarks>
+        public GrantableServiceAccountRights GrantableRights { get; set; } = new();
+    }
+
+    /// <summary>The five service-account rights, as booleans the caller may confer (#864).</summary>
+    /// <remarks>
+    /// Deliberately the same five names the request body uses, so a client maps one to the other without a
+    /// translation table — a table being the place a tenth right would later be forgotten.
+    /// </remarks>
+    public class GrantableServiceAccountRights
+    {
+        public bool CanManageRepositories { get; set; }
+
+        public bool CanManageMasks { get; set; }
+
+        public bool CanManageServiceAccounts { get; set; }
+
+        public bool CanImport { get; set; }
+
+        public bool CanExport { get; set; }
     }
 
     public class CreateServiceAccountRequest
@@ -265,6 +305,16 @@ public class ServiceAccountsController : ControllerBase
         return Ok(new ServiceAccountsListResource
         {
             ServiceAccounts = page.Select(BuildResource).ToList(),
+            // Straight from the rights this action ALREADY resolved to authorize itself (#864) — so the
+            // advertised cap and the enforced one are the same value, not two reads that agree (ADR 0722).
+            GrantableRights = new GrantableServiceAccountRights
+            {
+                CanManageRepositories = caller.CanManageRepositories,
+                CanManageMasks = caller.CanManageMasks,
+                CanManageServiceAccounts = caller.CanManageServiceAccounts,
+                CanImport = caller.CanImport,
+                CanExport = caller.CanExport,
+            },
             Links = links,
         });
     }
