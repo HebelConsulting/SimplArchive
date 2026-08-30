@@ -51,11 +51,19 @@ public partial class App : Application
 
             // Wire the crash guard (ADR "Desktop crash guard") to the new main window. The sign-in hook is what
             // lets a session that cannot be renewed escalate to a real login instead of only offering to quit.
+            //
+            // `returnToLogon` is what the modals' second button now does instead of quitting the app. It is
+            // the LOGOUT command deliberately, not LoginCommand: LoginCommand re-runs the browser OAuth flow
+            // against the server already configured, while what a disconnected user needs is the logon window
+            // — the one place that lets them pick a different server. Logout also clears the session state and
+            // raises LogoutRequested below, which stops the heartbeat and closes this window, so the whole
+            // teardown stays the single path it already was.
             Services.AppExceptions.Initialize(
                 window,
                 () => viewModel.IsTenantAdmin,
                 viewModel.ReconnectAsync,
-                () => viewModel.LoginCommand.ExecuteAsync(null));
+                () => viewModel.LoginCommand.ExecuteAsync(null),
+                () => viewModel.LogoutCommand.Execute(null));
 
             // A session that ends is NOT a connectivity failure — the server is answering, it just will not
             // accept this session any more — so it gets its own modal, naming the server it happened on.

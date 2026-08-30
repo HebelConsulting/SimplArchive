@@ -107,6 +107,62 @@ internal static class Program
             return;
         }
 
+        // Dismissing the connection-lost modal signs out to the LOGON WINDOW instead of quitting the app:
+        // `--connlost-signout-test`.
+        //
+        // A hook rather than a case in the desktop test suite because that project has no headless Avalonia at
+        // all, and both halves of this are statements about a Window: which result the button closes with, and
+        // what AppExceptions then does with that result. It checks the two independently, because they failed
+        // independently — the button said "Close" and returned "close", and every one of the three flows threw
+        // the user out of the application over a momentary network drop.
+        //
+        // Reverting either half makes this report FAILED, which is what says it measures the change rather
+        // than some default: restore Close("close") and the first line fails; restore the Shutdown() call and
+        // the second does.
+        if (args.Contains("--connlost-signout-test"))
+        {
+            AppBuilder.Configure<App>()
+                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .UseSkia()
+                .WithInterFont()
+                .SetupWithoutStarting();
+
+            var owner = new Views.LogonWindow();
+            owner.Show();
+
+            var dialog = new Views.ConnectionLostDialog(showDetails: false, "probe");
+            var closed = dialog.ShowDialog<string?>(owner);
+            Dispatcher.UIThread.RunJobs();
+            dialog.SignOutButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
+
+            var result = closed.IsCompleted ? closed.Result : "(dialog still open)";
+            var buttonOk = result == "sign-out";
+            Console.WriteLine($"Second button closes with: {result} (expected sign-out) -> {buttonOk}");
+
+            // The label has to move WITH the behaviour: "Close" on a button that reopens a sign-in window is
+            // the affordance-honesty defect this change exists to fix, so a silent revert of the text is a
+            // regression even while the behaviour is right.
+            var label = SimplArchive.Localization.Strings.Get("ClSignOut");
+            var labelOk = !string.IsNullOrWhiteSpace(label) && label != "ClSignOut" && label != "Close";
+            Console.WriteLine($"Second button label: '{label}' -> {labelOk}");
+
+            // And AppExceptions routes that result to the logon hook rather than to Shutdown().
+            var returned = false;
+            Services.AppExceptions.Initialize(
+                owner,
+                () => false,
+                () => Task.CompletedTask,
+                null,
+                () => returned = true);
+            Services.AppExceptions.ReturnToLogon();
+            Console.WriteLine($"AppExceptions.ReturnToLogon invoked the logon hook: {returned}");
+
+            var ok = buttonOk && labelOk && returned;
+            Console.WriteLine(ok ? "OK" : "FAILED");
+            return;
+        }
+
         // The contents list scrolls vertically, and the filter row narrows it: `--list-scroll-test` (#48).
         // A rendered check, not a VM one — "there is a scrollbar" is a statement about the visual tree, and
         // the pane's outer ScrollViewer deliberately disables vertical (it exists to co-scroll header + rows

@@ -23,7 +23,7 @@
         </Expander>
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-            <Button Content="{loc:Tr Close}" Click="OnClose" />
+            <Button x:Name="SignOutButton" Content="{loc:Tr ClSignOut}" Click="OnSignOut" />
             <Button Content="{loc:Tr ClReconnect}" Click="OnReconnect" IsDefault="True" />
         </StackPanel>
     </StackPanel>

@@ -2221,13 +2221,16 @@
     <value>Verbindung zum Server verloren.</value>
   </data>
   <data name="ClBody" xml:space="preserve">
-    <value>Die letzte Aktion konnte nicht abgeschlossen werden. Verbinden Sie sich erneut, um neu zu laden, oder schließen Sie die App.</value>
+    <value>Die letzte Aktion konnte nicht abgeschlossen werden. Verbinden Sie sich erneut, um neu zu laden, oder melden Sie sich ab und kehren Sie zur Anmeldung zurück.</value>
   </data>
   <data name="ClTechDetails" xml:space="preserve">
     <value>Technische Details</value>
   </data>
   <data name="ClReconnect" xml:space="preserve">
     <value>Erneut verbinden</value>
+  </data>
+  <data name="ClSignOut" xml:space="preserve">
+    <value>Abmelden</value>
   </data>
   <data name="BulkSensTitle" xml:space="preserve">
     <value>Vertraulichkeit festlegen</value>

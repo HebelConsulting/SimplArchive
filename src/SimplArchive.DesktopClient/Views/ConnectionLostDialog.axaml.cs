@@ -4,7 +4,12 @@ using Avalonia.Interactivity;
 namespace SimplArchive.DesktopClient.Views;
 
 // The "lost connection" modal (ADR "Desktop crash guard"). ShowDialog<string?> returns "reconnect" or
-// "close". The technical-details expander is shown only to tenant admins.
+// "sign-out". The technical-details expander is shown only to tenant admins.
+//
+// The second button used to say "Close" and quit the app. It now signs out and returns to the logon window,
+// and it is LABELLED that way: a control whose text promises one outcome and delivers another is the thing
+// CLAUDE.md's state-transition principle exists to prevent, and "Close" beside a button that reopens a
+// sign-in window was exactly that.
 public partial class ConnectionLostDialog : Window
 {
     public ConnectionLostDialog()
@@ -20,5 +25,5 @@ public partial class ConnectionLostDialog : Window
 
     private void OnReconnect(object? sender, RoutedEventArgs e) => Close("reconnect");
 
-    private void OnClose(object? sender, RoutedEventArgs e) => Close("close");
+    private void OnSignOut(object? sender, RoutedEventArgs e) => Close("sign-out");
 }

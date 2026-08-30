@@ -13,21 +13,61 @@ namespace SimplArchive.DesktopClient.Services;
 // A last-resort crash guard (ADR "Desktop crash guard"): instead of letting an unhandled exception take the
 // app down, it surfaces the "lost connection" modal. Wired to the .NET global exception events and used by
 // the Safe.Fire wrapper around the app's async void handlers — Avalonia has no single UI-thread hook, so both
-// are needed. Reconnect reloads the view + session; Close exits. Only one dialog shows at a time.
+// are needed. Reconnect reloads the view + session; Sign out drops the session and returns to the logon
+// window. Only one dialog shows at a time.
 public static class AppExceptions
 {
     private static Window? _owner;
     private static Func<bool>? _isTenantAdmin;
     private static Func<Task>? _reconnect;
     private static Func<Task>? _signIn;
+    private static Action? _returnToLogon;
     private static bool _showing;
 
-    public static void Initialize(Window owner, Func<bool> isTenantAdmin, Func<Task> reconnect, Func<Task>? signIn = null)
+    public static void Initialize(
+        Window owner,
+        Func<bool> isTenantAdmin,
+        Func<Task> reconnect,
+        Func<Task>? signIn = null,
+        Action? returnToLogon = null)
     {
         _owner = owner;
         _isTenantAdmin = isTenantAdmin;
         _reconnect = reconnect;
         _signIn = signIn;
+        _returnToLogon = returnToLogon;
+    }
+
+    /// <summary>
+    /// Dismissing any of these modals ends the SESSION, not the process: it drops to the logon window.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// All three flows used to call <c>Shutdown()</c>, so a momentary network drop cost the user the whole
+    /// application and every unsaved thing in it — and the only way back in was to launch it again. Returning
+    /// to the logon window is the recovery the user actually wants, and it is also the honest one: the server
+    /// picker is there, so they can reconnect to a DIFFERENT server without restarting.
+    /// </para>
+    /// <para>
+    /// It routes through the ordinary logout path rather than re-implementing it, so the session teardown stays
+    /// in one place: state cleared, heartbeat stopped, next sign-in forced to re-authenticate. A second copy
+    /// here would be the drift CLAUDE.md's one-implementation principle names, and it would drift in the worst
+    /// possible direction — a field the copy forgot to clear is the previous user's data on a shared machine.
+    /// </para>
+    /// <para>
+    /// Falls back to <c>Shutdown()</c> when nothing is wired (the headless screenshot harness, a startup
+    /// failure before the main window exists). Quitting is still reachable — from the logon window.
+    /// </para>
+    /// </remarks>
+    internal static void ReturnToLogon()
+    {
+        if (_returnToLogon is { } toLogon)
+        {
+            toLogon();
+            return;
+        }
+
+        (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown();
     }
 
     // Safe to call from any thread — marshals to the UI thread. A connectivity failure (server unreachable)
@@ -94,7 +134,7 @@ public static class AppExceptions
 
     // The reconnect modal: reappears until the server is reachable again (ADR "Desktop session reconnect").
     // Reconnect runs a bounded reachability probe + a session reload; on success the loop ends, on failure the
-    // modal is shown again (manual retry). Close exits the app.
+    // modal is shown again (manual retry). Sign out returns to the logon window.
     private static async Task ShowReconnectAsync()
     {
         if (_owner is null || _showing)
@@ -113,7 +153,7 @@ public static class AppExceptions
 
                 if (result != "reconnect")
                 {
-                    (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown();
+                    ReturnToLogon();
                     return;
                 }
 
@@ -164,7 +204,7 @@ public static class AppExceptions
 
                 if (result != "reconnect")
                 {
-                    (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown();
+                    ReturnToLogon();
                     return;
                 }
 
@@ -237,9 +277,12 @@ public static class AppExceptions
                     // Don't loop the dialog if reconnecting also fails — leave it for the next user action.
                 }
             }
-            else if (result == "close")
+            else if (result == "sign-out")
             {
-                (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown();
+                // A crash returns to the logon window too. The reasoning is not that a fresh session repairs
+                // whatever broke — it is that the alternative was losing the application outright, and the
+                // state this drops is exactly the state the unhandled exception already made untrustworthy.
+                ReturnToLogon();
             }
         }
         finally

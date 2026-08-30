@@ -2221,13 +2221,16 @@
     <value>Lost connection to the server.</value>
   </data>
   <data name="ClBody" xml:space="preserve">
-    <value>The last action couldn't be completed. Reconnect to reload, or close the app.</value>
+    <value>The last action couldn't be completed. Reconnect to reload, or sign out and return to the sign-in window.</value>
   </data>
   <data name="ClTechDetails" xml:space="preserve">
     <value>Technical details</value>
   </data>
   <data name="ClReconnect" xml:space="preserve">
     <value>Reconnect</value>
+  </data>
+  <data name="ClSignOut" xml:space="preserve">
+    <value>Sign out</value>
   </data>
   <data name="BulkSensTitle" xml:space="preserve">
     <value>Set sensitivity</value>

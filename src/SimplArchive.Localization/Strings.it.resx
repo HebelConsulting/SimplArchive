@@ -2221,13 +2221,16 @@
     <value>Connessione al server persa.</value>
   </data>
   <data name="ClBody" xml:space="preserve">
-    <value>Impossibile completare l'ultima azione. Riconnetti per ricaricare, o chiudi l'app.</value>
+    <value>Impossibile completare l'ultima azione. Riconnetti per ricaricare, oppure esci e torna alla finestra di accesso.</value>
   </data>
   <data name="ClTechDetails" xml:space="preserve">
     <value>Dettagli tecnici</value>
   </data>
   <data name="ClReconnect" xml:space="preserve">
     <value>Riconnetti</value>
+  </data>
+  <data name="ClSignOut" xml:space="preserve">
+    <value>Esci</value>
   </data>
   <data name="BulkSensTitle" xml:space="preserve">
     <value>Imposta riservatezza</value>

@@ -2221,13 +2221,16 @@
     <value>Se perdió la conexión con el servidor.</value>
   </data>
   <data name="ClBody" xml:space="preserve">
-    <value>No se pudo completar la última acción. Reconecta para recargar, o cierra la app.</value>
+    <value>No se pudo completar la última acción. Reconecta para recargar, o cierra la sesión y vuelve a la ventana de inicio de sesión.</value>
   </data>
   <data name="ClTechDetails" xml:space="preserve">
     <value>Detalles técnicos</value>
   </data>
   <data name="ClReconnect" xml:space="preserve">
     <value>Reconectar</value>
+  </data>
+  <data name="ClSignOut" xml:space="preserve">
+    <value>Cerrar sesión</value>
   </data>
   <data name="BulkSensTitle" xml:space="preserve">
     <value>Establecer confidencialidad</value>
