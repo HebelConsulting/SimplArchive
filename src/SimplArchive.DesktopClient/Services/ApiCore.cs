@@ -117,7 +117,11 @@ public sealed class ApiCore
                 if (link.TryGetProperty("rel", out var rel) && rel.GetString() is { Length: > 0 } name
                     && link.TryGetProperty("href", out var href) && href.GetString() is { Length: > 0 } value)
                 {
-                    links[name] = value;
+                    // Trimmed here rather than at each caller: the href is absolute-from-root ("/api/tags") and
+                    // this HttpClient has a BaseAddress, so a leading slash escapes any path prefix it carries.
+                    // The second copy of this method trimmed and this one did not — harmless only while the
+                    // base address has no prefix, which is exactly the kind of agreement two copies stop keeping.
+                    links[name] = value.TrimStart('/');
                 }
             }
         }

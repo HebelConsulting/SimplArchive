@@ -17,12 +17,21 @@ public sealed class AnnotationsClient(ApiCore core)
     // A sticky note / positional annotation (ADR "Document annotations"). Etag is the optimistic-concurrency
     // token to send back as If-Match on edit/delete; CanEdit/CanDelete are the server's per-caller hints.
     // Points is the normalized "x,y x,y …" (each 0..1) poly-line for a Freehand (kind 7), null otherwise (ADR 0525).
-    public sealed record AnnotationInfo(Guid Id, int PageIndex, int Kind, double PositionX, double PositionY, double? Width, double? Height, string Text, string Color, string AuthorName, string Etag, bool CanEdit, bool CanDelete, string? Points = null);
+    // SelfHref: this annotation's OWN address, as the row advertised it (#862). It used to be composed —
+    // $"{annotationsUrl}/{id}" — a path-segment append onto a rel-supplied href, which ADR 0557 calls composing
+    // in disguise and which the hypermedia ratchet could not see, because its regex matches only literals that
+    // START with `api/`. The server had advertised this rel all along.
+    public sealed record AnnotationInfo(Guid Id, int PageIndex, int Kind, double PositionX, double PositionY, double? Width, double? Height, string Text, string Color, string AuthorName, string Etag, bool CanEdit, bool CanDelete, string? Points = null, string? SelfHref = null);
 
     // --- Sticky notes / annotations (ADR "Document annotations") ----------------------------------------
 
     // The annotation list + whether the caller may create a note here (CanAnnotate, ADR "CanAnnotate right").
     public sealed record AnnotationList(IReadOnlyList<AnnotationInfo> Items, bool CanCreate);
+
+    // An annotation without its own address cannot be written to, and guessing one is what this change removes.
+    private static string RequireSelf(AnnotationInfo annotation) =>
+        annotation.SelfHref?.TrimStart('/')
+        ?? throw new ApiActionException("This note can no longer be edited — reload the document.");
 
     public async Task<AnnotationList> GetAnnotationsAsync(string annotationsUrl, CancellationToken cancellationToken = default)
     {
@@ -46,7 +55,8 @@ public sealed class AnnotationsClient(ApiCore core)
                     a.TryGetProperty("etag", out var et) ? et.GetString() ?? "" : "",
                     a.TryGetProperty("canEdit", out var ce) && ce.GetBoolean(),
                     a.TryGetProperty("canDelete", out var cd) && cd.GetBoolean(),
-                    a.TryGetProperty("points", out var pts) && pts.ValueKind == JsonValueKind.String ? pts.GetString() : null));
+                    a.TryGetProperty("points", out var pts) && pts.ValueKind == JsonValueKind.String ? pts.GetString() : null,
+                    ApiCore.RelHref(a, "self")));
             }
         }
 
@@ -67,12 +77,13 @@ public sealed class AnnotationsClient(ApiCore core)
         }
     }
 
-    public async Task UpdateAnnotationAsync(string annotationsUrl, Guid id, int pageIndex, double x, double y, string text, string color, string etag, CancellationToken cancellationToken = default)
-        => await UpdateAnnotationAsync(annotationsUrl, id, pageIndex, x, y, null, null, text, color, etag, cancellationToken);
+    public async Task UpdateAnnotationAsync(AnnotationInfo annotation, int pageIndex, double x, double y, string text, string color, string etag, CancellationToken cancellationToken = default)
+        => await UpdateAnnotationAsync(annotation, pageIndex, x, y, null, null, text, color, etag, cancellationToken);
 
-    public async Task UpdateAnnotationAsync(string annotationsUrl, Guid id, int pageIndex, double x, double y, double? width, double? height, string text, string color, string etag, CancellationToken cancellationToken = default)
+    /// <summary>Takes the ROW, which carries its own address (ADR 0555) — no id, nothing composed (#862).</summary>
+    public async Task UpdateAnnotationAsync(AnnotationInfo annotation, int pageIndex, double x, double y, double? width, double? height, string text, string color, string etag, CancellationToken cancellationToken = default)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Put, $"{annotationsUrl.TrimStart('/')}/{id}")
+        using var request = new HttpRequestMessage(HttpMethod.Put, RequireSelf(annotation))
         {
             Content = JsonContent.Create(new { pageIndex, positionX = x, positionY = y, width, height, text, color }),
         };
@@ -84,9 +95,9 @@ public sealed class AnnotationsClient(ApiCore core)
         }
     }
 
-    public async Task DeleteAnnotationAsync(string annotationsUrl, Guid id, string etag, CancellationToken cancellationToken = default)
+    public async Task DeleteAnnotationAsync(AnnotationInfo annotation, string etag, CancellationToken cancellationToken = default)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Delete, $"{annotationsUrl.TrimStart('/')}/{id}");
+        using var request = new HttpRequestMessage(HttpMethod.Delete, RequireSelf(annotation));
         request.Headers.TryAddWithoutValidation("If-Match", $"\"{etag}\"");
         using var response = await _core.Http.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)

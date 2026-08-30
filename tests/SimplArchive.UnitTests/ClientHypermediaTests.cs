@@ -32,6 +32,29 @@ public partial class ClientHypermediaTests
     // been reporting 41 when the real figure was 48.
     private static readonly Regex ComposedApiUrl = new("\\$?\"/?api/", RegexOptions.Compiled);
 
+    // …and the shape the pattern above is BLIND to (#862): an interpolated string that begins with a hole and
+    // then appends a path segment — `$"{ListUrl}/{link.Id}"`. The literal starts with `{`, not `api/`, so the
+    // ledger above reported ZERO while three of these were live. ADR 0557 calls it composing in disguise:
+    // appending a QUERY to an advertised href is following it, appending a SEGMENT is building an address the
+    // server never gave you.
+    //
+    // Deliberately narrow, and calibrated before being trusted — the lesson this file already learned once with
+    // the missing optional slash. The broad form (`\$"\{[^}]+\}/`) matched 19 sites of which only 4 were real:
+    // the rest were protocol endpoints the API deliberately keeps outside `api/` (/connect, /.well-known,
+    // /hubs, /Account, /download, /go), the sanctioned API-root read, a filesystem path, a WebDAV path, a
+    // display name and a console line. Requiring the base to be NAMED like an address, and the appended segment
+    // to itself be an interpolation, took it to 4 hits and 0 false positives.
+    //
+    // What it will still miss: an href held in a variable named something else, and a segment appended as a
+    // literal. Stated plainly because the counterpart to "the guard reports zero" is knowing what zero covers.
+    // The entry point is the ONE address a client may know (ADR 0543) — but it is spelled "api" with no
+    // slash, so the api/ pattern never saw it, and two desktop comments had been written explaining that it
+    // "carries no slash" rather than the guard being able to check it. Matched as an HTTP call's argument so
+    // an unrelated "api" string (a screenshot fixture's placeholder) is not swept in.
+    private static readonly Regex EntryPointRead = new("Async(?:<[^>]*>)?\\(\"api\"", RegexOptions.Compiled);
+
+    private static readonly Regex ComposedByAppending = new("\\$\"\\{[^}]*([Hh]ref|[Uu]rl)[^}]*\\}/\\{", RegexOptions.Compiled);
+
     // THE END STATE (#416): the budget dictionary this test carried for ten months is GONE, because the debt it
     // measured is gone — the web burn-down finished at 26 → 0 and the desktop's finished earlier at 184 → 1.
     // What remains is not a budget but a set of NAMED, COUNTED exceptions: each is a single deliberate line, and
@@ -52,7 +75,15 @@ public partial class ClientHypermediaTests
     // search hit, a hold item, an external-link row) advertise the document's address themselves.
     private static readonly Dictionary<string, int> NamedExceptions = new()
     {
+        // Each entry is ONE line, and each is COUNTED rather than exempted, so a second address appearing in
+        // the same file fails the build.
+        //
+        // ApiRoot's entry used to be satisfied by the string "/api/tags" inside a COMMENT, while the real
+        // entry-point read — `GetFromJsonAsync<RootResponse>("api")` — carries no slash and so matched
+        // nothing. The budget was right by coincidence and protected nothing (#862). Both are now counted for
+        // what they are: the entry point is matched by EntryPointRead, and comments are not scanned at all.
         ["src/SimplArchive.Client/Services/ApiRoot.cs"] = 1,
+        ["src/SimplArchive.DesktopClient/Services/ApiCore.cs"] = 1,
         ["src/SimplArchive.Client/Services/BrowseService.cs"] = 1,
     };
 
@@ -194,6 +225,24 @@ public partial class ClientHypermediaTests
 
         // Hyphenated rels must be seen: the earlier pattern was [A-Za-z]+, which silently could not match one.
         Assert.Equal("external-links", RelFollowed().Match("""RequireAsync("external-links")""").Groups["rel"].Value);
+
+        // #862: the append form ADR 0557 calls "composing in disguise". It carries no api/ literal at all, so
+        // the original pattern scored it zero — the reason the burn-down could read as finished while it was not.
+        Assert.Single(ComposedByAppending.Matches("$\"{annotationsHref}/{annotation.Id}\""));
+        Assert.Single(ComposedByAppending.Matches("$\"{ListUrl}/{link.Id}\""));
+
+        // …and the two calibration decisions, pinned so a later widening cannot quietly undo them. Appending a
+        // QUERY is FOLLOWING (0557's own boundary), and a path built from things that are not addresses — an
+        // object key, a display path — is not this rule's business. Without these, the pattern matched 19 sites
+        // of which 4 were real, and a guard that is wrong 15 times out of 19 gets suppressed rather than read.
+        Assert.Empty(ComposedByAppending.Matches("$\"{childrenHref}?limit=1\""));
+        Assert.Empty(ComposedByAppending.Matches("$\"{tenantId}/{filingYear}/{guid}\""));
+
+        // The entry point is COUNTED, not exempted — it is spelled "api" with no slash, which is why it was
+        // invisible and why two comments existed saying so. An unrelated "api" argument is not swept in.
+        Assert.Single(EntryPointRead.Matches("await Http.GetAsync(\"api\", cancellationToken)"));
+        Assert.Single(EntryPointRead.Matches("await _anonymous.GetFromJsonAsync<RootResponse>(\"api\", ct)"));
+        Assert.Empty(EntryPointRead.Matches("new ReferencesViewModel(client, Guid.Empty, \"Report.pdf\", \"api\")"));
     }
 
     // Every call shape that takes a rel NAME. RequireMeAsync/MeHrefAsync are spelled out: neither contains
@@ -272,7 +321,22 @@ public partial class ClientHypermediaTests
 
         foreach (var file in ClientFiles(root))
         {
-            var matches = ComposedApiUrl.Matches(File.ReadAllText(file)).Count;
+            // COMMENTS ARE NOT CODE, and this scanner had to learn it: the moment the append pattern was added,
+            // the three comments EXPLAINING it counted as three violations. A guard that punishes documenting
+            // the rule teaches people to stop documenting it (#862). The original `api/` pattern got away with
+            // it only because that spelling is rare in prose.
+            var code = File.ReadLines(file)
+                .Where(l => !l.TrimStart().StartsWith("//", StringComparison.Ordinal)
+                    && !l.TrimStart().StartsWith("*", StringComparison.Ordinal)
+                    && !l.TrimStart().StartsWith("@*", StringComparison.Ordinal));
+
+            var text = string.Join('\n', code);
+
+            // BOTH spellings count against the same ledger, because they are the same offence: an address the
+            // client built rather than followed. Counting them separately would let a file trade one for the
+            // other without the number moving.
+            var matches = ComposedApiUrl.Matches(text).Count + ComposedByAppending.Matches(text).Count
+                + EntryPointRead.Matches(text).Count;
             if (matches > 0)
             {
                 counts[Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/')] = matches;

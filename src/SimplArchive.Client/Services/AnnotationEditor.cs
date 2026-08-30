@@ -527,7 +527,16 @@ public sealed class AnnotationEditor(HttpClient http, IDialogService dialogs, IS
 
     // ---- Requests --------------------------------------------------------------------------------------
 
-    private string HrefFor(AnnotationDto a) => $"{_collectionHref!.TrimStart('/')}/{a.Id}";
+    /// <summary>This annotation's OWN address, as its row advertised it (#862).</summary>
+    /// <remarks>
+    /// Was `$"{_collectionHref}/{a.Id}"` — a path-segment append onto a rel-supplied href, which ADR 0557 calls
+    /// composing in disguise. The hypermedia ratchet could not see it: its regex matches only literals that
+    /// START with `api/`, and this one starts with an interpolation hole. The server had advertised the `self`
+    /// rel on every annotation all along.
+    /// </remarks>
+    private static string HrefFor(AnnotationDto a) =>
+        a.Links?.FirstOrDefault(l => l.Rel == "self")?.Href?.TrimStart('/')
+        ?? throw new InvalidOperationException("The annotation advertised no 'self' rel (ADR 0543).");
 
     private AnnotationDto? Find(Guid id) => _annotations.FirstOrDefault(a => a.Id == id);
 
@@ -598,6 +607,9 @@ public sealed class AnnotationEditor(HttpClient http, IDialogService dialogs, IS
         public bool CanEdit { get; set; }
 
         public bool CanDelete { get; set; }
+
+        // The row's own address — what HrefFor follows instead of composing one (#862).
+        public List<Hypermedia.LinkResponse>? Links { get; set; }
 
         public string? Points { get; set; }
     }

@@ -40,8 +40,13 @@ public class DesktopAnnotationTests
         Assert.True(note.CanDelete);
         Assert.False(string.IsNullOrEmpty(note.Etag));
 
+        // The row advertises its OWN address, which is what edit/delete now follow instead of composing one
+        // from the collection href and the id (#862, ADR 0727). Asserted here because every write below is
+        // silently dependent on it.
+        Assert.False(string.IsNullOrEmpty(note.SelfHref));
+
         // Edit it (move + retext) using the embedded ETag as If-Match.
-        await api.Annotations.UpdateAnnotationAsync(url, note.Id, 0, 0.5, 0.6, "Reviewed", "#8BC34A", note.Etag);
+        await api.Annotations.UpdateAnnotationAsync(note, 0, 0.5, 0.6, "Reviewed", "#8BC34A", note.Etag);
         var afterEdit = await api.Annotations.GetAnnotationsAsync(url);
         var edited = Assert.Single(afterEdit.Items);
         Assert.Equal("Reviewed", edited.Text);
@@ -50,7 +55,7 @@ public class DesktopAnnotationTests
         Assert.NotEqual(note.Etag, edited.Etag); // the token rotated on update
 
         // Delete it (fresh ETag).
-        await api.Annotations.DeleteAnnotationAsync(url, edited.Id, edited.Etag);
+        await api.Annotations.DeleteAnnotationAsync(edited, edited.Etag);
         Assert.Empty((await api.Annotations.GetAnnotationsAsync(url)).Items);
 
         // Clean up the throwaway document.
@@ -79,13 +84,13 @@ public class DesktopAnnotationTests
         Assert.Equal("Sized note", note.Text);
 
         // Resize it — a size-only update (position/text/colour preserved), the exact path the corner-grip drag uses.
-        await api.Annotations.UpdateAnnotationAsync(url, note.Id, note.PageIndex, note.PositionX, note.PositionY, 0.4, 0.2, note.Text, note.Color, note.Etag);
+        await api.Annotations.UpdateAnnotationAsync(note, note.PageIndex, note.PositionX, note.PositionY, 0.4, 0.2, note.Text, note.Color, note.Etag);
         var resized = Assert.Single((await api.Annotations.GetAnnotationsAsync(url)).Items);
         Assert.Equal(0.4, resized.Width!.Value, 3);
         Assert.Equal(0.2, resized.Height!.Value, 3);
         Assert.Equal("Sized note", resized.Text);
 
-        await api.Annotations.DeleteAnnotationAsync(url, resized.Id, resized.Etag);
+        await api.Annotations.DeleteAnnotationAsync(resized, resized.Etag);
         await api.Documents.DeleteAsync(doc.Href("self"));
     }
 
@@ -178,7 +183,7 @@ public class DesktopAnnotationTests
         Assert.Equal(0.2, resized.Height!.Value, 3);
         Assert.Equal(0.4, resized.PositionX, 3); // position preserved
 
-        await api.Annotations.DeleteAnnotationAsync(url, resized.Id, resized.Etag);
+        await api.Annotations.DeleteAnnotationAsync(resized, resized.Etag);
         await api.Documents.DeleteAsync(doc.Href("self"));
     }
 
@@ -228,12 +233,12 @@ public class DesktopAnnotationTests
 
         // Recolour the highlight — a colour-only update on a text-less shape (the palette-for-highlights fix,
         // ADR "Annotation shape recolour"): the empty text is valid for a shape, and the colour changes.
-        await api.Annotations.UpdateAnnotationAsync(url, shape.Id, shape.PageIndex, shape.PositionX, shape.PositionY, shape.Width, shape.Height, "", "#4FC3F7", shape.Etag);
+        await api.Annotations.UpdateAnnotationAsync(shape, shape.PageIndex, shape.PositionX, shape.PositionY, shape.Width, shape.Height, "", "#4FC3F7", shape.Etag);
         var recoloured = Assert.Single((await api.Annotations.GetAnnotationsAsync(url)).Items);
         Assert.Equal("#4FC3F7", recoloured.Color);
         Assert.Equal("", recoloured.Text);
 
-        await api.Annotations.DeleteAnnotationAsync(url, recoloured.Id, recoloured.Etag);
+        await api.Annotations.DeleteAnnotationAsync(recoloured, recoloured.Etag);
         Assert.Empty((await api.Annotations.GetAnnotationsAsync(url)).Items);
         await api.Documents.DeleteAsync(doc.Href("self"));
     }

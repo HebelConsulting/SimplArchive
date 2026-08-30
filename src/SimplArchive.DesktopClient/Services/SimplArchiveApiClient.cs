@@ -369,31 +369,10 @@ public sealed class SimplArchiveApiClient
         Core.RootHrefAsync(rel, cancellationToken);
 
     // The API root's link relations — the ONE URL a client is allowed to know (ADR 0543); everything else is
-    // discovered from here. Note "api" carries no slash, so it is not a composed resource path.
-    public async Task<IReadOnlyDictionary<string, string>> GetRootLinksAsync(CancellationToken cancellationToken = default)
-    {
-        var links = new Dictionary<string, string>(StringComparer.Ordinal);
-        using var response = await _http.GetAsync("api", cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            return links;
-        }
-
-        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-        if (doc.RootElement.TryGetProperty("links", out var items) && items.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var link in items.EnumerateArray())
-            {
-                if (link.TryGetProperty("rel", out var rel) && rel.GetString() is { Length: > 0 } name
-                    && link.TryGetProperty("href", out var href) && href.GetString() is { Length: > 0 } value)
-                {
-                    links[name] = value.TrimStart('/');
-                }
-            }
-        }
-
-        return links;
-    }
+    // discovered from here. Delegated rather than repeated: this file used to carry its own copy of the read,
+    // and the two had already drifted on whether the href keeps its leading slash (#862).
+    public Task<IReadOnlyDictionary<string, string>> GetRootLinksAsync(CancellationToken cancellationToken = default) =>
+        Core.GetRootLinksAsync(cancellationToken);
 
 
     internal static async Task<string?> ErrorCodeAsync(HttpResponseMessage response, CancellationToken cancellationToken)

@@ -289,11 +289,11 @@ public sealed partial class PreviewViewModel : ObservableObject
         {
             if (result.Action == "delete")
             {
-                await Api.Annotations.DeleteAnnotationAsync(_annotationsUrl, note.Id, note.Etag);
+                await Api.Annotations.DeleteAnnotationAsync(note, note.Etag);
             }
             else if (result.Action == "save")
             {
-                await Api.Annotations.UpdateAnnotationAsync(_annotationsUrl, note.Id, note.PageIndex, note.PositionX, note.PositionY, note.Width, note.Height, result.Text, result.Color, note.Etag);
+                await Api.Annotations.UpdateAnnotationAsync(note, note.PageIndex, note.PositionX, note.PositionY, note.Width, note.Height, result.Text, result.Color, note.Etag);
             }
             else
             {
@@ -327,7 +327,7 @@ public sealed partial class PreviewViewModel : ObservableObject
 
         try
         {
-            await Api.Annotations.UpdateAnnotationAsync(_annotationsUrl, note.Id, note.PageIndex, move.X, move.Y, note.Width, note.Height, note.Text, note.Color, note.Etag);
+            await Api.Annotations.UpdateAnnotationAsync(note, note.PageIndex, move.X, move.Y, note.Width, note.Height, note.Text, note.Color, note.Etag);
         }
         catch (Exception e)
         {
@@ -355,7 +355,7 @@ public sealed partial class PreviewViewModel : ObservableObject
 
         try
         {
-            await Api.Annotations.UpdateAnnotationAsync(_annotationsUrl, note.Id, note.PageIndex, note.PositionX, note.PositionY, resize.Width, resize.Height, note.Text, note.Color, note.Etag);
+            await Api.Annotations.UpdateAnnotationAsync(note, note.PageIndex, note.PositionX, note.PositionY, resize.Width, resize.Height, note.Text, note.Color, note.Etag);
         }
         catch (Exception e)
         {
@@ -396,7 +396,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         {
             foreach (var a in targets)
             {
-                await Api.Annotations.UpdateAnnotationAsync(_annotationsUrl, a.Id, a.PageIndex, a.PositionX, a.PositionY, a.Width, a.Height, a.Text, color, a.Etag);
+                await Api.Annotations.UpdateAnnotationAsync(a, a.PageIndex, a.PositionX, a.PositionY, a.Width, a.Height, a.Text, color, a.Etag);
             }
         }
         catch (Exception e)
@@ -584,7 +584,7 @@ public sealed partial class PreviewViewModel : ObservableObject
             {
                 var nx = Math.Clamp(a.PositionX + move.Dx, 0, 1);
                 var ny = Math.Clamp(a.PositionY + move.Dy, 0, 1);
-                await Api.Annotations.UpdateAnnotationAsync(_annotationsUrl, a.Id, a.PageIndex, nx, ny, a.Width, a.Height, a.Text, a.Color, a.Etag);
+                await Api.Annotations.UpdateAnnotationAsync(a, a.PageIndex, nx, ny, a.Width, a.Height, a.Text, a.Color, a.Etag);
             }
         }
         catch (Exception e)
@@ -609,7 +609,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         {
             foreach (var a in targets)
             {
-                await Api.Annotations.DeleteAnnotationAsync(_annotationsUrl, a.Id, a.Etag);
+                await Api.Annotations.DeleteAnnotationAsync(a, a.Etag);
             }
         }
         catch (Exception e)
