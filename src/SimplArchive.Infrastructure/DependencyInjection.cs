@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Infrastructure.Acl;
@@ -51,7 +52,44 @@ public static class DependencyInjection
             : TimeProvider.System;
         services.AddKeyedSingleton("demo-clock", demoClock);
 
-        services.AddDbContext<SimplArchiveDbContext>(options => options.UseNpgsql(connectionString));
+        // ONE data source for the process, so the pool is one pool. That matters beyond tidiness: the ceiling
+        // applied above is per data source, and a design that ended up with two live ones would silently double
+        // the connection count — the failure ADR 0701 exists to prevent (#750).
+        //
+        // Its job here is to carry the password provider. When one is registered (the Api registers the OpenBao
+        // one), Npgsql re-asks for the password on its own schedule and applies it to NEW physical connections,
+        // which is what lets the process outlive a single credential lifetime without ever swapping a username
+        // or rebuilding the pool. With no provider registered — every test, and any deployment not using
+        // OpenBao — the connection string carries its own password and nothing changes.
+        services.AddSingleton(sp =>
+        {
+            var builder = new Npgsql.NpgsqlDataSourceBuilder(connectionString);
+
+            if (sp.GetService<IDatabasePasswordProvider>() is { } passwords)
+            {
+                var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("SimplArchive.Infrastructure.DatabaseCredentials");
+
+                builder.UsePeriodicPasswordProvider(
+                    async (_, cancellationToken) =>
+                    {
+                        var password = await passwords.GetPasswordAsync(cancellationToken);
+                        logger.LogDebug("Refreshed the database password from the secrets store.");
+                        return password;
+                    },
+                    // Comfortably inside the 12h rotation period, so a refresh has many chances to land before
+                    // the password it holds stops working.
+                    successRefreshInterval: TimeSpan.FromHours(1),
+                    // On failure Npgsql KEEPS the password it already has and retries on this interval, which is
+                    // the "keep serving, retry, warn" behaviour the outage story argues for: a brief secrets-store
+                    // blip must not take down an app whose current credential is still perfectly valid.
+                    failureRefreshInterval: TimeSpan.FromSeconds(30));
+            }
+
+            return builder.Build();
+        });
+
+        services.AddDbContext<SimplArchiveDbContext>((sp, options) =>
+            options.UseNpgsql(sp.GetRequiredService<Npgsql.NpgsqlDataSource>()));
 
         // Startup states the effective ceiling (Program.cs). The number is otherwise invisible — it lives inside
         // a connection string nobody may print, because that string carries the password.

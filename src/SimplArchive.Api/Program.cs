@@ -122,6 +122,22 @@ builder.Services.AddOpenApi();
 // must track real time. A SEPARATE keyed "demo-clock" (also in AddInfrastructure) is a fixed instant only when
 // `Demo:Clock` is set by the manual-capture harness, and only the demo seed + audit recorder read it, so the
 // manual's time-sensitive screens are byte-stable without freezing the auth clock.
+// The rotating database password (ADR "Database credential refresh"). Registered BEFORE AddInfrastructure so the
+// NpgsqlDataSource it builds can pick the provider up; when the runtime static role is not provisioned nothing
+// is registered and the connection string keeps its own password, exactly as before — which is what leaves every
+// test and every non-OpenBao deployment untouched.
+{
+    var openBao = new SimplArchive.Api.Configuration.OpenBaoOptions();
+    builder.Configuration.GetSection(SimplArchive.Api.Configuration.OpenBaoOptions.SectionName).Bind(openBao);
+
+    if (!string.IsNullOrWhiteSpace(openBao.Address) && !string.IsNullOrWhiteSpace(openBao.DatabaseRuntimeStaticRole))
+    {
+        builder.Services.AddSingleton(openBao);
+        builder.Services.AddSingleton<SimplArchive.Application.Abstractions.IDatabasePasswordProvider,
+            SimplArchive.Api.Configuration.OpenBaoDatabasePasswordProvider>();
+    }
+}
+
 builder.Services.AddInfrastructure(builder.Configuration);
 
 // Persist Data Protection keys in Postgres (ADR 0514) via the EF Core key store, so antiforgery + auth cookies

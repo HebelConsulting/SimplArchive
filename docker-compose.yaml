@@ -321,7 +321,7 @@ services:
         bao secrets enable database || true
         bao write database/config/simplarchive \
           plugin_name=postgresql-database-plugin \
-          allowed_roles=simplarchive,simplarchive-owner \
+          allowed_roles=simplarchive,simplarchive-owner,simplarchive-runtime \
           connection_url='postgresql://{{username}}:{{password}}@db:5432/simplarchive?sslmode=disable' \
           username=simplarchive_vault password=simplarchive_vault_bootstrap
         bao write -force database/rotate-root/simplarchive
@@ -348,13 +348,31 @@ services:
         # (`28P01`). An explicit rotate-role makes OpenBao ALTER Postgres to a fresh password it also stores, so
         # the two always re-agree after a re-provision. (rotate-root above already re-synced simplarchive_vault.)
         bao write -f database/rotate-role/simplarchive-owner
+        # Static role for the RUNTIME connection (the app's own DML identity, created by db-init). This is what
+        # makes the app survive longer than one credential lifetime: a dynamic credential mints a new USERNAME
+        # per lease, which a live connection pool cannot swap, whereas rotating the password of a fixed username
+        # is something Npgsql applies to new physical connections by itself.
+        #
+        # Rotated more often than the owner (12h vs 24h) because it is the credential in constant use; the app
+        # refreshes well inside that window and keeps serving on the current password if OpenBao is briefly
+        # unreachable.
+        bao write database/static-roles/simplarchive-runtime \
+          db_name=simplarchive \
+          username=simplarchive_runtime \
+          rotation_period=43200 \
+          rotation_statements="ALTER ROLE \"{{name}}\" WITH PASSWORD '{{password}}';"
+        # Same forced rotation as the owner role above, for the same reason: writing a static-role config only
+        # rotates on FIRST creation, so a re-provision against a persistent OpenBao would leave OpenBao holding a
+        # password db-init has just reset to its bootstrap seed — the `28P01` drift that ADR "Fix OpenBao
+        # static-role drift on re-provision" documents. An explicit rotate makes the two re-agree every time.
+        bao write -f database/rotate-role/simplarchive-runtime
         # Transit engine for encrypting the TOTP secret at rest (ADR "MFA require-policy + TOTP secret
         # encryption") — the key never leaves OpenBao.
         bao secrets enable transit || true
         bao write -f transit/keys/simplarchive-mfa
         # AppRole machine auth for the Api (fixed dev ids).
         bao auth enable approle || true
-        printf 'path "secret/data/simplarchive/*" { capabilities = ["read"] }\npath "database/creds/simplarchive" { capabilities = ["read"] }\npath "database/static-creds/simplarchive-owner" { capabilities = ["read"] }\npath "transit/encrypt/simplarchive-mfa" { capabilities = ["update"] }\npath "transit/decrypt/simplarchive-mfa" { capabilities = ["update"] }\n' | bao policy write simplarchive -
+        printf 'path "secret/data/simplarchive/*" { capabilities = ["read"] }\npath "database/creds/simplarchive" { capabilities = ["read"] }\npath "database/static-creds/simplarchive-owner" { capabilities = ["read"] }\npath "database/static-creds/simplarchive-runtime" { capabilities = ["read"] }\npath "transit/encrypt/simplarchive-mfa" { capabilities = ["update"] }\npath "transit/decrypt/simplarchive-mfa" { capabilities = ["update"] }\n' | bao policy write simplarchive -
         bao write auth/approle/role/simplarchive token_policies=simplarchive token_ttl=1h token_max_ttl=4h
         bao write auth/approle/role/simplarchive/role-id role_id=simplarchive-role
         # Idempotent on a re-run against an already-provisioned OpenBao (the fixed SecretID may already exist).
@@ -415,6 +433,12 @@ services:
       OpenBao__DatabaseConnectionTemplate: "Host=db;Port=5432;Database=simplarchive"
       # The database static role whose OpenBao-rotated password backs the migration connection (ADR 0359).
       OpenBao__DatabaseOwnerStaticRole: "simplarchive-owner"
+      # The database static role backing the RUNTIME connection (ADR "Database credential refresh"). Set here,
+      # the app connects as a fixed login and re-reads its rotating password for as long as it runs; unset, it
+      # falls back to one dynamic credential read at startup — which expires at its 24h lease and leaves the api
+      # permanently 503 until it is restarted. That is not hypothetical: it is what this dev stack did after two
+      # days up.
+      OpenBao__DatabaseRuntimeStaticRole: "simplarchive-runtime"
       # The browser-facing origin — must match the host port mapping above so the blazor-client's seeded
       # redirect URIs and OpenIddict's issuer line up with what the browser actually loads.
       App__BaseUrl: "http://localhost:8080"

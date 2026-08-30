@@ -68,9 +68,29 @@ public sealed class OpenBaoSecretsReader
         // non-secret template + the issued username/password.
         if (!string.IsNullOrWhiteSpace(_options.DatabaseConnectionTemplate))
         {
-            var (username, password) = await ReadDatabaseCredentialAsync(token, cancellationToken);
             var template = _options.DatabaseConnectionTemplate.TrimEnd(';');
-            data["ConnectionStrings:Default"] = $"{template};Username={username};Password={password}";
+
+            if (!string.IsNullOrWhiteSpace(_options.DatabaseRuntimeStaticRole)
+                && await ReadStaticDatabaseCredentialAsync(token, _options.DatabaseRuntimeStaticRole, cancellationToken) is { } runtime)
+            {
+                // The runtime connects as a FIXED login whose password OpenBao rotates, and the password is
+                // deliberately ABSENT here: Npgsql refuses a password provider on a connection string that
+                // already carries one, and the provider is the only thing that can keep this credential current
+                // as it rotates. See IDatabasePasswordProvider for why a dynamic credential cannot do this job.
+                // The username comes from OpenBao's own answer rather than from configuration, so the name the
+                // app connects as cannot drift from the one OpenBao is rotating. The password in that same
+                // response is deliberately DISCARDED: the provider fetches it at connect time, and baking a
+                // snapshot in here would recreate the very staleness this change removes.
+                data["ConnectionStrings:Default"] = $"{template};Username={runtime.Username}";
+            }
+            else
+            {
+                // Legacy path: one dynamic credential, read once, valid until its lease expires. Kept so a
+                // deployment that has not provisioned the static role still starts — but it is the shape whose
+                // expiry took the dev stack down, so it is not the default anywhere we provision.
+                var (username, password) = await ReadDatabaseCredentialAsync(token, cancellationToken);
+                data["ConnectionStrings:Default"] = $"{template};Username={username};Password={password}";
+            }
 
             // Dedicated migration-owner credential (ADRs "Dedicated migration owner role" +
             // "OpenBao static-role rotation for the migration owner"): the schema-owning `simplarchive` role,
@@ -87,6 +107,26 @@ public sealed class OpenBaoSecretsReader
 
         Log.Debug("Read {Count} secret(s) from OpenBao at {Address}.", data.Count, _options.Address);
         return data;
+    }
+
+    /// <summary>
+    /// The CURRENT password of the runtime's fixed database login — re-read on Npgsql's refresh schedule for as
+    /// long as the process lives, which is the whole point (see <c>IDatabasePasswordProvider</c>).
+    /// </summary>
+    /// <remarks>
+    /// Logs in afresh each call rather than reusing a token: the AppRole token has its own TTL (4h in the dev
+    /// provisioning), shorter than the process lifetime, so a cached one would expire and reproduce the very
+    /// staleness bug this exists to fix — one level up, and harder to see.
+    /// </remarks>
+    public async Task<string?> ReadRuntimeDatabasePasswordAsync(CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(_options.DatabaseRuntimeStaticRole))
+        {
+            return null;
+        }
+
+        var token = await LoginAsync(cancellationToken);
+        return (await ReadStaticDatabaseCredentialAsync(token, _options.DatabaseRuntimeStaticRole, cancellationToken))?.Password;
     }
 
     private async Task<string> LoginAsync(CancellationToken cancellationToken)

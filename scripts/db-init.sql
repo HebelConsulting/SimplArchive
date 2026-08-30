@@ -10,8 +10,20 @@
 --                         mint the dynamic runtime roles + rotate the static role; root-rotated by OpenBao (its
 --                         literal is a bootstrap seed too). NOINHERIT + admin-only membership so it can
 --                         administer `simplarchive`/`simplarchive_app` without inheriting the owner's rights.
---   * simplarchive_app   (NOLOGIN group)     — the least-privilege runtime bundle; the OpenBao dynamic
---                         per-startup roles join it (IN ROLE) and inherit its DML grants.
+--   * simplarchive_app   (NOLOGIN group)     — the least-privilege runtime bundle; the runtime login role and
+--                         the OpenBao dynamic per-startup roles join it (IN ROLE) and inherit its DML grants.
+--   * simplarchive_runtime (LOGIN)           — the FIXED identity the running app connects as, whose password
+--                         OpenBao owns and rotates as a database STATIC role. It owns nothing and holds only
+--                         the app group's DML, so it is emphatically not the schema owner.
+--
+--                         It exists because a dynamic credential cannot be refreshed in place: each lease mints
+--                         a NEW username, and a running process cannot swap the username underneath a live
+--                         connection pool. A static role rotates the PASSWORD of a fixed username, which Npgsql
+--                         can pick up for new physical connections without the app noticing. Before this, the
+--                         app read one dynamic credential at startup and kept it for the life of the process —
+--                         so at `default_ttl` (24h) Postgres revoked the role and EVERY new connection failed
+--                         `28P01` until someone restarted the container. Observed in the dev stack after ~2
+--                         days: a permanently unhealthy api, with `/health/ready` correctly reporting 503.
 --
 -- ALTER DEFAULT PRIVILEGES makes anything `simplarchive` creates auto-granted (DML) to the app group, so a
 -- table created during a migration is usable by an already-minted dynamic role regardless of ordering.
@@ -27,8 +39,21 @@ BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'simplarchive_vault') THEN
     CREATE ROLE simplarchive_vault LOGIN CREATEROLE NOINHERIT PASSWORD 'simplarchive_vault_bootstrap';
   END IF;
+  -- Created here rather than by OpenBao, because a static role can only rotate a password for a user that
+  -- already exists. Idempotent, so an EXISTING dev volume gains it on the next boot without a `down -v`.
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'simplarchive_runtime') THEN
+    CREATE ROLE simplarchive_runtime LOGIN PASSWORD 'simplarchive_runtime_bootstrap' IN ROLE simplarchive_app;
+  END IF;
 END
 $$;
+
+-- Belt and braces: an existing volume may have the role from an earlier run without the group membership.
+GRANT simplarchive_app TO simplarchive_runtime;
+GRANT CONNECT ON DATABASE simplarchive TO simplarchive_runtime;
+
+-- The OpenBao engine admin must be able to ALTER this role's password (CREATEROLE + ADMIN on the target), the
+-- same pairing that lets it rotate the owner role.
+GRANT simplarchive_runtime TO simplarchive_vault WITH ADMIN OPTION;
 
 -- simplarchive administers the app group so it can add each newly-minted dynamic role to it.
 GRANT simplarchive_app TO simplarchive WITH ADMIN OPTION;

@@ -32,4 +32,16 @@ public sealed class OpenBaoOptions
     // database/static-creds/<name> and composed into ConnectionStrings:Migration. Empty => skipped (migrations
     // fall back to ConnectionStrings:Default), so tests / non-OpenBao deployments are unaffected.
     public string DatabaseOwnerStaticRole { get; set; } = "";
+
+    // The database secrets-engine *static* role for the RUNTIME connection — a fixed login whose password
+    // OpenBao rotates. When set, ConnectionStrings:Default is composed with that username and NO password, and
+    // the password is supplied at connect time by OpenBaoDatabasePasswordProvider so it can be re-read as it
+    // rotates.
+    //
+    // This is what makes the app outlive one credential lifetime. The DYNAMIC role below mints a new USERNAME
+    // per lease, so its credential cannot be refreshed in place: the app read it once at startup, and at
+    // default_ttl (24h) Postgres revoked the role and every new connection failed 28P01 until a restart.
+    // Empty => the dynamic credential is used exactly as before, which is what keeps tests and non-OpenBao
+    // deployments unaffected.
+    public string DatabaseRuntimeStaticRole { get; set; } = "";
 }
