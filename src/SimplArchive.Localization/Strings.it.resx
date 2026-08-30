@@ -1527,6 +1527,9 @@
   <data name="RbHardDelete" xml:space="preserve">
     <value>Elimina definitivamente</value>
   </data>
+  <data name="RbActionUnavailable" xml:space="preserve">
+    <value>Questa azione non è più disponibile — aggiorna il cestino.</value>
+  </data>
   <data name="RbEmpty" xml:space="preserve">
     <value>Il cestino è vuoto.</value>
   </data>

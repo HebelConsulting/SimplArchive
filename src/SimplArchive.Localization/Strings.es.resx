@@ -1527,6 +1527,9 @@
   <data name="RbHardDelete" xml:space="preserve">
     <value>Eliminar permanentemente</value>
   </data>
+  <data name="RbActionUnavailable" xml:space="preserve">
+    <value>Esa acción ya no está disponible — actualiza la papelera.</value>
+  </data>
   <data name="RbEmpty" xml:space="preserve">
     <value>La papelera está vacía.</value>
   </data>

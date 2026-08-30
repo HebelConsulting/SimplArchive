@@ -24,19 +24,22 @@
            merely-nothing-selected only disables. The buttons stay flat: no toggles here, but the one-shape
            rule (ADR 0576/0581) is why the filled/outlined accents went. *@
         <div class="wb-search-bar pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default);">
-            <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_rbChecked.Count == 0)" OnClick="RestoreSelectedAsync"
+            @* Gated on the collection's own rel, which was ALREADY captured in a field and consulted only at
+               the point of use — where a null simply returned (#872). The selection count is a precondition,
+               not a permission. *@
+            <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_rbChecked.Count == 0 || _restoreSelectedHref is null)" OnClick="RestoreSelectedAsync"
                        title="@string.Format(Strings.Get("RbRestoreSelected"), _rbChecked.Count)"
                        aria-label="@string.Format(Strings.Get("RbRestoreSelected"), _rbChecked.Count)">
                 <MudIcon Icon="@Icons.Material.Filled.RestoreFromTrash" Size="Size.Small" /><span class="wb-rib-label">@string.Format(Strings.Get("RbRestoreSelected"), _rbChecked.Count)</span>
             </MudButton>
             @if (IsTenantAdmin)
             {
-                <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(_rbChecked.Count == 0)" OnClick="PurgeSelectedAsync"
+                <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(_rbChecked.Count == 0 || _purgeSelectedHref is null)" OnClick="PurgeSelectedAsync"
                            title="@string.Format(Strings.Get("RbPurgeSelected"), _rbChecked.Count)"
                            aria-label="@string.Format(Strings.Get("RbPurgeSelected"), _rbChecked.Count)">
                     <MudIcon Icon="@Icons.Material.Filled.DeleteForever" Size="Size.Small" /><span class="wb-rib-label">@string.Format(Strings.Get("RbPurgeSelected"), _rbChecked.Count)</span>
                 </MudButton>
-                <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_recycleBinItems.Count == 0)" OnClick="HardDeleteAllAsync"
+                <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_recycleBinItems.Count == 0 || _purgeAllHref is null)" OnClick="HardDeleteAllAsync"
                            title="@Strings.Get("RbHardDeleteAll")" aria-label="@Strings.Get("RbHardDeleteAll")">
                     <MudIcon Icon="@Icons.Material.Filled.DeleteSweep" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RbHardDeleteAll")</span>
                 </MudButton>
@@ -65,8 +68,14 @@
                        the selection, differing only in scope (#521's split). Hard delete stays admin-HIDDEN. *@
                     <MudTd Style="text-align:right; white-space:nowrap;" @onclick:stopPropagation="true">
                         <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomLeft">
-                            <MudMenuItem Icon="@Icons.Material.Filled.RestoreFromTrash" OnClick="() => RestoreRecycleBinItemAsync(row)">@Strings.Get("RbRestore")</MudMenuItem>
-                            @if (IsTenantAdmin)
+                            @* Each row action on the row's OWN rel (#872), not on "the row exists". IsTenantAdmin
+                               stays on hard delete as well: the flag hides the whole destructive group, the rel
+                               says whether THIS row accepts it, and they are different questions. *@
+                            @if (row.Href("restore") is not null)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.RestoreFromTrash" OnClick="() => RestoreRecycleBinItemAsync(row)">@Strings.Get("RbRestore")</MudMenuItem>
+                            }
+                            @if (IsTenantAdmin && row.Href("purge") is not null)
                             {
                                 @* Destructive keeps its distance in a menu too — the divider the desktop's
                                    context menu had from day one (tranche-1 parity slip, caught in review). *@
@@ -246,7 +255,7 @@
 
     private async Task RestoreRecycleBinItemAsync(RecycleBinItem item)
     {
-        if (item.Href("restore") is not { } restoreHref) { return; }
+        if (item.Href("restore") is not { } restoreHref) { Snackbar.Add(Strings.Get("RbActionUnavailable"), Severity.Warning); return; }
 
         var response = await Http.PostAsync(restoreHref, null);
         if (response.IsSuccessStatusCode)
@@ -312,7 +321,7 @@
     private async Task RestoreSelectedAsync()
     {
         var ids = _rbChecked.ToList();
-        if (_restoreSelectedHref is not { } href) { return; }
+        if (_restoreSelectedHref is not { } href) { Snackbar.Add(Strings.Get("RbActionUnavailable"), Severity.Warning); return; }
 
         var response = await Http.PostAsJsonAsync(href, new { ids });
         if (response.IsSuccessStatusCode)
@@ -336,7 +345,7 @@
     // Per-row permanent purge — no extra confirmation (per spec).
     private async Task HardDeleteRecycleBinItemAsync(RecycleBinItem item)
     {
-        if (item.Href("purge") is not { } purgeHref) { return; }
+        if (item.Href("purge") is not { } purgeHref) { Snackbar.Add(Strings.Get("RbActionUnavailable"), Severity.Warning); return; }
 
         var response = await Http.PostAsync(purgeHref, null);
         if (response.IsSuccessStatusCode)
@@ -366,7 +375,8 @@
         }
 
         var ids = _rbChecked.ToList();
-        if (_purgeSelectedHref is not { } href) { return; }
+        // Reached only after the "I AGREE" ceremony, which is the worst place to say nothing at all (#863).
+        if (_purgeSelectedHref is not { } href) { Snackbar.Add(Strings.Get("RbActionUnavailable"), Severity.Warning); return; }
 
         var response = await Http.PostAsJsonAsync(href, new { ids });
         if (response.IsSuccessStatusCode)
@@ -395,7 +405,8 @@
             return;
         }
 
-        if (_purgeAllHref is not { } href) { return; }
+        // Likewise after "I AGREE".
+        if (_purgeAllHref is not { } href) { Snackbar.Add(Strings.Get("RbActionUnavailable"), Severity.Warning); return; }
 
         var response = await Http.PostAsync(href, null);
         if (response.IsSuccessStatusCode)

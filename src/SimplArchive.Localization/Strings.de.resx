@@ -1527,6 +1527,9 @@
   <data name="RbHardDelete" xml:space="preserve">
     <value>Endgültig löschen</value>
   </data>
+  <data name="RbActionUnavailable" xml:space="preserve">
+    <value>Diese Aktion ist nicht mehr verfügbar — aktualisieren Sie den Papierkorb.</value>
+  </data>
   <data name="RbEmpty" xml:space="preserve">
     <value>Der Papierkorb ist leer.</value>
   </data>

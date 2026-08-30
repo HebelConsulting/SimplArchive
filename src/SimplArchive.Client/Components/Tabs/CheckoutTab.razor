@@ -82,6 +82,12 @@
                    title="@Strings.Get("CoCheckIn")" aria-label="@Strings.Get("CoCheckIn")">
             <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CoCheckIn")</span>
         </MudButton>
+        @* Gated on ExpiresAt, and that is CORRECT — verified against the endpoint rather than assumed (#872).
+           ExpiresAt is `ttlDays > 0 ? … : null`, so a null means the tenant's auto-release TTL is OFF and there
+           is no idle timer to reset: this is an APPLICABILITY test, not a re-derived rights rule (the ADR 0554
+           distinction). POST /extend accepts it regardless, so gating on the unconditional `extend` rel instead
+           would enable a button that does nothing observable. The audit filed this as burn-down; reading the
+           endpoint refutes it. *@
         <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_selected?.ExpiresAt is null || _selectedIds.Count > 1)"
                    OnClick="@(() => ExtendCheckoutAsync(_selected!))"
                    title="@Strings.Get("CoExtend")" aria-label="@Strings.Get("CoExtend")">

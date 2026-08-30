@@ -25,12 +25,26 @@ public sealed partial class SensitivityLabelsViewModel : ObservableObject
     [ObservableProperty] private bool _newWatermark;
     [ObservableProperty] private string _status = "";
 
+    /// <summary>Whether the server said THIS caller may manage the label catalog (#873).</summary>
+    /// <remarks>
+    /// Defaults to false so a load that fails leaves the editor closed rather than open — absence is "not
+    /// available to you, here, now" (ADR 0543), and an unanswered question is not a yes.
+    /// </remarks>
+    [ObservableProperty] private bool _canManage;
+
     public async Task LoadAsync()
     {
         Labels.Clear();
         try
         {
-            foreach (var l in (await _api.Admin.GetSensitivityLabelsAsync()).Items)
+            // The catalog's `canManage` was PARSED and then dropped on the floor (#873): AdminClient reads it
+            // into SensitivityLabelCatalog and this loop took only `.Items`, so Add / Save / Retire rendered for
+            // a caller the server had already said cannot manage, and the refusal arrived as caught-exception
+            // status text. The gate existed on the wire the whole time — this is the cheapest fix in the audit.
+            var catalog = await _api.Admin.GetSensitivityLabelsAsync();
+            CanManage = catalog.CanManage;
+
+            foreach (var l in catalog.Items)
             {
                 Labels.Add(new SensitivityLabelRow(l.Id, l.Name, l.Rank, l.Color, l.Watermark, l.Retired, l.SelfHref, l.RetireHref, l.UnretireHref));
             }

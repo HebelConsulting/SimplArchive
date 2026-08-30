@@ -292,8 +292,12 @@ public class TokenController : ControllerBase
             return TokenError(OpenIddictConstants.Errors.InvalidGrant, "The impersonation target is not a valid user.");
         }
 
+        // The SAME call the principal listing makes when it decides whether to advertise `impersonate`
+        // (ADR 0722): the rel is a promise, and a promise backed by a second computation is only as good as the
+        // two staying in step — which they were not, since the listing sent DIRECT rights (#875).
         var targetRights = await _systemRights.GetEffectiveSystemRightsAsync(targetUserId);
-        if (targetRights.IsTenantAdmin || targetRights.CanImpersonate)
+        var actorRights = await _systemRights.GetEffectiveSystemRightsAsync(actorUserId);
+        if (!Users.ImpersonationPolicy.MayImpersonate(actorUserId, actorRights, actorIsAlreadyImpersonating: false, target, targetRights))
         {
             return TokenError(OpenIddictConstants.Errors.InvalidGrant, "An administrator cannot be impersonated.");
         }

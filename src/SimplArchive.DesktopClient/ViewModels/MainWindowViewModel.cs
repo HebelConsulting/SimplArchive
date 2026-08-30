@@ -4301,10 +4301,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     public bool CanResetSelectedPrincipalMfa => CanResetMfa && SelectedPrincipal is { IsGroup: false, MfaEnabled: true };
 
-    // Impersonate action shows for a selected active, non-admin user when the caller can impersonate and isn't
-    // already impersonating (ADR "User impersonation"). The server enforces the rules regardless.
+    // Impersonate shows where the row's `impersonate` rel says the server will accept it — not on the row's
+    // Rights, which are DIRECT columns while the endpoint refuses on EFFECTIVE ones (#875, ADR 0725).
     public bool CanImpersonateSelectedPrincipal => CanImpersonate && !IsImpersonating
-        && SelectedPrincipal is { IsGroup: false, IsActive: true, Rights: { IsTenantAdmin: false, CanImpersonate: false } };
+        && SelectedPrincipal is { IsGroup: false, Source: { } src } && src.Href("impersonate") is not null;
 
     // Called after the user finishes the enroll dialog — reflects the new state in the account menu.
     public void MarkMfaEnabled() => MfaEnabled = true;

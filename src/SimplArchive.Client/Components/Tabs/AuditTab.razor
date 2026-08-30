@@ -23,21 +23,24 @@
                    (ADR 0543). The verify chips are feedback, not actions — they ride beside the buttons that
                    produced them. Apply/Clear stay with the filter form below. *@
                 <div class="wb-search-bar pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default); flex-wrap:wrap;">
-                    <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="ExportAuditAsync"
+                    @* Each of these gates on the rel the audit collection advertised — all four were ALREADY
+                       captured in fields and then used with `!`, so a missing one was a null-deref or a request
+                       to nowhere rather than an absent affordance (#872). *@
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="ExportAuditAsync" Disabled="@(_auditExportHref is null)"
                                title="@Strings.Get("AuditExport")" aria-label="@Strings.Get("AuditExport")">
                         <MudIcon Icon="@Icons.Material.Filled.Download" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("AuditExport")</span>
                     </MudButton>
-                    <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" OnClick="VerifyAuditChainAsync" Disabled="_auditVerifying"
+                    <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" OnClick="VerifyAuditChainAsync" Disabled="@(_auditVerifying || _auditVerifyHref is null)"
                                title="@Strings.Get("AuditVerify")" aria-label="@Strings.Get("AuditVerify")">
                         <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("AuditVerify")</span>
                     </MudButton>
-                    <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="VerifyWormSegmentsAsync" Disabled="_wormVerifying"
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="VerifyWormSegmentsAsync" Disabled="@(_wormVerifying || _auditWormVerifyHref is null)"
                                title="@Strings.Get("AuditVerifyWorm")" aria-label="@Strings.Get("AuditVerifyWorm")">
                         <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("AuditVerifyWorm")</span>
                     </MudButton>
                     @if (IsTenantAdmin)
                     {
-                        <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" OnClick="PurgeAuditAsync" Disabled="_auditRetentionBusy"
+                        <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" OnClick="PurgeAuditAsync" Disabled="@(_auditRetentionBusy || _auditPurgeHref is null)"
                                    title="@Strings.Get("AuditPurgeNow")" aria-label="@Strings.Get("AuditPurgeNow")">
                             <MudIcon Icon="@Icons.Material.Filled.DeleteSweep" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("AuditPurgeNow")</span>
                         </MudButton>
@@ -292,7 +295,7 @@
         try
         {
             await EnsureAuditLinksAsync();
-            var resp = await Http.PostAsync(_auditPurgeHref!, null);
+            var resp = await Http.PostAsync(_auditPurgeHref!, null); // gated above; `!` is now a claim the UI enforces
             if (resp.IsSuccessStatusCode)
             {
                 var result = await resp.Content.ReadFromJsonAsync<PurgeDto>();

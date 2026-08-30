@@ -237,9 +237,40 @@ public class UsersController : ControllerBase
             links.Add(new Link("next", Url.Action(nameof(List), new { cursor = nextCursor, limit = pageSize })!, "GET"));
         }
 
+        // Whether the CALLER may impersonate at all is asked once; the per-target half is asked per row, and
+        // only when that first answer is yes — so a caller without CanImpersonate (the overwhelming majority,
+        // and every service account) pays nothing extra. This listing is a paginated admin screen, not a hot
+        // read, which is what makes a per-row effective-rights resolution affordable here where it would not
+        // have been on a document listing (#858's batch exists for that case).
+        // Impersonation does not nest, and the token endpoint refuses an already-impersonating actor — so the
+        // rel must not be offered to one either. Read from the claim, which is where that fact lives.
+        var alreadyImpersonating = HttpContext.User.FindFirst(SimplArchive.Auth.ImpersonationConstants.ImpersonatedByClaim) is not null;
+
+        var actorId = _currentUserAccessor.UserId;
+        var actorRights = actorId is { } id && !alreadyImpersonating
+            ? await _userSystemRights.GetEffectiveSystemRightsAsync(id, cancellationToken)
+            : null;
+
+        var users = new List<UserResource>(page.Count);
+        foreach (var user in page)
+        {
+            // Only when the caller could impersonate ANYONE do we pay for the per-target answer, so the common
+            // case costs nothing extra.
+            var mayImpersonate = actorId is { } actor
+                && actorRights is { CanImpersonate: true }
+                && Users.ImpersonationPolicy.MayImpersonate(
+                    actor,
+                    actorRights,
+                    actorIsAlreadyImpersonating: false,
+                    user,
+                    await _userSystemRights.GetEffectiveSystemRightsAsync(user.Id, cancellationToken));
+
+            users.Add(BuildResource(user, mayImpersonate));
+        }
+
         return Ok(new UsersListResource
         {
-            Users = page.Select(BuildResource).ToList(),
+            Users = users,
             Links = links,
         });
     }
@@ -844,7 +875,7 @@ public class UsersController : ControllerBase
         return NoContent();
     }
 
-    private static UserResource BuildResource(User user)
+    private static UserResource BuildResource(User user, bool mayImpersonate = false)
     {
         return new UserResource
         {
@@ -854,6 +885,9 @@ public class UsersController : ControllerBase
             IsActive = user.IsActive,
             MfaEnabled = user.MfaEnabledAt is not null,
             ImapShowAllDocuments = user.ImapShowAllDocuments,
+            // DIRECT rights (this user's own columns) — what the rights EDITOR needs, since that is what a PUT
+            // writes. Deliberately not effective rights: #875's defect was a client reading this and answering
+            // an impersonation question with it, which the server decides on EFFECTIVE rights instead.
             Rights = Users.SystemRightsMapping.Read(user),
             Links =
             [
@@ -870,6 +904,14 @@ public class UsersController : ControllerBase
                 new Link("reset-password", $"/api/users/{user.Id}/reset-password", "POST"),
                 new Link("reset-mfa", $"/api/users/{user.Id}/mfa/reset", "POST"),
                 new Link("deactivate", $"/api/users/{user.Id}", "DELETE"),
+
+                // Impersonating THIS user, advertised only where the token endpoint would actually accept it
+                // (#875, ADR 0722). Both clients used to decide this themselves from the row's DIRECT rights,
+                // and the server decides on EFFECTIVE ones — so a user who is an admin via a GROUP was offered
+                // and refused. A rel carries the whole answer, including the halves a row cannot show.
+                .. mayImpersonate
+                    ? new[] { new Link("impersonate", "/connect/token", "POST") }
+                    : [],
             ],
         };
     }

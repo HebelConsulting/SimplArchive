@@ -153,8 +153,14 @@
                         @string.Format(Strings.Get("UgImapShowAll"), sel.ImapShowAllDocuments ? Strings.Get("UgImapAllDocs") : Strings.Get("UgImapMailOnly"))
                     </MudText>
                 }
-                @* Impersonate a non-admin user (ADR "User impersonation"). *@
-                @if (CanImpersonate && !sel.Rights.IsTenantAdmin && !sel.Rights.CanImpersonate)
+                @* Impersonate a non-admin user (ADR "User impersonation"), on the row's `impersonate` rel (#875).
+                   This used to re-implement the server's rule from `sel.Rights` — and got it WRONG, because the
+                   listing sends each user's DIRECT rights (their own columns) while the token endpoint refuses
+                   on EFFECTIVE ones (own ∪ groups). A user who is a tenant admin via a GROUP was therefore
+                   offered as a target and refused on click. The rel carries the whole answer, including the
+                   halves a row cannot show — the target being active, not the caller, and the caller not
+                   already impersonating. *@
+                @if (sel.Href("impersonate") is not null)
                 {
                     <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.SupervisorAccount" OnClick="() => ImpersonatePrincipalAsync(sel)" Class="mb-2">@Strings.Get("UgImpersonate")</MudButton>
                 }
@@ -851,6 +857,7 @@
         // A group has no photo, which is also why that affordance is hidden for one.
         public string? PhotoHref { get; set; }
         public IReadOnlyDictionary<string, string>? Links { get; set; }
+
 
         public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
     }

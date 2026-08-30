@@ -1527,6 +1527,9 @@
   <data name="RbHardDelete" xml:space="preserve">
     <value>Hard-delete</value>
   </data>
+  <data name="RbActionUnavailable" xml:space="preserve">
+    <value>That action is no longer available — refresh the recycle bin.</value>
+  </data>
   <data name="RbEmpty" xml:space="preserve">
     <value>The recycle bin is empty.</value>
   </data>

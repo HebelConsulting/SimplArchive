@@ -104,5 +104,15 @@ public sealed partial class VersionsViewModel : ObservableObject
 public sealed record VersionRowViewModel(Guid Id, int VersionNumber, string DocumentDate, string Filed, string By, string? DownloadUrl, string FileExtension, bool IsCurrent, string? Comment, VersionsClient.VersionInfo Version)
 {
     public string Label => $"v{VersionNumber}";
-    public bool CanMakeCurrent => !IsCurrent;
+    /// <summary>May this version be made current — as the SERVER said, not as the row re-derives it.</summary>
+    /// <remarks>
+    /// Was `!IsCurrent`, a shape test, while the write requires the row's `restore` rel (VersionsClient uses
+    /// RequireHref, which THROWS). So a read-only caller got an enabled button whose click landed in the status
+    /// line (#873). The row already carries `Version` whole — with a comment saying it does so "so Make current
+    /// follows its restore rel" — and only the gate ignored it.
+    ///
+    /// !IsCurrent stays as well: the current version is not restorable to itself, which is applicability rather
+    /// than permission (ADR 0554's distinction).
+    /// </remarks>
+    public bool CanMakeCurrent => !IsCurrent && Version.Href("restore") is not null;
 }

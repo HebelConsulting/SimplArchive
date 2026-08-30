@@ -15,7 +15,9 @@
             <TextBox Text="{Binding NewColor}" Watermark="#RRGGBB" Width="100" />
             <NumericUpDown Value="{Binding NewRank}" Minimum="0" Maximum="100" Width="90" />
             <CheckBox Content="{loc:Tr SlColWatermark}" IsChecked="{Binding NewWatermark}" />
-            <Button Content="Add" Command="{Binding CreateCommand}" />
+            <!-- On the server's own canManage answer (#873), which the client was already receiving and
+                 discarding. Absence means the affordance is not offered, not that the click 403s. -->
+            <Button Content="Add" Command="{Binding CreateCommand}" IsVisible="{Binding CanManage}" />
         </StackPanel>
 
         <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Foreground="#c62828" Margin="0,8,0,0" />
@@ -33,8 +35,10 @@
                             <NumericUpDown Value="{Binding Rank}" Minimum="0" Maximum="100" Width="90" />
                             <CheckBox Content="WM" IsChecked="{Binding Watermark}" VerticalAlignment="Center" />
                             <Button Content="{loc:Tr Save}"
+                                    IsVisible="{Binding $parent[ItemsControl].((vm:SensitivityLabelsViewModel)DataContext).CanManage}"
                                     Command="{Binding $parent[ItemsControl].((vm:SensitivityLabelsViewModel)DataContext).SaveCommand}" CommandParameter="{Binding}" />
                             <Button Content="{Binding RetireLabel}"
+                                    IsVisible="{Binding $parent[ItemsControl].((vm:SensitivityLabelsViewModel)DataContext).CanManage}"
                                     Command="{Binding $parent[ItemsControl].((vm:SensitivityLabelsViewModel)DataContext).RetireCommand}" CommandParameter="{Binding}" />
                         </StackPanel>
                     </DataTemplate>

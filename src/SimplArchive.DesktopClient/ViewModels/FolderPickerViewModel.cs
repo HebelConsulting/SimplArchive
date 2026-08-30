@@ -87,7 +87,15 @@ public sealed partial class FolderPickerViewModel : ObservableObject
         // A personal space's ROOT is shown and expands, but is not a target: its first level is provisioned,
         // not user-filled (#634), so the server would refuse. Returning null here is what leaves the dialog's
         // commit disabled rather than offering a click that cannot succeed (ADR 0543's spirit).
-        return SelectedNode is { IsPersonal: false } node ? new FilingResult(FilingMode.PickedFolder, node.Id, comment, node.Links) : null;
+        //
+        // The same reasoning extends to `create-child` (#873): the node's links were carried and never asked.
+        // A folder that admits no plain child — a notebook, which holds sections and notes — would refuse the
+        // filing, and the picker offered it anyway. ADR 0689 says what is SHOWN and what is CHOOSABLE are
+        // separate questions; this is the choosable half, asked of the same value the dialog commits with so
+        // the button and the outcome cannot disagree.
+        return SelectedNode is { IsPersonal: false } node && node.HasRel("create-child")
+            ? new FilingResult(FilingMode.PickedFolder, node.Id, comment, node.Links)
+            : null;
     }
 
     public ObservableCollection<TreeNodeViewModel> Roots { get; } = [];
