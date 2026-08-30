@@ -104,6 +104,13 @@ public partial class ImapDialog : Window
             return;
         }
 
+        // The box has ALREADY moved by the time this runs, so a failure that only writes a status line leaves it
+        // showing a setting the server never stored — ADR 0724's "lying state", the same defect as the web
+        // switch and the Intray toggles. Unlike those it was never silent (a missing `settings` rel throws into
+        // the catch below), which is precisely why it was easy to miss: an error message is not the same as an
+        // accurate control, and this one silently reverts on the next open.
+        var previous = ShowAllBox.IsChecked != true;
+
         try
         {
             await _api.Profile.SetImapShowAllDocumentsAsync(status, ShowAllBox.IsChecked == true);
@@ -112,6 +119,12 @@ public partial class ImapDialog : Window
         catch
         {
             StatusText.Text = Strings.Get("ImSettingsError");
+
+            // Put it back, behind the same re-entrancy guard Apply() uses — assigning IsChecked re-raises this
+            // handler, and without the guard the revert would try to write the old value back to the server.
+            _loading = true;
+            ShowAllBox.IsChecked = previous;
+            _loading = false;
         }
     });
 

@@ -46,10 +46,10 @@
 
                     <!-- Approve / Reject (the assigned reviewer). -->
                     <StackPanel Spacing="6" IsVisible="{Binding CanReview}">
-                        <Button Content="{loc:Tr WorkflowApprove}" Command="{Binding ApproveCommand}" IsEnabled="{Binding !Busy}" HorizontalAlignment="Left" />
+                        <Button Content="{loc:Tr WorkflowApprove}" Command="{Binding ApproveCommand}" IsEnabled="{Binding !Busy}" IsVisible="{Binding CanApprove}" HorizontalAlignment="Left" />
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <TextBox Text="{Binding RejectReason}" Watermark="{loc:Tr WorkflowRejectReason}" MinWidth="230" />
-                            <Button Content="{loc:Tr WorkflowReject}" Command="{Binding RejectCommand}" IsEnabled="{Binding !Busy}" />
+                            <Button Content="{loc:Tr WorkflowReject}" Command="{Binding RejectCommand}" IsEnabled="{Binding !Busy}" IsVisible="{Binding CanReject}" />
                         </StackPanel>
                     </StackPanel>
 

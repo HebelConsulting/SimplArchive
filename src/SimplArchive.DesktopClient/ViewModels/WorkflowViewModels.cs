@@ -34,7 +34,15 @@ public sealed partial class WorkflowWindowViewModel : ObservableObject
     [ObservableProperty] private string _statusName = "";
     [ObservableProperty] private string? _assignedTo;
     [ObservableProperty] private bool _canSubmit;
-    [ObservableProperty] private bool _canReview;   // approve/reject (the assigned reviewer)
+    [ObservableProperty] private bool _canReview;   // the review SECTION is shown when either action is offered
+
+    // Asked separately, because they are separate answers (#865). Gating Reject on `approve` was correct only
+    // while the server emits the pair together — and a rel emitted unconditionally alongside another is a rel
+    // that never needed to be conditional. The failure it hid: Reject rendered, POSTed to `reject`, and the
+    // missing rel made that a silent no-op.
+    [ObservableProperty] private bool _canApprove;
+
+    [ObservableProperty] private bool _canReject;
     [ObservableProperty] private bool _canRelease;
     [ObservableProperty] private bool _canReassign;  // delegate/re-route (reviewer or editor)
     [ObservableProperty] private bool _hasHistory;
@@ -50,7 +58,7 @@ public sealed partial class WorkflowWindowViewModel : ObservableObject
     {
         HasWorkflow = false;
         History.Clear();
-        CanSubmit = CanReview = CanRelease = CanReassign = false;
+        CanSubmit = CanReview = CanRelease = CanReassign = CanApprove = CanReject = false;
         RejectReason = "";
         SelectedReviewer = null;
 
@@ -76,7 +84,13 @@ public sealed partial class WorkflowWindowViewModel : ObservableObject
         AssignedTo = wf.AssignedToName is { } a ? $"reviewer: {a}" : null;
         _links = new Dictionary<string, string>(wf.Links);
         CanSubmit = wf.Links.ContainsKey("submit");
-        CanReview = wf.Links.ContainsKey("approve"); // approve + reject travel together (assigned reviewer)
+        // Approve and Reject are asked SEPARATELY (#865). They were both gated on `approve`, on the assumption
+        // that the two travel together — true today, and precisely the assumption that makes a conditional rel
+        // pointless. The moment they diverge, which is the only reason to emit them conditionally at all,
+        // Reject was offered on the strength of approve and then silently did nothing (it POSTs to `reject`).
+        CanApprove = wf.Links.ContainsKey("approve");
+        CanReject = wf.Links.ContainsKey("reject");
+        CanReview = CanApprove || CanReject; // the section is shown when EITHER is on offer
         CanRelease = wf.Links.ContainsKey("release");
         CanReassign = wf.Links.ContainsKey("reassign");
 

@@ -51,7 +51,15 @@
     {
         try
         {
-            if (CompareHref is null) { return; }
+            // `_busy` starts TRUE here, so this early return left the dialog spinning forever — the same shape
+            // as CompareVersionsDialog and VersionsDialog (#874). Found by sweeping for the shape rather than
+            // by the audit, which is the argument for fixing a pattern instead of the instances someone
+            // happened to notice.
+            if (CompareHref is null)
+            {
+                _result = new CompareResult { Available = false };
+                return;
+            }
 
             _result = await Http.GetFromJsonAsync<CompareResult>(CompareHref);
         }
@@ -59,7 +67,10 @@
         {
             _result = new CompareResult { Available = false };
         }
-        _busy = false;
+        finally
+        {
+            _busy = false;
+        }
     }
 
     private record CompareResult { public bool Available { get; set; } public string FromText { get; set; } = ""; public string ToText { get; set; } = ""; }

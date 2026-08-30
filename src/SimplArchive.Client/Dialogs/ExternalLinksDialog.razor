@@ -56,8 +56,15 @@
                                     {
                                         <MudButton Size="Size.Small" OnClick="@(() => ExtendAsync(link))">@Strings.Get("ExtLinkExtend")</MudButton>
                                     }
-                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
-                                                   aria-label="@Strings.Get("ExtLinkRevoke")" OnClick="@(() => RevokeAsync(link))" />
+                                    @* Rendered only where the server offered it (#861). It was UNGATED, and its
+                                       address fell back to a composed `{ListUrl}/{link.Id}` — a path-segment
+                                       append onto a rel-supplied href, which ADR 0557 calls composing in
+                                       disguise and which the hypermedia ratchet cannot see (#862). *@
+                                    @if (RelativeHref(link.Links, "revoke") is not null)
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                                       aria-label="@Strings.Get("ExtLinkRevoke")" OnClick="@(() => RevokeAsync(link))" />
+                                    }
                                 </div>
                             </MudListItem>
                         }
@@ -161,7 +168,15 @@
 
     private async Task RevokeAsync(ExternalLinkResponse link)
     {
-        var request = new HttpRequestMessage(HttpMethod.Delete, RelativeHref(link.Links, "revoke") ?? $"{ListUrl}/{link.Id}");
+        // No composed fallback: the button above renders only when this rel is present, so an absent one here
+        // means the row went stale rather than that we should guess its address (#861).
+        if (RelativeHref(link.Links, "revoke") is not { } revokeHref)
+        {
+            Snackbar.Add(Strings.Get("ExtLinkRevokeUnavailable"), Severity.Warning);
+            return;
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Delete, revokeHref);
         request.Headers.TryAddWithoutValidation("If-Match", link.Etag);
         var response = await Http.SendAsync(request);
         if (response.IsSuccessStatusCode)

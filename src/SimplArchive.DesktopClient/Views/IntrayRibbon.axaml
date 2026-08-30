@@ -67,6 +67,7 @@
                 <Button AutomationProperties.AutomationId="intray-patch-cut" IsEnabled="{Binding IntrayActions.CanCutAtPatchCodes}"
                         Click="OnIntrayPatchCut" ToolTip.Tip="{loc:Tr IntrayPatchCutNow}"><i:Icon Value="mdi-scissors-cutting" FontSize="18" /></Button>
                 <Button AutomationProperties.AutomationId="intray-patch-sheet"
+                        IsEnabled="{Binding IntrayActions.CanOpenPatchCodeSheet}"
                         Click="OnIntrayPatchSheet" ToolTip.Tip="{loc:Tr IntrayPatchSheetTip}"><i:Icon Value="mdi-printer" FontSize="18" /></Button>
             </StackPanel>
             <!-- Item group: what to do with the staged file as a whole, and what the list is showing.

@@ -1884,6 +1884,12 @@
   <data name="ExtLinkRevoke" xml:space="preserve">
     <value>Revoca</value>
   </data>
+  <data name="ExtLinkRevokeUnavailable" xml:space="preserve">
+    <value>Questo collegamento non può più essere revocato — riapri l'elenco per aggiornarlo.</value>
+  </data>
+  <data name="IntrayActionUnavailable" xml:space="preserve">
+    <value>Questa azione non è disponibile per questo elemento.</value>
+  </data>
   <data name="ExtLinkExtend" xml:space="preserve">
     <value>Prolunga</value>
   </data>
@@ -4298,6 +4304,9 @@
   </data>
   <data name="ImSettingsError" xml:space="preserve">
     <value>Impossibile salvare l'impostazione.</value>
+  </data>
+  <data name="ImSettingsUnavailable" xml:space="preserve">
+    <value>Le impostazioni IMAP non possono essere modificate al momento.</value>
   </data>
   <data name="StErrLoadContacts" xml:space="preserve">
     <value>Impossibile caricare i contatti: {0}</value>

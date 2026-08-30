@@ -120,18 +120,30 @@
 
     private async Task SetShowAllAsync(bool value)
     {
+        // The switch is flipped optimistically, so EVERY path that does not confirm a write has to put it back
+        // (ADR 0724, shape 2). Both failed to: a missing `settings` rel returned silently, and the catch showed
+        // an error while leaving the switch showing a setting the server had rejected. A control reporting a
+        // state that was never stored is worse than one that does nothing — it gives the user no reason to
+        // look again, and it silently reverts on the next load.
+        var previous = _showAll;
         _showAll = value;
+
+        // The settings address comes from the status resource's own advertised rel (ADR 0543).
+        if (_settingsHref is not { } href)
+        {
+            _showAll = previous;
+            Snackbar.Add(Strings.Get("ImSettingsUnavailable"), Severity.Warning);
+            return;
+        }
+
         try
         {
-            // The settings address comes from the status resource's own advertised rel (ADR 0543).
-            if (_settingsHref is { } href)
-            {
-                (await Http.PutAsJsonAsync(href, new { showAllDocuments = value })).EnsureSuccessStatusCode();
-                Snackbar.Add(Strings.Get("ImSettingsSaved"), Severity.Info);
-            }
+            (await Http.PutAsJsonAsync(href, new { showAllDocuments = value })).EnsureSuccessStatusCode();
+            Snackbar.Add(Strings.Get("ImSettingsSaved"), Severity.Info);
         }
         catch (Exception)
         {
+            _showAll = previous;
             Snackbar.Add(Strings.Get("ImSettingsError"), Severity.Error);
         }
     }

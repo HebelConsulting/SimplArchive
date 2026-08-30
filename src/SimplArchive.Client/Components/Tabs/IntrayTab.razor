@@ -462,7 +462,31 @@
     // `preview`, which the row had been carrying all along while the tab rebuilt them from Name plus a
     // hand-written `?group=`/`?user=` query. The server's own hrefs already carry that source query, so the
     // SourceQuery property that existed to re-append it is gone (ADR 0532/0543, #416).
-    private record IntrayItem(string Name, long Size, bool HasMask, string DownloadHref, string PreviewHref, string FileHref, string DeleteHref, string MoveHref, string MaskHref, Guid? GroupId, string? GroupName, Guid? UserId, string? UserName, string? PagesHref, bool Signed)
+    // The addresses are NULLABLE on purpose (#876). They used to be `string` filled with `?? ""`, and an empty
+    // href does not fail — it resolves against the client's base address, so a missing rel became a request to
+    // the APPLICATION ROOT whose response is the SPA's own HTML. That is worse than a no-op: it is a real
+    // request whose error, if any, points somewhere else entirely. Null forces each use site to say what it
+    // does when the server did not offer the action.
+    /// <summary>True when the server did not offer this action on this row — say so, never request it.</summary>
+    /// <remarks>
+    /// The point of the guard is that an ABSENT address is not a harmless one. `Http.GetAsync(null)` and
+    /// `Http.GetAsync("")` both resolve against the client's BaseAddress, so a missing rel became a real request
+    /// to the application root whose response is the SPA's own HTML — a failure that points at the wrong place
+    /// (#876). Making the fields nullable alone does not fix that; it only changes how the same request is
+    /// spelled, which is why every use site is guarded rather than merely compiling.
+    /// </remarks>
+    private bool NotOffered(string? href)
+    {
+        if (href is not null)
+        {
+            return false;
+        }
+
+        _intrayStatus = Strings.Get("IntrayActionUnavailable");
+        return true;
+    }
+
+    private record IntrayItem(string Name, long Size, bool HasMask, string? DownloadHref, string? PreviewHref, string? FileHref, string? DeleteHref, string? MoveHref, string? MaskHref, Guid? GroupId, string? GroupName, Guid? UserId, string? UserName, string? PagesHref, bool Signed)
     {
         // Un-classified items (no staged mask sidecar) show in square brackets (ADRs 0279/0281).
         public string DisplayName => HasMask ? Name : $"[{Name}]";
@@ -514,9 +538,9 @@
             _patchCodeSheetHref = Links.Href(response?.Links, "patchCodeSheet");
             _intrayItems = (response?.Items ?? []).Select(i => new IntrayItem(
                 i.Name, i.Size, i.HasMask,
-                Links.Href(i.Links, "download") ?? "", Links.Href(i.Links, "preview") ?? "",
-                Links.Href(i.Links, "file") ?? "", Links.Href(i.Links, "self") ?? "",
-                Links.Href(i.Links, "move") ?? "", Links.Href(i.Links, "mask") ?? "",
+                Links.Href(i.Links, "download"), Links.Href(i.Links, "preview"),
+                Links.Href(i.Links, "file"), Links.Href(i.Links, "self"),
+                Links.Href(i.Links, "move"), Links.Href(i.Links, "mask"),
                 // A null `pages` means the server offered no page operations for this row's format (ADR 0554).
                 i.GroupId, i.GroupName, i.UserId, i.UserName, Links.Href(i.Links, "pages"), i.Signed)).ToList();
             _intrayStatus = _intrayItems.Count == 0 ? "Your intray is empty. Upload files to file them into a repository." : $"{_intrayItems.Count} item(s).";
@@ -654,6 +678,8 @@
         // the shared pdf.js host with the hit-overlay. 204 = no preview available.
         try
         {
+            if (NotOffered(item.PreviewHref)) { return; }
+
             using var r = await Http.GetAsync(item.PreviewHref);
             if (r.IsSuccessStatusCode && r.StatusCode != HttpStatusCode.NoContent)
             {
@@ -678,6 +704,8 @@
         try
         {
             _intrayStgMasks = (await Http.GetFromJsonAsync<MaskListResponse>(await ApiRoot.RequireAsync("masks")))?.Masks ?? [];
+            if (NotOffered(item.MaskHref)) { return; }
+
             var draft = await Http.GetFromJsonAsync<IntrayMaskDraft>(item.MaskHref);
             _intrayStgName = string.IsNullOrEmpty(draft?.Name) ? System.IO.Path.GetFileNameWithoutExtension(item.Name) : draft.Name;
             _intrayStgDate = DateTime.TryParse(draft?.DocumentDate, out var d) ? d.Date : null;
@@ -763,6 +791,8 @@
                 fields = _intrayStgFields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.ToValues() }),
                 ocrLanguages = _intrayStgScannable && _intrayStgOcrCodes.Count > 0 ? _intrayStgOcrCodes : null,
             };
+
+            if (NotOffered(item.MaskHref)) { return; }
 
             var resp = await Http.PutAsJsonAsync(item.MaskHref, body);
             if (resp.IsSuccessStatusCode)
@@ -973,6 +1003,8 @@
             var module = await JS.InvokeAsync<IJSObjectReference>("import", "./preview.js");
             await using (module)
             {
+                if (NotOffered(item.DownloadHref)) { return; }
+
                 images = (await module.InvokeAsync<Dialogs.SortPagesDialog.PageThumbnail[]>("pageThumbnails", item.DownloadHref, 260)).ToList();
             }
         }
@@ -1098,6 +1130,12 @@
             var me = await Http.GetFromJsonAsync<MeResponse>(await ApiRoot.RequireAsync("me"));
             if (Links.Href(me?.Links, rel) is not { } href)
             {
+                // REVERT, don't just return (#876). The flip above is optimistic, and the exception path below
+                // already undoes it — this path did not, so a missing rel left the switch showing a setting the
+                // server had never stored, which silently reverts on the next load. A control reporting a state
+                // that does not exist is worse than one that does nothing: the user has no reason to look again.
+                set(previous);
+                _intrayStatus = ApiErrorText.For(null);
                 return;
             }
 
@@ -1219,6 +1257,8 @@
             ? new { documentId = choice.TargetId, comment = choice.Comment }
             : new { folderId = choice.TargetId, comment = choice.Comment };
 
+        if (NotOffered(item.FileHref)) { return false; }
+
         var response = await Http.PostAsJsonAsync(item.FileHref, body);
         if (response.IsSuccessStatusCode)
         {
@@ -1278,7 +1318,12 @@
         await LoadIntrayAsync();
     }
 
-    private async Task DownloadIntrayItemAsync(IntrayItem item) => await JS.InvokeVoidAsync("open", item.DownloadHref, "_blank");
+    private async Task DownloadIntrayItemAsync(IntrayItem item)
+    {
+        if (NotOffered(item.DownloadHref)) { return; }
+
+        await JS.InvokeVoidAsync("open", item.DownloadHref, "_blank");
+    }
 
     // Send an OWN item into another intray (ADR 0532): pick a group or a user, then move it there.
     private async Task SendIntrayItemAsync(IntrayItem item)
@@ -1304,6 +1349,8 @@
     {
         try
         {
+            if (NotOffered(item.MoveHref)) { return; }
+
             var response = await Http.PostAsJsonAsync(item.MoveHref, new { targetGroupId, targetUserId });
             if (!response.IsSuccessStatusCode)
             {
@@ -1370,7 +1417,11 @@
         var deleted = 0;
         foreach (var item in items)
         {
-            if ((await Http.DeleteAsync(item.DeleteHref)).IsSuccessStatusCode)
+            if (NotOffered(item.DeleteHref)) { return; }
+
+            if (NotOffered(item.DeleteHref)) { return; }
+
+        if ((await Http.DeleteAsync(item.DeleteHref)).IsSuccessStatusCode)
             {
                 deleted++;
                 ClearIntraySelection(item);
@@ -1396,6 +1447,10 @@
         {
             return;
         }
+
+        // After a confirmation, which is the worst place for a silent failure: the user has said yes to
+        // deleting a named item and would otherwise be told nothing at all (#863/#876).
+        if (NotOffered(item.DeleteHref)) { return; }
 
         if ((await Http.DeleteAsync(item.DeleteHref)).IsSuccessStatusCode)
         {

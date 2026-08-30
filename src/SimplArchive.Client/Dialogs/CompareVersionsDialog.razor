@@ -34,7 +34,7 @@
                         <MudSelectItem T="Guid" Value="@v.Id">v@(v.VersionNumber)</MudSelectItem>
                     }
                 </MudSelect>
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Difference" OnClick="CompareAsync" Disabled="@(_fromId == _toId || _busy)">@Strings.Get("CompareButton")</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Difference" OnClick="CompareAsync" Disabled="@(_fromId == _toId || _busy || _compareHref is null)">@Strings.Get("CompareButton")</MudButton>
             </div>
 
             @if (_busy)
@@ -139,17 +139,31 @@
         _result = null;
         try
         {
-            if (_compareHref is null) { return; }
+            // The early return here used to skip the `_busy = false` below it, so an absent `compare` rel left
+            // the dialog spinning FOREVER with no indication anything was wrong — a no-op you cannot even
+            // recover from without closing the dialog (#874). A guard clause that returns must undo the state
+            // it set, which is what `finally` is for; the button is also gated on the rel now, so this is the
+            // floor beneath the gate rather than the gate.
+            if (_compareHref is null)
+            {
+                _result = new CompareResult { Available = false };
+                return;
+            }
 
             // The collection advertises ONE compare address; the two versions travel as query parameters,
             // because a link names one resource and a pair has none (issue #416, resolved by reshaping the API).
+            // Appending a QUERY to an advertised href is following it; appending a path SEGMENT would not be
+            // (ADR 0557).
             _result = await Http.GetFromJsonAsync<CompareResult>($"{_compareHref}?from={_fromId}&to={_toId}");
         }
         catch (Exception)
         {
             _result = new CompareResult { Available = false };
         }
-        _busy = false;
+        finally
+        {
+            _busy = false;
+        }
     }
 
     // Restore was moved out of the compare dialog (issue #265) — "Make current" lives on the Versions dialog.

@@ -1884,6 +1884,12 @@
   <data name="ExtLinkRevoke" xml:space="preserve">
     <value>Revoke</value>
   </data>
+  <data name="ExtLinkRevokeUnavailable" xml:space="preserve">
+    <value>This link can no longer be revoked — reopen the list to refresh it.</value>
+  </data>
+  <data name="IntrayActionUnavailable" xml:space="preserve">
+    <value>That action isn't available for this item.</value>
+  </data>
   <data name="ExtLinkExtend" xml:space="preserve">
     <value>Extend</value>
   </data>
@@ -4298,6 +4304,9 @@
   </data>
   <data name="ImSettingsError" xml:space="preserve">
     <value>Could not save the setting.</value>
+  </data>
+  <data name="ImSettingsUnavailable" xml:space="preserve">
+    <value>IMAP settings can't be changed right now.</value>
   </data>
   <data name="StErrLoadContacts" xml:space="preserve">
     <value>Could not load contacts: {0}</value>

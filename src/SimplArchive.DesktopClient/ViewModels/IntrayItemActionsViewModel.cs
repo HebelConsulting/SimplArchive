@@ -75,6 +75,15 @@ public sealed partial class IntrayItemActionsViewModel : ObservableObject
 
     public bool CanCutAtPatchCodes => Pages?.CanCutAtPatchCodes == true;
 
+    /// <summary>Whether the printable separator sheet is on offer (#860).</summary>
+    /// <remarks>
+    /// The rel was already captured from the listing and already read at the point of USE, where a null simply
+    /// returned — so the button was always clickable and sometimes did nothing, with no feedback. Its immediate
+    /// sibling (Cut at patch codes) had bound to a server flag all along; this one just was not bound to
+    /// anything. ADR 0543: absence means the affordance is not offered, not that clicking it is a no-op.
+    /// </remarks>
+    public bool CanOpenPatchCodeSheet => PatchCodeSheetHref is not null;
+
     /// <summary>
     /// Whether crooked scans are straightened automatically for this user (#491) — the ribbon toggle's state,
     /// held down while on.
@@ -108,6 +117,7 @@ public sealed partial class IntrayItemActionsViewModel : ObservableObject
         OnPropertyChanged(nameof(CanSort));
         OnPropertyChanged(nameof(CanDeskew));
         OnPropertyChanged(nameof(CanCutAtPatchCodes));
+        OnPropertyChanged(nameof(CanOpenPatchCodeSheet));
     }
 
     partial void OnSelectedCountChanged(int value) => OnPropertyChanged(nameof(CanJoin));

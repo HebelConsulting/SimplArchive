@@ -78,10 +78,13 @@
                                     </MudTooltip>
                                     @* Colour-coded because it is the only destructive one of the three, and the
                                        one that matters most when it matters at all (issue #410). *@
-                                    <MudTooltip Text="@Strings.Get("ExtLinkRevoke")">
-                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
-                                                       aria-label="@Strings.Get("ExtLinkRevoke")" OnClick="@(() => RevokeAsync(link))" />
-                                    </MudTooltip>
+                                    @if (RelativeHref(link.Links, "revoke") is not null)
+                                    {
+                                        <MudTooltip Text="@Strings.Get("ExtLinkRevoke")">
+                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                                           aria-label="@Strings.Get("ExtLinkRevoke")" OnClick="@(() => RevokeAsync(link))" />
+                                        </MudTooltip>
+                                    }
                                 </td>
                             </tr>
                         }
@@ -147,8 +150,11 @@
 
     private async Task RevokeAsync(MyLinkResponse link)
     {
+        // The button renders only when this rel is present, so reaching here with it absent means a stale row —
+        // say so rather than returning silently (#863's plain-no-op shape).
         if (RelativeHref(link.Links, "revoke") is not { } href)
         {
+            Snackbar.Add(Strings.Get("ExtLinkRevokeUnavailable"), Severity.Warning);
             return;
         }
 

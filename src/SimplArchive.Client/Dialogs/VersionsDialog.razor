@@ -103,7 +103,14 @@
         _loading = true;
         try
         {
-            if (VersionsHref is null) { return; }
+            // Same shape as CompareVersionsDialog (#874): this early return skipped the `_loading = false`
+            // below, so a missing address left the dialog loading forever with nothing to indicate why. The
+            // flag is cleared in a `finally` now, so every exit path undoes what the entry set.
+            if (VersionsHref is null)
+            {
+                _versions = [];
+                return;
+            }
 
             var resp = await Http.GetFromJsonAsync<VersionListResponse>(VersionsHref);
             var confirmed = (resp?.Versions ?? [])
@@ -124,7 +131,10 @@
         {
             _versions = [];
         }
-        _loading = false;
+        finally
+        {
+            _loading = false;
+        }
     }
 
     // Deliberate two-step (ADR "Deliberate make-current in the Versions dialog"): the button acts on the single

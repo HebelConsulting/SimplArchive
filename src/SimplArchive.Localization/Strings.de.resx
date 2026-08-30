@@ -1884,6 +1884,12 @@
   <data name="ExtLinkRevoke" xml:space="preserve">
     <value>Widerrufen</value>
   </data>
+  <data name="ExtLinkRevokeUnavailable" xml:space="preserve">
+    <value>Dieser Link kann nicht mehr widerrufen werden — öffnen Sie die Liste erneut, um sie zu aktualisieren.</value>
+  </data>
+  <data name="IntrayActionUnavailable" xml:space="preserve">
+    <value>Diese Aktion ist für dieses Element nicht verfügbar.</value>
+  </data>
   <data name="ExtLinkExtend" xml:space="preserve">
     <value>Verlängern</value>
   </data>
@@ -4298,6 +4304,9 @@
   </data>
   <data name="ImSettingsError" xml:space="preserve">
     <value>Die Einstellung konnte nicht gespeichert werden.</value>
+  </data>
+  <data name="ImSettingsUnavailable" xml:space="preserve">
+    <value>IMAP-Einstellungen können derzeit nicht geändert werden.</value>
   </data>
   <data name="StErrLoadContacts" xml:space="preserve">
     <value>Kontakte konnten nicht geladen werden: {0}</value>
