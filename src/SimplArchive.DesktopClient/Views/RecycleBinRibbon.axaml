@@ -4,7 +4,11 @@
              xmlns:i="using:Projektanker.Icons.Avalonia"
              xmlns:loc="using:SimplArchive.DesktopClient.Localization"
              x:Class="SimplArchive.DesktopClient.Views.RecycleBinRibbon"
-             x:DataType="vm:MainWindowViewModel">
+             x:DataType="vm:RecycleBinTabViewModel">
+    <!-- Typed to the TAB's view-model, not the window's (#519 tranche 2). It used to be MainWindowViewModel and
+         bind `RecycleBin.*`, which is what broke the first attempt at extracting this tab: once the tab body
+         became a control with its own DataContext, every one of those paths was absent. Same shape as
+         AuditRibbon, which tranche 1 typed to AuditTabViewModel for the same reason. -->
     <!-- Recycle bin ribbon (#530 tranche 1) — the Repositories shape replacing a labeled header bar. The
          selected-item group first; the DESTRUCTIVE pair icon-only in its own group, separated from restore
          (destructive never sits beside the button that commits work — the Check-out discard precedent), both
@@ -14,20 +18,20 @@
     <Border Classes="ribbon" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
         <WrapPanel Orientation="Horizontal">
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
-                <Button AutomationProperties.AutomationId="rb-restore" IsEnabled="{Binding RecycleBin.HasCheckedItems}"
-                        Command="{Binding RecycleBin.RestoreSelectedCommand}"
-                        ToolTip.Tip="{Binding RecycleBin.RestoreSelectedLabel}"><i:Icon Value="mdi-restore" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="rb-restore" IsEnabled="{Binding HasCheckedItems}"
+                        Command="{Binding RestoreSelectedCommand}"
+                        ToolTip.Tip="{Binding RestoreSelectedLabel}"><i:Icon Value="mdi-restore" FontSize="18" /></Button>
             </StackPanel>
-            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4" IsVisible="{Binding RecycleBin.IsTenantAdmin}">
-                <Button AutomationProperties.AutomationId="rb-purge" IsEnabled="{Binding RecycleBin.CanPurgeSelected}"
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4" IsVisible="{Binding IsTenantAdmin}">
+                <Button AutomationProperties.AutomationId="rb-purge" IsEnabled="{Binding CanPurgeSelected}"
                         Click="OnPurgeSelected"
-                        ToolTip.Tip="{Binding RecycleBin.PurgeSelectedLabel}"><i:Icon Value="mdi-delete-forever" FontSize="18" /></Button>
-                <Button AutomationProperties.AutomationId="rb-empty" IsEnabled="{Binding RecycleBin.HasItems}"
+                        ToolTip.Tip="{Binding PurgeSelectedLabel}"><i:Icon Value="mdi-delete-forever" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="rb-empty" IsEnabled="{Binding HasItems}"
                         Click="OnHardDeleteAll"
                         ToolTip.Tip="{loc:Tr RbHardDeleteAll}"><i:Icon Value="mdi-delete-sweep" FontSize="18" /></Button>
             </StackPanel>
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
-                <Button Command="{Binding RecycleBin.RefreshCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
+                <Button Command="{Binding RefreshCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
             </StackPanel>
         </WrapPanel>
     </Border>

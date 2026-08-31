@@ -383,16 +383,6 @@ public partial class MainWindow
         }
     });
 
-    // The Recycle bin selection, kept on the view-model so the ribbon's bulk buttons see how many rows are
-    // highlighted (#530 tranche 1 — the Check-out recipe).
-    private void OnRecycleBinSelectionChanged(object? sender, SelectionChangedEventArgs e)
-    {
-        if (DataContext is MainWindowViewModel vm)
-        {
-            vm.RecycleBin.SetSelection(RecycleBinList.SelectedItems?.OfType<RecycleBinRowViewModel>().ToList() ?? []);
-        }
-    }
-
     // Restore / hard-delete ONE recycle-bin row, addressed from the row's context menu via its Tag (#530
     // tranche 1 — the CheckoutRow recipe; the ribbon's selection-scoped twins arrive with the ribbon).
     internal void OnRecycleBinRestore(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
