@@ -107,7 +107,12 @@ public class OverLimitFileCeilingTests
         // because MainWindow's menu bindings read these properties directly — moving them to another type would
         // put a gate at arm's length from the menu it gates, which is the coupling this change exists to remove.
         // #517's per-tab view-model burn-down is still the plan for this file.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_603,
+        // #517 split the Intray tab out into MainWindowViewModel.Intray.cs. That LOWERS the number below without
+        // lowering the class, so the new partial is listed too — otherwise this guard would reward moving cost
+        // to an unwatched file, which is the exact regression its header warns about. The class total is what
+        // #517 is actually burning down; these two entries only stop either half growing.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_070,
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.Intray.cs"] = 624,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
         // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —
