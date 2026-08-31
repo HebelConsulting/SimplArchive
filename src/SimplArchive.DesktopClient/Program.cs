@@ -247,9 +247,14 @@ internal static class Program
 
             vm.ResetLayoutCommand.Execute(null);
             var expanded = !vm.TreeCollapsed && !vm.ListCollapsed && !vm.IndexCollapsed && !vm.ChatCollapsed;
+            // The index pane resets to AUTO, not to a proportion — it fits its content (ADR 0550), and #413
+            // removed its remembered height so one drag cannot survive a collapse/expand cycle. This check
+            // still asserted the old 1.5* default afterwards and had been reporting FAILED ever since (#895):
+            // the behaviour changed in 684ea63f, the assertion did not. Its DefaultIndex constant is gone too,
+            // which is why the 1.5 here was a bare literal with nothing left to agree with.
             var defaults = vm.TreeWidth.Value == 1.4 && vm.TreeWidth.IsStar
                 && vm.ListWidth.Value == 2 && vm.ListWidth.IsStar
-                && vm.IndexHeight.Value == 1.5 && vm.IndexHeight.IsStar
+                && vm.IndexHeight.IsAuto
                 && vm.ChatWidth.Value == 2 && vm.ChatWidth.IsStar;
             Console.WriteLine($"after reset: expanded={expanded} defaults={defaults} (tree={vm.TreeWidth} list={vm.ListWidth} index={vm.IndexHeight} chat={vm.ChatWidth})");
             Console.WriteLine(expanded && defaults ? "OK" : "FAILED");
