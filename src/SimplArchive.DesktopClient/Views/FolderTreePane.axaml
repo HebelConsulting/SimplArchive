@@ -1,0 +1,125 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SimplArchive.DesktopClient.Views.FolderTreePane"
+             x:DataType="vm:MainWindowViewModel">
+    <!-- The Repositories tree pane (#519 tranche 6). Typed to MainWindowViewModel and INHERITING the window's
+         DataContext: Repositories is the shell rather than a guest in it, so nothing re-scopes and every
+         binding path below is unchanged (see the scope on #519).
+
+         The context-menu handlers forward to the window, the RepositoriesRibbon shape — each opens a dialog,
+         and a dialog needs a parent only the window has. The TreeView itself is exposed to the window because
+         WorkbenchDragDrop coordinates the tree, the contents list and the intray list TOGETHER: that wiring is
+         cross-pane by nature and cannot move into any one pane. -->
+    <TreeView x:Name="FolderTree" AutomationProperties.AutomationId="tour:pane-tree" DragDrop.AllowDrop="True" IsVisible="{Binding !TreeCollapsed}" ItemsSource="{Binding Tree}" SelectedItem="{Binding SelectedTreeNode}"
+              ContextRequested="OnTreeContextRequested">
+        <!-- Folder actions on the right-clicked tree node (ADR "Desktop tree-pane folder context menu"). -->
+        <TreeView.ContextMenu>
+            <ContextMenu>
+                <!-- Every create here is gated on a rel the node advertised, and this one was
+                     the exception until #634: it showed everywhere, including on a notebook
+                     (which holds sections, not folders), on the personal space's first level,
+                     and to a caller with no right to create. The server refused each, so the
+                     user met an error where they should have met an absence (ADR 0543). -->
+                <!-- The creates the SERVER offered for this node (#673). A submenu because
+                     Avalonia's menu takes literal items or a bound collection and never
+                     both, and the static entries below are worth more than a flat list. -->
+                <MenuItem Header="{loc:Tr MwNew}" ItemsSource="{Binding TreeContextAdmits}" IsVisible="{Binding TreeContextCanCreateAny}">
+                    <MenuItem.Icon><i:Icon Value="mdi-plus" /></MenuItem.Icon>
+                    <MenuItem.ItemContainerTheme>
+                        <ControlTheme TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                            <!-- ReflectionBinding: a ControlTheme carries no x:DataType, so a
+                                 compiled binding here resolves against the WINDOW's
+                                 view-model and fails to find Header/Command. -->
+                            <Setter Property="Header" Value="{ReflectionBinding Header}" />
+                            <Setter Property="Command" Value="{ReflectionBinding Command}" />
+                            <!-- The glyph the created thing will wear. A Template, because
+                                 MenuItem.Icon takes CONTENT rather than a name — without
+                                 it these entries were the only ones in this menu with no
+                                 icon, and TreeMenuEntry.Icon was set and never read. -->
+                            <Setter Property="Icon">
+                                <Template>
+                                    <i:Icon Value="{ReflectionBinding Icon}" />
+                                </Template>
+                            </Setter>
+                        </ControlTheme>
+                    </MenuItem.ItemContainerTheme>
+                </MenuItem>
+                <!-- Same gate as New subfolder above: an upload is that same create (ADR 0637). -->
+                <MenuItem Header="{loc:Tr Upload}" Click="OnTreeUpload" IsVisible="{Binding TreeContextCanCreateChild}">
+                    <MenuItem.Icon><i:Icon Value="mdi-upload-outline" /></MenuItem.Icon>
+                </MenuItem>
+                <Separator />
+                <MenuItem Header="{loc:Tr CtxRename}" Click="OnTreeRename" IsVisible="{Binding TreeContextCanEditIndexData}">
+                    <MenuItem.Icon><i:Icon Value="mdi-rename-box" /></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="{loc:Tr CtxMoveTo}" Click="OnTreeMove" IsVisible="{Binding TreeContextCanMove}">
+                    <MenuItem.Icon><i:Icon Value="mdi-file-move-outline" /></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="{loc:Tr FolderSortLabel}" Click="OnTreeFolderSort" IsVisible="{Binding TreeContextCanEditIndexData}">
+                    <MenuItem.Icon><i:Icon Value="mdi-sort" /></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="{loc:Tr UgDelete}" Click="OnTreeDelete" IsVisible="{Binding TreeContextCanDelete}">
+                    <MenuItem.Icon><i:Icon Value="mdi-delete" /></MenuItem.Icon>
+                </MenuItem>
+                <Separator />
+                <MenuItem Header="{loc:Tr MaManageAccess}" Click="OnTreeManageAccess" IsVisible="{Binding TreeContextCanManageAccess}">
+                    <MenuItem.Icon><i:Icon Value="mdi-shield-account-outline" /></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="{loc:Tr CtxPlaceLegalHold}" Click="OnTreePlaceLegalHold" IsVisible="{Binding CanLegalHold}">
+                    <MenuItem.Icon><i:Icon Value="mdi-gavel" /></MenuItem.Icon>
+                </MenuItem>
+                <!-- Take over a user's personal space (ADR 0672). Visible only where the
+                     listing advertised the rel, so a caller without CanManageUsers has no
+                     item rather than one that answers 403. -->
+                <MenuItem Header="{loc:Tr CtxTakeOver}" Click="OnTreeTakeOver" IsVisible="{Binding TreeContextCanTakeOver}">
+                    <MenuItem.Icon><i:Icon Value="mdi-shield-account" /></MenuItem.Icon>
+                </MenuItem>
+                <Separator />
+                <MenuItem Header="{loc:Tr CtxPlaceReference}" Click="OnTreePlaceReference">
+                    <MenuItem.Icon><i:Icon Value="mdi-link-variant" /></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="{loc:Tr MwReferences}" Click="OnTreeReferences" IsVisible="{Binding TreeContextHasReferences}">
+                    <MenuItem.Icon><i:Icon Value="mdi-share-variant-outline" /></MenuItem.Icon>
+                </MenuItem>
+                <Separator />
+                <MenuItem Header="{loc:Tr MwFollowFolder}" Click="OnTreeToggleFollow">
+                    <MenuItem.Icon><i:Icon Value="mdi-bell-outline" /></MenuItem.Icon>
+                </MenuItem>
+                <Separator />
+                <MenuItem Header="{loc:Tr HomeExport}" Click="OnExport" IsVisible="{Binding CanExport}">
+                    <MenuItem.Icon><i:Icon Value="mdi-archive-arrow-down-outline" /></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="{loc:Tr RibbonRefresh}" Click="OnTreeRefresh">
+                    <MenuItem.Icon><i:Icon Value="mdi-refresh" /></MenuItem.Icon>
+                </MenuItem>
+            </ContextMenu>
+        </TreeView.ContextMenu>
+        <TreeView.Styles>
+            <Style Selector="TreeViewItem">
+                <Setter Property="IsExpanded" Value="{ReflectionBinding IsExpanded, Mode=TwoWay}" />
+            </Style>
+            <!-- The folder-glyph classes are APPLICATION-wide (App.axaml), not defined here:
+                 the tree, the contents list and the detail pane draw the same object and must
+                 use the same rules (ADR 0547). -->
+        </TreeView.Styles>
+        <TreeView.DataTemplates>
+            <TreeDataTemplate DataType="vm:TreeNodeViewModel" ItemsSource="{Binding Children}">
+                <!-- The Border exists to carry the selected-node ring (#696); a StackPanel
+                     has no border of its own. Padding is set by the style so an unmarked
+                     row does not shift when its neighbour gains a ring. -->
+                <Border Classes.wbCurrentNode="{Binding IsMarked}" Padding="2,0">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <i:Icon Value="{Binding IconValue}"
+                                Classes.wbFolder="{Binding UsesFolderBrush}"
+                                Classes.wbFolderEmpty="{Binding UsesEmptyFolderBrush}"
+                                Classes.wbMutedGlyph="{Binding UsesMutedBrush}" />
+                        <TextBlock Text="{Binding Name}" />
+                    </StackPanel>
+                </Border>
+            </TreeDataTemplate>
+        </TreeView.DataTemplates>
+    </TreeView>
+</UserControl>

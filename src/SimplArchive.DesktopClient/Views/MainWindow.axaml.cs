@@ -25,7 +25,7 @@ public partial class MainWindow : Window
 
         // Drag-and-drop — OS-file drops + the internal move/reference drag — lives in WorkbenchDragDrop
         // (issue #466); it wires its own handlers onto the list, tree and intray controls.
-        new WorkbenchDragDrop(this, ContentsList, FolderTree, ServerIntrayList).Wire();
+        new WorkbenchDragDrop(this, ContentsList, TreePane.Tree, ServerIntrayList).Wire();
 
         // Ctrl/Cmd+P opens the server manager (ADR "Desktop server configuration"), Ctrl/Cmd+O opens the selected
         // document (#482) — a window-level tunnel handler so they fire regardless of focus.
@@ -38,7 +38,7 @@ public partial class MainWindow : Window
         // Tapping a tree folder always shows its contents — even the already-selected node, so re-clicking the
         // tree re-syncs the list after drilling into a subfolder via the contents pane (the binding alone
         // short-circuits a same-node re-selection). See MainWindowViewModel.ReselectTreeFolderAsync.
-        FolderTree.AddHandler(Gestures.TappedEvent, OnTreeItemTapped);
+        TreePane.Tree.AddHandler(Gestures.TappedEvent, OnTreeItemTapped);
 
         // Provide the sticky-note dialog to the Repositories/Intray preview (ADR "Document annotations"). Set on
         // the main Preview only, so the Recycle-bin preview never offers note editing. Kept in code-behind since
@@ -53,7 +53,7 @@ public partial class MainWindow : Window
                 // minimal-movement and a no-op when the node is already visible, which is the same behaviour
                 // decided for the web: never move the pane without cause.
                 vm.MarkedNodeChanged += node => Dispatcher.UIThread.Post(() =>
-                    FolderTree.GetVisualDescendants().OfType<Border>()
+                    TreePane.Tree.GetVisualDescendants().OfType<Border>()
                         .FirstOrDefault(b => ReferenceEquals(b.DataContext, node))?.BringIntoView());
                 vm.ExtendRetentionDialog = name => new ExtendRetentionDialog(name).ShowDialog<string?>(this);
                 vm.Search.SaveSearchNamePrompt = () => new NewFolderDialog("Save search", "Name this saved search").ShowDialog<string?>(this);
@@ -880,7 +880,7 @@ public partial class MainWindow : Window
     // action files into it). Suppress the menu over empty space / synthetic nodes.
     private TreeNodeViewModel? _treeContextNode;
 
-    private void OnTreeContextRequested(object? sender, ContextRequestedEventArgs e)
+    internal void OnTreeContextRequested(object? sender, ContextRequestedEventArgs e)
     {
         _treeContextNode = (e.Source as Visual)?.GetSelfAndVisualAncestors().OfType<TreeViewItem>().FirstOrDefault()?.DataContext as TreeNodeViewModel;
         if (_treeContextNode is null or { IsSynthetic: true } or { IsLauncher: true } && DataContext is MainWindowViewModel)
@@ -955,7 +955,7 @@ public partial class MainWindow : Window
     }
 
 
-    private void OnTreeRename(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnTreeRename(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || _treeContextNode is not { } node)
         {
@@ -969,7 +969,7 @@ public partial class MainWindow : Window
         }
     });
 
-    private void OnTreeDelete(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnTreeDelete(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm && _treeContextNode is { } node
             && await new ConfirmDialog($"Delete the folder '{node.Name}' and everything inside it? It will be moved to the recycle bin.", "Delete").ShowDialog<bool>(this))
@@ -985,7 +985,7 @@ public partial class MainWindow : Window
 
     // Upload files into the right-clicked folder. Reuses the drag-and-drop path (UploadDroppedFilesAsync), so
     // duplicate detection and per-file error reporting behave identically to a drop.
-    private void OnTreeUpload(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnTreeUpload(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || _treeContextNode is not { } node)
         {
@@ -1003,7 +1003,7 @@ public partial class MainWindow : Window
         }
     });
 
-    private void OnTreeMove(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnTreeMove(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || _treeContextNode is not { } node
             || vm.CreateMoveTargetPickerViewModel() is not { } picker)
@@ -1019,7 +1019,7 @@ public partial class MainWindow : Window
 
     // Puts the detail pane's folder-settings row into edit mode for the right-clicked folder (its contents sort
     // order) — the same editor its "Edit" button opens.
-    private void OnTreeFolderSort(object? sender, RoutedEventArgs e)
+    internal void OnTreeFolderSort(object? sender, RoutedEventArgs e)
     {
         if (DataContext is MainWindowViewModel vm)
         {
@@ -1027,7 +1027,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnTreePlaceLegalHold(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnTreePlaceLegalHold(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || _treeContextNode is not { } node)
         {
@@ -1041,7 +1041,7 @@ public partial class MainWindow : Window
     });
 
     // Place a reference (shortcut) to the right-clicked folder in another folder — the picker chooses where.
-    private void OnTreePlaceReference(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnTreePlaceReference(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || _treeContextNode is not { } node
             || vm.CreateMoveTargetPickerViewModel() is not { } picker)
@@ -1057,7 +1057,7 @@ public partial class MainWindow : Window
         }
     });
 
-    private void OnTreeReferences(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnTreeReferences(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || _treeContextNode is not { } node
             || vm.CreateReferencesViewModel(node.Id, node.Name, node.DocumentSelfHref) is not { } references)
@@ -1086,7 +1086,7 @@ public partial class MainWindow : Window
     // Manage access on the right-clicked TREE folder (ADR "Tree-pane context menu with manage-access"). The
     // contents-list menu's OnManageAccess acts on SelectedItem; a tree node isn't a list row, so this targets
     // _treeContextNode instead. The dialog self-gates on the caller's own CanManagePermissions.
-    private void OnTreeManageAccess(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnTreeManageAccess(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.Api is not { } api || _treeContextNode is not { } node)
         {
@@ -1100,7 +1100,7 @@ public partial class MainWindow : Window
 
     // Take over a user's personal space (ADR 0672). The href comes from the RIGHT-CLICKED node, never from
     // pane state and never composed — the listing advertised it, and only to a caller who may perform it.
-    private void OnTreeTakeOver(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnTreeTakeOver(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || _treeContextNode is not { } node || !node.HasRel("take-over"))
         {
@@ -1114,7 +1114,7 @@ public partial class MainWindow : Window
         }
     });
 
-    private void OnTreeRefresh(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnTreeRefresh(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm)
         {
@@ -1122,7 +1122,7 @@ public partial class MainWindow : Window
         }
     });
 
-    private void OnTreeToggleFollow(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnTreeToggleFollow(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm && _treeContextNode is { IsSynthetic: false } node)
         {
