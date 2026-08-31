@@ -99,7 +99,7 @@ public partial class MainWindow : Window
     }
 
     // Ribbon "New folder": prompt for a name, then create it in the current folder.
-    private void OnNewFolder(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnNewFolder(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm)
         {
@@ -115,7 +115,7 @@ public partial class MainWindow : Window
 
     // Rename/Delete are triggered from the ribbon, the row context menu, and F2/Delete — all act on the
     // selected contents-list row and route through these code-behind handlers so the dialogs live in the view.
-    private void OnRename(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnRename(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm)
         {
@@ -123,7 +123,7 @@ public partial class MainWindow : Window
         }
     });
 
-    private void OnDelete(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnDelete(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm)
         {
@@ -546,7 +546,7 @@ public partial class MainWindow : Window
     });
 
     // Export the selected repository/folder + subtree to a .zip (ADR "Repository export"). Tenant-admin-only.
-    private void OnExport(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnExport(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm)
         {
@@ -582,7 +582,7 @@ public partial class MainWindow : Window
         }
     });
 
-    private void OnImport(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnImport(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm)
         {
@@ -625,7 +625,7 @@ public partial class MainWindow : Window
 
     // Opens the approval workflow for the selected document in a separate window (ADR "Workflow start on
     // demand") — from the ribbon button or the row context menu. Refreshes the Tasks badge afterwards.
-    private void OnStartWorkflow(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnStartWorkflow(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.CreateWorkflowViewModel() is not { } workflow)
         {

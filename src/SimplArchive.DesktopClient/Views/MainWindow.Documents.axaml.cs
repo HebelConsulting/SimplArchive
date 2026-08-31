@@ -63,7 +63,7 @@ public partial class MainWindow
     // Compare two versions of the selected document (ADR "Document version comparison") — an inline diff dialog
     // (plus an optional Beyond Compare launch when installed).
     // Versions dialog (ADR "Versions dialog") — list versions with Open/Save-as/Make-current + a Compare launcher.
-    private void OnVersions(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnVersions(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.Api is not { } api || vm.SelectedItem is not { IsFolder: false } node)
         {
@@ -175,7 +175,7 @@ public partial class MainWindow
         await new ManageAccessDialog(mvm).ShowDialog(this);
     });
 
-    private void OnSaveAs(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnSaveAs(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.SelectedItem is not { IsFolder: false } node)
         {
@@ -415,7 +415,7 @@ public partial class MainWindow
     // The order matters and is not arbitrary. Already-mounted is checked FIRST and answered locally, so the
     // common case — "show me my documents" — costs no request at all. Only then does it ask the server whether
     // credentials exist, because that is the only question the client cannot answer itself.
-    private void OnWebDavRibbon(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnWebDavRibbon(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel { Api: { } api } vm)
         {

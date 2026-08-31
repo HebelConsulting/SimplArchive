@@ -66,67 +66,8 @@
                     <!-- Ribbon — buttons grouped by concern (tree / documents / general) with vertical separators
                          between the groups (ADR "Desktop Repositories-tab UI polish"). "Convert scans" moved to
                          the Tenant tab. The vertical separators are thin theme-coloured Borders. -->
-                    <Border Classes="ribbon" DockPanel.Dock="Top" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
-                        <!-- WrapPanel so whole button-groups reflow onto a new row when the ribbon is too narrow to
-                             fit them all, instead of clipping — matching the preview-pane toolbar (both clients). Each
-                             concern-group is a cluster (a horizontal StackPanel) with a right/bottom margin; the margin
-                             replaces the old vertical separators and delineates the groups. -->
-                        <WrapPanel Orientation="Horizontal">
-                            <!-- Tree group: folder/structure + repository export/import (act on the selected folder/repository subtree). -->
-                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
-                                <Button AutomationProperties.AutomationId="tour:action-new-folder" IsEnabled="{Binding CanCreateFolder}" Click="OnNewFolder" ToolTip.Tip="{loc:Tr NewFolder}"><i:Icon Value="mdi-folder-plus" FontSize="18" /></Button>
-                                <!-- Requires CanExport (ADR "Dedicated CanExport/CanImport rights"); enabled once a folder is open. -->
-                                <Button IsVisible="{Binding HasExportRight}" IsEnabled="{Binding CanExport}" Click="OnExport" ToolTip.Tip="{loc:Tr RibbonExport}"><i:Icon Value="mdi-archive-arrow-down-outline" FontSize="18" /></Button>
-                                <!-- Requires CanImport (ADR "Dedicated CanExport/CanImport rights"): import an archive under the current folder, or as a new repository. -->
-                                <Button IsVisible="{Binding HasImportRight}" Click="OnImport" ToolTip.Tip="{loc:Tr RibbonImport}"><i:Icon Value="mdi-archive-arrow-up-outline" FontSize="18" /></Button>
-                            </StackPanel>
-
-                            <!-- Documents group: operations on the selected document/item (order: Open · Save · Rename · Delete · Upload · Check-out · Workflow). -->
-                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
-                                <Button Command="{Binding OpenCommand}" ToolTip.Tip="{x:Static vm:MainWindowViewModel.RibbonOpenTip}"><i:Icon Value="mdi-open-in-app" FontSize="18" /></Button>
-                                <Button IsEnabled="{Binding CanSaveAs}" Click="OnSaveAs" ToolTip.Tip="{loc:Tr RibbonSaveAs}"><i:Icon Value="mdi-content-save-outline" FontSize="18" /></Button>
-                                <Button Click="OnGoToLink" ToolTip.Tip="{loc:Tr RibbonGoToLink}"><i:Icon Value="mdi-link-variant" FontSize="18" /></Button>
-                                <Button IsEnabled="{Binding HasSelectedItem}" Click="OnRename" ToolTip.Tip="{loc:Tr RibbonRename}"><i:Icon Value="mdi-rename-box" FontSize="18" /></Button>
-                                <Button IsEnabled="{Binding HasSelectedItem}" Click="OnDelete" ToolTip.Tip="{loc:Tr RibbonDelete}"><i:Icon Value="mdi-delete" FontSize="18" /></Button>
-                                <Button IsEnabled="False" ToolTip.Tip="{loc:Tr RibbonUpload}"><i:Icon Value="mdi-upload" FontSize="18" /></Button>
-                                <Button IsEnabled="{Binding CanCheckOut}" Command="{Binding CheckOutSelectedCommand}" ToolTip.Tip="{loc:Tr RibbonCheckOut}"><i:Icon Value="mdi-lock-outline" FontSize="18" /></Button>
-                                <Button IsEnabled="{Binding CanSaveAs}" Click="OnVersions" ToolTip.Tip="{loc:Tr RibbonVersions}"><i:Icon Value="mdi-history" FontSize="18" /></Button>
-                                <Button IsEnabled="{Binding CanStartWorkflow}" Click="OnStartWorkflow" ToolTip.Tip="{Binding WorkflowButtonLabel}"><i:Icon Value="mdi-sitemap-outline" FontSize="18" /></Button>
-                            </StackPanel>
-
-                            <!-- General group: view actions. -->
-                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
-                                <Button Command="{Binding RefreshCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
-                                <Button Command="{Binding ResetLayoutCommand}" ToolTip.Tip="{loc:Tr RibbonResetLayout}"><i:Icon Value="mdi-view-grid-outline" FontSize="18" /></Button>
-                                <!-- WebDAV (#461): ONE button that does the next useful thing — set up credentials,
-                                     mount, or open what is already mounted. The tooltip says which, because an icon
-                                     that changes meaning silently is worse than three buttons. -->
-                                <Button Click="OnWebDavRibbon" AutomationProperties.AutomationId="ribbon-webdav"
-                                        ToolTip.Tip="{Binding WebDav.Tooltip}"><i:Icon Value="mdi-folder-network-outline" FontSize="18" /></Button>
-                                <!-- "My external links" — everything the caller has shared, across documents (ADR 0546).
-                                     A cross-document review surface, so it belongs to the general group rather than to the
-                                     selected document. Hidden until the API root advertises the rel. -->
-                                <Button Command="{Binding ShowMyExternalLinksCommand}" IsVisible="{Binding HasMyExternalLinks}"
-                                        ToolTip.Tip="{loc:Tr ExtLinkMyLinks}"><i:Icon Value="mdi-link-box-variant-outline" FontSize="18" /></Button>
-                            </StackPanel>
-
-                            <ItemsControl ItemsSource="{Binding Breadcrumbs}" VerticalAlignment="Center" Margin="0,0,0,4">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:BreadcrumbViewModel">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="/" Foreground="{DynamicResource WbFaint}" Margin="4,0" VerticalAlignment="Center" IsVisible="{Binding ShowSeparator}" />
-                                            <Button Content="{Binding Name}" CommandParameter="{Binding}"
-                                                    Command="{ReflectionBinding $parent[ItemsControl].DataContext.NavigateToBreadcrumbCommand}"
-                                                    Background="Transparent" BorderThickness="0" Padding="3,1" Foreground="{DynamicResource WbAccentText}" Cursor="Hand" />
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </WrapPanel>
-                    </Border>
+                    <!-- The ribbon is its own control (#519, tranche 5) — the last tab ribbon that was still inline. -->
+                    <v:RepositoriesRibbon DockPanel.Dock="Top" />
 
                     <!-- tree | contents | detail (resizable via gutters, each side pane collapsible) -->
                     <Grid>
