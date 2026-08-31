@@ -324,16 +324,6 @@ public partial class MainWindow
         }
     });
 
-    // The Check-out selection, kept on the view-model so ribbon gates + bulk actions see how many rows are
-    // highlighted — SelectedRow alone cannot say (#521, the multi-select piece).
-    private void OnCheckoutSelectionChanged(object? sender, SelectionChangedEventArgs e)
-    {
-        if (DataContext is MainWindowViewModel vm)
-        {
-            vm.Checkout.SetSelection(CheckoutList.SelectedItems?.OfType<CheckoutRowViewModel>().ToList() ?? []);
-        }
-    }
-
     // A row's context menu hands over its own row as the Tag and means THAT row; a ribbon button hands over
     // nothing and means the whole selection — the same two scopes CheckoutRowFrom resolves for the single-row
     // actions, extended to a list for the verbs that compose (#521).

@@ -4,7 +4,10 @@
              xmlns:i="using:Projektanker.Icons.Avalonia"
              xmlns:loc="using:SimplArchive.DesktopClient.Localization"
              x:Class="SimplArchive.DesktopClient.Views.CheckoutRibbon"
-             x:DataType="vm:MainWindowViewModel">
+             x:DataType="vm:CheckoutTabViewModel">
+    <!-- Typed to the TAB's view-model, not the window's (#519 tranche 3): once the tab body became a control
+         with its own DataContext, every `Checkout.*` path here would otherwise be absent. Same move as
+         AuditRibbon (tranche 1) and RecycleBinRibbon (tranche 2). -->
     <!-- Check-out ribbon (#500) — the same shape as the Intray's, because the two tabs are the same kind of
          place: a staging area you also reach from your file manager. Its two actions already existed; what
          they lacked was a home. Refresh sat beside the heading and WebDAV in the bottom-left corner, so the
@@ -20,18 +23,18 @@
                  (ADR 0518) — the in-app diff, and the user's own Beyond Compare, which shows whether or not
                  the tool is installed because that is how anyone discovers it exists. -->
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
-                <Button AutomationProperties.AutomationId="checkout-edit" IsEnabled="{Binding Checkout.HasSelectedRow}"
-                        Command="{Binding Checkout.EditCommand}" CommandParameter="{Binding Checkout.SelectedRow}"
+                <Button AutomationProperties.AutomationId="checkout-edit" IsEnabled="{Binding HasSelectedRow}"
+                        Command="{Binding EditCommand}" CommandParameter="{Binding SelectedRow}"
                         ToolTip.Tip="{loc:Tr CoEditTip}"><i:Icon Value="mdi-pencil-outline" FontSize="18" /></Button>
                 <!-- Single-subject verbs (one diff has one document), so they gate on a SINGLE modified
                      selection — while check-in and discard below compose across many (#521). -->
-                <Button AutomationProperties.AutomationId="checkout-compare" IsEnabled="{Binding Checkout.SelectedIsSingleModified}"
+                <Button AutomationProperties.AutomationId="checkout-compare" IsEnabled="{Binding SelectedIsSingleModified}"
                         Click="OnCheckoutCompare" ToolTip.Tip="{loc:Tr CoCompare}"><i:Icon Value="mdi-compare-horizontal" FontSize="18" /></Button>
-                <Button AutomationProperties.AutomationId="checkout-beyondcompare" IsEnabled="{Binding Checkout.SelectedIsSingleModified}"
+                <Button AutomationProperties.AutomationId="checkout-beyondcompare" IsEnabled="{Binding SelectedIsSingleModified}"
                         Click="OnCheckoutBeyondCompare" ToolTip.Tip="{loc:Tr CoBeyondCompare}"><i:Icon Value="mdi-compare" FontSize="18" /></Button>
                 <!-- Rotate/Sort the WORKING COPY (ADR 0593) — greyed until the selected row's pages resource
                      offered `sort` (a signed or non-paged working copy never does, ADR 0543/0554). -->
-                <Button AutomationProperties.AutomationId="checkout-sort" IsEnabled="{Binding Checkout.SelectedCanSortPages}"
+                <Button AutomationProperties.AutomationId="checkout-sort" IsEnabled="{Binding SelectedCanSortPages}"
                         Click="OnCheckoutSortPages" ToolTip.Tip="{loc:Tr IntraySortTitle}"><i:Icon Value="mdi-sort" FontSize="18" /></Button>
             </StackPanel>
             <!-- Finish: the two ways a check-out ENDS well — commit the work, or release it unchanged.
@@ -39,35 +42,38 @@
                  the window like discard does, instead of binding a single-row command to SelectedRow — which
                  with several rows highlighted would silently commit only one of them (#521). -->
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
-                <Button AutomationProperties.AutomationId="checkout-checkin" IsEnabled="{Binding Checkout.SelectedCanCheckIn}"
+                <Button AutomationProperties.AutomationId="checkout-checkin" IsEnabled="{Binding SelectedCanCheckIn}"
                         Click="OnCheckoutCheckIn"
                         ToolTip.Tip="{loc:Tr CoCheckIn}"><i:Icon Value="mdi-check" FontSize="18" /></Button>
-                <Button AutomationProperties.AutomationId="checkout-unlock" IsEnabled="{Binding Checkout.SelectedCanUnlock}"
-                        Command="{Binding Checkout.UnlockCommand}" CommandParameter="{Binding Checkout.SelectedRow}"
+                <Button AutomationProperties.AutomationId="checkout-unlock" IsEnabled="{Binding SelectedCanUnlock}"
+                        Command="{Binding UnlockCommand}" CommandParameter="{Binding SelectedRow}"
                         ToolTip.Tip="{loc:Tr MwUnlock}"><i:Icon Value="mdi-lock-open-variant-outline" FontSize="18" /></Button>
             </StackPanel>
             <!-- Lease: how long you keep holding it. -->
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
-                <Button AutomationProperties.AutomationId="checkout-extend" IsEnabled="{Binding Checkout.SelectedCanExtend}"
-                        Command="{Binding Checkout.ExtendCommand}" CommandParameter="{Binding Checkout.SelectedRow}"
+                <Button AutomationProperties.AutomationId="checkout-extend" IsEnabled="{Binding SelectedCanExtend}"
+                        Command="{Binding ExtendCommand}" CommandParameter="{Binding SelectedRow}"
                         ToolTip.Tip="{loc:Tr MwExtendCheckoutTip}"><i:Icon Value="mdi-clock-plus-outline" FontSize="18" /></Button>
             </StackPanel>
             <!-- Discard, ALONE. It ends the check-out too, but by throwing the work away — and it would
                  otherwise sit next to the button that commits it, which is the worst adjacency in this tab. -->
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
-                <Button AutomationProperties.AutomationId="checkout-discard" IsEnabled="{Binding Checkout.SelectedCanDiscard}"
+                <Button AutomationProperties.AutomationId="checkout-discard" IsEnabled="{Binding SelectedCanDiscard}"
                         Click="OnCheckoutDiscard" ToolTip.Tip="{loc:Tr MwDiscard}"><i:Icon Value="mdi-delete-outline" FontSize="18" /></Button>
             </StackPanel>
             <!-- Item group: what to do with the list as a whole. -->
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
-                <Button AutomationProperties.AutomationId="checkout-refresh" Command="{Binding Checkout.RefreshCommand}"
+                <Button AutomationProperties.AutomationId="checkout-refresh" Command="{Binding RefreshCommand}"
                         ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
             </StackPanel>
             <!-- General group: one WebDAV button that does the next useful thing — set up, mount, or open this
                  tab's own folder (ADR "One WebDAV button per tab, deep-linked"). -->
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
+                <!-- WebDav is the SHELL's, not this tab's, so it is addressed at the window explicitly rather
+                     than by inheritance (#519 tranche 3) — the same cast MainWindow.axaml already uses. This is
+                     the one binding here that did not move scope with the rest. -->
                 <Button Click="OnWebDavTabButton" Tag="Check-out" AutomationProperties.AutomationId="checkout-webdav"
-                        ToolTip.Tip="{Binding WebDav.Tooltip}"><i:Icon Value="mdi-folder-network-outline" FontSize="18" /></Button>
+                        ToolTip.Tip="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).WebDav.Tooltip}"><i:Icon Value="mdi-folder-network-outline" FontSize="18" /></Button>
             </StackPanel>
         </WrapPanel>
     </Border>

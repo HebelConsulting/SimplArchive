@@ -1,0 +1,126 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             xmlns:v="using:SimplArchive.DesktopClient.Views"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             x:Class="SimplArchive.DesktopClient.Views.CheckoutTab"
+             x:DataType="vm:CheckoutTabViewModel">
+    <!-- The Check-out tab's body (#519, tranche 3) — moved out of MainWindow.axaml, which is on the 1000-line
+         debt list. DataContext is the CheckoutTabViewModel, which #517 had already extracted, so every
+         `Checkout.X` path here became `X`.
+
+         CheckoutRibbon is re-typed to this view-model in the same change, for the reason tranche 2 was first
+         reverted over: a nested control declaring x:DataType of the SHELL's view-model binds through the
+         `Checkout` property, and re-scoping this tab leaves every one of those paths absent — which reads as a
+         null DataContext and is not one. -->
+    <!-- Outer grid so the preview full-screen overlay can cover the tab (tab strip stays reachable). -->
+    <Grid>
+    <DockPanel LastChildFill="True">
+
+    <!-- The tab's own actions, in one place and in the same place the Intray keeps its own (#500).
+         Refresh used to sit beside the heading and WebDAV in the bottom-left corner. -->
+    <v:CheckoutRibbon DockPanel.Dock="Top" />
+
+    <Grid Margin="14" ColumnDefinitions="*,10,1.15*">
+
+        <!-- Left column: what you hold locked, and what can be done with each. Same shape as the
+             Intray tab, because it is the same kind of place — a staging area you also reach from
+             your file manager (ADR "The Check-out tab shows what you are about to check in"). -->
+        <Grid Grid.Column="0" RowDefinitions="Auto,*">
+            <!-- Heading over its own count, at the Intray's type scale (#500). The count used to sit
+                 at the bottom of the list, which is the one place the eye reaches last — and on a
+                 long list, only after scrolling past everything it is counting. -->
+            <StackPanel Grid.Row="0" VerticalAlignment="Center" Margin="0,0,0,6">
+                <TextBlock Text="{loc:Tr CoHeader}" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding Status}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+            </StackPanel>
+
+            <DockPanel Grid.Row="1" LastChildFill="True">
+            <TextBlock DockPanel.Dock="Top" IsVisible="{Binding !HasItems}" TextWrapping="Wrap"
+                       Text="{loc:Tr MwCheckoutEmpty}"
+                       Foreground="{DynamicResource WbFaint}" />
+            <!-- No column headers, and icon buttons rather than labelled ones: the list is half the
+                 window now, and the wide table this replaced pushed the document NAME off the left
+                 edge — the one column nobody can do without. Path and expiry ride under the name;
+                 everything else is a tooltip. Same shape as the Intray list, for the same reason. -->
+            <ListBox x:Name="CheckoutList" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedRow}"
+                     SelectionMode="Multiple" SelectionChanged="OnCheckoutSelectionChanged"
+                     Background="Transparent" BorderThickness="0">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:CheckoutRowViewModel">
+                        <!-- The row, its indicators and its context menu are their own control
+                             (#521, #519): seven buttons per row were squeezing the document name
+                             off the left edge, and a row is a thing rather than a region. -->
+                        <v:CheckoutRow />
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+            </DockPanel>
+        </Grid>
+
+        <GridSplitter Grid.Column="1" Background="{DynamicResource WbBorder}" ResizeDirection="Columns" HorizontalAlignment="Stretch" />
+
+        <!-- Right column: index data (top) over the WORKING COPY's preview (bottom). Each is
+             resizable + collapsible, as on the Intray tab. -->
+        <Grid Grid.Column="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="{Binding MaskHeight, Mode=TwoWay}" />
+                <RowDefinition Height="6" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="{Binding PreviewHeight, Mode=TwoWay}" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,0,0,0">
+                <Grid ColumnDefinitions="*,Auto" Margin="12,6">
+                    <TextBlock Grid.Column="0" Text="{Binding DetailTitle}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <Button Grid.Column="1" Command="{Binding ToggleMaskCommand}" ToolTip.Tip="{loc:Tr MwCollapseExpand}"><i:Icon Value="{Binding MaskCaret}" /></Button>
+                </Grid>
+            </Border>
+
+            <!-- Index data is READ-ONLY here: it belongs to the archived document and is the same
+                 either side of an edit. Editing it is the Repositories tab's job. -->
+            <Border Grid.Row="1" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,0,0,0" IsVisible="{Binding !MaskCollapsed}">
+                <ScrollViewer>
+                    <StackPanel Margin="12,4" Spacing="6">
+                        <TextBlock Text="{loc:Tr SelectDocDetail}" Foreground="{DynamicResource WbFaint}"
+                                   TextWrapping="Wrap" IsVisible="{Binding !SelectedRow}" />
+                        <ItemsControl ItemsSource="{Binding IndexFields}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:IndexFieldViewModel">
+                                    <Grid ColumnDefinitions="180,*" Margin="0,3">
+                                        <TextBlock Grid.Column="0" Text="{Binding FieldName}" Foreground="{DynamicResource WbMuted}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Values}" TextWrapping="Wrap" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <GridSplitter Grid.Row="2" Background="{DynamicResource WbBorder}" ResizeDirection="Rows" HorizontalAlignment="Stretch"
+                          IsEnabled="{Binding !MaskCollapsed}" />
+
+            <Border Grid.Row="3" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,1,0,0">
+                <Grid ColumnDefinitions="*,Auto" Margin="12,6">
+                    <TextBlock Grid.Column="0" Text="{loc:Tr CoWorkingCopyPreview}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <Button Grid.Column="1" Command="{Binding TogglePreviewCommand}" ToolTip.Tip="{loc:Tr MwCollapseExpand}"><i:Icon Value="{Binding PreviewCaret}" /></Button>
+                </Grid>
+            </Border>
+
+            <!-- The WORKING COPY, not the archived version. Showing the archived side here would
+                 answer the opposite of the question this tab exists to answer. -->
+            <Border Grid.Row="4" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,0,0,0" IsVisible="{Binding !PreviewCollapsed}">
+                <v:PreviewPane DataContext="{Binding Preview}" />
+            </Border>
+        </Grid>
+    </Grid>
+    </DockPanel>
+
+        <Border IsVisible="{Binding Preview.PreviewFullscreen}" ZIndex="100" Background="{DynamicResource WbChrome}">
+            <v:PreviewPane DataContext="{Binding Preview}" />
+        </Border>
+    </Grid>
+</UserControl>
