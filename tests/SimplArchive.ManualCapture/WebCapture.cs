@@ -84,7 +84,15 @@ public static partial class WebCapture
             await ShotAsync(page, outDir, screen.Name);
         }
 
-        await LoginAsync(page);
+        // The notification bell's unread badge is fetched during MainLayout's init, which lands AFTER login — so
+        // every figure with an app bar was a coin flip on whether the badge had arrived (#868). That is the churn
+        // this harness kept producing: web-phone-detail.png alternated on nothing but that badge.
+        //
+        // Waiting for the response is the fix rather than hiding the badge, because the badge is real UI: the
+        // manual should show what a user sees, and what it must not do is show it only half the time. Armed
+        // BEFORE login (the response can land before the await otherwise) and bounded, so a build where the call
+        // never happens degrades to the old timing rather than hanging for the 60 s page timeout.
+        await LoginAndSettleBadgeAsync(page);
 
         foreach (var screen in Screens.Web.Where(s => !s.BeforeLogin))
         {
@@ -146,7 +154,7 @@ public static partial class WebCapture
         page.SetDefaultTimeout(60000);
         await page.GotoAsync(baseUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
         await page.GetByText(LoginRegex()).First.WaitForAsync();
-        await LoginAsync(page);
+        await LoginAndSettleBadgeAsync(page);
 
         // The premise, asserted rather than assumed: without a coarse pointer every shot below is the desktop
         // layout under a mobile filename.
@@ -722,6 +730,33 @@ public static partial class WebCapture
 
         // Every logged-in page — main, touch tiers — renders motion-free (#832).
         await FreezeMotionAsync(page);
+    }
+
+    /// <summary>Logs in, then waits for the unread-count fetch that decides whether the bell shows a badge.</summary>
+    /// <remarks>
+    /// #868: that fetch lands during MainLayout's init, AFTER login, so a screenshot taken before it produced a
+    /// bell without a badge and one taken after produced a bell with one — the same figure, two bytes, no code
+    /// change between them. Both responsive and desktop passes go through here so neither can drift alone.
+    /// </remarks>
+    private static async Task LoginAndSettleBadgeAsync(IPage page)
+    {
+        var unreadCount = page.WaitForResponseAsync(
+            r => r.Url.Contains("/api/notifications/unread-count", StringComparison.Ordinal),
+            new PageWaitForResponseOptions { Timeout = 15000 });
+
+        await LoginAsync(page);
+
+        try
+        {
+            await unreadCount;
+        }
+        catch (TimeoutException)
+        {
+            Console.WriteLine("[web] the unread-count fetch never arrived — figures may show the pre-badge state");
+        }
+
+        // …and one render tick, so the badge has actually painted once the count is in.
+        await page.WaitForTimeoutAsync(300);
     }
 
     private static async Task ShotAsync(IPage page, string outDir, string name)
