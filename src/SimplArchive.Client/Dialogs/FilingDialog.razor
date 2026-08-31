@@ -98,7 +98,7 @@
             var page = await Http.GetFromJsonAsync<ListResponse>(url);
             foreach (var r in page?.Repositories ?? [])
             {
-                shared.Add(new PickNode(r.Id, r.Name, r.HasSubfolders, Rel(r.Links, "children")));
+                shared.Add(new PickNode(r.Id, r.Name, r.HasSubfolders, Rel(r.Links, "children"), Admits(r.Links)));
             }
             url = Next(page?.Links);
         }
@@ -110,8 +110,11 @@
             ? null
             : new PickNode(personal.Id, personal.Name, true, Rel(personal.Links, "children"));
 
+        // Two independent reasons a root may not be a target, and BOTH have to hold for it to be one:
+        // FilingRoots says a personal space's own root is not (ADR 0689), and `create-child` says whether the
+        // server would accept a document here at all (ADR 0543).
         _roots = [.. FilingRoots.Compose(personalNode, shared, n => n.Name)
-            .Select(root => ToItem(root.Node with { Selectable = root.Selectable }))];
+            .Select(root => ToItem(root.Node with { Selectable = root.Selectable && root.Node.Selectable }))];
         _loading = false;
     }
 
@@ -124,7 +127,7 @@
             var page = await Http.GetFromJsonAsync<ChildrenResponse>(url);
             foreach (var c in (page?.Children ?? []).Where(c => !c.HasVersions))
             {
-                children.Add(ToItem(new PickNode(c.Id, c.Name, c.HasSubfolders, Rel(c.Links, "children"))));
+                children.Add(ToItem(new PickNode(c.Id, c.Name, c.HasSubfolders, Rel(c.Links, "children"), Admits(c.Links))));
             }
             url = Next(page?.Links);
         }
@@ -148,6 +151,17 @@
     private string? Trimmed() => string.IsNullOrWhiteSpace(_comment) ? null : _comment.Trim();
 
     private void Cancel() => Dialog.Cancel();
+
+    /// <summary>Whether the server would accept a plain child here — the same rel both clients gate creates on.</summary>
+    /// <remarks>
+    /// Every node in this tree was offered as a filing target regardless, so the picker listed `My Addressbook`
+    /// and `My Calendar` — typed collections that hold contacts and appointments and refuse a PDF. The user
+    /// picked one, pressed File, and got a refusal the dialog already had the information to prevent: the rows
+    /// carried `create-child` all along and nothing read it (ADR 0543 — a missing rel means *not available to
+    /// you, here, now*). The desktop picker has gated on this rel since #873; this is the web catching up
+    /// (ADR 0511 — the two clients are one surface).
+    /// </remarks>
+    private static bool Admits(List<Link>? links) => Rel(links, "create-child") is not null;
 
     private static TreeItemData<PickNode> ToItem(PickNode n) => new() { Value = n, Text = n.Name, Expandable = n.HasSubfolders };
 
