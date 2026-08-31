@@ -321,21 +321,21 @@ internal static class Program
         if (args.Contains("--intray-collapse-test"))
         {
             var vm = new MainWindowViewModel();
-            vm.Intray.ToggleIntrayServerCommand.Execute(null);
-            vm.Intray.ToggleIntrayLocalCommand.Execute(null);
-            vm.Intray.ToggleIntrayMaskCommand.Execute(null);
-            vm.Intray.ToggleIntrayPreviewCommand.Execute(null);
-            var collapsedToZero = vm.Intray.IntrayServerHeight.Value == 0 && vm.Intray.IntrayLocalHeight.Value == 0
-                && vm.Intray.IntrayMaskHeight.Value == 0 && vm.Intray.IntrayPreviewHeight.Value == 0;
-            var flags = vm.Intray.IntrayServerCollapsed && vm.Intray.IntrayLocalCollapsed && vm.Intray.IntrayMaskCollapsed && vm.Intray.IntrayPreviewCollapsed;
+            vm.Intray.ToggleServerCommand.Execute(null);
+            vm.Intray.ToggleLocalCommand.Execute(null);
+            vm.Intray.ToggleMaskCommand.Execute(null);
+            vm.Intray.TogglePreviewCommand.Execute(null);
+            var collapsedToZero = vm.Intray.ServerHeight.Value == 0 && vm.Intray.LocalHeight.Value == 0
+                && vm.Intray.MaskHeight.Value == 0 && vm.Intray.PreviewHeight.Value == 0;
+            var flags = vm.Intray.ServerCollapsed && vm.Intray.LocalCollapsed && vm.Intray.MaskCollapsed && vm.Intray.PreviewCollapsed;
             Console.WriteLine($"collapsed: heights0={collapsedToZero} flags={flags}");
 
             // A fresh VM loads the just-persisted state (all collapsed).
             var reloaded = new MainWindowViewModel();
-            var persisted = reloaded.Intray.IntrayServerCollapsed && reloaded.Intray.IntrayLocalCollapsed
-                && reloaded.Intray.IntrayMaskCollapsed && reloaded.Intray.IntrayPreviewCollapsed;
+            var persisted = reloaded.Intray.ServerCollapsed && reloaded.Intray.LocalCollapsed
+                && reloaded.Intray.MaskCollapsed && reloaded.Intray.PreviewCollapsed;
             reloaded.ResetLayoutCommand.Execute(null); // restore defaults so the test leaves no collapsed state behind
-            var reset = !reloaded.Intray.IntrayServerCollapsed && reloaded.Intray.IntrayMaskHeight.Value == 1.1 && reloaded.Intray.IntrayMaskHeight.IsStar;
+            var reset = !reloaded.Intray.ServerCollapsed && reloaded.Intray.MaskHeight.Value == 1.1 && reloaded.Intray.MaskHeight.IsStar;
             Console.WriteLine($"reloaded persisted={persisted} | reset ok={reset}");
             Console.WriteLine(collapsedToZero && flags && persisted && reset ? "OK" : "FAILED");
             return;

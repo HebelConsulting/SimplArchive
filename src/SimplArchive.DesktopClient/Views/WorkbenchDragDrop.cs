@@ -98,7 +98,7 @@ internal sealed class WorkbenchDragDrop
             return;
         }
 
-        await vm.Intray.UploadFilesToIntrayAsync(await ReadStorageFilesAsync(storageFiles));
+        await vm.Intray.UploadFilesAsync(await ReadStorageFilesAsync(storageFiles));
     });
 
     // Begin an internal move/reference drag once the pointer leaves the pressed row by a small threshold.
@@ -407,7 +407,7 @@ internal sealed class WorkbenchDragDrop
         {
             if (treeNode.PersonalKind == "intray")
             {
-                await vm.Intray.CopyDocumentsToIntrayAsync(dragged.Select(d => d.Id).ToList());
+                await vm.Intray.CopyDocumentsAsync(dragged.Select(d => d.Id).ToList());
                 return;
             }
 
@@ -432,7 +432,7 @@ internal sealed class WorkbenchDragDrop
             var files = await ReadStorageFilesAsync(storageFiles);
             if (treeNode.PersonalKind == "intray")
             {
-                await vm.Intray.UploadFilesToIntrayAsync(files);
+                await vm.Intray.UploadFilesAsync(files);
             }
             else
             {

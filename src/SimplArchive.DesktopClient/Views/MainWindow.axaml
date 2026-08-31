@@ -135,7 +135,7 @@
                         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                 <TextBlock Text="{loc:Tr TabIntray}" FontWeight="SemiBold" />
-                                <TextBlock Text="{Binding Intray.IntrayStatus}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                <TextBlock Text="{Binding Intray.Status}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                             </StackPanel>
                         </Grid>
                         <!-- View filter (ADR 0532): a CanManageIntrays holder gets a user-picker to open another
@@ -146,7 +146,7 @@
                         <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="12" Margin="0,0,0,6" VerticalAlignment="Center"
                                     IsVisible="{Binding Intray.CanManageIntrays}">
                             <ComboBox MinWidth="180"
-                                      ItemsSource="{Binding Intray.IntrayUsers}" SelectedItem="{Binding Intray.SelectedIntrayUser}"
+                                      ItemsSource="{Binding Intray.Users}" SelectedItem="{Binding Intray.SelectedUser}"
                                       PlaceholderText="{loc:Tr IntrayUserPicker}">
                                 <ComboBox.ItemTemplate>
                                     <DataTemplate x:DataType="vm:IntrayUserPickerItem">
@@ -155,7 +155,7 @@
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
                         </StackPanel>
-                        <ListBox Grid.Row="2" x:Name="ServerIntrayList" ItemsSource="{Binding Intray.ServerIntray}" SelectedItem="{Binding Intray.SelectedServerIntrayItem}"
+                        <ListBox Grid.Row="2" x:Name="ServerIntrayList" ItemsSource="{Binding Intray.ServerItems}" SelectedItem="{Binding Intray.SelectedServerItem}"
                                  DragDrop.AllowDrop="True"
                                  SelectionMode="Multiple" SelectionChanged="OnServerIntraySelectionChanged" DoubleTapped="OnIntrayItemDoubleTapped">
                             <ListBox.ItemTemplate>
@@ -175,29 +175,29 @@
                     <Grid Grid.Column="2">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
-                            <RowDefinition Height="{Binding Intray.IntrayMaskHeight, Mode=TwoWay}" />
+                            <RowDefinition Height="{Binding Intray.MaskHeight, Mode=TwoWay}" />
                             <RowDefinition Height="6" />
                             <RowDefinition Height="Auto" />
-                            <RowDefinition Height="{Binding Intray.IntrayPreviewHeight, Mode=TwoWay}" />
+                            <RowDefinition Height="{Binding Intray.PreviewHeight, Mode=TwoWay}" />
                         </Grid.RowDefinitions>
 
                         <!-- Mask / index-data header -->
                         <Border Grid.Row="0" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,0,0,0">
                             <Grid ColumnDefinitions="*,Auto" Margin="12,6">
-                                <TextBlock Grid.Column="0" Text="{Binding Intray.IntrayDetailTitle}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                <Button Grid.Column="1" Command="{Binding Intray.ToggleIntrayMaskCommand}" ToolTip.Tip="{loc:Tr MwCollapseExpand}"><i:Icon Value="{Binding Intray.IntrayMaskCaret}" /></Button>
+                                <TextBlock Grid.Column="0" Text="{Binding Intray.DetailTitle}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <Button Grid.Column="1" Command="{Binding Intray.ToggleMaskCommand}" ToolTip.Tip="{loc:Tr MwCollapseExpand}"><i:Icon Value="{Binding Intray.MaskCaret}" /></Button>
                             </Grid>
                         </Border>
 
                         <!-- Mask / index-data body (staged to the item's sidecar) — editable only for a focused server item -->
-                        <Border Grid.Row="1" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,0,0,0" IsVisible="{Binding !Intray.IntrayMaskCollapsed}">
+                        <Border Grid.Row="1" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,0,0,0" IsVisible="{Binding !Intray.MaskCollapsed}">
                             <ScrollViewer>
                                 <StackPanel Margin="12,4" Spacing="6">
                                     <TextBlock Text="{loc:Tr MwSelectIntrayItem}" Foreground="{DynamicResource WbFaint}"
-                                               TextWrapping="Wrap" IsVisible="{Binding !Intray.IntrayItemFocused}" />
+                                               TextWrapping="Wrap" IsVisible="{Binding !Intray.ItemFocused}" />
 
                                     <!-- Emails (.eml/.msg) are classified automatically when filed — no mask offered. -->
-                                    <StackPanel IsVisible="{Binding Intray.IntrayIsEmail}" Orientation="Horizontal" Spacing="8" Margin="0,4">
+                                    <StackPanel IsVisible="{Binding Intray.IsEmail}" Orientation="Horizontal" Spacing="8" Margin="0,4">
                                         <i:Icon Value="mdi-email-check-outline" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
                                         <TextBlock Text="{loc:Tr IntrayEmailAutoMask}" Foreground="{DynamicResource WbMuted}" TextWrapping="Wrap" VerticalAlignment="Center" />
                                     </StackPanel>
@@ -205,34 +205,34 @@
                                     <StackPanel Spacing="6">
                                         <StackPanel.IsVisible>
                                             <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
-                                                <Binding Path="Intray.IntrayItemFocused" />
-                                                <Binding Path="!Intray.IntrayIsEmail" />
+                                                <Binding Path="Intray.ItemFocused" />
+                                                <Binding Path="!Intray.IsEmail" />
                                             </MultiBinding>
                                         </StackPanel.IsVisible>
                                         <Grid ColumnDefinitions="180,*">
                                             <TextBlock Grid.Column="0" Text="{loc:Tr Name}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
-                                            <TextBox Grid.Column="1" Text="{Binding Intray.IntrayName}" Height="28" Padding="4,2" VerticalContentAlignment="Center" />
+                                            <TextBox Grid.Column="1" Text="{Binding Intray.Name}" Height="28" Padding="4,2" VerticalContentAlignment="Center" />
                                         </Grid>
                                         <Grid ColumnDefinitions="180,*">
                                             <TextBlock Grid.Column="0" Text="{loc:Tr VerColDocDate}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
                                             <!-- Free-text date entry with an optional calendar picker (ADR "Intray refinements"). -->
-                                            <CalendarDatePicker Grid.Column="1" SelectedDate="{Binding Intray.IntrayDocumentDate}" Watermark="yyyy-MM-dd" HorizontalAlignment="Stretch" />
+                                            <CalendarDatePicker Grid.Column="1" SelectedDate="{Binding Intray.DocumentDate}" Watermark="yyyy-MM-dd" HorizontalAlignment="Stretch" />
                                         </Grid>
                                         <Grid ColumnDefinitions="180,*">
                                             <TextBlock Grid.Column="0" Text="{loc:Tr MaskLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
-                                            <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding Intray.IntrayAvailableMasks}" SelectedItem="{Binding Intray.IntraySelectedMaskChoice}">
+                                            <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding Intray.AvailableMasks}" SelectedItem="{Binding Intray.SelectedMaskChoice}">
                                                 <ComboBox.ItemTemplate>
                                                     <DataTemplate x:DataType="vm:MaskChoiceViewModel"><TextBlock Text="{Binding Name}" /></DataTemplate>
                                                 </ComboBox.ItemTemplate>
                                             </ComboBox>
                                         </Grid>
                                         <!-- OCR languages for a scannable item — staged, applied to the searchable-PDF conversion at filing (ADR "Inbox OCR-language staging"). -->
-                                        <Grid ColumnDefinitions="180,*,Auto" IsVisible="{Binding Intray.IntrayStgScannable}">
+                                        <Grid ColumnDefinitions="180,*,Auto" IsVisible="{Binding Intray.StgScannable}">
                                             <TextBlock Grid.Column="0" Text="{loc:Tr SysOcrLanguages}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="1" Text="{Binding Intray.IntrayOcrDisplay}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Intray.OcrDisplay}" VerticalAlignment="Center" TextWrapping="Wrap" />
                                             <Button Grid.Column="2" Click="OnEditIntrayOcrLanguages" Margin="6,2,0,2" ToolTip.Tip="{loc:Tr MwEditOcr}"><i:Icon Value="mdi-pencil-outline" /></Button>
                                         </Grid>
-                                        <ItemsControl ItemsSource="{Binding Intray.IntrayMaskEditFields}">
+                                        <ItemsControl ItemsSource="{Binding Intray.MaskEditFields}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:MaskFieldEditViewModel">
                                                     <Grid ColumnDefinitions="180,*" Margin="0,3">
@@ -247,36 +247,36 @@
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
-                                        <Button Content="{loc:Tr Save}" Command="{Binding Intray.SaveIntrayMaskCommand}" HorizontalAlignment="Right" Margin="0,4,0,0" />
+                                        <Button Content="{loc:Tr Save}" Command="{Binding Intray.SaveMaskCommand}" HorizontalAlignment="Right" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </StackPanel>
                             </ScrollViewer>
                         </Border>
 
                         <GridSplitter Grid.Row="2" Background="{DynamicResource WbBorder}" ResizeDirection="Rows" HorizontalAlignment="Stretch"
-                                      IsEnabled="{Binding !Intray.IntrayMaskCollapsed}" />
+                                      IsEnabled="{Binding !Intray.MaskCollapsed}" />
 
                         <!-- Preview header -->
                         <Border Grid.Row="3" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,1,0,0">
                             <Grid ColumnDefinitions="*,Auto" Margin="12,6">
                                 <TextBlock Grid.Column="0" Text="{loc:Tr MwPreview}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                <Button Grid.Column="1" Command="{Binding Intray.ToggleIntrayPreviewCommand}" ToolTip.Tip="{loc:Tr MwCollapseExpand}"><i:Icon Value="{Binding Intray.IntrayPreviewCaret}" /></Button>
+                                <Button Grid.Column="1" Command="{Binding Intray.TogglePreviewCommand}" ToolTip.Tip="{loc:Tr MwCollapseExpand}"><i:Icon Value="{Binding Intray.PreviewCaret}" /></Button>
                             </Grid>
                         </Border>
 
                         <!-- Preview body (full parity: renditions, hit-overlay, find-in-document, click-to-copy) -->
                         <!-- Intray preview — the same reusable surface as the Repositories pane; full-screen shows
                              the overlay below (ADR "Desktop preview full-screen toggle"). -->
-                        <Border Grid.Row="4" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,0,0,0" IsVisible="{Binding !Intray.IntrayPreviewCollapsed}">
-                            <v:PreviewPane DataContext="{Binding Intray.IntrayPreview}" />
+                        <Border Grid.Row="4" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,0,0,0" IsVisible="{Binding !Intray.PreviewCollapsed}">
+                            <v:PreviewPane DataContext="{Binding Intray.Preview}" />
                         </Border>
                     </Grid>
                 </Grid>
                 </DockPanel>
 
                     <!-- Full-screen preview overlay for the Intray tab (its own IntrayPreview, disconnected from Repositories). -->
-                    <Border IsVisible="{Binding Intray.IntrayPreview.PreviewFullscreen}" ZIndex="100" Background="{DynamicResource WbChrome}">
-                        <v:PreviewPane DataContext="{Binding Intray.IntrayPreview}" />
+                    <Border IsVisible="{Binding Intray.Preview.PreviewFullscreen}" ZIndex="100" Background="{DynamicResource WbChrome}">
+                        <v:PreviewPane DataContext="{Binding Intray.Preview}" />
                     </Border>
                 </Grid>
             </TabItem>

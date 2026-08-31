@@ -481,7 +481,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     private void ExitPreviewFullscreen()
     {
         Preview.ExitFullscreen();
-        Intray.IntrayPreview.ExitFullscreen();
+        Intray.Preview.ExitFullscreen();
         RecycleBin.Preview.ExitFullscreen();
     }
 
@@ -922,7 +922,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     {
         _api = null;
         Preview.Api = null;
-        Intray.IntrayPreview.Api = null;
+        Intray.Preview.Api = null;
         IsLoggedIn = false;
         _forceLoginNext = true;
         _ = StopRealtimeNotificationsAsync(); // drop the live hub connection with the session
@@ -1502,8 +1502,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
             case 0 when OpenCommand.CanExecute(null):
                 await OpenCommand.ExecuteAsync(null);
                 break;
-            case 1 when Intray.SelectedServerIntrayItem is not null:
-                await Intray.OpenServerIntrayItemCommand.ExecuteAsync(null);
+            case 1 when Intray.SelectedServerItem is not null:
+                await Intray.OpenServerItemCommand.ExecuteAsync(null);
                 break;
         }
     }
@@ -2547,7 +2547,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         }
 
         Status = string.Format(Strings.Get("StFiledOf"), filed, items.Count);
-        await Intray.RefreshIntrayAsync();
+        await Intray.RefreshAsync();
     }
     // Builds the filing dialog VM, passing the Repositories tab's selected document (if any) so the dialog can
     // offer filing as a new version of it / into its folder (ADR "Context-aware inbox filing dialog").
@@ -2620,13 +2620,13 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     async partial void OnSelectedTabChanged(int value)
     {
         Preview.ExitFullscreen(); // leave full screen when switching tabs (the tab strip stays reachable while maximized)
-        Intray.IntrayPreview.ExitFullscreen();
+        Intray.Preview.ExitFullscreen();
         RecycleBin.Preview.ExitFullscreen();
 
         await (value switch
         {
             0 => RefreshRepositoriesViewAsync(),
-            1 => Intray.RefreshIntrayAsync(),
+            1 => Intray.RefreshAsync(),
             2 => ActivateCheckoutAsync(),
             3 => ActivateSearchAsync(),
             4 => LoadRecycleBinAsync(),

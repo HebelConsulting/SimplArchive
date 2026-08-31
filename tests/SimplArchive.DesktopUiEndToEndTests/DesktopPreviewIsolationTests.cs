@@ -13,14 +13,14 @@ public class DesktopPreviewIsolationTests
     {
         var vm = new MainWindowViewModel();
 
-        Assert.NotSame(vm.Preview, vm.Intray.IntrayPreview);
+        Assert.NotSame(vm.Preview, vm.Intray.Preview);
         Assert.NotSame(vm.Preview, vm.RecycleBin.Preview);
-        Assert.NotSame(vm.Intray.IntrayPreview, vm.RecycleBin.Preview);
+        Assert.NotSame(vm.Intray.Preview, vm.RecycleBin.Preview);
 
         // Mutating one preview's state must not affect the others.
         vm.Preview.FindQuery = "repo";
-        vm.Intray.IntrayPreview.FindQuery = "intray";
+        vm.Intray.Preview.FindQuery = "intray";
         Assert.Equal("repo", vm.Preview.FindQuery);
-        Assert.Equal("intray", vm.Intray.IntrayPreview.FindQuery);
+        Assert.Equal("intray", vm.Intray.Preview.FindQuery);
     }
 }
