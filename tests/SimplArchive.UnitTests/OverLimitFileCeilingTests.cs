@@ -16,8 +16,12 @@ namespace SimplArchive.UnitTests;
 // (issue #466, closed that day), which is when the owner also interviewed on everything remaining. What the
 // list holds now is exactly those decisions: the two desktop giants — MainWindowViewModel (per-tab
 // view-model tranches, then re-interview at the measured floor, #517) and SimplArchiveApiClient (real
-// per-area clients sharing one auth/HTTP core, planned together with #443, #518) — and MainWindow.axaml,
-// where the owner DECIDED markup counts: a UserControl per tab down to <1000 (#519).
+// per-area clients sharing one auth/HTTP core, planned together with #443, #518) — and — until 2026-08-31 —
+// MainWindow.axaml, where the owner DECIDED markup counts: a UserControl per tab down to <1000 (#519). It
+// LEFT the list at 2,327 → 574, by exactly that route: a control per tab (Audit, Recycle bin, Check-out,
+// Search), then the Repositories tab split into its ribbon, tree, contents and detail panes. The last four
+// inherit the window's DataContext rather than getting a view-model of their own, because Repositories IS
+// the shell — 138 binding roots against Search's 31.
 //
 // One caveat ADR 0572 records: MainWindow's CLASS still spans ~1,575 lines across its three partial files —
 // the per-feature partial split for view-glue was the user-approved shape, so the file-level ceiling is what
@@ -183,36 +187,6 @@ public class OverLimitFileCeilingTests
         // one list's input across two places for the sake of the number.
         ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_190,
 
-        // The four that crossed the line AFTER #466's list was written — proof the debt grows invisibly
-        // without a guard, which is why they enter it the moment they were noticed (full sweep, 2026-08-13).
-        // MainWindow.axaml is pure markup, and the owner DECIDED (2026-08-14, #519) that the 1000-line rule
-        // COVERS markup: the target is <1,000 via a UserControl per TabItem.
-        // 2,464 -> 2,427 (ADR 0577: the Intray ribbon became its own control) -> 2,330 (ADR 0578: so did the
-        // top bar). Both had gained a responsibility per feature while living here; chrome and a ribbon are
-        // things, not regions.
-        // 2,032 → 1,956: #519 tranche 1 — the Audit TabItem's body became AuditTab (the TenantSettingsPane /
-        // ContactsTab shape); the header and its visibility gate stay with the shell.
-        // 1,956 → 1,962 for #673: three static MenuItems became one bound submenu. Longer than what it
-        // replaced because of the ItemContainerTheme and the note on why its bindings are reflection ones —
-        // a ControlTheme carries no x:DataType, so a compiled binding there resolves against the WINDOW's
-        // view-model and fails. That cost six lines and would otherwise be rediscovered by whoever touches it.
-        // 1,962 → 1,971: the New submenu's entries now get an ICON. MenuItem.Icon takes CONTENT rather than a
-        // glyph name, so it is a Setter with a Template — four lines of markup and five of the note saying
-        // why, because the previous state was TreeMenuEntry.Icon set and never read, which failed silently and
-        // was only ever going to be found by looking at a rendered menu.
-        // 1,971 → 1,976 for #696: the tree item's template gains a Border to carry the selected-node ring. A
-        // StackPanel has no border of its own, so this is the cheapest shape that can show one.
-        // 1_976 -> 1_987 for #691 (owner-confirmed): the detail pane's workflow slot became an ItemsControl over
-        // the advertised transitions where it was one Button. #519 will take this file down by extracting a
-        // UserControl per tab; eleven lines of markup is not the moment to start that.
-        // 1,993 → 1,994 for #686 (owner-confirmed 2026-08-26): one attribute — the contents list's
-        // PointerPressed, which is how a click on its empty area deselects.
-        // 1,994 → 2,000 for #768 (owner-confirmed 2026-08-26, the second raise on this file today): the owner
-        // column, and the target's list-row columns on a REFERENCE row. A referenced row was drawing blank
-        // Type / Doc date / Size / Tags cells beside a real row that filled them, on both clients, because a
-        // reference was projected as a stub. Assigning the columns is what a row costs; the projection itself
-        // became one shared definition (DocumentSummaryQueries) rather than a second copy.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 1_017,
 
         // Entered 2026-08-20 (#673, ADR 0655) — over the line since well before it was noticed, and never on
         // the list, so nothing was watching it. It enters ON THE WAY DOWN: the containment port took it 1,041 →
@@ -223,6 +197,10 @@ public class OverLimitFileCeilingTests
         // The direction of travel is right — every invariant here that grows a real collaborator can leave the
         // same way containment did, since what the DbContext owes is the ENFORCEMENT POINT, not the rules. No
         // burn-down is scheduled and none is promised; lower this when one happens.
+        // The four that crossed the line AFTER #466's list was written — proof the debt grows invisibly
+        // without a guard, which is why they enter it the moment they were noticed (full sweep, 2026-08-13).
+        // MainWindow.axaml was one of them and has since LEFT the list (2,327 → 574, #519); what follows is
+        // the rest of that group.
         // 1,017 → 1,015: the shared containment provider (#673) replaced the private cache and its one-use
         // wrapper. Lowered rather than left with headroom — an unlowered ceiling is permission to grow back
         // into it, silently. It also caught this change growing the file by ONE line, which is the entire

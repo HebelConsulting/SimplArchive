@@ -428,7 +428,7 @@ public partial class MainWindow : Window
 
     // Edit the OCR languages (system field): the ordered multi-select picker (ADR "System fields +
     // OCR-language mask field").
-    private void OnEditOcrLanguages(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnEditOcrLanguages(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm)
         {
@@ -637,7 +637,7 @@ public partial class MainWindow : Window
     // A transition pressed in the detail pane's workflow slot (#691). Split by what the transition NEEDS:
     // approve/submit/release act; reject needs a reason and reassign a reviewer, so those open the window that
     // can ask. The web client splits them identically (ADR 0511).
-    private void OnWorkflowTransition(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnWorkflowTransition(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm
             || (sender as Control)?.Tag is not string rel

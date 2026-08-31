@@ -1,0 +1,465 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             xmlns:svc="using:SimplArchive.DesktopClient.Services"
+             xmlns:v="using:SimplArchive.DesktopClient.Views"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SimplArchive.DesktopClient.Views.DocumentDetailPane"
+             x:DataType="vm:MainWindowViewModel">
+    <!-- The Repositories detail pane (#519 tranche 8, the last): index data over (preview | chat). Typed to
+         MainWindowViewModel and INHERITING the window's DataContext, so nothing re-scopes and every binding
+         path is unchanged.
+
+         This pane was named as the risky one when the Repositories work was scoped, on the strength of the
+         tranche-2 revert note blaming "nested PreviewPane composition" for that failure. Measuring it said
+         otherwise: no x:Name at all, so no namescope to break, and only two handlers. The nested
+         DataContext="{Binding Preview}" and the $parent[Window] casts both keep working here for the same
+         reason — one resolves against this pane's inherited DataContext, which is still the window's, and the
+         others address the window explicitly rather than by inheritance. -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- Auto by default so the pane fits its content and the preview keeps the rest
+                 (ADR 0550); a GridSplitter drag writes a pixel height into the same property,
+                 which the next selection resets back to Auto. MaxHeight caps a long mask so
+                 it cannot push the preview off the bottom. -->
+            <RowDefinition Height="{Binding IndexHeight, Mode=TwoWay}" MaxHeight="280" />
+            <RowDefinition Height="10" />
+            <RowDefinition Height="3*" />
+        </Grid.RowDefinitions>
+
+        <!-- Index-data -->
+        <ScrollViewer Grid.Row="0" AutomationProperties.AutomationId="tour:pane-index" IsVisible="{Binding !IndexCollapsed}">
+            <StackPanel Margin="12,10" Spacing="4">
+                <!-- The row that owns this object's actions. While EDITING it swaps to Save + Cancel
+                     in the SAME slots (ADR 0550): the pencil taught the user where this pane's
+                     controls are, so the commit belongs there and not at the far end of the pane;
+                     and the actions that can do nothing mid-edit (share, follow) go away rather than
+                     sit inert. Declaration order matters — Dock=Right stacks right-to-left, so first
+                     means rightmost, matching where the web row ends (ADR 0511). -->
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" AutomationProperties.AutomationId="tour:action-save-index" Command="{Binding SaveDetailCommand}"
+                            ToolTip.Tip="{loc:Tr Save}" IsVisible="{Binding IsEditing}"
+                            Height="26" Padding="6,0" Background="Transparent" BorderThickness="0">
+                        <i:Icon Value="mdi-content-save-outline" FontSize="16" />
+                    </Button>
+                    <Button DockPanel.Dock="Right" Command="{Binding CancelEditCommand}"
+                            ToolTip.Tip="{loc:Tr Cancel}" IsVisible="{Binding IsEditing}"
+                            Height="26" Padding="6,0" Background="Transparent" BorderThickness="0">
+                        <i:Icon Value="mdi-close" FontSize="16" />
+                    </Button>
+                    <Button DockPanel.Dock="Right" AutomationProperties.AutomationId="tour:action-edit-index" Command="{Binding BeginEditCommand}"
+                            ToolTip.Tip="{loc:Tr Edit}" IsVisible="{Binding CanBeginEdit}"
+                            Height="26" Padding="6,0" Background="Transparent" BorderThickness="0">
+                        <i:Icon Value="mdi-pencil-outline" FontSize="16" />
+                    </Button>
+                    <!-- Follow / unfollow this document (ADR "Document subscriptions"). -->
+                    <Button DockPanel.Dock="Right" Command="{Binding ToggleSubscriptionCommand}" ToolTip.Tip="{Binding SubscriptionTip}"
+                            IsVisible="{Binding !IsEditing}"
+                            Height="26" Padding="6,0" Background="Transparent" BorderThickness="0">
+                        <i:Icon Value="{Binding SubscriptionIcon}" FontSize="16" />
+                    </Button>
+                    <!-- Share this document by external link (ADR 0546, issue #385). Shown only when the
+                         server advertised the rel — with the tenant switch off, without the right, or on a
+                         FOLDER, there is no link to offer and the button is simply absent. -->
+                    <Button DockPanel.Dock="Right" Command="{Binding ShowDocumentExternalLinksCommand}"
+                            ToolTip.Tip="{loc:Tr ExtLinkShare}" IsVisible="{Binding CanShareDocument}"
+                            Height="26" Padding="6,0" Background="Transparent" BorderThickness="0">
+                        <i:Icon Value="mdi-link-variant" FontSize="16" />
+                    </Button>
+                    <!-- The SAME glyph the tree draws for this object (ADR 0547): a folder looks like a
+                         folder — and an empty one like an empty one — in every pane. -->
+                    <i:Icon DockPanel.Dock="Left" Value="{Binding DetailGlyph}" FontSize="16"
+                            Classes.wbFolder="{Binding DetailGlyphBrushKey, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=WbFolder}"
+                            Classes.wbFolderEmpty="{Binding DetailGlyphBrushKey, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=WbFolderEmpty}"
+                            VerticalAlignment="Center" Margin="0,0,6,0"
+                            IsVisible="{Binding DetailTitle, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                    <TextBlock Text="{Binding DetailTitle}" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                </DockPanel>
+
+
+                <!-- System fields: always shown, separate from the mask (ADR "System fields + OCR-language mask
+                     field"). Read-only until the pane enters edit mode (ADR "Single pane-level edit toggle on
+                     the detail pane"); Name/Document date/OCR languages then become editable, File extension/
+                     Created/Created by stay read-only. -->
+                <Grid ColumnDefinitions="110,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,8,0,0"
+                      IsVisible="{Binding SysCreated, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr Name}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SysName}" VerticalAlignment="Center" Margin="0,2" IsVisible="{Binding !IsEditing}" />
+                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding SysName}" Height="28" Padding="4,2" VerticalContentAlignment="Center" Margin="0,2" IsVisible="{Binding IsEditing}" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr SysFileExtension}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SysFileExtension}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Margin="0,2" />
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr VerColDocDate}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SysDocumentDateText}" VerticalAlignment="Center" Margin="0,2" IsVisible="{Binding !IsEditing}" />
+                    <DatePicker Grid.Row="2" Grid.Column="1" SelectedDate="{Binding SysDocumentDate}" HorizontalAlignment="Left" Margin="0,2" IsVisible="{Binding IsEditing}" />
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:Tr SysOcrLanguages}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" IsVisible="{Binding SysHasTiff}" />
+                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SysOcrLanguages}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,2" IsVisible="{Binding SysHasTiff}" />
+                    <Button Grid.Row="3" Grid.Column="2" Click="OnEditOcrLanguages" Margin="6,2,0,2" ToolTip.Tip="{loc:Tr MwEditOcr}" IsVisible="{Binding CanEditOcr}"><i:Icon Value="mdi-pencil-outline" /></Button>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:Tr SysCreated}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SysCreated}" VerticalAlignment="Center" Margin="0,2" />
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Text="{loc:Tr SysCreatedBy}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SysCreatedBy}" VerticalAlignment="Center" Margin="0,2" />
+
+                    <!-- The document's current (latest confirmed) version number, directly below Created by
+                         (ADR "Mask-pane current-version line"). -->
+                    <TextBlock Grid.Row="6" Grid.Column="0" Text="{loc:Tr SysCurrentVersion}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SysCurrentVersion}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Margin="0,2" />
+
+                    <!-- The workflow's state, and beside it the transitions the SERVER
+                         advertises - one button each, or nothing (#691; ADR 0550/0543). -->
+                    <TextBlock Grid.Row="7" Grid.Column="0" Text="{loc:Tr WorkflowStatus}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                    <StackPanel Grid.Row="7" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="{Binding WorkflowStateDisplay}" VerticalAlignment="Center" Margin="0,2" />
+                        <ItemsControl ItemsSource="{Binding WorkflowTransitions}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="6" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:MainWindowViewModel+WorkflowTransitionViewModel">
+                                    <Button Content="{Binding Label}" Tag="{Binding Rel}" Click="OnWorkflowTransition" Padding="8,2" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Folder-only: the order this folder lists its contents in (ADR "Per-folder contents
+                     sort order"). A row in the ONE detail pane since issue #408, committed by the same
+                     Save as the mask beside it rather than by an Edit toggle of its own. -->
+                <Grid ColumnDefinitions="130,*" Margin="0,6,0,0" IsVisible="{Binding DetailIsFolder}">
+                    <TextBlock Grid.Column="0" Text="{loc:Tr FolderSortLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="{Binding DetailSortText}" VerticalAlignment="Center" IsVisible="{Binding !IsEditing}" />
+                    <ComboBox Grid.Column="1" SelectedIndex="{Binding EditSortOrder}" IsVisible="{Binding IsEditing}" HorizontalAlignment="Left" MinWidth="180">
+                        <ComboBoxItem Content="{loc:Tr FolderSortName}" />
+                        <ComboBoxItem Content="{loc:Tr FolderSortDocDate}" />
+                        <ComboBoxItem Content="{loc:Tr FolderSortCreated}" />
+                    </ComboBox>
+                </Grid>
+
+                <!-- Mask (additional metadata) — read-only when the pane isn't editing. -->
+                <StackPanel IsVisible="{Binding !IsEditing}" Margin="0,10,0,0">
+                    <TextBlock Text="{Binding MaskLine}" Foreground="{DynamicResource WbMuted}" FontSize="12" VerticalAlignment="Center" />
+                    <!-- Sensitivity badge (ADR "Configurable sensitivity labels + upload defaults"). -->
+                    <Border IsVisible="{Binding HasSensitivity}" Background="{Binding DetailSensitivityBrush}" CornerRadius="3" Padding="6,1" HorizontalAlignment="Left" Margin="0,4,0,0">
+                        <TextBlock Text="{Binding DetailSensitivityText}" Foreground="White" FontSize="11" FontWeight="SemiBold" />
+                    </Border>
+                    <ItemsControl ItemsSource="{Binding IndexFields}" Margin="0,2,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:IndexFieldViewModel">
+                                <Grid ColumnDefinitions="180,*" Margin="0,2">
+                                    <TextBlock Grid.Column="0" Text="{Binding FieldName}" Foreground="{DynamicResource WbMuted}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Values}" TextWrapping="Wrap" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <!-- Free-form tags (ADR "Document tags") — clickable chips → search by that tag. -->
+                    <ItemsControl IsVisible="{Binding HasDetailTags}" ItemsSource="{Binding DetailTags}" Margin="0,6,0,0">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:CompileBindings="False">
+                                <Button Margin="0,0,4,4" Padding="7,1" Background="{DynamicResource WbChrome}" CornerRadius="3"
+                                        CommandParameter="{Binding}"
+                                        Command="{Binding DataContext.SearchByTagCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}">
+                                    <StackPanel Orientation="Horizontal" Spacing="3">
+                                        <i:Icon Value="mdi-label-outline" FontSize="11" />
+                                        <TextBlock Text="{Binding}" FontSize="11" />
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <!-- Mask edit mode: choose the mask + type-aware field editors. -->
+                <StackPanel IsVisible="{Binding IsEditing}" Spacing="6" Margin="0,10,0,0">
+                    <Grid ColumnDefinitions="180,*">
+                        <TextBlock Grid.Column="0" Text="{loc:Tr MaskLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding AvailableMasks}" SelectedItem="{Binding SelectedMaskChoice}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:MaskChoiceViewModel"><TextBlock Text="{Binding Name}" /></DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </Grid>
+                    <!-- Sensitivity label (ADR "Data classification / sensitivity labels"). -->
+                    <Grid ColumnDefinitions="180,*">
+                        <TextBlock Grid.Column="0" Text="{loc:Tr BulkSensLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding SensitivityPickerItems}" SelectedItem="{Binding SelectedSensitivityItem}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:MainWindowViewModel+SensitivityPickerItem"><TextBlock Text="{Binding Name}" /></DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </Grid>
+                    <ItemsControl ItemsSource="{Binding MaskEditFields}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:MaskFieldEditViewModel">
+                                <Grid ColumnDefinitions="180,*" Margin="0,3">
+                                    <TextBlock Grid.Column="0" Text="{Binding Label}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                    <Panel Grid.Column="1">
+                                        <DatePicker IsVisible="{Binding IsDate}" HorizontalAlignment="Left" SelectedDate="{Binding DateValue}" />
+                                        <CheckBox IsVisible="{Binding IsBoolean}" IsChecked="{Binding BoolValue}" />
+                                        <TextBox IsVisible="{Binding IsMultiLine}" Text="{Binding TextValue}" IsReadOnly="{Binding Locked}" AcceptsReturn="True" Height="60" Watermark="{loc:Tr OneValuePerLine}" />
+                                        <TextBox IsVisible="{Binding IsSingleLine}" Text="{Binding TextValue}" Height="28" Padding="4,2" VerticalContentAlignment="Center" />
+                                    </Panel>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <!-- Free-form tags (ADR "Document tags") — removable chips + a catalog-autocomplete add box. -->
+                    <Grid ColumnDefinitions="180,*">
+                        <TextBlock Grid.Column="0" Text="{loc:Tr TabTags}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Top" Margin="0,4,0,0" />
+                        <StackPanel Grid.Column="1" Spacing="4">
+                            <ItemsControl ItemsSource="{Binding EditTags}">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:CompileBindings="False">
+                                        <Border Margin="0,0,4,4" Padding="7,1" Background="{DynamicResource WbChrome}" CornerRadius="3">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <TextBlock Text="{Binding}" FontSize="11" VerticalAlignment="Center" />
+                                                <Button Content="✕" Padding="3,0" MinWidth="0" MinHeight="0" FontSize="10" Background="Transparent"
+                                                        CommandParameter="{Binding}"
+                                                        Command="{Binding DataContext.RemoveTagCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <AutoCompleteBox Text="{Binding NewTag, Mode=TwoWay}" ItemsSource="{Binding TagCatalog}"
+                                                 Watermark="{loc:Tr BulkTagsPlaceholder}" FilterMode="ContainsOrdinal" MinimumPrefixLength="0" Width="220" />
+                                <Button Content="{loc:Tr Add}" Command="{Binding AddTagCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+
+                <!-- No commit row here: Save and Cancel live in the header, where the pencil that
+                     started the edit is (ADR 0550). -->
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- gutter: resize + collapse the index-data pane -->
+        <GridSplitter Grid.Row="1" Background="{DynamicResource WbBorder}" ResizeDirection="Rows" HorizontalAlignment="Stretch" IsEnabled="{Binding !IndexCollapsed}" />
+        <Button Grid.Row="1" Command="{Binding ToggleIndexCommand}" Width="24" Height="10" Padding="0" MinHeight="0" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip.Tip="{loc:Tr MwCollapseExpand}">
+            <i:Icon Value="{Binding IndexCaret}" FontSize="11" />
+        </Button>
+
+        <!-- preview | chat -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" />
+                <ColumnDefinition Width="10" />
+                <ColumnDefinition Width="{Binding ChatWidth, Mode=TwoWay}" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Preview (docked). The surface is a reusable UserControl — see the full-screen
+                 overlay below and ADR "Desktop preview full-screen toggle". -->
+            <Border Grid.Column="0" AutomationProperties.AutomationId="tour:pane-preview" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,1,0,0"
+                    IsVisible="{Binding !Preview.PreviewFullscreen}">
+                <v:PreviewPane DataContext="{Binding Preview}" />
+            </Border>
+
+            <!-- gutter: resize + collapse the chat -->
+            <GridSplitter Grid.Column="1" Background="{DynamicResource WbBorder}" ResizeDirection="Columns" IsEnabled="{Binding !ChatCollapsed}" />
+            <Button Grid.Column="1" Command="{Binding ToggleChatCommand}" Width="10" Height="24" Padding="0" MinWidth="0" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip.Tip="{loc:Tr MwCollapseExpand}">
+                <i:Icon Value="{Binding ChatCaret}" FontSize="11" />
+            </Button>
+
+            <!-- Chat -->
+            <Border Grid.Column="2" AutomationProperties.AutomationId="tour:pane-chat" IsVisible="{Binding !ChatCollapsed}" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,1,0,0">
+                <DockPanel LastChildFill="True">
+                    <TextBlock DockPanel.Dock="Top" Text="{loc:Tr CommentsHeader}" FontWeight="SemiBold" Margin="10,8" />
+                    <Border DockPanel.Dock="Bottom" Padding="8" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,1,0,0">
+                        <StackPanel Spacing="4">
+                            <!-- The @-mention picker (issue #383), ABOVE the box: it opens while typing at the
+                                 bottom of the pane, so opening downwards would push it out of view. -->
+                            <ItemsControl ItemsSource="{Binding MentionCandidates}"
+                                          IsVisible="{Binding HasMentionCandidates}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="svc:DocumentsClient+MentionableUser">
+                                        <Button Classes="mention" HorizontalAlignment="Stretch" Padding="6,3" FontSize="12"
+                                                Background="Transparent" BorderThickness="0"
+                                                HorizontalContentAlignment="Left" Content="{Binding DisplayName}"
+                                                Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).PickMentionCommand}"
+                                                CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBox Text="{Binding NewComment}" Watermark="{loc:Tr CommentPlaceholder}" AcceptsReturn="True" MinHeight="46" />
+                            <Button Command="{Binding PostCommentCommand}" HorizontalAlignment="Right" ToolTip.Tip="{loc:Tr MwPostComment}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <i:Icon Value="mdi-send" FontSize="16" />
+                                    <TextBlock Text="{loc:Tr CommentBtn}" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                    <ScrollViewer>
+                        <ItemsControl ItemsSource="{Binding Comments}" Margin="10,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ChatMessageViewModel">
+                                    <StackPanel Margin="0,6">
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <Button Classes="link" IsVisible="{Binding ShowAuthorLink}" Padding="0" FontSize="11"
+                                                    Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ShowAuthorCardCommand}"
+                                                    CommandParameter="{Binding}" Content="{Binding AuthorName}">
+                                                <!-- The identity card (ADR 0544). Clicking runs the command (which follows the
+                                                     advertised card href) and opens this flyout; it binds to the window VM, since
+                                                     only one card is open at a time. -->
+                                                <Button.Flyout>
+                                                    <Flyout Placement="Bottom">
+                                                        <StackPanel MinWidth="220" Margin="4" Orientation="Horizontal" Spacing="12"
+                                                                    DataContext="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext)}">
+                                                            <Border IsVisible="{Binding AuthorCard, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                                                    Width="56" Height="56" CornerRadius="28" ClipToBounds="True"
+                                                                    Background="{DynamicResource WbChrome}">
+                                                                <Panel>
+                                                                    <TextBlock Text="{Binding AuthorCard.Initials}" HorizontalAlignment="Center"
+                                                                               VerticalAlignment="Center" FontSize="20"
+                                                                               IsVisible="{Binding !AuthorCard.HasPhoto}" />
+                                                                    <Image Source="{Binding AuthorCard.PhotoImage}" Stretch="UniformToFill"
+                                                                           IsVisible="{Binding AuthorCard.HasPhoto}" />
+                                                                </Panel>
+                                                            </Border>
+                                                            <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                                <TextBlock Text="{Binding AuthorCard.DisplayName}" FontWeight="SemiBold" FontSize="13" />
+                                                                <TextBlock Text="{Binding AuthorCard.Email}" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                                                                <TextBlock Text="{loc:Tr UserCardDeactivated}" Foreground="{DynamicResource WbMuted}"
+                                                                           FontSize="11" IsVisible="{Binding !AuthorCard.IsActive}" />
+                                                                <TextBlock Text="{loc:Tr UserCardLoadFailed}" Foreground="{DynamicResource WbMuted}"
+                                                                           FontSize="11" TextWrapping="Wrap" MaxWidth="200"
+                                                                           IsVisible="{Binding AuthorCardFailed}" />
+                                                            </StackPanel>
+                                                        </StackPanel>
+                                                    </Flyout>
+                                                </Button.Flyout>
+                                            </Button>
+                                            <TextBlock IsVisible="{Binding ShowAuthorPlainName}" Text="{Binding AuthorName}"
+                                                       Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                            <TextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding DisplayBody}" TextWrapping="Wrap" FontSize="13" IsVisible="{Binding IsUserPost}" />
+                                        <!-- Reply affordance: a top-level typed message only (ADR 0511 parity with the web
+                                             thread). It binds to the window view-model, since the command has to close
+                                             whichever other reply box is open.
+                                             Deliberately NOT Classes="link" — no such style is defined in this app, so that
+                                             class is a no-op and the button would render with full default chrome next to
+                                             the message text. The flat look is set here instead, matching the web's link. -->
+                                        <Button IsVisible="{Binding ShowReplyLink}" Padding="0" FontSize="11"
+                                                HorizontalAlignment="Left" Content="{loc:Tr ReplyBtn}"
+                                                Background="Transparent" BorderThickness="0"
+                                                Foreground="{DynamicResource WbMuted}"
+                                                Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ToggleReplyCommand}"
+                                                CommandParameter="{Binding}" />
+                                        <!-- An automatic entry (ADR 0545): the sentence, then the
+                                             version block with its icon and optional comment. -->
+                                        <TextBlock Text="{Binding SystemSentence}" TextWrapping="Wrap" FontSize="13"
+                                                   FontStyle="Italic" Foreground="{DynamicResource WbMuted}"
+                                                   IsVisible="{Binding IsSystemEntry}" />
+                                        <Border IsVisible="{Binding HasVersionEntry}" Margin="0,3,0,0" Padding="6,3"
+                                                BorderBrush="{DynamicResource WbBorder}" BorderThickness="2,0,0,0">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+
+                                                <StackPanel Spacing="1">
+                                                    <TextBlock Text="{Binding VersionLabel}" FontSize="11" />
+                                                    <TextBlock Text="{Binding VersionCommentText}" FontSize="11" TextWrapping="Wrap"
+                                                               Foreground="{DynamicResource WbMuted}"
+                                                               IsVisible="{Binding HasVersionComment}" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+                                        <ItemsControl ItemsSource="{Binding Replies}" Margin="16,4,0,0">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:ChatMessageViewModel">
+                                                    <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="2,0,0,0" Padding="8,2" Margin="0,3">
+                                                        <StackPanel>
+                                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <Button Classes="link" IsVisible="{Binding ShowAuthorLink}" Padding="0" FontSize="11"
+                                                    Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ShowAuthorCardCommand}"
+                                                    CommandParameter="{Binding}" Content="{Binding AuthorName}">
+                                                <!-- The identity card (ADR 0544). Clicking runs the command (which follows the
+                                                     advertised card href) and opens this flyout; it binds to the window VM, since
+                                                     only one card is open at a time. -->
+                                                <Button.Flyout>
+                                                    <Flyout Placement="Bottom">
+                                                        <StackPanel MinWidth="220" Margin="4" Orientation="Horizontal" Spacing="12"
+                                                                    DataContext="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext)}">
+                                                            <Border IsVisible="{Binding AuthorCard, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                                                    Width="56" Height="56" CornerRadius="28" ClipToBounds="True"
+                                                                    Background="{DynamicResource WbChrome}">
+                                                                <Panel>
+                                                                    <TextBlock Text="{Binding AuthorCard.Initials}" HorizontalAlignment="Center"
+                                                                               VerticalAlignment="Center" FontSize="20"
+                                                                               IsVisible="{Binding !AuthorCard.HasPhoto}" />
+                                                                    <Image Source="{Binding AuthorCard.PhotoImage}" Stretch="UniformToFill"
+                                                                           IsVisible="{Binding AuthorCard.HasPhoto}" />
+                                                                </Panel>
+                                                            </Border>
+                                                            <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                                <TextBlock Text="{Binding AuthorCard.DisplayName}" FontWeight="SemiBold" FontSize="13" />
+                                                                <TextBlock Text="{Binding AuthorCard.Email}" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                                                                <TextBlock Text="{loc:Tr UserCardDeactivated}" Foreground="{DynamicResource WbMuted}"
+                                                                           FontSize="11" IsVisible="{Binding !AuthorCard.IsActive}" />
+                                                                <TextBlock Text="{loc:Tr UserCardLoadFailed}" Foreground="{DynamicResource WbMuted}"
+                                                                           FontSize="11" TextWrapping="Wrap" MaxWidth="200"
+                                                                           IsVisible="{Binding AuthorCardFailed}" />
+                                                            </StackPanel>
+                                                        </StackPanel>
+                                                    </Flyout>
+                                                </Button.Flyout>
+                                            </Button>
+                                            <TextBlock IsVisible="{Binding ShowAuthorPlainName}" Text="{Binding AuthorName}"
+                                                       Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                            <TextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                        </StackPanel>
+                                                            <TextBlock Text="{Binding DisplayBody}" TextWrapping="Wrap" FontSize="13" IsVisible="{Binding IsUserPost}" />
+                                        <!-- An automatic entry (ADR 0545): the sentence, then the
+                                             version block with its icon and optional comment. -->
+                                        <TextBlock Text="{Binding SystemSentence}" TextWrapping="Wrap" FontSize="13"
+                                                   FontStyle="Italic" Foreground="{DynamicResource WbMuted}"
+                                                   IsVisible="{Binding IsSystemEntry}" />
+                                        <Border IsVisible="{Binding HasVersionEntry}" Margin="0,3,0,0" Padding="6,3"
+                                                BorderBrush="{DynamicResource WbBorder}" BorderThickness="2,0,0,0">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+
+                                                <StackPanel Spacing="1">
+                                                    <TextBlock Text="{Binding VersionLabel}" FontSize="11" />
+                                                    <TextBlock Text="{Binding VersionCommentText}" FontSize="11" TextWrapping="Wrap"
+                                                               Foreground="{DynamicResource WbMuted}"
+                                                               IsVisible="{Binding HasVersionComment}" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <!-- The reply box sits BELOW the existing replies, where the new one will
+                                             appear — so the thread reads in the order it was written. -->
+                                        <StackPanel IsVisible="{Binding IsReplying}" Margin="16,4,0,0" Spacing="4">
+                                            <TextBox Text="{Binding ReplyText}" Watermark="{loc:Tr ReplyPlaceholder}"
+                                                     AcceptsReturn="True" MinHeight="40" FontSize="13" />
+                                            <Button HorizontalAlignment="Right" FontSize="11" Content="{loc:Tr ReplyBtn}"
+                                                    Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).PostReplyCommand}"
+                                                    CommandParameter="{Binding}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+
+        </Grid>
+    </Grid>
+</UserControl>
