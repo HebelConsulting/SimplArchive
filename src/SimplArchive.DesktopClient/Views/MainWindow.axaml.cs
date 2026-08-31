@@ -25,15 +25,12 @@ public partial class MainWindow : Window
 
         // Drag-and-drop — OS-file drops + the internal move/reference drag — lives in WorkbenchDragDrop
         // (issue #466); it wires its own handlers onto the list, tree and intray controls.
-        new WorkbenchDragDrop(this, ContentsList, TreePane.Tree, ServerIntrayList).Wire();
+        new WorkbenchDragDrop(this, ListPane.List, TreePane.Tree, ServerIntrayList).Wire();
 
         // Ctrl/Cmd+P opens the server manager (ADR "Desktop server configuration"), Ctrl/Cmd+O opens the selected
         // document (#482) — a window-level tunnel handler so they fire regardless of focus.
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
 
-        // Advertise the Open chord in the menu entry itself — a shortcut nobody can discover is one nobody uses.
-        // Set here rather than in XAML because it is ⌘ on macOS and Ctrl elsewhere (Services.Shortcuts).
-        OpenMenuItem.InputGesture = Shortcuts.Open;
 
         // Tapping a tree folder always shows its contents — even the already-selected node, so re-clicking the
         // tree re-syncs the list after drilling into a subfolder via the contents pane (the binding alone
@@ -178,7 +175,7 @@ public partial class MainWindow : Window
 
     // Open (context menu): same as the ribbon Open button / double-click — a folder (or a document with
     // children, e.g. an email with attachments) drills in, a plain document opens in its native application.
-    private void OnOpen(object? sender, RoutedEventArgs e)
+    internal void OnOpen(object? sender, RoutedEventArgs e)
     {
         if (DataContext is MainWindowViewModel vm && vm.OpenCommand.CanExecute(null))
         {
@@ -702,7 +699,7 @@ public partial class MainWindow : Window
 
     // Bulk actions on the multi-selection (ADR "Bulk actions on selected documents"). The list is
     // SelectionMode=Multiple; this pushes the current selection to the VM so the bulk bar appears at ≥2.
-    private void OnContentsSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    internal void OnContentsSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (DataContext is MainWindowViewModel vm && sender is ListBox lb)
         {
@@ -710,7 +707,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnBulkMove(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnBulkMove(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.CreateMoveTargetPickerViewModel() is not { } picker)
         {
@@ -723,7 +720,7 @@ public partial class MainWindow : Window
         }
     });
 
-    private void OnBulkDelete(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnBulkDelete(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm
             && await new ConfirmDialog($"Move {vm.BulkSelectionCount} item(s) to the recycle bin?", "Delete").ShowDialog<bool>(this))
@@ -732,7 +729,7 @@ public partial class MainWindow : Window
         }
     });
 
-    private void OnBulkAddTags(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnBulkAddTags(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm)
         {
@@ -746,7 +743,7 @@ public partial class MainWindow : Window
         }
     });
 
-    private void OnBulkSensitivity(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnBulkSensitivity(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm
             && await new BulkSensitivityDialog(vm.SensitivityPickerItems).ShowDialog<MainWindowViewModel.SensitivityPickerItem?>(this) is { } label)
@@ -756,7 +753,7 @@ public partial class MainWindow : Window
     });
 
     // Right-clicking a row selects it first, so the context menu (and ribbon) act on the row under the cursor.
-    private void OnContentsContextRequested(object? sender, ContextRequestedEventArgs e)
+    internal void OnContentsContextRequested(object? sender, ContextRequestedEventArgs e)
     {
         if (e.Source is Control { DataContext: NodeViewModel node } && DataContext is MainWindowViewModel vm)
         {
@@ -797,7 +794,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnListKeyDown(object? sender, KeyEventArgs e) => Safe.Fire(async () =>
+    internal void OnListKeyDown(object? sender, KeyEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.SelectedItem is null)
         {
@@ -826,7 +823,7 @@ public partial class MainWindow : Window
     // A click on the list's EMPTY area deselects. Without it a selection could be made and never unmade — the
     // pane could only move from one subject to another. Tunnel phase so it is seen before the ListBox turns the
     // press into a selection, and only when the press landed outside any row.
-    private void OnContentsBackgroundPressed(object? sender, PointerPressedEventArgs e)
+    internal void OnContentsBackgroundPressed(object? sender, PointerPressedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel vm
             || e.Source is not Visual source
@@ -842,7 +839,7 @@ public partial class MainWindow : Window
     // Double-click a row: same as the Open command (folder navigates in, document — or a zip entry — opens
     // natively). A zip entry opens natively too (OpenAsync's IsArchiveEntry branch); Save-as stays on the
     // context menu.
-    private void OnListDoubleTapped(object? sender, TappedEventArgs e)
+    internal void OnListDoubleTapped(object? sender, TappedEventArgs e)
     {
         if (DataContext is MainWindowViewModel vm && vm.OpenCommand.CanExecute(null))
         {

@@ -14,7 +14,7 @@ namespace SimplArchive.DesktopClient.Views;
 public partial class MainWindow
 {
     // Place a legal hold on the selected contents-list item — creates a new matter covering it.
-    private void OnPlaceLegalHold(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnPlaceLegalHold(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.SelectedItem is not { } node || node.IsReference)
         {
@@ -81,7 +81,7 @@ public partial class MainWindow
         }
     });
 
-    private void OnCompareVersions(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnCompareVersions(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.Api is not { } api || vm.SelectedItem is not { IsFolder: false } node)
         {
@@ -163,7 +163,7 @@ public partial class MainWindow
         vm.Status = await CheckoutDiffLauncher.OpenAsync(api, row.Item?.DownloadUrl, row.FileExtension, row.StashDownloadUrl);
     });
 
-    private void OnManageAccess(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnManageAccess(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.Api is not { } api || vm.SelectedItem is not { } node)
         {
@@ -220,7 +220,7 @@ public partial class MainWindow
 
     // References … (context menu, items with references): list the folders that reference this item; opening
     // a row navigates to that folder.
-    private void OnReferences(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnReferences(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.CreateReferencesViewModel() is not { } references)
         {
@@ -250,7 +250,7 @@ public partial class MainWindow
     });
 
     // Go to … (context menu, references only): jump to the referenced item's real home folder.
-    private void OnGoTo(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnGoTo(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm && vm.SelectedItem is { IsReference: true } node)
         {

@@ -212,7 +212,7 @@ public class OverLimitFileCeilingTests
         // Type / Doc date / Size / Tags cells beside a real row that filled them, on both clients, because a
         // reference was projected as a stub. Assigning the columns is what a row costs; the projection itself
         // became one shared definition (DocumentSummaryQueries) rather than a second copy.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 1_200,
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 1_017,
 
         // Entered 2026-08-20 (#673, ADR 0655) — over the line since well before it was noticed, and never on
         // the list, so nothing was watching it. It enters ON THE WAY DOWN: the containment port took it 1,041 →
