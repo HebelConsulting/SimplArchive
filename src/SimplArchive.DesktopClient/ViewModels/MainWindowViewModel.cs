@@ -91,6 +91,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Preview.Api = api;
         IntrayPreview.Api = api;
         SearchPreview.Api = api;
+        _ocrLanguages = new OcrLanguageCatalog(api);
         RecycleBin.SetApi(api);
         Search.SetApi(api);
         Search.OpenResultRequested = OpenSearchResultAsync;
@@ -546,7 +547,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private string? _notificationsReadAllHref;
     private IReadOnlyList<string> _sysOcrCodes = [];  // persisted (original) OCR codes
     private IReadOnlyList<string> _stagedOcrCodes = []; // picker-staged codes, persisted on Save
-    private IReadOnlyList<SimplArchiveApiClient.OcrLanguageOption> _ocrCatalog = [];
+    // The OCR language catalogue, shared with the tenant and detail panes (#517). A service because nothing
+    // binds to it and it was three copies of the same lazy-load; see OcrLanguageCatalog.
+    private OcrLanguageCatalog? _ocrLanguages;
 
     // The Repositories + Intray preview surface (state + render + find + hit-overlay + full-screen). Extracted to
     // its own PreviewViewModel so the Recycle bin tab can own a SEPARATE instance (RecycleBin.Preview) and the
@@ -2823,12 +2826,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
             // staging"). Load the catalog on demand so DescribeOcrLanguages can map codes → names.
             IntrayStgScannable = IsScannableExtension(name);
             _intrayStgOcrCodes = draft.OcrLanguages.ToList();
-            if (IntrayStgScannable && _ocrCatalog.Count == 0)
+            if (IntrayStgScannable)
             {
-                try { _ocrCatalog = await _api.GetOcrLanguageCatalogAsync(); }
-                catch { /* non-fatal — the picker just shows codes */ }
+                await (_ocrLanguages?.EnsureLoadedAsync() ?? Task.CompletedTask);
             }
-            IntrayOcrDisplay = DescribeOcrLanguages(_intrayStgOcrCodes);
+            IntrayOcrDisplay = (_ocrLanguages?.Describe(_intrayStgOcrCodes) ?? "");
 
             // Preselect the staged mask, or default to "Basic Entry" for an un-classified item (the same
             // default auto-classification applies at filing).
@@ -2905,12 +2907,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private List<string> _intrayStgOcrCodes = [];
 
     public (IReadOnlyList<SimplArchiveApiClient.OcrLanguageOption> Catalog, IReadOnlyList<string> Selected) IntrayOcrPickerState() =>
-        (_ocrCatalog, _intrayStgOcrCodes);
+        (_ocrLanguages?.Options ?? [], _intrayStgOcrCodes);
 
     public void StageIntrayOcrLanguages(IReadOnlyList<string> codes)
     {
         _intrayStgOcrCodes = codes.ToList();
-        IntrayOcrDisplay = DescribeOcrLanguages(_intrayStgOcrCodes);
+        IntrayOcrDisplay = (_ocrLanguages?.Describe(_intrayStgOcrCodes) ?? "");
     }
 
     private static bool IsScannableExtension(string name) =>
@@ -4284,11 +4286,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             ApplyTenantSettings(s);
             TenantEditingGroup = null;
             TenantSettingsLoaded = true;
-            if (_ocrCatalog.Count == 0)
-            {
-                try { _ocrCatalog = await _api.GetOcrLanguageCatalogAsync(); }
-                catch (Exception) { /* leave empty; the picker just won't offer names */ }
-            }
+            await (_ocrLanguages?.EnsureLoadedAsync() ?? Task.CompletedTask);
         }
         catch (Exception)
         {
@@ -4334,7 +4332,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         TenantWebhookHealthy = s.AuditWebhookConsecutiveFailures == 0;
         TenantWebhookHealth = DescribeWebhookHealth(s);
         _tenantStagedOcrCodes = s.DefaultOcrLanguages.Split('+', StringSplitOptions.RemoveEmptyEntries).ToList();
-        TenantOcrDisplay = DescribeOcrLanguages(_tenantStagedOcrCodes);
+        TenantOcrDisplay = (_ocrLanguages?.Describe(_tenantStagedOcrCodes) ?? "");
         TenantId = s.Id.ToString();
         TenantStatus = s.Status;
         TenantCreated = s.CreatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
@@ -4418,12 +4416,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     // The tenant-default OCR ordered picker state + staging (edited via the shared OcrLanguagePickerDialog).
     public (IReadOnlyList<SimplArchiveApiClient.OcrLanguageOption> Catalog, IReadOnlyList<string> Selected) TenantOcrPickerState() =>
-        (_ocrCatalog, _tenantStagedOcrCodes);
+        (_ocrLanguages?.Options ?? [], _tenantStagedOcrCodes);
 
     public void StageTenantOcrLanguages(IReadOnlyList<string> codes)
     {
         _tenantStagedOcrCodes = codes.ToList();
-        TenantOcrDisplay = DescribeOcrLanguages(_tenantStagedOcrCodes);
+        TenantOcrDisplay = (_ocrLanguages?.Describe(_tenantStagedOcrCodes) ?? "");
     }
 
     public async Task CreateRepositoryAsync(string name)
@@ -5268,39 +5266,24 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         if (SysHasTiff)
         {
-            if (_ocrCatalog.Count == 0)
-            {
-                try { _ocrCatalog = await _api.GetOcrLanguageCatalogAsync(); }
-                catch (Exception) { /* leave empty */ }
-            }
+            await (_ocrLanguages?.EnsureLoadedAsync() ?? Task.CompletedTask);
 
             _sysOcrCodes = string.IsNullOrWhiteSpace(fields.OcrLanguages) ? [] : fields.OcrLanguages.Split('+', StringSplitOptions.RemoveEmptyEntries);
             _stagedOcrCodes = _sysOcrCodes;
-            SysOcrLanguages = DescribeOcrLanguages(_sysOcrCodes);
+            SysOcrLanguages = (_ocrLanguages?.Describe(_sysOcrCodes) ?? "");
         }
-    }
-
-    // Turns ordered codes into a readable, priority-ordered display ("German, French"); empty = tenant default.
-    private string DescribeOcrLanguages(IReadOnlyList<string> codes)
-    {
-        if (codes.Count == 0)
-        {
-            return "(tenant default)";
-        }
-
-        return string.Join(", ", codes.Select(c => _ocrCatalog.FirstOrDefault(o => o.Code == c)?.DisplayName ?? c));
     }
 
     // Exposes the catalog + the currently staged ordered selection to the picker dialog (the view owns the
     // dialog). The picker stages into the pane; the pane's single Save persists it.
     public (IReadOnlyList<SimplArchiveApiClient.OcrLanguageOption> Catalog, IReadOnlyList<string> Selected) OcrLanguagePickerState() =>
-        (_ocrCatalog, _stagedOcrCodes);
+        (_ocrLanguages?.Options ?? [], _stagedOcrCodes);
 
     // Stages the picker's ordered selection (no API call) — persisted by SaveDetail, discarded by cancel.
     public void StageOcrLanguages(IReadOnlyList<string> codes)
     {
         _stagedOcrCodes = codes;
-        SysOcrLanguages = DescribeOcrLanguages(codes);
+        SysOcrLanguages = (_ocrLanguages?.Describe(codes) ?? "");
     }
 
     // ---- Editable detail pane (ADR "Single pane-level edit toggle on the detail pane") ---------------------
@@ -5588,7 +5571,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         SysName = _originalName;
         SysDocumentDate = _originalDocumentDate;
         _stagedOcrCodes = _sysOcrCodes;
-        SysOcrLanguages = DescribeOcrLanguages(_sysOcrCodes);
+        SysOcrLanguages = (_ocrLanguages?.Describe(_sysOcrCodes) ?? "");
 
         if (_selectedDocumentId is not null)
         {

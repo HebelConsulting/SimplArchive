@@ -285,8 +285,8 @@ public sealed partial class MainWindowViewModel
             "capture" => new
             {
                 // Preserve the catalog order for the "+"-joined default (a stable OCR priority).
-                defaultOcrLanguages = _ocrCatalog.Count > 0
-                    ? string.Join('+', _ocrCatalog.Select(l => l.Code).Where(c => _tenantStagedOcrCodes.Contains(c)))
+                defaultOcrLanguages = _ocrLanguages is { Options.Count: > 0 } catalogue
+                    ? string.Join('+', catalogue.Options.Select(l => l.Code).Where(c => _tenantStagedOcrCodes.Contains(c)))
                     : string.Join('+', _tenantStagedOcrCodes),
                 restrictTagsToCatalog = TenantRestrictTagsToCatalog,
             },
