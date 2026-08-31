@@ -103,7 +103,7 @@ public class OverLimitFileCeilingTests
         // because MainWindow's menu bindings read these properties directly — moving them to another type would
         // put a gate at arm's length from the menu it gates, which is the coupling this change exists to remove.
         // #517's per-tab view-model burn-down is still the plan for this file.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 7_070,
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_603,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
         // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —
@@ -181,7 +181,7 @@ public class OverLimitFileCeilingTests
         // EXISTING key handler, and a tunnel-phase pointer handler for a press that landed outside any row.
         // Both are input plumbing for a control this file already handles; an attached behaviour would scatter
         // one list's input across two places for the sake of the number.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_216,
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_190,
 
         // The four that crossed the line AFTER #466's list was written — proof the debt grows invisibly
         // without a guard, which is why they enter it the moment they were noticed (full sweep, 2026-08-13).
@@ -212,7 +212,7 @@ public class OverLimitFileCeilingTests
         // Type / Doc date / Size / Tags cells beside a real row that filled them, on both clients, because a
         // reference was projected as a stub. Assigning the columns is what a row costs; the projection itself
         // became one shared definition (DocumentSummaryQueries) rather than a second copy.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 1_621,
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 1_366,
 
         // Entered 2026-08-20 (#673, ADR 0655) — over the line since well before it was noticed, and never on
         // the list, so nothing was watching it. It enters ON THE WAY DOWN: the containment port took it 1,041 →

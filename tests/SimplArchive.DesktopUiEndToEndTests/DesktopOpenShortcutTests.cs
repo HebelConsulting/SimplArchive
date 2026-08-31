@@ -14,7 +14,7 @@ public class DesktopOpenShortcutTests
     public async Task The_chord_does_nothing_on_a_search_result()
     {
         var vm = new MainWindowViewModel { SelectedTab = 3 }; // Search
-        vm.SelectedSearchResult = new SearchResultViewModel
+        vm.Search.SelectedSearchResult = new SearchResultViewModel
         {
             Id = Guid.NewGuid(),
             Name = "a result",

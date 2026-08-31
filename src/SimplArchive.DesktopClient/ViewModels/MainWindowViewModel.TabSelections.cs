@@ -225,9 +225,6 @@ public sealed partial class MainWindowViewModel
         catch (Exception) { Status = Strings.Get("WorkflowActionFailed"); }
     }
 
-    /// <summary>Greys the Search toolbar's Go to (#530, tranche 8); raised by OnSelectedSearchResultChanged.</summary>
-    public bool HasSelectedSearchResult => SelectedSearchResult is not null;
-
     // ---- Tenant settings, per group (#530 tranche 10, ADR "Per-group tenant settings") --------------------
     // ONE group edits at a time; each group's Save PUTs exactly its own fields via the api-client's generic
     // SaveTenantSettingsGroupAsync, following the settings-<group> rel of the last-READ settings.

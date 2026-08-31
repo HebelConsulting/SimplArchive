@@ -48,7 +48,7 @@ public static class OpenShortcutCheck
 
         // Search: a selected result the chord must NOT act on. Revealing it would set SelectedTab to 0.
         vm.SelectedTab = 3;
-        vm.SelectedSearchResult = new SearchResultViewModel
+        vm.Search.SelectedSearchResult = new SearchResultViewModel
         {
             Id = Guid.NewGuid(),
             Name = "irrelevant",

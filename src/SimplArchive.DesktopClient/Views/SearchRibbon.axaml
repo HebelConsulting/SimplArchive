@@ -4,7 +4,8 @@
              xmlns:i="using:Projektanker.Icons.Avalonia"
              xmlns:loc="using:SimplArchive.DesktopClient.Localization"
              x:Class="SimplArchive.DesktopClient.Views.SearchRibbon"
-             x:DataType="vm:MainWindowViewModel">
+             x:DataType="vm:SearchTabViewModel">
+    <!-- Typed to the TAB's view-model (#519 tranche 4) — the rule tranche 2 was reverted over. -->
     <!-- Search ribbon (review round after #530, superseding tranche 8's buttons-beside-the-field): a real
          ribbon row like every other tab — [search, save] as the general group, the DOCUMENT group's Go to
          separated, acting on the selected result. The query field + repository selector live in their own

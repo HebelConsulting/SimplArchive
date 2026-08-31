@@ -56,7 +56,7 @@ public partial class MainWindow : Window
                     FolderTree.GetVisualDescendants().OfType<Border>()
                         .FirstOrDefault(b => ReferenceEquals(b.DataContext, node))?.BringIntoView());
                 vm.ExtendRetentionDialog = name => new ExtendRetentionDialog(name).ShowDialog<string?>(this);
-                vm.SaveSearchNamePrompt = () => new NewFolderDialog("Save search", "Name this saved search").ShowDialog<string?>(this);
+                vm.Search.SaveSearchNamePrompt = () => new NewFolderDialog("Save search", "Name this saved search").ShowDialog<string?>(this);
                 vm.DuplicateUploadDialog = req => new DuplicateUploadDialog(req).ShowDialog<MainWindowViewModel.DuplicatePromptResult?>(this);
 
                 // The duplicate-address-claim question (#703): the client composed it, localized, from the
@@ -74,7 +74,7 @@ public partial class MainWindow : Window
                     return window.ShowDialog(this);
                 };
                 vm.ShowExternalLinkDetailDialog = dvm => new ExternalLinkDetailDialog(dvm).ShowDialog(this);
-                vm.ShowShareSavedSearchDialog = svm => new ShareSavedSearchDialog(svm).ShowDialog<bool>(this);
+                vm.Search.ShowShareSavedSearchDialog = svm => new ShareSavedSearchDialog(svm).ShowDialog<bool>(this);
             }
         };
     }
@@ -839,24 +839,6 @@ public partial class MainWindow : Window
     }
 
     // Enter in the search box runs the search.
-    private void OnSearchKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter && DataContext is MainWindowViewModel vm && vm.SearchCommand.CanExecute(null))
-        {
-            e.Handled = true;
-            vm.SearchCommand.Execute(null);
-        }
-    }
-
-    // Double-click a search result: switch to the Repositories tab and navigate to it.
-    private void OnSearchResultDoubleTapped(object? sender, TappedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is MainWindowViewModel vm && vm.SelectedSearchResult is { } result)
-        {
-            await vm.OpenSearchResultAsync(result);
-        }
-    });
-
     // Double-click a row: same as the Open command (folder navigates in, document — or a zip entry — opens
     // natively). A zip entry opens natively too (OpenAsync's IsArchiveEntry branch); Save-as stays on the
     // context menu.
