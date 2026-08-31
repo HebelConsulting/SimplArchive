@@ -656,7 +656,7 @@ public sealed class AdminClient(ApiCore core)
         IReadOnlyDictionary<string, string>? Links = null,
         // The capability answers for the tree node this row becomes (#858) — a tree node gets the Rename /
         // Move to / Delete menu, so this listing has to carry them like the others do.
-        bool CanDelete = false, bool CanEditIndexData = false, bool CanMove = false, bool CanManagePermissions = false)
+        bool CanDelete = false, bool CanEditIndexData = false, bool CanMove = false, bool CanManagePermissions = false, bool CanCreateChildren = false)
     {
         public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
     }
@@ -696,7 +696,8 @@ public sealed class AdminClient(ApiCore core)
                     r.TryGetProperty("canDelete", out var cd) && cd.ValueKind == System.Text.Json.JsonValueKind.True,
                     r.TryGetProperty("canEditIndexData", out var ce) && ce.ValueKind == System.Text.Json.JsonValueKind.True,
                     r.TryGetProperty("canMove", out var cm) && cm.ValueKind == System.Text.Json.JsonValueKind.True,
-                    r.TryGetProperty("canManagePermissions", out var cmp) && cmp.ValueKind == System.Text.Json.JsonValueKind.True));
+                    r.TryGetProperty("canManagePermissions", out var cmp) && cmp.ValueKind == System.Text.Json.JsonValueKind.True,
+                    r.TryGetProperty("canCreateChildren", out var ccc) && ccc.ValueKind == System.Text.Json.JsonValueKind.True));
             }
         }
         return list;

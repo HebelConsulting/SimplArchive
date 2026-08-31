@@ -15,7 +15,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     private bool _loaded;
 
     public TreeNodeViewModel(Guid id, string name, bool hasSubfolders, Func<TreeNodeViewModel, Task<IEnumerable<TreeNodeViewModel>>>? loadChildren, bool isReference = false, bool isPersonal = false, string? syntheticIcon = null, string? personalKind = null, bool hasReferences = false, bool hasChildren = true, IReadOnlyDictionary<string, string>? links = null, IReadOnlyList<Services.CreatableChild>? admits = null, string? icon = null,
-        bool canDelete = false, bool canEditIndexData = false, bool canMove = false, bool canManagePermissions = false)
+        bool canDelete = false, bool canEditIndexData = false, bool canMove = false, bool canManagePermissions = false, bool canCreateChildren = false)
     {
         Id = id;
         Name = name;
@@ -32,6 +32,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         CanEditIndexData = canEditIndexData;
         CanMove = canMove;
         CanManagePermissions = canManagePermissions;
+        CanCreateChildren = canCreateChildren;
         MaskIconToken = icon;
 
         // A placeholder child makes the expander appear before the real children are loaded.
@@ -82,6 +83,9 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     public bool CanMove { get; }
 
     public bool CanManagePermissions { get; }
+
+    /// <summary>May a plain child be created in this node? (#854, replaces the `create-child` rel.)</summary>
+    public bool CanCreateChildren { get; }
 
     public bool HasRel(string rel) => Links is not null && Links.ContainsKey(rel);
 

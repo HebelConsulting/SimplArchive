@@ -55,6 +55,10 @@ public record BrowseNode(Guid Id, string Name, bool HasChildren, bool HasVersion
     // behind Go to / a search hit. The synthetic nodes (Administration, the Personal groupings) keep false
     // because they are not documents and have nothing to delete.
     bool CanDelete = false, bool CanEditIndexData = false, bool CanMove = false, bool CanManagePermissions = false,
+    // Whether a plain child may be created IN this node — the successor to the `create-child` rel (#854).
+    // Same default-false reasoning as the four above: forgetting a construction site hides Upload and New
+    // folder rather than offering them where the server would refuse.
+    bool CanCreateChildren = false,
     // The thread's URL as the SERVER advertised it (the "chat" rel), not one this client composed — see
     // ADR 0543. Null for a synthetic tree node, and for a node from a list that doesn't emit the rel yet;
     // those fall back to a composed URL, which is what the hypermedia guard's allowlist is burning down.

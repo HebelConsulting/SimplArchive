@@ -375,7 +375,7 @@ internal sealed class WorkbenchDragDrop
         if (e.Data.Contains(DataFormats.Files))
         {
             // Both launchers take files, each meaning something different (see OnTreeDrop). A plain FOLDER takes
-            // them only where a child may actually be created — the `create-child` rel that gates New subfolder,
+            // them only where a child may actually be created — the capability that gates New subfolder,
             // because a dropped file is that same create (#634, ADR 0637). The personal space's first level is
             // the case this closes: dropping there was refused before any bytes moved, and refusing a drop the
             // pointer said it would accept is the affordance lying (ADR 0543).
@@ -384,7 +384,7 @@ internal sealed class WorkbenchDragDrop
             {
                 null => DragDropEffects.None,
                 { IsLauncher: true } => DragDropEffects.Copy,
-                _ when node.HasRel("create-child") => DragDropEffects.Copy,
+                _ when node.CanCreateChildren => DragDropEffects.Copy,
                 _ => DragDropEffects.None,
             };
             return;

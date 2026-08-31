@@ -27,6 +27,9 @@ public record RepositorySummary
 
     public bool CanManagePermissions { get; set; }
 
+    /// <summary>May the caller create a plain child here? Replaces the `create-child` rel (#854).</summary>
+    public bool CanCreateChildren { get; set; }
+
     public Guid Id { get; set; }
 
     public string Name { get; set; } = "";

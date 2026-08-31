@@ -58,7 +58,11 @@ public sealed record Node(Guid Id, string Name, bool HasChildren, bool HasVersio
     bool CanDelete = false,
     bool CanEditIndexData = false,
     bool CanMove = false,
-    bool CanManagePermissions = false)
+    bool CanManagePermissions = false,
+    // May a PLAIN child — a folder, or an uploaded document — be created in this row? The successor to the
+    // `create-child` rel, which addressed the same URL as `children` and differed only by method (#854,
+    // ADR 0719). The rel answered the mask rule only; this answers the rights too.
+    bool CanCreateChildren = false)
 {
     /// <summary>The advertised href for <paramref name="rel"/>.</summary>
     /// <remarks>

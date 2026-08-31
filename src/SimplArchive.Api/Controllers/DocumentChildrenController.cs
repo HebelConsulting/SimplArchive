@@ -88,6 +88,10 @@ public class DocumentChildrenController : ControllerBase
         /// <summary>May the caller manage this row's permissions? (#858)</summary>
         public bool CanManagePermissions { get; set; }
 
+        /// <summary>May the caller create a plain child inside this row? (#854)</summary>
+        /// <remarks>Policy AND right — see <c>ICarriesRowCapabilities.CanCreateChildren</c>.</remarks>
+        public bool CanCreateChildren { get; set; }
+
 
         public Guid Id { get; set; }
 
@@ -199,6 +203,15 @@ public class DocumentChildrenController : ControllerBase
         // clients apply it (folders-first) as the default order when the folder is opened; a column-header click
         // is an ephemeral override. Serialized as the int enum value (Name=0/DocumentDate=1/Created=2).
         public FolderContentsSortOrder ContentsSortOrder { get; set; }
+
+        /// <summary>May the caller create a plain child in the folder this collection belongs to? (#854)</summary>
+        /// <remarks>
+        /// The collection's own `create-child` rel, converted: it pointed at this very collection's address and
+        /// differed from `self` only by method (ADR 0719). The reason it exists at all is the one its removed
+        /// comment gave — a caller that reached a folder through its collection rather than through its
+        /// parent's listing must get the SAME answer to "can I create here?" as the row would give (ADR 0637).
+        /// </remarks>
+        public bool CanCreateChildren { get; set; }
     }
 
     // "children", not "documents" — /documents/{id}/documents would repeat the same word despite being
@@ -271,10 +284,6 @@ public class DocumentChildrenController : ControllerBase
         // reached the same folder through its collection rather than through its parent's listing would
         // otherwise get the opposite answer to the same question — which is precisely the drift that having one
         // rel for one create is meant to remove (ADR 0637).
-        if (ChildCreationPolicy.AdmitsPlainChild(folder.MaskId, folder.IsPersonalRoot))
-        {
-            links.Add(new Link("create-child", Url.Action(nameof(CreateChild), new { documentId })!, "POST"));
-        }
 
         if (hasMore)
         {
@@ -347,12 +356,30 @@ public class DocumentChildrenController : ControllerBase
 
         // The per-row rights, in ONE batch for the page (#858) — this is what lets a client gate Delete/Rename/
         // Move honestly instead of offering them to anyone who can see a row and answering with a 403.
-        await Hypermedia.RowCapabilities.StampAsync(children, r => r.Id, _access, cancellationToken);
+        //
+        // The mask half of CanCreateChildren is read from `page`, where the mask is in scope — the row DTO does
+        // not carry it, and adding it purely to answer this would put a column on the wire for the client to
+        // re-derive a rule the server already knows (#854). parentIsPersonalRoot is false by construction: a
+        // personal space is a ROOT document, so it is never itself a listed child.
+        var admitsPlainChild = page.ToDictionary(
+            d => d.Id,
+            d => ChildCreationPolicy.AdmitsPlainChild(d.MaskId, parentIsPersonalRoot: false));
+
+        await Hypermedia.RowCapabilities.StampAsync(
+            children, r => r.Id, r => admitsPlainChild[r.Id], _access, cancellationToken);
+
+        // The FOLDER's own rights, which the per-row batch above does not cover — it answers the children, and
+        // this answers their parent. One document's worth of work on a read that already does several queries,
+        // and the alternative (a client fetching the folder resource just to learn whether it may upload here)
+        // is the per-rel round trip ADR 0557 exists to prevent.
+        var folderRights = await _access.GetCallerRightsAsync(documentId, cancellationToken);
 
         return Ok(new DocumentChildrenResource
         {
             Children = children,
             ContentsSortOrder = folderSortOrder,
+            CanCreateChildren = folderRights.CanCreateSubItems
+                && ChildCreationPolicy.AdmitsPlainChild(folder.MaskId, folder.IsPersonalRoot),
             Links = links,
         });
     }
@@ -404,10 +431,6 @@ public class DocumentChildrenController : ControllerBase
         // Unlike the single-document GET this does not check CanCreateSubItems, because a per-row rights
         // resolution is a query per row on the hottest path there is. The mask half of the rule is what this
         // change is for; a caller without the right still meets a 403, exactly as before.
-        if (ChildCreationPolicy.AdmitsPlainChild(d.MaskId, parentIsPersonalRoot: false))
-        {
-            links.Add(new Link("create-child", $"/api/documents/{d.Id}/children", "POST"));
-        }
 
         return links;
     }

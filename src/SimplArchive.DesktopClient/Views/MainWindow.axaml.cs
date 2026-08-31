@@ -913,7 +913,7 @@ public partial class MainWindow : Window
             vm.TreeContextHasReferences = node.HasReferences;
             // Read from the RIGHT-CLICKED node, not from pane state (ADR 0559): the pane describes whatever
             // last finished loading, which during a load is a different folder than the one under the cursor.
-            vm.TreeContextCanCreateChild = node.HasRel("create-child");
+            vm.TreeContextCanCreateChild = node.CanCreateChildren;
             vm.TreeContextCanTakeOver = node.HasRel("take-over");
             // The destructive half, from the same right-clicked node and for the same reason (#858).
             vm.TreeContextCanEditIndexData = node.CanEditIndexData;

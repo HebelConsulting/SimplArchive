@@ -157,6 +157,14 @@ public class DocumentsController : ControllerBase
         /// </remarks>
         public bool CanEditIndexData { get; set; }
 
+        /// <summary>May the caller create a plain child — a folder or an uploaded document — in this folder? (#854)</summary>
+        /// <remarks>
+        /// Replaces the `create-child` rel, which addressed the children collection that `children` already
+        /// addresses (ADR 0719: one rel per resource, the method says the action). Both halves, as the rel here
+        /// already did: the mask must admit a plain child AND the caller must hold <c>CanCreateSubItems</c>.
+        /// </remarks>
+        public bool CanCreateChildren { get; set; }
+
         // True when this item ignores its ancestors' ACL and uses only its own grants (ADR "Document ACL
         // inheritance resolution") — the read-only inheritance indicator in the Manage-access dialog.
         public bool BreaksInheritance { get; set; }
@@ -407,10 +415,9 @@ public class DocumentsController : ControllerBase
         var isPersonalRoot = await _dbContext.Documents
             .AnyAsync(d => d.Id == documentId && d.PersonalOfUserId != null, cancellationToken);
 
-        if (rights.CanCreateSubItems && ChildCreationPolicy.AdmitsPlainChild(folderMaskId, isPersonalRoot))
-        {
-            links.Add(new Link("create-child", $"/api/documents/{documentId}/children", "POST"));
-        }
+        // Was the `create-child` rel, pointing at the SAME address as `children` and differing only by method
+        // — one URL under two names (#854, ADR 0719). It is a capability, so it now says so.
+        var canCreateChildren = rights.CanCreateSubItems && ChildCreationPolicy.AdmitsPlainChild(folderMaskId, isPersonalRoot);
 
         // The structured editors (#564, ADR 0631). Conditional on the MASK for the same reason as the notebook
         // rels above: a contact card exists on a contact and nowhere else, so the rel's absence is the clients'
@@ -472,6 +479,7 @@ public class DocumentsController : ControllerBase
             CanManagePermissions = rights.CanManagePermissions,
             CanDelete = rights.CanDelete,
             CanEditIndexData = rights.CanEditIndexData,
+            CanCreateChildren = canCreateChildren,
             BreaksInheritance = document.BreaksInheritance,
             ContentsSortOrder = document.ContentsSortOrder,
             Links = links,

@@ -105,6 +105,10 @@ public class RepositoriesController : ControllerBase
         /// <summary>May the caller manage this row's permissions? (#858)</summary>
         public bool CanManagePermissions { get; set; }
 
+        /// <summary>May the caller create a plain child inside this row? (#854)</summary>
+        /// <remarks>Policy AND right — see <c>ICarriesRowCapabilities.CanCreateChildren</c>.</remarks>
+        public bool CanCreateChildren { get; set; }
+
 
         public Guid Id { get; set; }
 
@@ -263,11 +267,6 @@ public class RepositoriesController : ControllerBase
                         new Link("mask", $"/api/documents/{candidate.Id}/mask", "GET"),
                 };
 
-                if (ChildCreationPolicy.AdmitsPlainChild(candidate.MaskId, parentIsPersonalRoot: false))
-                {
-                    rowLinks.Add(new Link("create-child", $"/api/documents/{candidate.Id}/children", "POST"));
-                }
-
                 var rights = candidateRights[candidate.Id];
 
                 visible.Add(new RepositoryResource
@@ -278,6 +277,12 @@ public class RepositoriesController : ControllerBase
                     CanEditIndexData = rights.CanEditIndexData,
                     CanMove = rights.CanMove,
                     CanManagePermissions = rights.CanManagePermissions,
+                    // Replaces the `create-child` rel this row used to add beside `children` — one address
+                    // under two names, with the method already saying which action it is (#854, ADR 0719).
+                    // The rel answered the mask half only; the flag answers both, and the rights are already
+                    // in hand here.
+                    CanCreateChildren = ChildCreationPolicy.AdmitsPlainChild(candidate.MaskId, parentIsPersonalRoot: false)
+                        && rights.CanCreateSubItems,
                     HasChildren = candidate.HasChildren,
                     HasVersions = candidate.HasVersions,
                     HasSubfolders = candidate.HasSubfolders,
@@ -524,6 +529,10 @@ public class RepositoriesController : ControllerBase
 
         /// <summary>May the caller manage this row's permissions? (#858)</summary>
         public bool CanManagePermissions { get; set; }
+
+        /// <summary>May the caller create a plain child inside this row? (#854)</summary>
+        /// <remarks>Policy AND right — see <c>ICarriesRowCapabilities.CanCreateChildren</c>.</remarks>
+        public bool CanCreateChildren { get; set; }
 
 
         public Guid Id { get; set; }

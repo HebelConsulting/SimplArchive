@@ -138,7 +138,7 @@ public class OverLimitFileCeilingTests
         // GetAcl/SetAclEntry/RevokeAclEntry/GetEffectiveAccess/SetInheritance plus ReadRights, which nothing else
         // used. Owner-confirmed 2026-08-30. The file has now paid down 1,466 → 1,412 → 1,281 in one day, both
         // times by extracting a cohesive surface rather than by moving the line.
-        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1_281,
+        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1_235,
 
         // Re-entered 2026-08-17 (ADR 0613): burned down to 967 in an earlier pass, back to 1,156 since — the
         // handlers here are what #519 moves into per-tab UserControls, which is what takes it under again.

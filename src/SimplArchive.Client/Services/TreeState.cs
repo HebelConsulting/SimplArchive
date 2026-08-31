@@ -49,7 +49,7 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
                 {
                     // A repository is its own repository scope.
                     shared.Add(BrowseService.ToTreeItem(new BrowseNode(r.Id, r.Name, r.HasChildren, r.HasVersions, r.HasSubfolders, RepositoryId: r.Id,
-                CanDelete: r.CanDelete, CanEditIndexData: r.CanEditIndexData, CanMove: r.CanMove, CanManagePermissions: r.CanManagePermissions,
+                CanDelete: r.CanDelete, CanEditIndexData: r.CanEditIndexData, CanMove: r.CanMove, CanManagePermissions: r.CanManagePermissions, CanCreateChildren: r.CanCreateChildren,
                 Links: Links.RelMap(r.Links), Admits: r.Admits, Icon: r.Icon)));
                 }
                 url = Links.Href(page?.Links, "next");
@@ -259,7 +259,7 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
         return (page?.Repositories ?? []).Select(r => new TreeItemData<BrowseNode>
         {
             Value = new BrowseNode(r.RepositoryId, r.DisplayName, r.HasChildren, false, r.HasSubfolders, RepositoryId: r.RepositoryId,
-                CanDelete: r.CanDelete, CanEditIndexData: r.CanEditIndexData, CanMove: r.CanMove, CanManagePermissions: r.CanManagePermissions,
+                CanDelete: r.CanDelete, CanEditIndexData: r.CanEditIndexData, CanMove: r.CanMove, CanManagePermissions: r.CanManagePermissions, CanCreateChildren: r.CanCreateChildren,
                 Links: r.Links.ToDictionary(l => l.Rel, l => l.Href)),
             Expandable = r.HasSubfolders,
             Text = r.UserIsActive ? r.DisplayName : $"{r.DisplayName} (inactive)",
@@ -304,6 +304,10 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
         public bool CanEditIndexData { get; set; }
 
         public bool CanMove { get; set; }
+
+        // The admin personal-repositories listing stamps this like any other row (#854); a personal space's
+        // ROOT never admits a plain child, so it arrives false — which is the answer, not an omission.
+        public bool CanCreateChildren { get; set; }
 
         public bool CanManagePermissions { get; set; }
 

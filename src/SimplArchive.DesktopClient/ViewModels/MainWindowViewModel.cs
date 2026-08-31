@@ -1115,7 +1115,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             // load through the loader that adds them.
             Tree.Add(root.Selectable
                 ? new TreeNodeViewModel(repository.Id, repository.Name, repository.HasSubfolders, LoadTreeChildrenAsync, links: repository.Links, hasReferences: repository.HasReferences, hasChildren: repository.HasChildren, admits: repository.Admits, icon: repository.Icon,
-                    canDelete: repository.CanDelete, canEditIndexData: repository.CanEditIndexData, canMove: repository.CanMove, canManagePermissions: repository.CanManagePermissions)
+                    canDelete: repository.CanDelete, canEditIndexData: repository.CanEditIndexData, canMove: repository.CanMove, canManagePermissions: repository.CanManagePermissions, canCreateChildren: repository.CanCreateChildren)
                 : new TreeNodeViewModel(repository.Id, repository.Name, hasSubfolders: true, LoadPersonalChildrenAsync, links: repository.Links, isPersonal: true));
         }
 
@@ -1189,7 +1189,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             // Carries `take-over` when this caller may perform it (ADR 0672) — absent otherwise, so the menu
             // item is simply not drawn rather than offering a button that answers 403.
             links: r.Links,
-            canDelete: r.CanDelete, canEditIndexData: r.CanEditIndexData, canMove: r.CanMove, canManagePermissions: r.CanManagePermissions));
+            canDelete: r.CanDelete, canEditIndexData: r.CanEditIndexData, canMove: r.CanMove, canManagePermissions: r.CanManagePermissions, canCreateChildren: r.CanCreateChildren));
     }
 
     // The Personal repository nests the Intray + Check-out launcher nodes above its real subfolders, mirroring
@@ -1217,7 +1217,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             .Where(c => !c.HasVersions)
             .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
             .Select(c => new TreeNodeViewModel(c.Id, c.Name, c.HasSubfolders, LoadTreeChildrenAsync, links: c.Links, hasReferences: c.HasReferences, hasChildren: c.HasChildren, admits: c.Admits, icon: c.Icon,
-                canDelete: c.CanDelete, canEditIndexData: c.CanEditIndexData, canMove: c.CanMove, canManagePermissions: c.CanManagePermissions));
+                canDelete: c.CanDelete, canEditIndexData: c.CanEditIndexData, canMove: c.CanMove, canManagePermissions: c.CanManagePermissions, canCreateChildren: c.CanCreateChildren));
 
         // Shortcuts, or none where the folder advertises none — see TreeReferenceNodes for why that is not the
         // same question as `children` above, and for the crash it stopped being (#735).
@@ -1276,10 +1276,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
                         ? stored
                         : throw new InvalidOperationException($"No advertised address for folder '{folderId}' (ADR 0543).");
             _currentFolderLinks = links;
-            CanCreateFolder = links.ContainsKey("create-child");
             // The folder's persisted default contents order (ADR "Per-folder contents sort order") arrives with
             // the contents; opening a fresh folder resets any ephemeral column-header sort back to that default.
-            var (children, sortOrder) = await _api.Documents.GetFolderContentsAsync(links["children"]);
+            (var children, var sortOrder, CanCreateFolder) = await _api.Documents.GetFolderContentsAsync(links["children"]);
             var references = await _api.Documents.GetReferencesAsync(links["references"]);
             _folderSortOrder = sortOrder;
             _headerSortActive = false;
@@ -1295,6 +1294,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                     CanEditIndexData = child.CanEditIndexData,
                     CanMove = child.CanMove,
                     CanManagePermissions = child.CanManagePermissions,
+                    CanCreateChildren = child.CanCreateChildren,
                     Id = child.Id,
                     Name = child.Name,
                     HasChildren = child.HasChildren,
@@ -1768,7 +1768,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             // The `folders` rel the button is gated on, not `children` (#634): same address, different method,
             // and following the one that enabled the affordance keeps gate and action from drifting.
-            await _api.Documents.CreateFolderAsync(folderLinks["create-child"], name);
+            await _api.Documents.CreateFolderAsync(folderLinks["children"], name);
             Status = string.Format(Strings.Get("StCreatedFolder"), name);
             await ShowNewChildInTreeAsync(folderId); // refresh the parent's children in the tree, keep it expanded
             await LoadFolderContentsAsync(folderId);
@@ -3788,11 +3788,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        // The `create-child` rel, not `children`: an upload IS that create (ADR 0637), so this asks the same
+        // A POST to the `children` address IS the create (ADR 0637) — the separate `create-child` rel that
         // question the drop target and the menu entry were gated on. It is also the backstop for the path
         // neither of those covers — a drop on the EMPTY list area falls back to the open folder, which with
         // `Personal` open is the first level that refuses it (#634).
-        if (!folderLinks.TryGetValue("create-child", out var childrenHref))
+        if (!folderLinks.TryGetValue("children", out var childrenHref))
         {
             Status = Strings.Get("StErrUploadNotHere");
             return;

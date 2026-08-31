@@ -3,9 +3,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Hypermedia;
-using SimplArchive.Domain.Acl;
-using SimplArchive.Domain.Notifications;
 using SimplArchive.Application.Abstractions;
+using SimplArchive.Domain.Acl;
+using SimplArchive.Domain.Documents;
+using SimplArchive.Domain.Notifications;
 using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Api.Controllers;
@@ -62,6 +63,10 @@ public class AdminController : ControllerBase
 
         /// <summary>May the caller manage this row's permissions? (#858)</summary>
         public bool CanManagePermissions { get; set; }
+
+        /// <summary>May the caller create a plain child inside this row? (#854)</summary>
+        /// <remarks>Policy AND right — see <c>ICarriesRowCapabilities.CanCreateChildren</c>.</remarks>
+        public bool CanCreateChildren { get; set; }
 
 
         public Guid UserId { get; set; }
@@ -147,7 +152,17 @@ public class AdminController : ControllerBase
             .ToListAsync(cancellationToken);
 
         // One batch for the page, not a lookup per row (#858).
-        await Hypermedia.RowCapabilities.StampAsync(items, r => r.RepositoryId, _access, cancellationToken);
+        //
+        // Every row here is a personal space's ROOT, whose first level holds only what it was provisioned with
+        // (#634) — so CanCreateChildren is false for all of them. Asked of the policy rather than written as a
+        // literal `false`, so this cannot quietly disagree if that rule ever changes (#854). The mask argument
+        // is unread on this branch, which is why null is honest here rather than a placeholder.
+        await Hypermedia.RowCapabilities.StampAsync(
+            items,
+            r => r.RepositoryId,
+            _ => ChildCreationPolicy.AdmitsPlainChild(parentMaskId: null, parentIsPersonalRoot: true),
+            _access,
+            cancellationToken);
 
         var canTakeOver = await CanManageUsersAsync(cancellationToken);
 

@@ -435,10 +435,10 @@
                 {
                     @* Upload and New folder are the SAME create, so one rel gates both (ADR 0637). Disabled
                        rather than hidden: a ribbon whose buttons come and go reflows under the cursor (0550). *@
-                    <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selectedFolder is null || BrowseService.HrefOf(_selectedFolder, "create-child") is null)" OnClick="() => UploadAsync(_selectedFolder)" title="@Strings.Get("Upload")" aria-label="@Strings.Get("Upload")">
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selectedFolder is not { CanCreateChildren: true })" OnClick="() => UploadAsync(_selectedFolder)" title="@Strings.Get("Upload")" aria-label="@Strings.Get("Upload")">
                         <MudIcon Icon="@Icons.Material.Filled.Upload" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("Upload")</span>
                     </MudButton>
-                    <MudButton Class="wb-rib-btn" data-tour="action-new-folder" Size="Size.Small" Disabled="@(_selectedFolder is null || BrowseService.HrefOf(_selectedFolder, "create-child") is null)" OnClick="() => NewFolderAsync(_selectedFolder)" title="@Strings.Get("NewFolder")" aria-label="@Strings.Get("NewFolder")">
+                    <MudButton Class="wb-rib-btn" data-tour="action-new-folder" Size="Size.Small" Disabled="@(_selectedFolder is not { CanCreateChildren: true })" OnClick="() => NewFolderAsync(_selectedFolder)" title="@Strings.Get("NewFolder")" aria-label="@Strings.Get("NewFolder")">
                         <MudIcon Icon="@Icons.Material.Filled.CreateNewFolder" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("NewFolder")</span>
                     </MudButton>
                     <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_downloadUrl is null)" OnClick="DownloadAsync" title="@Strings.Get("Download")" aria-label="@Strings.Get("Download")">
@@ -548,7 +548,7 @@
                             }
                             @* The same rel the creates above follow (ADR 0637), but top-level rather than in
                                "New ▸": that submenu makes something EMPTY, and an upload brings its own. *@
-                            @if (BrowseService.HrefOf(tn, "create-child") is not null)
+                            @if (tn.CanCreateChildren)
                             {
                                 <MudMenuItem Icon="@Icons.Material.Filled.Upload" OnClick="() => UploadAsync(tn)">@Strings.Get("Upload")</MudMenuItem>
                             }
@@ -2610,21 +2610,27 @@
 
     // ---- Ribbon actions ------------------------------------------------------------------------------
 
-    // Takes the node it acts on (ADR 0559) and refuses without `create-child` — an upload IS that create.
+    // Takes the node it acts on (ADR 0559) and refuses unless the row says a child may be created — an upload
+    // IS that create. Was the `create-child` rel, which the server retired in favour of this capability (#854).
     private async Task UploadAsync(BrowseNode? node)
     {
-        if (node is { } folder && BrowseService.HrefOf(folder, "create-child") is not null && _module is not null)
+        if (node is { CanCreateChildren: true } folder && _module is not null)
         {
             await _module.InvokeVoidAsync("openFilePicker", _selfRef, folder.Id.ToString());
         }
     }
 
     // Takes the node it acts on — the tree menu passes the ROW right-clicked, the ribbon the selection (ADR
-    // 0559); reading _selectedFolder from the menu filed into whatever was last selected. And it addresses the
-    // create by the rel both call sites are gated on, so an absent rel cannot be worked around here.
+    // 0559); reading _selectedFolder from the menu filed into whatever was last selected.
+    //
+    // Two separate questions since #854, and they used to be one: MAY a child be created here (the
+    // CanCreateChildren capability) and WHERE does the create go (a POST to the `children` address). The rel
+    // that answered both was `create-child`, pointing at the same URL as `children` — one address under two
+    // names, which is what ADR 0719 removes.
     private async Task NewFolderAsync(BrowseNode? node)
     {
-        if (node is not { } folder || BrowseService.HrefOf(folder, "create-child") is not { } createHref)
+        if (node is not { CanCreateChildren: true } folder
+            || BrowseService.HrefOf(folder, "children") is not { } createHref)
         {
             return;
         }
@@ -2860,7 +2866,7 @@
         // a search hit would show Rename / Move to / Delete as unavailable while the identical folder reached
         // through the tree offered them.
         await SelectFolderAsync(new BrowseNode(folderId, doc?.Name ?? "(folder)", true, false, false,
-            CanDelete: doc?.CanDelete ?? false,
+            CanDelete: doc?.CanDelete ?? false, CanCreateChildren: doc?.CanCreateChildren ?? false,
             CanEditIndexData: doc?.CanEditIndexData ?? false,
             CanMove: Links.Href(doc?.Links, "move") is not null,
             CanManagePermissions: doc?.CanManagePermissions ?? false,

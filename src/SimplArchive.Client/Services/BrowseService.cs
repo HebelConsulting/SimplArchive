@@ -109,7 +109,7 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
             foreach (var c in page?.Children ?? [])
             {
                 nodes.Add(new BrowseNode(c.Id, c.Name, c.HasChildren, c.HasVersions, c.HasSubfolders, c.HasReferences, RepositoryId: repositoryId,
-                CanDelete: c.CanDelete, CanEditIndexData: c.CanEditIndexData, CanMove: c.CanMove, CanManagePermissions: c.CanManagePermissions,
+                CanDelete: c.CanDelete, CanEditIndexData: c.CanEditIndexData, CanMove: c.CanMove, CanManagePermissions: c.CanManagePermissions, CanCreateChildren: c.CanCreateChildren,
                 FileExtension: c.FileExtension, OnLegalHold: c.OnLegalHold,
                     CheckedOut: c.CheckedOut, CheckedOutByMe: c.CheckedOutByMe, CheckedOutByName: c.CheckedOutByName,
                     DocumentType: c.DocumentType, DocumentDate: c.DocumentDate, SizeBytes: c.SizeBytes, Tags: c.Tags, CreatedBy: c.CreatedBy, SensitivityLabelName: c.SensitivityLabelName, SensitivityLabelColor: c.SensitivityLabelColor, VersionCount: c.VersionCount, VersionCreatedAt: c.VersionCreatedAt,
@@ -236,7 +236,7 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
             // LIST here is a no-op — it is not an internal drag target (see below).
             "checkout" => new Dictionary<string, object> { ["data-drop-checkout"] = "true" },
             _ when node.HasVersions => new Dictionary<string, object> { ["data-drop-doc"] = node.Id.ToString() },
-            // A folder is a drop target only where a child may actually be created — the same `create-child`
+            // A folder is a drop target only where a child may actually be created — the same capability
             // rel that gates New folder and Upload, because a dropped file IS that create (#634, ADR 0637). The
             // personal space's first level is the case this closes: it holds only what it was provisioned with,
             // so a file dropped on `Personal` was refused before any bytes moved, and the user met a refusal
@@ -249,7 +249,7 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
             // writes into whatever this returns, so handing it the static would add `draggable` to it once and
             // then hand that poisoned instance to every node in the app. The null-node path above may return
             // the shared one because it returns immediately; this branch falls through.
-            _ when HrefOf(node, "create-child") is null => new Dictionary<string, object>(),
+            _ when !node.CanCreateChildren => new Dictionary<string, object>(),
             _ => new Dictionary<string, object> { ["data-drop-folder"] = node.Id.ToString() },
         };
 

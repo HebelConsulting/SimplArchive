@@ -72,6 +72,9 @@ public sealed class NodeViewModel
 
     public bool CanManagePermissions { get; init; }
 
+    /// <summary>May a plain child be created in this row? (#854.)</summary>
+    public bool CanCreateChildren { get; init; }
+
     public bool OnLegalHold { get; init; }
 
     // Check-out state (ADR "Document check-out / check-in"): CheckedOut drives a lock glyph, CheckedOutByMe

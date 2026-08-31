@@ -115,6 +115,9 @@ public record DocumentDetailResponse
 
     public bool CanManagePermissions { get; set; }
 
+    /// <summary>May the caller create a plain child here? Replaces the `create-child` rel (#854).</summary>
+    public bool CanCreateChildren { get; set; }
+
     // The server's answer to "may this caller change the name and index data?" (#858/#859). Read rather than
     // inferred: the pencil used to render whenever a document was loaded, so a read-only caller got it and
     // found out at Save.

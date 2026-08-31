@@ -108,11 +108,6 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
     public async Task<List<Node>> GetRepositoriesAsync(CancellationToken cancellationToken = default) =>
         await _core.LoadPagedAsync(await _core.RootHrefAsync("repositories", cancellationToken), "repositories", ParseNode, cancellationToken);
 
-    // Takes the advertised href (node.Href("children")), not a folder id (ADR 0543, issue #416). Every listing
-    // that can produce a row here advertises it — the children listing and the repositories listing both do.
-    public Task<List<Node>> GetChildrenAsync(string childrenHref, CancellationToken cancellationToken = default) =>
-        _core.LoadPagedAsync(childrenHref, "children", ParseNode, cancellationToken);
-
     // The item's ancestor folder ids, repository-root first down to its immediate parent (issue #340) — used to
     // reveal a search hit in the lazy tree. Empty for an item filed at a repository root.
     public async Task<List<Guid>> GetAncestorsAsync(string ancestorsHref, CancellationToken cancellationToken = default)
@@ -131,24 +126,6 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         }
 
         return ids;
-    }
-
-    // The folder's persisted default contents sort order (ADR "Per-folder contents sort order") from the children
-    // listing envelope — 0=Name / 1=DocumentDate / 2=Created; DocumentDate (1) when unavailable.
-    // The order travels IN the children envelope, so a screen that is listing the folder anyway should call
-    // GetFolderContentsAsync and read both from one response. This overload is for the callers that want only
-    // the number (a VM check), and it asks for a single row rather than a page to get it.
-    public async Task<int> GetContentsSortOrderAsync(string childrenHref, CancellationToken cancellationToken = default) =>
-        ReadContentsSortOrder(await _core.Http.GetFromJsonAsync<JsonElement>(childrenHref + "?limit=1", cancellationToken));
-
-    // Sets the folder's persisted default contents sort order (CanEditIndexData-gated).
-    public async Task SetContentsSortOrderAsync(string contentsSortOrderHref, int sortOrder, CancellationToken cancellationToken = default)
-    {
-        var response = await _core.Http.PutAsJsonAsync(contentsSortOrderHref, new { sortOrder }, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new ApiActionException($"Could not set the contents sort order ({(int)response.StatusCode}).");
-        }
     }
 
     // Lists a .zip document's entries on demand (ADR "Zip file browsing") — nothing is unpacked.
@@ -756,7 +733,7 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
     /// </remarks>
     public async Task<NameConflict> DescribeNameConflictAsync(string childrenHref, string stem, CancellationToken cancellationToken = default)
     {
-        var (children, _) = await GetFolderContentsAsync(childrenHref, cancellationToken);
+        var (children, _, _) = await GetFolderContentsAsync(childrenHref, cancellationToken);
         var existing = children.FirstOrDefault(c => string.Equals(c.Name, stem, StringComparison.OrdinalIgnoreCase));
         var taken = children.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -806,7 +783,8 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         item.TryGetProperty("canDelete", out var cd) && cd.ValueKind == JsonValueKind.True,
         item.TryGetProperty("canEditIndexData", out var ce) && ce.ValueKind == JsonValueKind.True,
         item.TryGetProperty("canMove", out var cm) && cm.ValueKind == JsonValueKind.True,
-        item.TryGetProperty("canManagePermissions", out var cmp) && cmp.ValueKind == JsonValueKind.True);
+        item.TryGetProperty("canManagePermissions", out var cmp) && cmp.ValueKind == JsonValueKind.True,
+        item.TryGetProperty("canCreateChildren", out var ccc) && ccc.ValueKind == JsonValueKind.True);
 
     // What this folder will accept, with the address for each (#673). An absent or empty array means the
     // client offers no creates here — the same reading as a missing rel: not available to you, here, now.
@@ -883,9 +861,6 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
             m.GetProperty("userId").GetGuid(),
             m.TryGetProperty("displayName", out var n) ? n.GetString() ?? "" : ""))];
     }
-
-    internal static int ReadContentsSortOrder(JsonElement envelope) =>
-        envelope.TryGetProperty("contentsSortOrder", out var so) && so.ValueKind == JsonValueKind.Number ? so.GetInt32() : 1;
 
     private static IReadOnlyList<string> ReadTags(JsonElement json) =>
         json.TryGetProperty("tags", out var t) && t.ValueKind == JsonValueKind.Array
@@ -1216,27 +1191,6 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         {
             return [];
         }
-    }
-
-    /// <summary>
-    /// A folder's contents AND its persisted contents order, from the one listing that already carries both.
-    /// Following rels must not turn one screen into N requests, and the order travelling in the children
-    /// envelope is precisely so a client does not have to ask for it separately (ADR 0543, issue #416).
-    /// </summary>
-    public async Task<(List<Node> Children, int SortOrder)> GetFolderContentsAsync(string childrenHref, CancellationToken cancellationToken = default)
-    {
-        var sortOrder = 1;
-        var first = true;
-        var children = await _core.LoadPagedAsync(childrenHref, "children", ParseNode, cancellationToken, page =>
-        {
-            if (first)
-            {
-                sortOrder = ReadContentsSortOrder(page);
-                first = false;
-            }
-        });
-
-        return (children, sortOrder);
     }
 
     /// <summary>

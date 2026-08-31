@@ -45,6 +45,21 @@ public interface ICarriesRowCapabilities
     /// action had two answers.
     /// </remarks>
     bool CanManagePermissions { get; set; }
+
+    /// <summary>May the caller create a plain child — a folder, or an uploaded document — inside this row?</summary>
+    /// <remarks>
+    /// The successor to the `create-child` rel (#854, ADR 0719). That rel and `children` addressed the SAME
+    /// URL and differed only by method, so the pair was one address under two names; the method already says
+    /// which action it is, and what the second name actually carried was a capability.
+    ///
+    /// It answers BOTH halves — the mask policy (<c>ChildCreationPolicy.AdmitsPlainChild</c>) AND
+    /// <c>CanCreateSubItems</c> on this row. The rel it replaces answered only the first on three of its four
+    /// emission sites, because a per-row rights resolution used to cost a query per row; its own comment said
+    /// so. <c>GetCallerRightsForManyAsync</c> removed that cost, so the flag can mean what a client needs it to
+    /// mean — "would a create here actually succeed?" — instead of "would the mask permit one, rights
+    /// notwithstanding".
+    /// </remarks>
+    bool CanCreateChildren { get; set; }
 }
 
 /// <summary>Stamps the capabilities onto a page of rows, in one batch rather than one lookup per row.</summary>
@@ -70,9 +85,16 @@ public interface ICarriesRowCapabilities
 /// </remarks>
 public static class RowCapabilities
 {
+    /// <param name="admitsPlainChild">
+    /// The mask half of <see cref="ICarriesRowCapabilities.CanCreateChildren"/>, which the rights lookup cannot
+    /// answer: whether this row's own mask admits a plain child at all. A lambda rather than a second interface
+    /// member, because it is the one thing that genuinely differs per row type and the call site is where a
+    /// reader wants to see it.
+    /// </param>
     public static async Task StampAsync<TRow>(
         IReadOnlyCollection<TRow> rows,
         Func<TRow, Guid> documentIdOf,
+        Func<TRow, bool> admitsPlainChild,
         DocumentAccessService access,
         CancellationToken cancellationToken)
         where TRow : ICarriesRowCapabilities
@@ -95,6 +117,7 @@ public static class RowCapabilities
             row.CanEditIndexData = r.CanEditIndexData;
             row.CanMove = r.CanMove;
             row.CanManagePermissions = r.CanManagePermissions;
+            row.CanCreateChildren = admitsPlainChild(row) && r.CanCreateSubItems;
         }
     }
 }
