@@ -551,7 +551,7 @@ public class RepositoriesController : ControllerBase
         public bool OnLegalHold { get; set; }
     }
 
-    private record DocumentSummaryRow(Guid Id, string Name, DateTimeOffset CreatedAt, bool HasChildren, bool HasVersions, bool HasReferences, bool OnLegalHold);
+    private record DocumentSummaryRow(Guid Id, string Name, DateTimeOffset CreatedAt, bool HasChildren, bool HasVersions, bool HasReferences, bool OnLegalHold, Guid? MaskId);
 
     public class DocumentListResource : HypermediaResource
     {
@@ -596,7 +596,11 @@ public class RepositoriesController : ControllerBase
                     || _dbContext.DocumentReferences.Any(x => x.ParentFolderId == d.Id),
                 _dbContext.DocumentVersions.Any(v => v.DocumentId == d.Id),
                 _dbContext.DocumentReferences.Any(r => r.TargetDocumentId == d.Id),
-                _dbContext.LegalHoldItems.Any(i => i.DocumentId == d.Id && _dbContext.LegalHolds.Any(h => h.Id == i.LegalHoldId && h.ReleasedAt == null))))
+                _dbContext.LegalHoldItems.Any(i => i.DocumentId == d.Id && _dbContext.LegalHolds.Any(h => h.Id == i.LegalHoldId && h.ReleasedAt == null)),
+                // The document's MASK, for CanCreateChildren's mask half (#889) — the rights half comes from
+                // the batch below. Resolved through MaskVersion the same way the children listing does it;
+                // Document itself carries only MaskVersionId.
+                _dbContext.MaskVersions.Where(mv => mv.Id == d.MaskVersionId).Select(mv => (Guid?)mv.MaskId).FirstOrDefault()))
             .ToListAsync(cancellationToken);
         var (page, hasMore) = Cursor.Split(fetched, pageSize);
 
@@ -612,18 +616,33 @@ public class RepositoriesController : ControllerBase
             links.Add(new Link("next", Url.Action(nameof(ListDocuments), new { repositoryId, cursor = nextCursor, limit = pageSize })!, "GET"));
         }
 
+        var documents = page.Select(d => new DocumentSummaryResource
+        {
+            Id = d.Id,
+            Name = d.Name,
+            HasChildren = d.HasChildren,
+            HasVersions = d.HasVersions,
+            HasReferences = d.HasReferences,
+            OnLegalHold = d.OnLegalHold,
+            Links = new List<Link> { new("self", $"/api/documents/{d.Id}", "GET") },
+        }).ToList();
+
+        // These rows implement ICarriesRowCapabilities and were never stamped (#889), so every one of them
+        // reported canDelete/canMove/canEditIndexData/canManagePermissions/canCreateChildren as FALSE. Nothing
+        // broke visibly because no client follows this listing's `documents` rel yet — but a conforming client
+        // that did would have been told it may do nothing at all with rows it owns, which is precisely the
+        // promise ADR 0543 exists to keep. The interface makes DECLARING the flags a compile error; it cannot
+        // make POPULATING them one, and this was the first place that difference bit.
+        var admitsPlainChild = page.ToDictionary(
+            d => d.Id,
+            d => ChildCreationPolicy.AdmitsPlainChild(d.MaskId, parentIsPersonalRoot: false));
+
+        await Hypermedia.RowCapabilities.StampAsync(
+            documents, r => r.Id, r => admitsPlainChild[r.Id], _access, cancellationToken);
+
         return Ok(new DocumentListResource
         {
-            Documents = page.Select(d => new DocumentSummaryResource
-            {
-                Id = d.Id,
-                Name = d.Name,
-                HasChildren = d.HasChildren,
-                HasVersions = d.HasVersions,
-                HasReferences = d.HasReferences,
-                OnLegalHold = d.OnLegalHold,
-                Links = new List<Link> { new("self", $"/api/documents/{d.Id}", "GET") },
-            }).ToList(),
+            Documents = documents,
             Links = links,
         });
     }
