@@ -43,7 +43,7 @@ jobs:
         working-directory: tools/${{ matrix.root }}
     steps:
       - uses: actions/checkout@v7
-      - uses: opentofu/setup-opentofu@v1
+      - uses: opentofu/setup-opentofu@v2
         with:
           tofu_version: 1.10.6
       - name: tofu fmt
