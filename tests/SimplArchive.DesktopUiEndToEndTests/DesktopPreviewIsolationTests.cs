@@ -4,6 +4,8 @@ namespace SimplArchive.UiEndToEndTests;
 
 // The Repositories, Intray, and Recycle-bin tabs each own a SEPARATE preview surface, so a preview shown on one
 // tab never leaks onto another (the Intray preview was previously wired to the Repositories one). Pure VM guard.
+// Since #517 the Intray's surface hangs off its own view-model, so the separation is structural rather than a
+// convention this test has to police — it still asserts it, because "structural" is exactly what a refactor moves.
 public class DesktopPreviewIsolationTests
 {
     [Fact]
@@ -11,14 +13,14 @@ public class DesktopPreviewIsolationTests
     {
         var vm = new MainWindowViewModel();
 
-        Assert.NotSame(vm.Preview, vm.IntrayPreview);
+        Assert.NotSame(vm.Preview, vm.Intray.IntrayPreview);
         Assert.NotSame(vm.Preview, vm.RecycleBin.Preview);
-        Assert.NotSame(vm.IntrayPreview, vm.RecycleBin.Preview);
+        Assert.NotSame(vm.Intray.IntrayPreview, vm.RecycleBin.Preview);
 
         // Mutating one preview's state must not affect the others.
         vm.Preview.FindQuery = "repo";
-        vm.IntrayPreview.FindQuery = "intray";
+        vm.Intray.IntrayPreview.FindQuery = "intray";
         Assert.Equal("repo", vm.Preview.FindQuery);
-        Assert.Equal("intray", vm.IntrayPreview.FindQuery);
+        Assert.Equal("intray", vm.Intray.IntrayPreview.FindQuery);
     }
 }

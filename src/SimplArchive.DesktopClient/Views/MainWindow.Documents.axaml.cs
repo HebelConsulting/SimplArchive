@@ -262,7 +262,7 @@ public partial class MainWindow
     {
         if (DataContext is MainWindowViewModel vm)
         {
-            await vm.OpenServerIntrayItemCommand.ExecuteAsync(null);
+            await vm.Intray.OpenServerIntrayItemCommand.ExecuteAsync(null);
         }
     });
 
@@ -270,8 +270,8 @@ public partial class MainWindow
     {
         if (DataContext is MainWindowViewModel vm && IntrayItemFrom(sender) is { } item)
         {
-            vm.SelectedServerIntrayItem = item;
-            await vm.OpenServerIntrayItemCommand.ExecuteAsync(null);
+            vm.Intray.SelectedServerIntrayItem = item;
+            await vm.Intray.OpenServerIntrayItemCommand.ExecuteAsync(null);
         }
     });
 
@@ -293,11 +293,11 @@ public partial class MainWindow
 
         if (result.Mode == FilingMode.AsVersion)
         {
-            await vm.FileServerIntrayItemAsVersionAsync(item, result.TargetId, result.Comment);
+            await vm.Intray.FileServerIntrayItemAsVersionAsync(item, result.TargetId, result.Comment);
         }
         else
         {
-            await vm.FileServerIntrayItemAsync(item, result.TargetId, result.Comment);
+            await vm.Intray.FileServerIntrayItemAsync(item, result.TargetId, result.Comment);
         }
     });
 

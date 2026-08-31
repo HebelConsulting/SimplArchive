@@ -15,7 +15,7 @@ namespace SimplArchive.DesktopClient.ViewModels;
 
 // The desktop workbench — mirrors the web Repositories tab: bottom tabs, a ribbon, and the
 // tree │ contents-list │ (index-data over (preview │ chat)) panes. See ADR "Desktop workbench UI".
-public sealed partial class MainWindowViewModel : ObservableObject
+public sealed partial class MainWindowViewModel : ObservableObject, IShellContext
 {
     private readonly OidcLoopbackAuthenticator _authenticator = new();
     private SimplArchiveApiClient? _api;
@@ -63,9 +63,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     public MainWindowViewModel()
     {
+        // Before LoadLayout: the tab restores its own four pane rows, so it has to exist by then.
+        Intray = new IntrayTabViewModel(this);
         LoadLayout();
         Preview.StatusReporter = m => Status = m;
-        IntrayPreview.StatusReporter = m => Status = m;
         SearchPreview.StatusReporter = m => Status = m;
         RecycleBin.StatusReporter = m => Status = m;
         Search.StatusReporter = m => Status = m;
@@ -74,7 +75,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Checkout.OnChanged = RefreshAfterCheckoutChangeAsync;
         ContactsTab.StatusReporter = m => Status = m;
         CalendarTab.StatusReporter = m => Status = m;
-        IntrayActions.Connect(() => _api, RefreshIntrayAsync, m => Status = m, () => _currentUserId);
         WireContentsFilter(); // VisibleItems follows Items through every mutation site (see the partial)
     }
 
@@ -85,7 +85,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         _api = api;
         Preview.Api = api;
-        IntrayPreview.Api = api;
         SearchPreview.Api = api;
         _ocrLanguages = new OcrLanguageCatalog(api);
         RecycleBin.SetApi(api);
@@ -93,10 +92,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Search.OpenResultRequested = OpenSearchResultAsync;
         ContactsTab.Setup(api);
         CalendarTab.Setup(api);
-
-        // The straightening toggle's state belongs to the USER, not the machine, so it is read from the server
-        // once per session rather than restored from local settings (#491).
-        Safe.Fire(async () => await IntrayActions.LoadIngestPreferencesAsync());
+        Intray.SetApi(api);
 
         // Read the API root's link relations once per session (ADR 0543): the root is the one URL a client may
         // know, and everything else is discovered from it. Fire-and-forget — a workbench that cannot reach the
@@ -213,15 +209,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         IndexHeight = GridLength.Auto; // fits its content — there is no default proportion to restore
         ChatWidth = _chatSaved;
 
-        _intrayServerSaved = new GridLength(DefaultIntrayServer, GridUnitType.Star);
-        _intrayLocalSaved = new GridLength(DefaultIntrayLocal, GridUnitType.Star);
-        _intrayMaskSaved = new GridLength(DefaultIntrayMask, GridUnitType.Star);
-        _intrayPreviewSaved = new GridLength(DefaultIntrayPreview, GridUnitType.Star);
-        IntrayServerCollapsed = IntrayLocalCollapsed = IntrayMaskCollapsed = IntrayPreviewCollapsed = false;
-        IntrayServerHeight = _intrayServerSaved;
-        IntrayLocalHeight = _intrayLocalSaved;
-        IntrayMaskHeight = _intrayMaskSaved;
-        IntrayPreviewHeight = _intrayPreviewSaved;
+        Intray.ResetLayout();
 
         StoredColNameWidth = DefaultColName;
         ColTypeWidth = DefaultColType;
@@ -237,9 +225,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private void LoadLayout()
     {
         var settings = LayoutSettingsStore.Load();
-        _treeSaved = ParseOrStar(settings.TreeWidth, DefaultTree);
-        _listSaved = ParseOrStar(settings.ListWidth, DefaultList);
-        _chatSaved = ParseOrStar(settings.ChatWidth, DefaultChat);
+        _treeSaved = GridLengths.ParseOrStar(settings.TreeWidth, DefaultTree);
+        _listSaved = GridLengths.ParseOrStar(settings.ListWidth, DefaultList);
+        _chatSaved = GridLengths.ParseOrStar(settings.ChatWidth, DefaultChat);
 
         TreeCollapsed = settings.TreeCollapsed;
         ListCollapsed = settings.ListCollapsed;
@@ -254,20 +242,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         IndexHeight = IndexCollapsed ? new GridLength(0) : GridLength.Auto;
         ChatWidth = ChatCollapsed ? new GridLength(0) : _chatSaved;
 
-        _intrayServerSaved = ParseOrStar(settings.IntrayServerHeight, DefaultIntrayServer);
-        _intrayLocalSaved = ParseOrStar(settings.IntrayLocalHeight, DefaultIntrayLocal);
-        _intrayMaskSaved = ParseOrStar(settings.IntrayMaskHeight, DefaultIntrayMask);
-        _intrayPreviewSaved = ParseOrStar(settings.IntrayPreviewHeight, DefaultIntrayPreview);
-
-        IntrayServerCollapsed = settings.IntrayServerCollapsed;
-        IntrayLocalCollapsed = settings.IntrayLocalCollapsed;
-        IntrayMaskCollapsed = settings.IntrayMaskCollapsed;
-        IntrayPreviewCollapsed = settings.IntrayPreviewCollapsed;
-
-        IntrayServerHeight = IntrayServerCollapsed ? new GridLength(0) : _intrayServerSaved;
-        IntrayLocalHeight = IntrayLocalCollapsed ? new GridLength(0) : _intrayLocalSaved;
-        IntrayMaskHeight = IntrayMaskCollapsed ? new GridLength(0) : _intrayMaskSaved;
-        IntrayPreviewHeight = IntrayPreviewCollapsed ? new GridLength(0) : _intrayPreviewSaved;
+        Intray.LoadLayout(settings);
 
         StoredColNameWidth = ParseDouble(settings.ColName, DefaultColName);
         ColTypeWidth = ParseDouble(settings.ColType, DefaultColType);
@@ -281,7 +256,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // capture GridSplitter drag-resizes).
     public void SaveLayout()
     {
-        LayoutSettingsStore.Save(new LayoutSettings
+        var settings = new LayoutSettings
         {
             TreeWidth = (TreeCollapsed ? _treeSaved : TreeWidth).ToString(),
             ListWidth = (ListCollapsed ? _listSaved : ListWidth).ToString(),
@@ -293,14 +268,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
             ListCollapsed = ListCollapsed,
             IndexCollapsed = IndexCollapsed,
             ChatCollapsed = ChatCollapsed,
-            IntrayServerHeight = (IntrayServerCollapsed ? _intrayServerSaved : IntrayServerHeight).ToString(),
-            IntrayLocalHeight = (IntrayLocalCollapsed ? _intrayLocalSaved : IntrayLocalHeight).ToString(),
-            IntrayMaskHeight = (IntrayMaskCollapsed ? _intrayMaskSaved : IntrayMaskHeight).ToString(),
-            IntrayPreviewHeight = (IntrayPreviewCollapsed ? _intrayPreviewSaved : IntrayPreviewHeight).ToString(),
-            IntrayServerCollapsed = IntrayServerCollapsed,
-            IntrayLocalCollapsed = IntrayLocalCollapsed,
-            IntrayMaskCollapsed = IntrayMaskCollapsed,
-            IntrayPreviewCollapsed = IntrayPreviewCollapsed,
             // The STORED width, not the drawn one: persisting the computed value would bake one pane width
             // into the layout file and make the next session open with a Name column sized for the last
             // session's window (#786).
@@ -310,13 +277,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
             ColSize = ColSizeWidth.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ColTags = ColTagsWidth.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ColOwner = ColOwnerWidth.ToString(System.Globalization.CultureInfo.InvariantCulture),
-        });
-    }
+        };
 
-    private static GridLength ParseOrStar(string value, double star)
-    {
-        try { return GridLength.Parse(value); }
-        catch { return new GridLength(star, GridUnitType.Star); }
+        Intray.WriteLayout(settings);   // the tab's four panes are its own to describe
+        LayoutSettingsStore.Save(settings);
     }
 
     private static double ParseDouble(string value, double fallback) =>
@@ -517,7 +481,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private void ExitPreviewFullscreen()
     {
         Preview.ExitFullscreen();
-        IntrayPreview.ExitFullscreen();
+        Intray.IntrayPreview.ExitFullscreen();
         RecycleBin.Preview.ExitFullscreen();
     }
 
@@ -958,7 +922,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         _api = null;
         Preview.Api = null;
-        IntrayPreview.Api = null;
+        Intray.IntrayPreview.Api = null;
         IsLoggedIn = false;
         _forceLoginNext = true;
         _ = StopRealtimeNotificationsAsync(); // drop the live hub connection with the session
@@ -1538,8 +1502,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
             case 0 when OpenCommand.CanExecute(null):
                 await OpenCommand.ExecuteAsync(null);
                 break;
-            case 1 when SelectedServerIntrayItem is not null:
-                await OpenServerIntrayItemCommand.ExecuteAsync(null);
+            case 1 when Intray.SelectedServerIntrayItem is not null:
+                await Intray.OpenServerIntrayItemCommand.ExecuteAsync(null);
                 break;
         }
     }
@@ -2268,7 +2232,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             CanImpersonate = me.CanImpersonate;
             HasExportRight = me.CanExport;
             HasImportRight = me.CanImport;
-            CanManageIntrays = me.CanManageIntrays;
+            Intray.CanManageIntrays = me.CanManageIntrays;
             CanManageMailRouting = me.CanManageMailRouting;
             IsImpersonating = me.ImpersonatedBy is not null;
             ImpersonatedName = me.ImpersonatedBy is not null ? me.UserName : null;
@@ -2551,8 +2515,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
 
 
-    private static bool IsScannableExtension(string name) =>
-        Path.GetExtension(name).ToLowerInvariant() is ".tif" or ".tiff" or ".pdf";
 
 
 
@@ -2585,7 +2547,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         Status = string.Format(Strings.Get("StFiledOf"), filed, items.Count);
-        await RefreshIntrayAsync();
+        await Intray.RefreshIntrayAsync();
     }
     // Builds the filing dialog VM, passing the Repositories tab's selected document (if any) so the dialog can
     // offer filing as a new version of it / into its folder (ADR "Context-aware inbox filing dialog").
@@ -2658,13 +2620,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
     async partial void OnSelectedTabChanged(int value)
     {
         Preview.ExitFullscreen(); // leave full screen when switching tabs (the tab strip stays reachable while maximized)
-        IntrayPreview.ExitFullscreen();
+        Intray.IntrayPreview.ExitFullscreen();
         RecycleBin.Preview.ExitFullscreen();
 
         await (value switch
         {
             0 => RefreshRepositoriesViewAsync(),
-            1 => RefreshIntrayAsync(),
+            1 => Intray.RefreshIntrayAsync(),
             2 => ActivateCheckoutAsync(),
             3 => ActivateSearchAsync(),
             4 => LoadRecycleBinAsync(),

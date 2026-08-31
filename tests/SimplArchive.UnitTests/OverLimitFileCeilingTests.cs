@@ -111,8 +111,13 @@ public class OverLimitFileCeilingTests
         // lowering the class, so the new partial is listed too — otherwise this guard would reward moving cost
         // to an unwatched file, which is the exact regression its header warns about. The class total is what
         // #517 is actually burning down; these two entries only stop either half growing.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_070,
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.Intray.cs"] = 624,
+        // 6,070 → 6,032, and the Intray entry is GONE: that partial became IntrayTabViewModel, a class of its
+        // own (683 lines, under the limit and covered by the general principle). This is the first tranche that
+        // moves cost OUT of the class rather than between its files — 7,330 → 6,795 across every partial. The
+        // window's half of the seam is its own partial and is listed below, for the reason above: a new file
+        // nothing watches is how the next tranche would quietly become a relocation.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_032,
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.ShellContext.cs"] = 80,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
         // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —

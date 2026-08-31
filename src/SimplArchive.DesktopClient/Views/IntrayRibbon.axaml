@@ -22,25 +22,25 @@
                  a right you do not hold is not advertised, but a button that merely has nothing to act on yet
                  stays put, so the ribbon does not reflow under the cursor as the selection changes. -->
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
-                <Button AutomationProperties.AutomationId="intray-open" IsEnabled="{Binding HasSelectedIntrayItem}"
+                <Button AutomationProperties.AutomationId="intray-open" IsEnabled="{Binding Intray.HasSelectedIntrayItem}"
                         Click="OnIntrayOpen" ToolTip.Tip="{x:Static vm:MainWindowViewModel.OpenTip}"><i:Icon Value="mdi-open-in-new" FontSize="18" /></Button>
-                <Button AutomationProperties.AutomationId="intray-send" IsEnabled="{Binding CanSendSelectedIntrayItem}"
+                <Button AutomationProperties.AutomationId="intray-send" IsEnabled="{Binding Intray.CanSendSelectedIntrayItem}"
                         Click="OnIntraySend" ToolTip.Tip="{loc:Tr IntraySendTitle}"><i:Icon Value="mdi-send-outline" FontSize="18" /></Button>
-                <Button AutomationProperties.AutomationId="intray-claim" IsEnabled="{Binding CanClaimSelectedIntrayItem}"
+                <Button AutomationProperties.AutomationId="intray-claim" IsEnabled="{Binding Intray.CanClaimSelectedIntrayItem}"
                         Click="OnIntrayMoveToMine" ToolTip.Tip="{loc:Tr IntrayClaimToMine}"><i:Icon Value="mdi-inbox-arrow-down-outline" FontSize="18" /></Button>
-                <Button AutomationProperties.AutomationId="intray-file" IsEnabled="{Binding HasSelectedIntrayItem}"
+                <Button AutomationProperties.AutomationId="intray-file" IsEnabled="{Binding Intray.HasSelectedIntrayItem}"
                         Click="OnIntrayFile" ToolTip.Tip="{loc:Tr MwFileIntoFolder}"><i:Icon Value="mdi-file-move-outline" FontSize="18" /></Button>
-                <Button AutomationProperties.AutomationId="intray-delete" IsEnabled="{Binding HasSelectedIntrayItem}"
+                <Button AutomationProperties.AutomationId="intray-delete" IsEnabled="{Binding Intray.HasSelectedIntrayItem}"
                         Click="OnIntrayDelete" ToolTip.Tip="{loc:Tr UgDelete}"><i:Icon Value="mdi-delete-outline" FontSize="18" /></Button>
             </StackPanel>
             <!-- Pages group: what is INSIDE a staged scan (#487). Each is disabled until the server
                  says it can succeed — a one-page file offers no split or sort (ADR 0554). -->
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
-                <Button AutomationProperties.AutomationId="intray-split" IsEnabled="{Binding IntrayActions.CanSplit}"
+                <Button AutomationProperties.AutomationId="intray-split" IsEnabled="{Binding Intray.IntrayActions.CanSplit}"
                         Click="OnIntraySplit" ToolTip.Tip="{loc:Tr IntraySplit}"><i:Icon Value="mdi-call-split" FontSize="18" /></Button>
-                <Button AutomationProperties.AutomationId="intray-sort" IsEnabled="{Binding IntrayActions.CanSort}"
+                <Button AutomationProperties.AutomationId="intray-sort" IsEnabled="{Binding Intray.IntrayActions.CanSort}"
                         Click="OnIntraySortPages" ToolTip.Tip="{loc:Tr IntraySortTitle}"><i:Icon Value="mdi-sort" FontSize="18" /></Button>
-                <Button AutomationProperties.AutomationId="intray-join" IsEnabled="{Binding IntrayActions.CanJoin}"
+                <Button AutomationProperties.AutomationId="intray-join" IsEnabled="{Binding Intray.IntrayActions.CanJoin}"
                         Click="OnIntrayJoin" ToolTip.Tip="{loc:Tr IntrayJoinTitle}"><i:Icon Value="mdi-call-merge" FontSize="18" /></Button>
             </StackPanel>
             <!-- Straightening group (#491): the sticky preference, held DOWN while on, beside the
@@ -48,12 +48,12 @@
                  the system will keep doing, where a menu item says only what it did once. -->
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
                 <ToggleButton AutomationProperties.AutomationId="intray-rotate-auto"
-                              IsChecked="{Binding IntrayActions.RotateAutomatically}"
+                              IsChecked="{Binding Intray.IntrayActions.RotateAutomatically}"
                               Click="OnIntrayRotateAutoToggled" ToolTip.Tip="{loc:Tr IntrayRotateAutoTip}"><i:Icon Value="mdi-rotate-right" FontSize="18" /></ToggleButton>
                 <ToggleButton AutomationProperties.AutomationId="intray-deskew-auto"
-                              IsChecked="{Binding IntrayActions.DeskewAutomatically}"
+                              IsChecked="{Binding Intray.IntrayActions.DeskewAutomatically}"
                               Click="OnIntrayDeskewAutoToggled" ToolTip.Tip="{loc:Tr IntrayDeskewAutoTipTiff}"><i:Icon Value="mdi-image-auto-adjust" FontSize="18" /></ToggleButton>
-                <Button AutomationProperties.AutomationId="intray-deskew" IsEnabled="{Binding IntrayActions.CanDeskew}"
+                <Button AutomationProperties.AutomationId="intray-deskew" IsEnabled="{Binding Intray.IntrayActions.CanDeskew}"
                         Click="OnIntrayDeskew" ToolTip.Tip="{loc:Tr IntrayDeskewNow}"><i:Icon Value="mdi-angle-acute" FontSize="18" /></Button>
             </StackPanel>
             <!-- Separator-sheet group (#492): the same shape as straightening, and next to it,
@@ -62,12 +62,12 @@
                  in the app can substitute for. -->
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
                 <ToggleButton AutomationProperties.AutomationId="intray-patch-auto"
-                              IsChecked="{Binding IntrayActions.CutAtPatchCodesAutomatically}"
+                              IsChecked="{Binding Intray.IntrayActions.CutAtPatchCodesAutomatically}"
                               Click="OnIntrayPatchAutoToggled" ToolTip.Tip="{loc:Tr IntrayPatchAutoTip}"><i:Icon Value="mdi-content-cut" FontSize="18" /></ToggleButton>
-                <Button AutomationProperties.AutomationId="intray-patch-cut" IsEnabled="{Binding IntrayActions.CanCutAtPatchCodes}"
+                <Button AutomationProperties.AutomationId="intray-patch-cut" IsEnabled="{Binding Intray.IntrayActions.CanCutAtPatchCodes}"
                         Click="OnIntrayPatchCut" ToolTip.Tip="{loc:Tr IntrayPatchCutNow}"><i:Icon Value="mdi-scissors-cutting" FontSize="18" /></Button>
                 <Button AutomationProperties.AutomationId="intray-patch-sheet"
-                        IsEnabled="{Binding IntrayActions.CanOpenPatchCodeSheet}"
+                        IsEnabled="{Binding Intray.IntrayActions.CanOpenPatchCodeSheet}"
                         Click="OnIntrayPatchSheet" ToolTip.Tip="{loc:Tr IntrayPatchSheetTip}"><i:Icon Value="mdi-printer" FontSize="18" /></Button>
             </StackPanel>
             <!-- Item group: what to do with the staged file as a whole, and what the list is showing.
@@ -80,10 +80,10 @@
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
                 <Button IsEnabled="{Binding CanFileMultiple}" Click="OnIntrayFileMultiple" ToolTip.Tip="{loc:Tr MwFileSelectedTip}"><i:Icon Value="mdi-file-move-outline" FontSize="18" /></Button>
                 <ToggleButton AutomationProperties.AutomationId="intray-show-groups"
-                              IsChecked="{Binding IntrayIncludeGroups}"
-                              IsEnabled="{Binding !IntrayViewUserId, FallbackValue=True}"
+                              IsChecked="{Binding Intray.IntrayIncludeGroups}"
+                              IsEnabled="{Binding !Intray.IntrayViewUserId, FallbackValue=True}"
                               ToolTip.Tip="{loc:Tr IntrayShowGroups}"><i:Icon Value="mdi-account-group-outline" FontSize="18" /></ToggleButton>
-                <Button Command="{Binding RefreshIntrayCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
+                <Button Command="{Binding Intray.RefreshIntrayCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
             </StackPanel>
             <!-- General group: one WebDAV button that does the next useful thing — set up, mount, or
                  open this tab's own folder (ADR "One WebDAV button per tab, deep-linked"). -->

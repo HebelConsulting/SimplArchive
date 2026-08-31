@@ -218,12 +218,12 @@ public partial class MainWindow : Window
 
         var selected = ServerIntrayList.SelectedItems?.Count ?? 0;
         vm.CanFileMultiple = selected >= 2;
-        vm.IntrayActions.SelectedCount = selected;
+        vm.Intray.IntrayActions.SelectedCount = selected;
 
         // Ask what THIS row's pages can do. Fire-and-forget through Safe.Fire because a selection change must
         // not wait on a request; the buttons are cleared first, so during the flight they say "not available",
         // which is exactly true (ADR 0559).
-        Safe.Fire(async () => await vm.IntrayActions.LoadPagesAsync(
+        Safe.Fire(async () => await vm.Intray.IntrayActions.LoadPagesAsync(
             selected == 1 ? ServerIntrayList.SelectedItem as IntrayItemViewModel : null));
     }
 
@@ -235,7 +235,7 @@ public partial class MainWindow : Window
     {
         if (DataContext is not MainWindowViewModel vm
             || ServerIntrayList.SelectedItem is not IntrayItemViewModel item
-            || await vm.IntrayActions.GetPagesAsync(item) is not { SplitHref: { } splitHref } pages)
+            || await vm.Intray.IntrayActions.GetPagesAsync(item) is not { SplitHref: { } splitHref } pages)
         {
             return;
         }
@@ -245,7 +245,7 @@ public partial class MainWindow : Window
         var prompt = string.Format(Strings.Get("IntraySplitConfirm"), item.Name, pages.PageCount);
         if (await new ConfirmDialog(prompt, Strings.Get("IntraySplit")).ShowDialog<bool>(this))
         {
-            await vm.IntrayActions.SplitAsync(item, splitHref);
+            await vm.Intray.IntrayActions.SplitAsync(item, splitHref);
         }
     });
 
@@ -255,7 +255,7 @@ public partial class MainWindow : Window
             || ServerIntrayList.SelectedItem is not IntrayItemViewModel item
             || item.Item is not { } info
             || vm.Api is not { } api
-            || await vm.IntrayActions.GetPagesAsync(item) is not { SortHref: { } sortHref })
+            || await vm.Intray.IntrayActions.GetPagesAsync(item) is not { SortHref: { } sortHref })
         {
             return;
         }
@@ -273,7 +273,7 @@ public partial class MainWindow : Window
         var dialog = new SortPagesDialog(item.Name, thumbnails.Cast<Bitmap?>().ToList());
         if (await dialog.ShowDialog<SortPagesDialog.Result?>(this) is { } arrangement)
         {
-            await vm.IntrayActions.SortAsync(item, sortHref, arrangement.Order, arrangement.Rotations);
+            await vm.Intray.IntrayActions.SortAsync(item, sortHref, arrangement.Order, arrangement.Rotations);
         }
     });
 
@@ -281,7 +281,7 @@ public partial class MainWindow : Window
     {
         if (DataContext is MainWindowViewModel vm && sender is ToggleButton { IsChecked: { } enabled })
         {
-            await vm.IntrayActions.SetRotateAutomaticallyAsync(enabled);
+            await vm.Intray.IntrayActions.SetRotateAutomaticallyAsync(enabled);
         }
     });
 
@@ -289,7 +289,7 @@ public partial class MainWindow : Window
     {
         if (DataContext is MainWindowViewModel vm && sender is ToggleButton { IsChecked: { } enabled })
         {
-            await vm.IntrayActions.SetDeskewAutomaticallyAsync(enabled);
+            await vm.Intray.IntrayActions.SetDeskewAutomaticallyAsync(enabled);
         }
     });
 
@@ -299,7 +299,7 @@ public partial class MainWindow : Window
     {
         if (DataContext is not MainWindowViewModel vm
             || ServerIntrayList.SelectedItem is not IntrayItemViewModel item
-            || await vm.IntrayActions.GetPagesAsync(item) is not { DeskewHref: { } deskewHref })
+            || await vm.Intray.IntrayActions.GetPagesAsync(item) is not { DeskewHref: { } deskewHref })
         {
             return;
         }
@@ -309,7 +309,7 @@ public partial class MainWindow : Window
         var prompt = string.Format(Strings.Get("IntrayDeskewConfirm"), item.Name);
         if (await new ConfirmDialog(prompt, Strings.Get("IntrayDeskewNow")).ShowDialog<bool>(this))
         {
-            await vm.IntrayActions.DeskewAsync(item, deskewHref);
+            await vm.Intray.IntrayActions.DeskewAsync(item, deskewHref);
         }
     });
 
@@ -317,7 +317,7 @@ public partial class MainWindow : Window
     {
         if (DataContext is MainWindowViewModel vm && sender is ToggleButton { IsChecked: { } enabled })
         {
-            await vm.IntrayActions.SetCutAtPatchCodesAutomaticallyAsync(enabled);
+            await vm.Intray.IntrayActions.SetCutAtPatchCodesAutomaticallyAsync(enabled);
         }
     });
 
@@ -327,7 +327,7 @@ public partial class MainWindow : Window
     {
         if (DataContext is not MainWindowViewModel vm
             || ServerIntrayList.SelectedItem is not IntrayItemViewModel item
-            || await vm.IntrayActions.GetPagesAsync(item) is not { PatchCodesHref: { } patchCodesHref })
+            || await vm.Intray.IntrayActions.GetPagesAsync(item) is not { PatchCodesHref: { } patchCodesHref })
         {
             return;
         }
@@ -337,7 +337,7 @@ public partial class MainWindow : Window
         var prompt = string.Format(Strings.Get("IntrayPatchCutConfirm"), item.Name);
         if (await new ConfirmDialog(prompt, Strings.Get("IntrayPatchCutNow")).ShowDialog<bool>(this))
         {
-            await vm.IntrayActions.CutAtPatchCodesAsync(item, patchCodesHref);
+            await vm.Intray.IntrayActions.CutAtPatchCodesAsync(item, patchCodesHref);
         }
     });
 
@@ -347,7 +347,7 @@ public partial class MainWindow : Window
     {
         if (DataContext is MainWindowViewModel vm)
         {
-            await vm.IntrayActions.OpenPatchCodeSheetAsync();
+            await vm.Intray.IntrayActions.OpenPatchCodeSheetAsync();
         }
     });
 
@@ -367,7 +367,7 @@ public partial class MainWindow : Window
 
         if (await new JoinItemsDialog(names).ShowDialog<JoinItemsDialog.Result?>(this) is { } result)
         {
-            await vm.IntrayActions.JoinAsync(result.Names, result.Name);
+            await vm.Intray.IntrayActions.JoinAsync(result.Names, result.Name);
         }
     });
 
@@ -397,7 +397,7 @@ public partial class MainWindow : Window
         {
             foreach (var item in items)
             {
-                await vm.IntrayActions.DeleteAsync(item);
+                await vm.Intray.IntrayActions.DeleteAsync(item);
             }
         }
     });
@@ -410,10 +410,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        var targets = await vm.IntrayActions.GetSendTargetsAsync();
+        var targets = await vm.Intray.IntrayActions.GetSendTargetsAsync();
         if (await new SendToIntrayDialog(item.Name, targets).ShowDialog<IntrayApi.IntrayTargetInfo?>(this) is { } target)
         {
-            await vm.IntrayActions.SendAsync(item, target);
+            await vm.Intray.IntrayActions.SendAsync(item, target);
         }
     });
 
@@ -422,7 +422,7 @@ public partial class MainWindow : Window
     {
         if (DataContext is MainWindowViewModel vm && IntrayItemFrom(sender) is { } item)
         {
-            await vm.IntrayActions.ClaimToMineAsync(item);
+            await vm.Intray.IntrayActions.ClaimToMineAsync(item);
         }
     });
 
@@ -457,7 +457,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var (catalog, selected) = vm.IntrayOcrPickerState();
+        var (catalog, selected) = vm.Intray.IntrayOcrPickerState();
         if (catalog.Count == 0)
         {
             return;
@@ -467,7 +467,7 @@ public partial class MainWindow : Window
         var codes = await new OcrLanguagePickerDialog { DataContext = picker }.ShowDialog<List<string>?>(this);
         if (codes is not null)
         {
-            vm.StageIntrayOcrLanguages(codes); // staged into the pane; the pane's Save persists it
+            vm.Intray.StageIntrayOcrLanguages(codes); // staged into the pane; the pane's Save persists it
         }
     });
 

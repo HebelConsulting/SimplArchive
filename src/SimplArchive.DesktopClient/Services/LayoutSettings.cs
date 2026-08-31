@@ -46,6 +46,17 @@ public sealed class LayoutSettings
 
 // Reads/writes LayoutSettings as JSON in the user's app-data directory. All IO is best-effort — a missing or
 // unreadable file just yields defaults, and a failed write is swallowed (layout persistence is non-critical).
+/// <summary>Reading a persisted pane size back. Shared: the shell parses its panes, each tab parses its own.</summary>
+public static class GridLengths
+{
+    /// <summary>The stored value, or a star-sized fallback when the file holds nothing usable.</summary>
+    public static Avalonia.Controls.GridLength ParseOrStar(string value, double star)
+    {
+        try { return Avalonia.Controls.GridLength.Parse(value); }
+        catch { return new Avalonia.Controls.GridLength(star, Avalonia.Controls.GridUnitType.Star); }
+    }
+}
+
 public static class LayoutSettingsStore
 {
     private static readonly string FilePath = Path.Combine(
