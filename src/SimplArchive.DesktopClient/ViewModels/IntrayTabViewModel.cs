@@ -56,7 +56,6 @@ public sealed partial class IntrayTabViewModel : ObservableObject
     public void SetApi(SimplArchiveApiClient api)
     {
         _api = api;
-        Preview.Api = api;
 
         // The straightening toggle's state belongs to the USER, not the machine, so it is read from the server
         // once per session rather than restored from local settings (#491).

@@ -39,7 +39,6 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
     public void SetApi(SimplArchiveApiClient api)
     {
         _api = api;
-        Preview.Api = api;
     }
 
     // Tenant-admin gates the per-row Hard-delete + Hard-delete all (permanent purge, ADR 0328/0329). Restore is

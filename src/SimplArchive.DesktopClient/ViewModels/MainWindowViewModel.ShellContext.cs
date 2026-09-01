@@ -104,4 +104,25 @@ public sealed partial class MainWindowViewModel
         UseApi(new SimplArchiveApiClient(accessToken));
         return Intray.SendSelfTestAsync();
     }
+
+    /// <summary>
+    /// Every preview surface in the window — the Repositories one plus each tab's own.
+    /// </summary>
+    /// <remarks>
+    /// ONE list, read by both the login wiring and the logout teardown, because they were two lists and drifted:
+    /// the Search tab's preview was in neither, so it silently showed nothing (its <c>RenderAsync</c> begins
+    /// <c>if (Api is null) return;</c>), and Check-out's and Recycle bin's kept their API client after sign-out.
+    /// A new tab that owns a preview belongs here, and <c>DesktopPreviewWiringTests</c> fails if it is missing.
+    /// </remarks>
+    internal IReadOnlyList<PreviewViewModel> PreviewSurfaces =>
+        [Preview, Intray.Preview, Search.Preview, RecycleBin.Preview, Checkout.Preview];
+
+    /// <summary>Hands every preview surface the session's API client, or takes it away at sign-out.</summary>
+    private void SetPreviewApi(SimplArchiveApiClient? api)
+    {
+        foreach (var preview in PreviewSurfaces)
+        {
+            preview.Api = api;
+        }
+    }
 }

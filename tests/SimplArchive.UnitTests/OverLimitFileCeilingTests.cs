@@ -116,48 +116,12 @@ public class OverLimitFileCeilingTests
         // moves cost OUT of the class rather than between its files — 7,330 → 6,795 across every partial. The
         // window's half of the seam is its own partial and is listed below, for the reason above: a new file
         // nothing watches is how the next tranche would quietly become a relocation.
-        // 6,032 → 6,015 and 80 → 107 for #517's finish (ADR 0730): all seven tabs now take IShellContext, which
-        // deleted six StatusReporter properties and the nine `m => Status = m` lambdas in the constructor.
-        // RefreshAfterCheckoutChangeAsync moved to the ShellContext partial, beside the interface member that
-        // calls it — OWNER-CONFIRMED 2026-09-01, chosen over raising the main file, and worth naming as the
-        // trade it is: it lowers one watched file by moving lines into another watched file. That is only not
-        // gaming because BOTH are on this list; if the destination ever leaves, this line stops being honest.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_015,
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.ShellContext.cs"] = 107,
+        // 6,032 → 6,015 for #517, then → its measurement here as the tab work continues.
+        // The ShellContext partial LEFT this list: it was added in #903 to stop cost moving to an unwatched
+        // file, and ADR 0732's general check now measures every authored file, so a 107-line partial has no
+        // business in an override list for files at or over 1000.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6011,
 
-        // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
-        // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —
-        // OWNER-CONFIRMED as an accepted exception (2026-08-17, on #443's close): split further only if a real
-        // seam appears; the finale already took the obvious ones (#518 owns any future burn-down).
-        // → 1,511 for the section/note creates (#564, owner-confirmed 2026-08-17). Half the raise it would have
-        // been: CreateFolderAsync had the same body, so it now shares the new helper instead of sitting beside
-        // a near-duplicate — +13 rather than +26.
-        // 1,511 -> 1,469 for #703: the index-data PUT and its duplicate-claim choreography left for
-        // IndexDataWrites (an extension file, same call sites). The guard caught the method GROWING here
-        // first — the ask-and-retry had just moved in from the view-model, right direction, wrong room.
-        // Lowered rather than left with headroom, as always.
-        // 1,469 → 1,438 for #704: the duplicate probe moved to IndexDataWrites when the guard caught it
-        // growing here — the second method to leave by that door, which is the door working.
-        // 1,438 → 1,456 for #768 (owner-confirmed 2026-08-26, the second raise on this file today): the owner
-        // column, and the target's list-row columns on a REFERENCE row. A referenced row was drawing blank
-        // Type / Doc date / Size / Tags cells beside a real row that filled them, on both clients, because a
-        // reference was projected as a stub. Assigning the columns is what a row costs; the projection itself
-        // became one shared definition (DocumentSummaryQueries) rather than a second copy.
-        // 1,456 → 1,412: #858 needed ten lines here for the conditional `move` rel, and rather than raise the
-        // ceiling for them the tag-CATALOG admin surface moved out to DocumentsClient.Tags.cs (the
-        // DocumentsClient.Export.cs precedent). Those members were interleaved with unrelated ones rather than
-        // sitting in a block, which is why a section header three-quarters down the file had stopped describing
-        // where its members were. Owner-confirmed 2026-08-30.
-        // 1,412 → 1,422 for #858 (owner-confirmed 2026-08-30): three capability fields in ParseNode, the one
-        // parser BOTH the repositories and children listings go through. That single parser is precisely why
-        // the desktop had no per-listing site to forget, so splitting it to save ten lines would trade the
-        // property that made this change safe for a smaller number. The file already paid down 1,466 → 1,412
-        // this session by extracting the tag-catalog surface.
-        // 1,422 → 1,281. #877 needed the ACL collection's grantable-rights cap plumbed through this file, and rather
-        // than raise the ceiling a THIRD time today the whole ACL surface moved to DocumentsClient.Acl.cs —
-        // GetAcl/SetAclEntry/RevokeAclEntry/GetEffectiveAccess/SetInheritance plus ReadRights, which nothing else
-        // used. Owner-confirmed 2026-08-30. The file has now paid down 1,466 → 1,412 → 1,281 in one day, both
-        // times by extracting a cohesive surface rather than by moving the line.
         ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1_235,
 
         // Re-entered 2026-08-17 (ADR 0613): burned down to 967 in an earlier pass, back to 1,156 since — the

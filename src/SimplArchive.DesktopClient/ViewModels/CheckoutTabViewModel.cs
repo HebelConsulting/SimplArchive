@@ -27,7 +27,6 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
     public void SetApi(SimplArchiveApiClient api)
     {
         _api = api;
-        Preview.Api = api;
     }
 
     // ---- Detail panes (ADR "The Check-out tab shows what you are about to check in") -------------------

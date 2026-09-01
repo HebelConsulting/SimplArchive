@@ -66,7 +66,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         // Everything the window owns is constructed FIRST: each takes this as its context, and LoadLayout
         // below asks a tab to restore its own pane rows, so a tab built after it would be null (#517).
         Preview = new PreviewViewModel(this);
-        SearchPreview = new PreviewViewModel(this);
         Intray = new IntrayTabViewModel(this);
         RecycleBin = new RecycleBinTabViewModel(this);
         Search = new SearchTabViewModel(this);
@@ -85,8 +84,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     private void UseApi(SimplArchiveApiClient api)
     {
         _api = api;
-        Preview.Api = api;
-        SearchPreview.Api = api;
+        SetPreviewApi(api);
         _ocrLanguages = new OcrLanguageCatalog(api);
         RecycleBin.SetApi(api);
         Search.SetApi(api);
@@ -474,7 +472,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
 
     // The Search tab's own preview instance, for the same reason as the Intray's (#462): a preview shown while
     // browsing search results must not leak into the Repositories tab, and vice versa.
-    public PreviewViewModel SearchPreview { get; }
 
     // Leaves full-screen for ALL preview surfaces (the Esc key binding + a tab switch) — only the active tab's
     // preview can actually be full-screen, so clearing all is safe.
@@ -922,8 +919,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     private void Logout()
     {
         _api = null;
-        Preview.Api = null;
-        Intray.Preview.Api = null;
+        SetPreviewApi(null);
         IsLoggedIn = false;
         _forceLoginNext = true;
         _ = StopRealtimeNotificationsAsync(); // drop the live hub connection with the session
