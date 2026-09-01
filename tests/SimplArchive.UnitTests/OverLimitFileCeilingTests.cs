@@ -238,7 +238,16 @@ public class OverLimitFileCeilingTests
         // Two extractions from two branches, merged: the file is UNDER 1,000 for good now, and the entry stays
         // (rather than being deleted at the 1,000 threshold) until the ratchet's general rule exists — a file
         // this central re-crossing the line deserves to fail a build, not a review.
-        ["src/SimplArchive.Infrastructure/Persistence/SimplArchiveDbContext.cs"] = 898,
+        // 898 → the entry is GONE, and by its own stated condition. The paragraph above says it stays "until
+        // the ratchet's general rule exists" — ADR 0732 built that rule, so a file under the limit no longer
+        // needs a bespoke ceiling to be watched: Every_authored_file_over_the_limit_has_an_entry measures it,
+        // and a re-crossing fails the build exactly as the entry was there to ensure.
+        //
+        // The owner confirmed 1000 lines are acceptable for this file (2026-09-01), which is what settles it.
+        // The alternative was raising 898 → 1000, and that would have been worse: a ceiling is a RATCHET, so a
+        // number above the file's actual size (871) is standing permission to grow into the gap silently, which
+        // is the behaviour this whole list exists to prevent. Deleting the entry gives the same allowance and
+        // none of the permission.
 
         // ---- Re-entered 2026-09-01 (issue #909) -------------------------------------------------------
         // Eight authored files were at/over 1000 with no entry here and no exception on record. That is this
