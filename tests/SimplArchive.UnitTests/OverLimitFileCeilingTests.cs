@@ -120,7 +120,18 @@ public class OverLimitFileCeilingTests
         // The ShellContext partial LEFT this list: it was added in #903 to stop cost moving to an unwatched
         // file, and ADR 0732's general check now measures every authored file, so a 107-line partial has no
         // business in an override list for files at or over 1000.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6011,
+        // 6,011 -> 5,305: the demo population and self-test routines the HEADLESS HOOKS drive moved to
+        // MainWindowViewModel.Screenshots.cs (732). They had accumulated under a section header reading
+        // "Author identity card (ADR 0544)" -- true of its first thirty lines and of nothing for the six
+        // hundred after, which is how the largest "section" in this file came to be mostly verification
+        // support living in a production view model. Same shape DesktopClient/Program.cs had, and found the
+        // same way: by reading what a heading actually covers rather than trusting it.
+        //
+        // A partial, not a collaborator: every routine writes this view model's own state -- the tree, the
+        // preview, the selection, the mask editor -- so a separate class would take the whole view model as a
+        // parameter and be a partial wearing a constructor. Nor can it move to the test project: it seeds a
+        // RUNNING application's view model, and ScreenshotRenderer and Program.cs call it.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 5305,
 
         // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
         // the one authenticated ApiCore. Four areas left it:
