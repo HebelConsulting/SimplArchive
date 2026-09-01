@@ -252,8 +252,17 @@ public class OverLimitFileCeilingTests
         // UsersController and DocumentVersionsController came back after #516 burned them down.
 
         // tests/ and tools/ are authored too, and the general check below now measures them. Both entered at
-        // their measured size on the owner's instruction (2026-09-01); neither has been looked at for a split.
-        ["tests/SimplArchive.EndToEndTests/ImapEndpointTests.cs"] = 1_127,
+        // their measured size on the owner's instruction (2026-09-01).
+        //
+        // ImapEndpointTests has since LEFT: 1,127 -> 766, by moving the five notes/notebook tests to
+        // ImapNotesTests. It was one file covering six unrelated subjects, and the split follows the convention
+        // the directory ALREADY had — ImapSearchTests, ImapStandingMailboxTests, ImapAttachmentFetchTests and
+        // ImapReferenceMailboxTests were each their own file. ImapEndpointTests was simply the one nobody ever
+        // divided, which is how a file named for an endpoint ends up meaning "the IMAP tests that predate the
+        // habit of naming them".
+        //
+        // A test file earns the same rule as product code for the same reason: the fifteen tests here shared
+        // nothing but a fixture, so the only thing the single file bought was a longer scroll.
         ["tools/SimplArchive.EloIxPorter/Program.cs"] = 1_233,
 
         // NOT listed, deliberately: Home.razor (3,390) has its own richer guard, WorkbenchShellSizeTests, and
