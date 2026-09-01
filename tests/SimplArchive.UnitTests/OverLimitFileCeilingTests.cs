@@ -243,13 +243,11 @@ public class OverLimitFileCeilingTests
         // It restores the ratchet at today's measurement so the number cannot rise further while each file
         // waits for its own answer — burn-down, or an owner-confirmed exception recorded here.
 
-        // 964 (ADR 0572) → 1,600. The largest silent regression this list has had: +636 through the WebDAV
-        // interop work of 2026-08-26/28 (#762, #794, #795), none of which was watched because the file had
-        // EARNED its way off the list and nothing re-added it. ADR 0572 already proved a split recipe on this
-        // exact file (1,762 → 964), so the burn-down route is known rather than hypothetical.
-        // Measured at 1601, not the 1,600 #909 reported: the same PR's prose fix (#910) net-added one line
-        // here, and a ceiling is only honest at the size it is actually taken.
-        ["src/SimplArchive.Api/WebDav/WebDavMiddleware.cs"] = 1601,
+        // WebDavMiddleware is GONE from this list: 1,601 → 299, burned down by moving every verb handler out
+        // (WebDavReads / WebDavWrites / WebDavMoveCopy), leaving the middleware as auth + dispatch. Deleting its
+        // entry is safe now in a way it was NOT before — the general check below means a file under the limit is
+        // still measured. Last time this file left the list, at 964 under ADR 0572, nothing watched it and it
+        // came back at 1,601. That is the whole reason the general check exists.
 
         // Born over the limit (2026-08-17, #561) and never watched. Home.razor has WorkbenchShellSizeTests, but
         // the tab components EXTRACTED from it inherited no guard — the extraction moved the lines out of the
@@ -276,10 +274,98 @@ public class OverLimitFileCeilingTests
         // through #911 — they already forwarded, so there was nothing there to delete.
         ["src/SimplArchive.Api/Controllers/DocumentVersionsController.cs"] = 1_001,
 
+        // tests/ and tools/ are authored too, and the general check below now measures them. Both entered at
+        // their measured size on the owner's instruction (2026-09-01); neither has been looked at for a split.
+        ["tests/SimplArchive.EndToEndTests/ImapEndpointTests.cs"] = 1_127,
+        ["tools/SimplArchive.EloIxPorter/Program.cs"] = 1_233,
+
         // NOT listed, deliberately: Home.razor (3,390) has its own richer guard, WorkbenchShellSizeTests, and
         // this file's header is explicit that one guard per file is the rule — two guards on one file will
         // eventually disagree. RepositoriesController left the list under its own steam at 977 (#911).
     };
+
+    // The trees whose files are AUTHORED. Generated output is excluded below rather than here, because the
+    // exclusions are about what produced a file, not where it lives.
+    private static readonly string[] AuthoredTrees = ["src", "tests", "tools"];
+
+    /// <summary>
+    /// Over the limit, and measured by a DIFFERENT guard. Not exceptions — the opposite: these carry a richer
+    /// check than a line ceiling, and listing them here as well would put two guards on one file, which this
+    /// file's header says will eventually disagree.
+    /// </summary>
+    private static readonly Dictionary<string, string> GuardedElsewhere = new()
+    {
+        ["src/SimplArchive.Client/Pages/Home.razor"] = "WorkbenchShellSizeTests (size + the slack test this guard omits)",
+    };
+
+    /// <summary>
+    /// The general rule, inverted from the list above: EVERY authored file must be under 1000 lines unless it
+    /// has an entry — rather than only the files someone remembered to list.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is what the list could not do on its own. It tracks known offenders, so a file born over the limit
+    /// (IntrayTab.razor at 1,482, ImapWrites at 1,022) or one that regrows after leaving (WebDavMiddleware,
+    /// 964 → 1,601) was invisible to it — and both happened, which is issue #909. With this check the list
+    /// becomes an OVERRIDE list: to exceed 1000 you must add an entry, in the commit that does it.
+    /// </para>
+    /// <para>
+    /// It also makes DELETING an entry safe. Before, deleting one removed the only thing measuring that file;
+    /// now the general rule catches it the moment it crosses back.
+    /// </para>
+    /// <para>
+    /// Generated files are not authored and are excluded: EF migrations and their designer/snapshot files, and
+    /// <c>*.g.cs</c>. Everything else in the three trees is measured.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Every_authored_file_over_the_limit_has_an_entry()
+    {
+        var root = RepoRoot();
+        var unlisted = new List<string>();
+
+        foreach (var tree in AuthoredTrees)
+        {
+            var treePath = Path.Combine(root, tree);
+            if (!Directory.Exists(treePath))
+            {
+                // Withheld from the public mirror (ADR 0484). Nothing to measure, and that is by design.
+                continue;
+            }
+
+            foreach (var path in Directory.EnumerateFiles(treePath, "*", SearchOption.AllDirectories))
+            {
+                var ext = Path.GetExtension(path);
+                if (ext is not (".cs" or ".razor" or ".axaml"))
+                {
+                    continue;
+                }
+
+                var rel = Path.GetRelativePath(root, path).Replace('\\', '/');
+                if (rel.Contains("/obj/", StringComparison.Ordinal)
+                    || rel.Contains("/bin/", StringComparison.Ordinal)
+                    || rel.Contains("/Migrations/", StringComparison.Ordinal)
+                    || rel.EndsWith(".Designer.cs", StringComparison.Ordinal)
+                    || rel.EndsWith(".g.cs", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var lines = File.ReadAllLines(path).Length;
+                if (lines >= 1000 && !Ceilings.ContainsKey(rel) && !GuardedElsewhere.ContainsKey(rel))
+                {
+                    unlisted.Add($"{rel} ({lines} lines)");
+                }
+            }
+        }
+
+        Assert.True(unlisted.Count == 0,
+            "These authored files are at or over the 1000-line limit with no entry in Ceilings:\n  "
+            + string.Join("\n  ", unlisted.OrderBy(f => f, StringComparer.Ordinal))
+            + "\n\nCLAUDE.md's standing principle is that no hand-written class exceeds 1000 lines and that an "
+            + "exception is NOT yours to grant. Split the file by responsibility — or, with the owner's explicit "
+            + "confirmation, add it to Ceilings at its measured size in this same commit, with the reason.");
+    }
 
     public static TheoryData<string> Files => [.. Ceilings.Keys];
 
@@ -287,7 +373,16 @@ public class OverLimitFileCeilingTests
     [MemberData(nameof(Files))]
     public void An_over_limit_file_does_not_grow(string file)
     {
-        var path = Path.Combine(RepoRoot(), file.Replace('/', Path.DirectorySeparatorChar));
+        var root = RepoRoot();
+        var tree = file.Split('/')[0];
+        if (!Directory.Exists(Path.Combine(root, tree)))
+        {
+            // The public mirror withholds tools/ (ADR 0484), so an entry there has nothing to measure. Skipping
+            // a MISSING TREE is not the same as skipping a missing file: the file below still has to exist.
+            return;
+        }
+
+        var path = Path.Combine(root, file.Replace('/', Path.DirectorySeparatorChar));
         Assert.True(File.Exists(path), $"{file} not found — if it moved or was deleted, update its Ceilings entry.");
 
         var lines = File.ReadAllLines(path).Length;

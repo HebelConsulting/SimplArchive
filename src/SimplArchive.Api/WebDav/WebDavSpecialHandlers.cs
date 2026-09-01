@@ -27,11 +27,11 @@ internal static class WebDavSpecialHandlers
             var files = await WebDavUserAreas.SpecialFolderFilesAsync(storage, db, user, folder);
             var responses = new List<PropStatXml>
             {
-                WebDavMiddleware.CollectionProp(basePath, [segments[0], folder], folder, WebDavMiddleware.NewestOf(files.Select(f => f.Modified))),
+                WebDavReads.CollectionProp(basePath, [segments[0], folder], folder, WebDavReads.NewestOf(files.Select(f => f.Modified))),
             };
             if (depth != "0")
             {
-                responses.AddRange(files.Select(f => WebDavMiddleware.FileProp(basePath, [segments[0], folder, f.Name], f.Size, f.Modified, ContentTypes.ForExtension(Path.GetExtension(f.Name)), f.Created)));
+                responses.AddRange(files.Select(f => WebDavReads.FileProp(basePath, [segments[0], folder, f.Name], f.Size, f.Modified, ContentTypes.ForExtension(Path.GetExtension(f.Name)), f.Created)));
 
                 // The caller's own in-flight scratch entries, same as the tree's listing (#794): every one
                 // answers a direct request, so a listing that omits them is the server contradicting itself,
@@ -41,8 +41,8 @@ internal static class WebDavSpecialHandlers
                 {
                     List<string> memberSegments = [segments[0], folder, member.Name];
                     responses.Add(member.IsCollection
-                        ? WebDavMiddleware.CollectionProp(basePath, memberSegments, member.Name, member.Modified)
-                        : WebDavMiddleware.FileProp(basePath, memberSegments, member.Size, member.Modified,
+                        ? WebDavReads.CollectionProp(basePath, memberSegments, member.Name, member.Modified)
+                        : WebDavReads.FileProp(basePath, memberSegments, member.Size, member.Modified,
                             ContentTypes.ForExtension(Path.GetExtension(member.Name))));
                 }
             }
@@ -54,7 +54,7 @@ internal static class WebDavSpecialHandlers
         // A single file inside the folder (flat — no deeper nesting), including a hidden lock/owner sidecar.
         if (segments.Count == 3 && await WebDavUserAreas.ResolveSpecialFileAsync(storage, db, user, folder, segments[2], segments) is { } file)
         {
-            await WebDavXml.WriteMultiStatusAsync(context, [WebDavMiddleware.FileProp(basePath, segments, file.Size, file.Modified, ContentTypes.ForExtension(Path.GetExtension(file.Name)), file.Created)]);
+            await WebDavXml.WriteMultiStatusAsync(context, [WebDavReads.FileProp(basePath, segments, file.Size, file.Modified, ContentTypes.ForExtension(Path.GetExtension(file.Name)), file.Created)]);
             return;
         }
 
@@ -138,7 +138,7 @@ internal static class WebDavSpecialHandlers
     // temp+rename, temp+copy, delete-then-rename, or the rename-original-to-backup dance — resolves correctly.
     internal static async Task HandleSpecialRenameAsync(HttpContext context, IServiceProvider services, SimplArchiveDbContext db, User user, List<string> segments, bool keepSource)
     {
-        var destSegments = WebDavMiddleware.ParseDestination(context);
+        var destSegments = WebDavMoveCopy.ParseDestination(context);
         if (segments.Count != 3 || destSegments is not { Count: 3 } || !WebDavMiddleware.IsSpecialPath(context, destSegments)
             || destSegments[0] != segments[0] || destSegments[1] != segments[1])
         {
@@ -269,7 +269,7 @@ internal static class WebDavSpecialHandlers
             return false;
         }
 
-        var destSegments = WebDavMiddleware.ParseDestination(context);
+        var destSegments = WebDavMoveCopy.ParseDestination(context);
         if (destSegments is null || destSegments.Count < 2 || WebDavMiddleware.IsSpecialPath(context, destSegments))
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
@@ -365,7 +365,7 @@ internal static class WebDavSpecialHandlers
             return false;
         }
 
-        var destSegments = WebDavMiddleware.ParseDestination(context);
+        var destSegments = WebDavMoveCopy.ParseDestination(context);
         if (destSegments is null || destSegments.Count < 2 || WebDavMiddleware.IsSpecialPath(context, destSegments))
         {
             return false;
@@ -464,7 +464,7 @@ internal static class WebDavSpecialHandlers
     internal static async Task<bool> TryIntraySafeSaveMoveAsync(
         HttpContext context, IServiceProvider services, SimplArchiveDbContext db, User user, List<string> segments)
     {
-        var destination = WebDavMiddleware.ParseDestination(context);
+        var destination = WebDavMoveCopy.ParseDestination(context);
         if (destination is not { Count: > 0 })
         {
             return false;
