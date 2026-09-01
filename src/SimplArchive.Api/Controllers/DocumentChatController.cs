@@ -37,7 +37,8 @@ public class DocumentChatController : ControllerBase
         ICurrentServiceAccountAccessor currentServiceAccountAccessor,
         ICurrentUserAccessor currentUserAccessor,
         INotificationService notifications,
-        IAuditRecorder audit)
+        IAuditRecorder audit,
+        Documents.DocumentAccessService access)
     {
         _dbContext = dbContext;
         _effectiveRightsCalculator = effectiveRightsCalculator;
@@ -45,8 +46,10 @@ public class DocumentChatController : ControllerBase
         _currentUserAccessor = currentUserAccessor;
         _notifications = notifications;
         _audit = audit;
+        _access = access;
     }
 
+    private readonly Documents.DocumentAccessService _access;
     private readonly IAuditRecorder _audit;
 
     // Plain mutable classes, not records — XmlSerializer (ADR "JSON/XML content negotiation").
@@ -512,13 +515,5 @@ public class DocumentChatController : ControllerBase
         return false;
     }
 
-    private (Guid? UserId, Guid? ServiceAccountId) GetCallerIdentity()
-    {
-        if (_currentServiceAccountAccessor.ServiceAccountId is { } serviceAccountId)
-        {
-            return (null, serviceAccountId);
-        }
-
-        return (_currentUserAccessor.UserId, null);
-    }
+    private (Guid? UserId, Guid? ServiceAccountId) GetCallerIdentity() => _access.GetCallerIdentity();
 }

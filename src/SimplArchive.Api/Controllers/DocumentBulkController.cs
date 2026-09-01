@@ -28,7 +28,6 @@ public class DocumentBulkController : ControllerBase
     private const int MaxItems = 500;
 
     private readonly SimplArchiveDbContext _dbContext;
-    private readonly IEffectiveRightsCalculator _effectiveRightsCalculator;
     private readonly ICurrentServiceAccountAccessor _currentServiceAccountAccessor;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly ILegalHoldService _legalHold;
@@ -37,10 +36,10 @@ public class DocumentBulkController : ControllerBase
     private readonly IUserSystemRightsResolver _userSystemRights;
     private readonly Documents.DocumentMover _mover;
     private readonly SimplArchive.Application.Abstractions.IObjectStorageClient _objectStorage;
+    private readonly Documents.DocumentAccessService _access;
 
     public DocumentBulkController(
         SimplArchiveDbContext dbContext,
-        IEffectiveRightsCalculator effectiveRightsCalculator,
         ICurrentServiceAccountAccessor currentServiceAccountAccessor,
         ICurrentUserAccessor currentUserAccessor,
         ILegalHoldService legalHold,
@@ -48,18 +47,19 @@ public class DocumentBulkController : ControllerBase
         IAuditRecorder audit,
         IUserSystemRightsResolver userSystemRights,
         Documents.DocumentMover mover,
-        SimplArchive.Application.Abstractions.IObjectStorageClient objectStorage)
+        SimplArchive.Application.Abstractions.IObjectStorageClient objectStorage,
+        Documents.DocumentAccessService access)
     {
         _objectStorage = objectStorage;
         _mover = mover;
         _dbContext = dbContext;
-        _effectiveRightsCalculator = effectiveRightsCalculator;
         _currentServiceAccountAccessor = currentServiceAccountAccessor;
         _currentUserAccessor = currentUserAccessor;
         _legalHold = legalHold;
         _queue = queue;
         _audit = audit;
         _userSystemRights = userSystemRights;
+        _access = access;
     }
 
     public class BulkExportRequest
@@ -518,20 +518,8 @@ public class DocumentBulkController : ControllerBase
         return false;
     }
 
-    private async Task<EffectiveRights> GetCallerRightsAsync(Guid documentId, CancellationToken cancellationToken)
-    {
-        if (_currentServiceAccountAccessor.ServiceAccountId is { } serviceAccountId)
-        {
-            return await _effectiveRightsCalculator.GetEffectiveRightsForServiceAccountAsync(serviceAccountId, documentId, cancellationToken);
-        }
-
-        if (_currentUserAccessor.UserId is { } userId)
-        {
-            return await _effectiveRightsCalculator.GetEffectiveRightsAsync(userId, documentId, cancellationToken);
-        }
-
-        return new EffectiveRights(false, false, false, false, false, false, false, false, false);
-    }
+    private Task<EffectiveRights> GetCallerRightsAsync(Guid documentId, CancellationToken cancellationToken) =>
+        _access.GetCallerRightsAsync(documentId, cancellationToken);
 
     // The caller's CanManageRepositories system right (User own∪groups, or ServiceAccount) — gates moving a root.
     private async Task<bool> HasManageRepositoriesRightAsync(CancellationToken cancellationToken)

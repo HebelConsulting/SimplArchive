@@ -33,25 +33,25 @@ public class WorkflowController : ControllerBase
 {
     private readonly SimplArchiveDbContext _dbContext;
     private readonly IEffectiveRightsCalculator _effectiveRightsCalculator;
-    private readonly ICurrentServiceAccountAccessor _currentServiceAccountAccessor;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly IAuditRecorder _audit;
     private readonly INotificationService _notifications;
+    private readonly Documents.DocumentAccessService _access;
 
     public WorkflowController(
         SimplArchiveDbContext dbContext,
         IEffectiveRightsCalculator effectiveRightsCalculator,
-        ICurrentServiceAccountAccessor currentServiceAccountAccessor,
         ICurrentUserAccessor currentUserAccessor,
         IAuditRecorder audit,
-        INotificationService notifications)
+        INotificationService notifications,
+        Documents.DocumentAccessService access)
     {
         _dbContext = dbContext;
         _effectiveRightsCalculator = effectiveRightsCalculator;
-        _currentServiceAccountAccessor = currentServiceAccountAccessor;
         _currentUserAccessor = currentUserAccessor;
         _audit = audit;
         _notifications = notifications;
+        _access = access;
     }
 
     private Task<string?> DocumentNameAsync(Guid documentId, CancellationToken cancellationToken) =>
@@ -480,30 +480,10 @@ public class WorkflowController : ControllerBase
         _ => status.ToString(),
     };
 
-    private async Task<EffectiveRights> GetCallerRightsAsync(Guid documentId, CancellationToken cancellationToken)
-    {
-        if (_currentServiceAccountAccessor.ServiceAccountId is { } serviceAccountId)
-        {
-            return await _effectiveRightsCalculator.GetEffectiveRightsForServiceAccountAsync(serviceAccountId, documentId, cancellationToken);
-        }
+    private Task<EffectiveRights> GetCallerRightsAsync(Guid documentId, CancellationToken cancellationToken) =>
+        _access.GetCallerRightsAsync(documentId, cancellationToken);
 
-        if (_currentUserAccessor.UserId is { } userId)
-        {
-            return await _effectiveRightsCalculator.GetEffectiveRightsAsync(userId, documentId, cancellationToken);
-        }
-
-        return new EffectiveRights(false, false, false, false, false, false, false, false, false);
-    }
-
-    private (Guid? UserId, Guid? ServiceAccountId) GetCallerIdentity()
-    {
-        if (_currentServiceAccountAccessor.ServiceAccountId is { } serviceAccountId)
-        {
-            return (null, serviceAccountId);
-        }
-
-        return (_currentUserAccessor.UserId, null);
-    }
+    private (Guid? UserId, Guid? ServiceAccountId) GetCallerIdentity() => _access.GetCallerIdentity();
 
     // ---- DTOs (mutable classes for XML serialization, per ADR "JSON/XML content negotiation") -----------
 

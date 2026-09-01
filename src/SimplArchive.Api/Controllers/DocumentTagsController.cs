@@ -23,26 +23,20 @@ namespace SimplArchive.Api.Controllers;
 public class DocumentTagsController : ControllerBase
 {
     private readonly SimplArchiveDbContext _dbContext;
-    private readonly IEffectiveRightsCalculator _effectiveRightsCalculator;
-    private readonly ICurrentServiceAccountAccessor _currentServiceAccountAccessor;
-    private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly IDocumentIndexQueue _queue;
     private readonly IAuditRecorder _audit;
+    private readonly Documents.DocumentAccessService _access;
 
     public DocumentTagsController(
         SimplArchiveDbContext dbContext,
-        IEffectiveRightsCalculator effectiveRightsCalculator,
-        ICurrentServiceAccountAccessor currentServiceAccountAccessor,
-        ICurrentUserAccessor currentUserAccessor,
         IDocumentIndexQueue queue,
-        IAuditRecorder audit)
+        IAuditRecorder audit,
+        Documents.DocumentAccessService access)
     {
         _dbContext = dbContext;
-        _effectiveRightsCalculator = effectiveRightsCalculator;
-        _currentServiceAccountAccessor = currentServiceAccountAccessor;
-        _currentUserAccessor = currentUserAccessor;
         _queue = queue;
         _audit = audit;
+        _access = access;
     }
 
     public class TagsResource : HypermediaResource
@@ -151,18 +145,6 @@ public class DocumentTagsController : ControllerBase
         Links = [new Link("self", $"/api/documents/{documentId}/tags", "GET")],
     };
 
-    private async Task<EffectiveRights> GetCallerRightsAsync(Guid documentId, CancellationToken cancellationToken)
-    {
-        if (_currentServiceAccountAccessor.ServiceAccountId is { } serviceAccountId)
-        {
-            return await _effectiveRightsCalculator.GetEffectiveRightsForServiceAccountAsync(serviceAccountId, documentId, cancellationToken);
-        }
-
-        if (_currentUserAccessor.UserId is { } userId)
-        {
-            return await _effectiveRightsCalculator.GetEffectiveRightsAsync(userId, documentId, cancellationToken);
-        }
-
-        return new EffectiveRights(false, false, false, false, false, false, false, false, false);
-    }
+    private Task<EffectiveRights> GetCallerRightsAsync(Guid documentId, CancellationToken cancellationToken) =>
+        _access.GetCallerRightsAsync(documentId, cancellationToken);
 }

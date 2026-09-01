@@ -30,27 +30,27 @@ namespace SimplArchive.Api.Controllers;
 public partial class DocumentAnnotationsController : ControllerBase
 {
     private readonly SimplArchiveDbContext _dbContext;
-    private readonly IEffectiveRightsCalculator _effectiveRightsCalculator;
     private readonly ICurrentServiceAccountAccessor _currentServiceAccountAccessor;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly IDocumentIndexQueue _indexQueue;
 
     public DocumentAnnotationsController(
         SimplArchiveDbContext dbContext,
-        IEffectiveRightsCalculator effectiveRightsCalculator,
         ICurrentServiceAccountAccessor currentServiceAccountAccessor,
         ICurrentUserAccessor currentUserAccessor,
         IDocumentIndexQueue indexQueue,
-        IAuditRecorder audit)
+        IAuditRecorder audit,
+        Documents.DocumentAccessService access)
     {
         _dbContext = dbContext;
-        _effectiveRightsCalculator = effectiveRightsCalculator;
         _currentServiceAccountAccessor = currentServiceAccountAccessor;
         _currentUserAccessor = currentUserAccessor;
         _indexQueue = indexQueue;
         _audit = audit;
+        _access = access;
     }
 
+    private readonly Documents.DocumentAccessService _access;
     private readonly IAuditRecorder _audit;
 
     [GeneratedRegex("^#[0-9A-Fa-f]{6}$")]
@@ -617,30 +617,10 @@ public partial class DocumentAnnotationsController : ControllerBase
             ? await _dbContext.Users.Where(u => u.Id == uid).Select(u => u.DisplayName).SingleOrDefaultAsync(cancellationToken)
             : await _dbContext.ServiceAccounts.Where(s => s.Id == serviceAccountId).Select(s => s.Name).SingleOrDefaultAsync(cancellationToken);
 
-    private async Task<EffectiveRights> GetCallerRightsAsync(Guid documentId, CancellationToken cancellationToken)
-    {
-        if (_currentServiceAccountAccessor.ServiceAccountId is { } serviceAccountId)
-        {
-            return await _effectiveRightsCalculator.GetEffectiveRightsForServiceAccountAsync(serviceAccountId, documentId, cancellationToken);
-        }
+    private Task<EffectiveRights> GetCallerRightsAsync(Guid documentId, CancellationToken cancellationToken) =>
+        _access.GetCallerRightsAsync(documentId, cancellationToken);
 
-        if (_currentUserAccessor.UserId is { } userId)
-        {
-            return await _effectiveRightsCalculator.GetEffectiveRightsAsync(userId, documentId, cancellationToken);
-        }
-
-        return new EffectiveRights(false, false, false, false, false, false, false, false, false);
-    }
-
-    private (Guid? UserId, Guid? ServiceAccountId) GetCallerIdentity()
-    {
-        if (_currentServiceAccountAccessor.ServiceAccountId is { } serviceAccountId)
-        {
-            return (null, serviceAccountId);
-        }
-
-        return (_currentUserAccessor.UserId, null);
-    }
+    private (Guid? UserId, Guid? ServiceAccountId) GetCallerIdentity() => _access.GetCallerIdentity();
 
     private void SetETag(Guid concurrencyToken) => Response.Headers.ETag = $"\"{concurrencyToken}\"";
 }

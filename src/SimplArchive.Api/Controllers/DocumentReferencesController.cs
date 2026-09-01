@@ -31,30 +31,24 @@ namespace SimplArchive.Api.Controllers;
 public class DocumentReferencesController : ControllerBase
 {
     private readonly SimplArchiveDbContext _dbContext;
-    private readonly IEffectiveRightsCalculator _effectiveRightsCalculator;
-    private readonly ICurrentServiceAccountAccessor _currentServiceAccountAccessor;
-    private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly IMaskContainmentProvider _containment;
 
     public DocumentReferencesController(
         SimplArchiveDbContext dbContext,
-        IEffectiveRightsCalculator effectiveRightsCalculator,
-        ICurrentServiceAccountAccessor currentServiceAccountAccessor,
-        ICurrentUserAccessor currentUserAccessor,
         ICurrentTenantAccessor currentTenantAccessor,
         IMaskContainmentProvider containment,
-        IAuditRecorder audit)
+        IAuditRecorder audit,
+        Documents.DocumentAccessService access)
     {
         _dbContext = dbContext;
-        _effectiveRightsCalculator = effectiveRightsCalculator;
-        _currentServiceAccountAccessor = currentServiceAccountAccessor;
-        _currentUserAccessor = currentUserAccessor;
         _currentTenantAccessor = currentTenantAccessor;
         _containment = containment;
         _audit = audit;
+        _access = access;
     }
 
+    private readonly Documents.DocumentAccessService _access;
     private readonly IAuditRecorder _audit;
 
     // Plain mutable classes, not records — XmlSerializer (ADR "JSON/XML content negotiation") needs a
@@ -418,33 +412,13 @@ public class DocumentReferencesController : ControllerBase
 
     // Checks ServiceAccount first, then a logged-in User — the two accessors are mutually exclusive per
     // request. See ADR "Document-scope authorization retrofit for User".
-    private async Task<EffectiveRights> GetCallerRightsAsync(Guid documentId, CancellationToken cancellationToken)
-    {
-        if (_currentServiceAccountAccessor.ServiceAccountId is { } serviceAccountId)
-        {
-            return await _effectiveRightsCalculator.GetEffectiveRightsForServiceAccountAsync(serviceAccountId, documentId, cancellationToken);
-        }
-
-        if (_currentUserAccessor.UserId is { } userId)
-        {
-            return await _effectiveRightsCalculator.GetEffectiveRightsAsync(userId, documentId, cancellationToken);
-        }
-
-        return new EffectiveRights(false, false, false, false, false, false, false, false, false);
-    }
+    private Task<EffectiveRights> GetCallerRightsAsync(Guid documentId, CancellationToken cancellationToken) =>
+        _access.GetCallerRightsAsync(documentId, cancellationToken);
 
     private async Task<bool> CanSeeAsync(Guid documentId, CancellationToken cancellationToken)
     {
         return (await GetCallerRightsAsync(documentId, cancellationToken)).CanSee;
     }
 
-    private (Guid? UserId, Guid? ServiceAccountId) GetCallerIdentity()
-    {
-        if (_currentServiceAccountAccessor.ServiceAccountId is { } serviceAccountId)
-        {
-            return (null, serviceAccountId);
-        }
-
-        return (_currentUserAccessor.UserId, null);
-    }
+    private (Guid? UserId, Guid? ServiceAccountId) GetCallerIdentity() => _access.GetCallerIdentity();
 }

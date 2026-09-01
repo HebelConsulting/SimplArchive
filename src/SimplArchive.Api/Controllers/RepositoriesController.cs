@@ -33,7 +33,6 @@ namespace SimplArchive.Api.Controllers;
 public class RepositoriesController : ControllerBase
 {
     private readonly SimplArchiveDbContext _dbContext;
-    private readonly IEffectiveRightsCalculator _effectiveRightsCalculator;
     private readonly ICurrentServiceAccountAccessor _currentServiceAccountAccessor;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
@@ -42,7 +41,6 @@ public class RepositoriesController : ControllerBase
 
     public RepositoriesController(
         SimplArchiveDbContext dbContext,
-        IEffectiveRightsCalculator effectiveRightsCalculator,
         ICurrentServiceAccountAccessor currentServiceAccountAccessor,
         ICurrentUserAccessor currentUserAccessor,
         ICurrentTenantAccessor currentTenantAccessor,
@@ -57,7 +55,6 @@ public class RepositoriesController : ControllerBase
     {
         _dbContext = dbContext;
         _clearanceScope = clearanceScope;
-        _effectiveRightsCalculator = effectiveRightsCalculator;
         _currentServiceAccountAccessor = currentServiceAccountAccessor;
         _currentUserAccessor = currentUserAccessor;
         _currentTenantAccessor = currentTenantAccessor;
@@ -966,20 +963,8 @@ public class RepositoriesController : ControllerBase
     // Checks ServiceAccount first, then a logged-in User — the two accessors are mutually exclusive per
     // request (CurrentPrincipalMiddleware's three-way branch). See ADR "Document-scope authorization
     // retrofit for User, and tenant-administrator-driven onboarding".
-    private async Task<EffectiveRights> GetCallerRightsAsync(Guid documentId, CancellationToken cancellationToken)
-    {
-        if (_currentServiceAccountAccessor.ServiceAccountId is { } serviceAccountId)
-        {
-            return await _effectiveRightsCalculator.GetEffectiveRightsForServiceAccountAsync(serviceAccountId, documentId, cancellationToken);
-        }
-
-        if (_currentUserAccessor.UserId is { } userId)
-        {
-            return await _effectiveRightsCalculator.GetEffectiveRightsAsync(userId, documentId, cancellationToken);
-        }
-
-        return new EffectiveRights(false, false, false, false, false, false, false, false, false);
-    }
+    private Task<EffectiveRights> GetCallerRightsAsync(Guid documentId, CancellationToken cancellationToken) =>
+        _access.GetCallerRightsAsync(documentId, cancellationToken);
 
     private async Task<bool> CanSeeAsync(Guid repositoryId, CancellationToken cancellationToken)
     {
@@ -988,13 +973,5 @@ public class RepositoriesController : ControllerBase
 
     // Returns whichever principal actually made this request, for Document creator attribution
     // (CreatedByUserId/CreatedByServiceAccountId, CHECK-constrained to exactly one).
-    private (Guid? UserId, Guid? ServiceAccountId) GetCallerIdentity()
-    {
-        if (_currentServiceAccountAccessor.ServiceAccountId is { } serviceAccountId)
-        {
-            return (null, serviceAccountId);
-        }
-
-        return (_currentUserAccessor.UserId, null);
-    }
+    private (Guid? UserId, Guid? ServiceAccountId) GetCallerIdentity() => _access.GetCallerIdentity();
 }
