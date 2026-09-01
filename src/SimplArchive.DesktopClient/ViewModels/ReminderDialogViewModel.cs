@@ -30,10 +30,10 @@ public partial class ReminderDialogViewModel : ObservableObject
 
     [ObservableProperty] private DateTimeOffset? _reminderDate = DateTimeOffset.Now.AddDays(1);
     [ObservableProperty] private TimeSpan? _reminderTime = new(9, 0, 0);
-    [ObservableProperty] private string _note = "";
+    [ObservableProperty] private string _note = string.Empty;
     [ObservableProperty] private int _recurrenceIndex;
     [ObservableProperty] private UserOptionInfo? _selectedTarget;
-    [ObservableProperty] private string _status = "";
+    [ObservableProperty] private string _status = string.Empty;
 
     // The target picker: "Myself" (Id = Empty) first, then the tenant's active users.
     public ObservableCollection<UserOptionInfo> Targets { get; } = [];
@@ -113,7 +113,7 @@ public partial class ReminderDialogViewModel : ObservableObject
             var when = new DateTimeOffset(date.Date + (ReminderTime ?? TimeSpan.Zero), date.Offset);
             var targetId = SelectedTarget is { } t && t.Id != Guid.Empty ? t.Id : (Guid?)null;
             await _api.Documents.CreateReminderAsync(_remindersHref, when, string.IsNullOrWhiteSpace(Note) ? null : Note, RecurrenceIndex, targetId);
-            Note = "";
+            Note = string.Empty;
             Status = Strings.Get("StReminderSet");
             await ReloadRemindersAsync();
         }

@@ -201,8 +201,8 @@ public sealed class OpenBaoSecretsReader
     // (openbao-init stores the whole issue JSON in KV so no jq is needed in the init container).
     private static bool TryParsePkiIssue(string issueJson, out string certificate, out string privateKey)
     {
-        certificate = "";
-        privateKey = "";
+        certificate = string.Empty;
+        privateKey = string.Empty;
         try
         {
             using var doc = JsonDocument.Parse(issueJson);

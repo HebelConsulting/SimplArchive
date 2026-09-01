@@ -92,7 +92,7 @@ public sealed class OpenSearchDocumentIndexer : IDocumentIndexer
             // Annotation text (ADR 0526) — note bodies + stamp captions + text-box content across the document's
             // versions, joined into one searchable field so a query matches text a user pinned onto the page.
             var annotationText = string.Join(" ", await _dbContext.DocumentAnnotations
-                .Where(a => a.DocumentId == documentId && a.Text != "")
+                .Where(a => a.DocumentId == documentId && a.Text != string.Empty)
                 .Select(a => a.Text)
                 .ToListAsync(cancellationToken));
 
@@ -102,7 +102,7 @@ public sealed class OpenSearchDocumentIndexer : IDocumentIndexer
             var versionCreatedBy = version is null ? null
                 : await ResolveCreatorNameAsync(version.CreatedByUserId, version.CreatedByServiceAccountId, cancellationToken);
 
-            var content = "";
+            var content = string.Empty;
             if (version is not null)
             {
                 var existing = await GetIndexedAsync(documentId, cancellationToken);

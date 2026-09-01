@@ -9,13 +9,13 @@ public sealed class OpenBaoOptions
     public const string SectionName = "OpenBao";
 
     // The OpenBao base address, e.g. http://openbao:8200. Empty => the provider is a no-op (disabled).
-    public string Address { get; set; } = "";
+    public string Address { get; set; } = string.Empty;
 
     // AppRole machine auth: the RoleId (non-secret) + SecretId (the one bootstrap secret the app is given, via
     // env/file). In dev these are fixed values provisioned by openbao-init; in production the SecretId would be
     // response-wrapped and short-lived.
-    public string RoleId { get; set; } = "";
-    public string SecretId { get; set; } = "";
+    public string RoleId { get; set; } = string.Empty;
+    public string SecretId { get; set; } = string.Empty;
 
     // The KV v2 mount (default "secret") the static secrets live under, and the database secrets-engine role
     // (default "simplarchive") that mints dynamic Postgres credentials.
@@ -25,13 +25,13 @@ public sealed class OpenBaoOptions
     // The non-secret part of the Postgres connection (host/port/database); the dynamic Username/Password from
     // OpenBao's database engine are appended to form ConnectionStrings:Default. When empty, the dynamic DB
     // credential is skipped (only the KV secrets are sourced).
-    public string DatabaseConnectionTemplate { get; set; } = "";
+    public string DatabaseConnectionTemplate { get; set; } = string.Empty;
 
     // The database secrets-engine *static* role whose password OpenBao owns + rotates for the schema-owning
     // migration identity (ADR "OpenBao static-role rotation for the migration owner"). Read from
     // database/static-creds/<name> and composed into ConnectionStrings:Migration. Empty => skipped (migrations
     // fall back to ConnectionStrings:Default), so tests / non-OpenBao deployments are unaffected.
-    public string DatabaseOwnerStaticRole { get; set; } = "";
+    public string DatabaseOwnerStaticRole { get; set; } = string.Empty;
 
     // The database secrets-engine *static* role for the RUNTIME connection — a fixed login whose password
     // OpenBao rotates. When set, ConnectionStrings:Default is composed with that username and NO password, and
@@ -43,5 +43,5 @@ public sealed class OpenBaoOptions
     // default_ttl (24h) Postgres revoked the role and every new connection failed 28P01 until a restart.
     // Empty => the dynamic credential is used exactly as before, which is what keeps tests and non-OpenBao
     // deployments unaffected.
-    public string DatabaseRuntimeStaticRole { get; set; } = "";
+    public string DatabaseRuntimeStaticRole { get; set; } = string.Empty;
 }

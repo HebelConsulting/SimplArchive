@@ -140,8 +140,8 @@ public class PasskeysController : ControllerBase
     {
         // The navigator.credentials.create() result, serialized as JSON.
         public JsonElement AttestationResponse { get; set; }
-        public string Token { get; set; } = "";
-        public string Name { get; set; } = "";
+        public string Token { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
     }
 
     [HttpPost("register")]
@@ -213,7 +213,7 @@ public class PasskeysController : ControllerBase
     public class PasskeyResource : HypermediaResource
     {
         public Guid Id { get; set; }
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
         public DateTimeOffset CreatedAt { get; set; }
         public DateTimeOffset? LastUsedAt { get; set; }
     }

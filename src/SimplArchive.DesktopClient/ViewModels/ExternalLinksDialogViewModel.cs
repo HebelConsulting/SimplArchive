@@ -60,7 +60,7 @@ public partial class ExternalLinksDialogViewModel : ObservableObject
     // sharer loses this URL the only remedy is to revoke and create another (ADR 0546).
     [ObservableProperty] private string? _createdUrl;
 
-    [ObservableProperty] private string _status = "";
+    [ObservableProperty] private string _status = string.Empty;
 
     // Set by the host window: opening a child dialog and moving the workbench are both things a dialog cannot do
     // for itself, so they arrive as callbacks rather than as a dependency on the main view-model.

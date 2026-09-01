@@ -120,7 +120,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
 
     [ObservableProperty] private bool _isReplying;
 
-    [ObservableProperty] private string _replyText = "";
+    [ObservableProperty] private string _replyText = string.Empty;
 
     public ObservableCollection<ChatMessageViewModel> Replies { get; } = [];
 }

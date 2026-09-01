@@ -46,7 +46,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
     // available to anyone who can see the recycled items.
     [ObservableProperty] private bool _isTenantAdmin;
 
-    [ObservableProperty] private string _status = "";
+    [ObservableProperty] private string _status = string.Empty;
 
     public ObservableCollection<RecycleBinRowViewModel> Items { get; } = [];
 
@@ -60,14 +60,14 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
 
     // ---- Read-only detail (mirrors the Repositories detail pane, no edit) -----------------------------
 
-    [ObservableProperty] private string _detailTitle = "";
-    [ObservableProperty] private string _maskLine = "";
-    [ObservableProperty] private string _sysName = "";
-    [ObservableProperty] private string _sysDocumentDate = "";
-    [ObservableProperty] private string _sysCreated = "";
-    [ObservableProperty] private string _sysCreatedBy = "";
-    [ObservableProperty] private string _sysFileExtension = "";
-    [ObservableProperty] private string _sysOcrLanguages = "";
+    [ObservableProperty] private string _detailTitle = string.Empty;
+    [ObservableProperty] private string _maskLine = string.Empty;
+    [ObservableProperty] private string _sysName = string.Empty;
+    [ObservableProperty] private string _sysDocumentDate = string.Empty;
+    [ObservableProperty] private string _sysCreated = string.Empty;
+    [ObservableProperty] private string _sysCreatedBy = string.Empty;
+    [ObservableProperty] private string _sysFileExtension = string.Empty;
+    [ObservableProperty] private string _sysOcrLanguages = string.Empty;
 
     public ObservableCollection<IndexFieldViewModel> IndexFields { get; } = [];
     public ObservableCollection<ChatMessageViewModel> Comments { get; } = [];
@@ -130,7 +130,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
         IndexFields.Clear();
         Comments.Clear();
         Preview.Reset("Loading…");
-        Preview.FindQuery = "";
+        Preview.FindQuery = string.Empty;
 
         try
         {
@@ -187,14 +187,14 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
 
     private void ClearDetail()
     {
-        DetailTitle = "";
-        MaskLine = "";
-        SysName = "";
-        SysDocumentDate = "";
-        SysCreated = "";
-        SysCreatedBy = "";
-        SysFileExtension = "";
-        SysOcrLanguages = "";
+        DetailTitle = string.Empty;
+        MaskLine = string.Empty;
+        SysName = string.Empty;
+        SysDocumentDate = string.Empty;
+        SysCreated = string.Empty;
+        SysCreatedBy = string.Empty;
+        SysFileExtension = string.Empty;
+        SysOcrLanguages = string.Empty;
         IndexFields.Clear();
         Comments.Clear();
         Preview.Reset("Select a deleted item.");

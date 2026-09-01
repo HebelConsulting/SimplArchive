@@ -85,7 +85,7 @@ public sealed class NodeViewModel
 
     // The lock holder's display name — a checked-out row is shown as "[name] {Name}" (ADR "Check-out
     // working-copy stash").
-    public string CheckedOutByName { get; init; } = "";
+    public string CheckedOutByName { get; init; } = string.Empty;
 
     // Checked out by a DIFFERENT user — the red lock + the "Override check-out" action.
     public bool CheckedOutByOther => CheckedOut && !CheckedOutByMe;
@@ -110,7 +110,7 @@ public sealed class NodeViewModel
 
     // List-row columns (ADR "List-row columns and sorting"): the assigned mask's name, the latest confirmed
     // version's document date + byte size, and the tags — all shown as sortable columns.
-    public string DocumentType { get; init; } = "";
+    public string DocumentType { get; init; } = string.Empty;
 
     public DateOnly? DocumentDate { get; init; }
 
@@ -120,7 +120,7 @@ public sealed class NodeViewModel
 
     // The data-classification sensitivity label (ADR "Configurable sensitivity labels + upload defaults") — the
     // per-tenant label name + colour from the server; empty name = None (no badge). Drives the inline row badge.
-    public string SensitivityLabelName { get; init; } = "";
+    public string SensitivityLabelName { get; init; } = string.Empty;
 
     public string? SensitivityLabelColor { get; init; }
 

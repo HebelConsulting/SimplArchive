@@ -121,7 +121,7 @@ public class TasksController : ControllerBase
         public Guid DocumentId { get; set; }
         public Guid? ParentId { get; set; }
         public Guid VersionId { get; set; }
-        public string DocumentName { get; set; } = "";
+        public string DocumentName { get; set; } = string.Empty;
         public int? VersionNumber { get; set; }
         public DateTimeOffset AssignedAt { get; set; }
         public DateTimeOffset? DueAt { get; set; }

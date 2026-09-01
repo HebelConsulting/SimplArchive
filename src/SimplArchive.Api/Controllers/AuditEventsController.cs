@@ -65,13 +65,13 @@ public class AuditEventsController : ControllerBase
 
         public DateTimeOffset Timestamp { get; set; }
 
-        public string ActorType { get; set; } = "";
+        public string ActorType { get; set; } = string.Empty;
 
         public Guid ActorId { get; set; }
 
-        public string ActorName { get; set; } = "";
+        public string ActorName { get; set; } = string.Empty;
 
-        public string Action { get; set; } = "";
+        public string Action { get; set; } = string.Empty;
 
         public string? TargetType { get; set; }
 
@@ -415,7 +415,7 @@ public class AuditEventsController : ControllerBase
     {
         public long FromSequence { get; set; }
         public long ToSequence { get; set; }
-        public string ObjectKey { get; set; } = "";
+        public string ObjectKey { get; set; } = string.Empty;
         public long SizeBytes { get; set; }
         public DateTimeOffset SealedAt { get; set; }
         public DateTimeOffset? LockedUntil { get; set; }
@@ -478,12 +478,12 @@ public class AuditEventsController : ControllerBase
     private sealed class AuditExportLine
     {
         public long Sequence { get; set; }
-        public string Hash { get; set; } = "";
+        public string Hash { get; set; } = string.Empty;
         public DateTimeOffset Timestamp { get; set; }
-        public string ActorType { get; set; } = "";
+        public string ActorType { get; set; } = string.Empty;
         public Guid ActorId { get; set; }
-        public string ActorName { get; set; } = "";
-        public string Action { get; set; } = "";
+        public string ActorName { get; set; } = string.Empty;
+        public string Action { get; set; } = string.Empty;
         public string? TargetType { get; set; }
         public Guid? TargetId { get; set; }
         public string? TargetName { get; set; }

@@ -43,7 +43,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
 
     public ObservableCollection<IndexFieldViewModel> IndexFields { get; } = [];
 
-    [ObservableProperty] private string _detailTitle = "";
+    [ObservableProperty] private string _detailTitle = string.Empty;
 
     [ObservableProperty] private bool _maskCollapsed;
 
@@ -139,7 +139,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
         Pages = null; // an affordance must not outlive its subject (ADR 0559)
         if (_api is null || row?.Item is not { } item)
         {
-            DetailTitle = "";
+            DetailTitle = string.Empty;
             Preview.Reset(Strings.Get("SelectDocDetail"));
             return;
         }
@@ -203,7 +203,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
 
     public int Count => Items.Count;
 
-    [ObservableProperty] private string _status = "";
+    [ObservableProperty] private string _status = string.Empty;
 
     private void Report(string message)
     {

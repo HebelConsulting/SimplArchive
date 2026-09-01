@@ -41,12 +41,12 @@ public class DocumentRemindersController : ControllerBase
         public Guid Id { get; set; }
         public Guid DocumentId { get; set; }
         public Guid TargetUserId { get; set; }
-        public string TargetName { get; set; } = "";
+        public string TargetName { get; set; } = string.Empty;
         public DateTimeOffset RemindAt { get; set; }
         public string? Note { get; set; }
         public int Recurrence { get; set; }
-        public string RecurrenceName { get; set; } = "";
-        public string CreatedByName { get; set; } = "";
+        public string RecurrenceName { get; set; } = string.Empty;
+        public string CreatedByName { get; set; } = string.Empty;
         public bool Mine { get; set; }
     }
 
@@ -58,7 +58,7 @@ public class DocumentRemindersController : ControllerBase
     public class ReminderTargetResource
     {
         public Guid Id { get; set; }
-        public string DisplayName { get; set; } = "";
+        public string DisplayName { get; set; } = string.Empty;
     }
 
     public class ReminderTargetsResource : HypermediaResource

@@ -34,7 +34,7 @@ public sealed partial class MaskFieldEditViewModel : ObservableObject
     /// caller without the routing right. Rendered read-only, so the refusal happens here instead of on save.</summary>
     public bool Locked { get; init; }
 
-    [ObservableProperty] private string _textValue = "";
+    [ObservableProperty] private string _textValue = string.Empty;
     [ObservableProperty] private System.DateTimeOffset? _dateValue;
     [ObservableProperty] private bool _boolValue;
 

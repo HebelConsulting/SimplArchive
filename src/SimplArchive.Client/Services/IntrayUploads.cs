@@ -81,7 +81,7 @@ public sealed class IntrayUploads(HttpClient http, ApiRoot apiRoot)
 
     public sealed record UploadIntrayResponse
     {
-        public string UploadUrl { get; set; } = "";
+        public string UploadUrl { get; set; } = string.Empty;
 
         public List<SimplArchive.Client.Hypermedia.LinkResponse> Links { get; set; } = [];
 

@@ -61,9 +61,9 @@ public class ServiceAccountsController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
-        public string ClientId { get; set; } = "";
+        public string ClientId { get; set; } = string.Empty;
 
         public bool IsActive { get; set; }
 
@@ -94,7 +94,7 @@ public class ServiceAccountsController : ControllerBase
     {
         // Present only in the create response — never retrievable again afterward, OpenIddict only ever
         // stores it hashed.
-        public string ClientSecret { get; set; } = "";
+        public string ClientSecret { get; set; } = string.Empty;
     }
 
     public class ServiceAccountsListResource : HypermediaResource
@@ -144,7 +144,7 @@ public class ServiceAccountsController : ControllerBase
 
     public class CreateServiceAccountRequest
     {
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
         public bool CanManageRepositories { get; set; }
 
@@ -161,7 +161,7 @@ public class ServiceAccountsController : ControllerBase
     // full-replace PUT (SA carries no ConcurrencyToken, so no If-Match, matching this controller's other mutations).
     public class UpdateServiceAccountRequest
     {
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
         public bool CanManageRepositories { get; set; }
 
@@ -176,9 +176,9 @@ public class ServiceAccountsController : ControllerBase
 
     public class RotateSecretResource : HypermediaResource
     {
-        public string ClientId { get; set; } = "";
+        public string ClientId { get; set; } = string.Empty;
 
-        public string ClientSecret { get; set; } = "";
+        public string ClientSecret { get; set; } = string.Empty;
     }
 
     [HttpPost]

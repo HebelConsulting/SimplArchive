@@ -41,7 +41,7 @@ public class SearchReindexController : ControllerBase
 
     public class ReindexResource
     {
-        public string Status { get; set; } = "";
+        public string Status { get; set; } = string.Empty;
 
         // Documents indexed by the last completed rebuild, or -1 if none has finished yet.
         public int LastIndexedCount { get; set; }

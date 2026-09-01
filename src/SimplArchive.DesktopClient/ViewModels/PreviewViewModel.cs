@@ -34,7 +34,7 @@ public sealed partial class PreviewViewModel : ObservableObject
 
     // Sensitivity watermark (ADR "Document watermarking") — the "<LABEL> · <viewer>" text, empty when the document
     // isn't Confidential/Restricted. The overlay tiles it diagonally over the preview (client-side only).
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(HasWatermark))][NotifyPropertyChangedFor(nameof(WatermarkTiles))] private string _watermarkText = "";
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(HasWatermark))][NotifyPropertyChangedFor(nameof(WatermarkTiles))] private string _watermarkText = string.Empty;
     public bool HasWatermark => !string.IsNullOrEmpty(WatermarkText) && HasPreview;
     public System.Collections.Generic.IReadOnlyList<string> WatermarkTiles =>
         string.IsNullOrEmpty(WatermarkText) ? [] : System.Linq.Enumerable.Repeat(WatermarkText, 48).ToArray();
@@ -127,7 +127,7 @@ public sealed partial class PreviewViewModel : ObservableObject
     // Find-in-document (ADR "Search hit overlay"): the query whose matching words are highlighted on the
     // preview. Seeded from the search when a document is opened from a result; also editable in the preview's
     // own find box. Reapplied to the pages whenever it changes or a new document loads.
-    [ObservableProperty] private string _findQuery = "";
+    [ObservableProperty] private string _findQuery = string.Empty;
     [ObservableProperty] private bool _canFindInDocument;
 
     // Occurrence count + current position for the find box (ADR "Find occurrence count + prev/next"). The flat

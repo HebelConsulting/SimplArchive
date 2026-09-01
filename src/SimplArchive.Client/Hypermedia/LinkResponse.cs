@@ -10,7 +10,7 @@ namespace SimplArchive.Client.Hypermedia;
 /// </remarks>
 public record LinkResponse
 {
-    public string Rel { get; set; } = "";
+    public string Rel { get; set; } = string.Empty;
 
-    public string Href { get; set; } = "";
+    public string Href { get; set; } = string.Empty;
 }

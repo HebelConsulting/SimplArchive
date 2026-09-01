@@ -59,7 +59,7 @@ public class DocumentChatController : ControllerBase
 
         public Guid? ParentMessageId { get; set; }
 
-        public string Body { get; set; } = "";
+        public string Body { get; set; } = string.Empty;
 
         // What produced this entry (ADR 0545): 0 UserPost · 1 VersionFiled · 2 VersionActivated, the Api's
         // enum-as-int convention. A client renders a localized sentence for anything but 0, so Body is empty
@@ -77,7 +77,7 @@ public class DocumentChatController : ControllerBase
         // localized sentence for the kind.
         public int? VersionCommentKind { get; set; }
 
-        public string AuthorName { get; set; } = "";
+        public string AuthorName { get; set; } = string.Empty;
 
         // Null when a ServiceAccount authored the message. A client uses the "author-card" rel rather than
         // composing a URL from this, but the id identifies the author (e.g. to group or highlight own posts).
@@ -96,7 +96,7 @@ public class DocumentChatController : ControllerBase
     {
         public Guid UserId { get; set; }
 
-        public string DisplayName { get; set; } = "";
+        public string DisplayName { get; set; } = string.Empty;
     }
 
     public class ChatMessageListResource : HypermediaResource
@@ -109,7 +109,7 @@ public class DocumentChatController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string DisplayName { get; set; } = "";
+        public string DisplayName { get; set; } = string.Empty;
     }
 
     public class MentionableUserListResource : HypermediaResource
@@ -119,7 +119,7 @@ public class DocumentChatController : ControllerBase
 
     public class CreateChatMessageRequest
     {
-        public string Body { get; set; } = "";
+        public string Body { get; set; } = string.Empty;
 
         public Guid? ParentMessageId { get; set; }
     }

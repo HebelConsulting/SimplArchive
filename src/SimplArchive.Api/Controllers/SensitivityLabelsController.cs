@@ -45,7 +45,7 @@ public class SensitivityLabelsController : ControllerBase
     public class SensitivityLabelResource : HypermediaResource
     {
         public Guid Id { get; set; }
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
         public int Rank { get; set; }
         public string? Color { get; set; }
         public bool Watermark { get; set; }
@@ -61,7 +61,7 @@ public class SensitivityLabelsController : ControllerBase
 
     public class UpsertSensitivityLabelRequest
     {
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
         public int Rank { get; set; }
         public string? Color { get; set; }
         public bool Watermark { get; set; }

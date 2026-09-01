@@ -115,7 +115,7 @@ public partial class ServiceAccountsWindow : Window
     private static async Task RunAsync(ServiceAccountsViewModel vm, Func<Task> action)
     {
         vm.Busy = true;
-        vm.Status = "";
+        vm.Status = string.Empty;
         try
         {
             await action();

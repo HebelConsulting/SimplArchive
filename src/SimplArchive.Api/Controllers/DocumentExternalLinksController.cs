@@ -66,7 +66,7 @@ public class DocumentExternalLinksController : ControllerBase
 
         public Guid DocumentId { get; set; }
 
-        public string DocumentName { get; set; } = "";
+        public string DocumentName { get; set; } = string.Empty;
 
         // The full redemption URL, returned ONLY when the link is created. Listing never returns it: the token is
         // a live credential, and a list endpoint is a far broader surface than a single create response (ADR 0546).
@@ -78,14 +78,14 @@ public class DocumentExternalLinksController : ControllerBase
 
         public int AccessCount { get; set; }
 
-        public string CreatedByName { get; set; } = "";
+        public string CreatedByName { get; set; } = string.Empty;
 
         public DateTimeOffset CreatedAt { get; set; }
 
         // Client hint: whether the extend control should be offered (expiry within 30 days).
         public bool CanExtend { get; set; }
 
-        public string Etag { get; set; } = "";
+        public string Etag { get; set; } = string.Empty;
     }
 
     // The response of the reveal endpoint. Its own resource rather than a reused row: a row means "here is a
@@ -95,7 +95,7 @@ public class DocumentExternalLinksController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string Url { get; set; } = "";
+        public string Url { get; set; } = string.Empty;
     }
 
     public class ExternalLinkListResource : HypermediaResource

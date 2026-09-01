@@ -67,7 +67,7 @@ public sealed partial class FolderPickerViewModel : ObservableObject
     [ObservableProperty][NotifyPropertyChangedFor(nameof(CanCommit))] private bool _modePicked;
 
     // Optional feed comment posted on the filed document(s) (ADR "Filing posts a feed comment").
-    [ObservableProperty] private string _comment = "";
+    [ObservableProperty] private string _comment = string.Empty;
 
     // The chosen target, or null if nothing valid is selected (e.g. "choose a folder" with no folder picked).
     public FilingResult? BuildResult()

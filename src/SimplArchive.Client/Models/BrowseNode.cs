@@ -86,7 +86,7 @@ public record BrowseNode(Guid Id, string Name, bool HasChildren, bool HasVersion
     // folder holding only documents is a tree leaf but is NOT empty. The pseudo-nodes are excluded — the
     // Administration branch and the Intray / Check-out launchers aren't folders, and the Personal root always
     // holds those launchers.
-    public bool IsEmptyFolder => IsFolder && !HasChildren && AdminKind == "" && PersonalKind == "";
+    public bool IsEmptyFolder => IsFolder && !HasChildren && AdminKind == "" && PersonalKind == string.Empty;
 
     // Which glyph colour this node takes in the tree (ADR "Folder icon scheme"), as the CSS class that
     // carries it. Gold is for containers only, so the Intray / Check-out launchers and the Administration

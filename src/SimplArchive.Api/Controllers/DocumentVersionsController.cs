@@ -103,7 +103,7 @@ public class DocumentVersionsController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string ObjectKey { get; set; } = "";
+        public string ObjectKey { get; set; } = string.Empty;
 
         public Uri UploadUrl { get; set; } = null!;
     }
@@ -227,11 +227,11 @@ public class DocumentVersionsController : ControllerBase
 
         public int? VersionNumber { get; set; }
 
-        public string ObjectKey { get; set; } = "";
+        public string ObjectKey { get; set; } = string.Empty;
 
         public string? Sha256Hash { get; set; }
 
-        public string Status { get; set; } = "";
+        public string Status { get; set; } = string.Empty;
 
         /// <summary>The version's approval-workflow status (Draft/InReview/Approved/Rejected/Released), or
         /// null when none was ever started — what lets a client label its workflow affordance by state
@@ -246,10 +246,10 @@ public class DocumentVersionsController : ControllerBase
         public DateTimeOffset CreatedAt { get; set; }
 
         // The creator's display name (User.DisplayName / ServiceAccount.Name) — a read-only system field.
-        public string CreatedByName { get; set; } = "";
+        public string CreatedByName { get; set; } = string.Empty;
 
         // The issuing date ("yyyy-MM-dd") — a string on the wire (XmlSerializer doesn't support DateOnly).
-        public string DocumentDate { get; set; } = "";
+        public string DocumentDate { get; set; } = string.Empty;
 
         // The version's OCR-language override (Tesseract "+"-joined; null = inherit the tenant default) — the
         // system-field picker on a TIFF version (ADR "Per-tenant / per-version OCR languages").
@@ -257,7 +257,7 @@ public class DocumentVersionsController : ControllerBase
 
         // The file extension (e.g. ".tif"), derived from the object key — a read-only system field now that
         // Document.Name no longer carries it (ADR "Extension off Document.Name, derived from the object key").
-        public string FileExtension { get; set; } = "";
+        public string FileExtension { get; set; } = string.Empty;
 
         // The optional per-version comment (ADR 0528) — the "why this revision" note, shown in the versions dialog.
         public string? Comment { get; set; }
@@ -599,7 +599,7 @@ public class DocumentVersionsController : ControllerBase
 
     public class PreviewPageResource
     {
-        public string Url { get; set; } = "";
+        public string Url { get; set; } = string.Empty;
     }
 
     public class TextLayoutResource : HypermediaResource
@@ -629,7 +629,7 @@ public class DocumentVersionsController : ControllerBase
     // size it renders the page at.
     public class TextLayoutWordResource
     {
-        public string Text { get; set; } = "";
+        public string Text { get; set; } = string.Empty;
 
         public double X { get; set; }
 
@@ -805,7 +805,7 @@ public class DocumentVersionsController : ControllerBase
 
     public class SetDocumentDateRequest
     {
-        public string DocumentDate { get; set; } = "";
+        public string DocumentDate { get; set; } = string.Empty;
     }
 
     private async Task<VersionRow?> LoadForReadAsync(Guid documentId, Guid versionId, CancellationToken cancellationToken)

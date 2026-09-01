@@ -44,7 +44,7 @@ public partial class BulkTagsDialog : Window
             _tags.Add(t);
         }
 
-        TagBox.Text = "";
+        TagBox.Text = string.Empty;
     }
 
     private void OnRemoveTag(object? sender, RoutedEventArgs e)

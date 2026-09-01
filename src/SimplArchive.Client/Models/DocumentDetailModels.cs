@@ -53,7 +53,7 @@ public record VersionResponse
 
     public Guid Id { get; set; }
     public int? VersionNumber { get; set; }
-    public string Status { get; set; } = "";
+    public string Status { get; set; } = string.Empty;
     public bool PreviewConverted { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public string? CreatedByName { get; set; }
@@ -83,7 +83,7 @@ public record TextLayoutPage
 
 public record TextLayoutWord
 {
-    public string Text { get; set; } = "";
+    public string Text { get; set; } = string.Empty;
 
     public double X { get; set; }
 
@@ -107,7 +107,7 @@ public record DocumentDetailResponse
 
     public Guid? SensitivityLabelId { get; set; }
 
-    public string SensitivityLabelName { get; set; } = "";
+    public string SensitivityLabelName { get; set; } = string.Empty;
 
     public string? SensitivityLabelColor { get; set; }
 

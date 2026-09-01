@@ -19,7 +19,7 @@ public sealed class SearchResultViewModel
 
     // A snippet with the matched terms wrapped in <em>…</em> (ADR "Search result highlighting"), or "" when
     // nothing textual matched. Rendered into bold runs by the InlineHighlighter attached property.
-    public string Highlight { get; init; } = "";
+    public string Highlight { get; init; } = string.Empty;
 
     // The `versions` address this hit advertised, or null for a folder (which has nothing to preview). Carried
     // on the row so previewing follows what the listing handed over rather than re-resolving the document

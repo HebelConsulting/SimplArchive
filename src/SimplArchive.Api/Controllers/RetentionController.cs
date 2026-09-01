@@ -69,11 +69,11 @@ public class RetentionController : ControllerBase
     public class RetentionItemResource : HypermediaResource
     {
         public Guid DocumentId { get; set; }
-        public string DocumentName { get; set; } = "";
+        public string DocumentName { get; set; } = string.Empty;
         public int RetentionYears { get; set; }
 
         // The date the document becomes eligible for auto-disposition (anchor + RetentionYears), "yyyy-MM-dd".
-        public string DispositionDate { get; set; } = "";
+        public string DispositionDate { get; set; } = string.Empty;
 
         // Past its disposition date but not yet swept (the sweep runs periodically).
         public bool Overdue { get; set; }

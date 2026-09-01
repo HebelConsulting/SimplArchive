@@ -30,7 +30,7 @@ public partial class FieldFilterRowViewModel : ObservableObject
 
     [ObservableProperty] private string _fieldName;
     [ObservableProperty] private OperatorOption? _selectedOperator;
-    [ObservableProperty] private string _value = "";
+    [ObservableProperty] private string _value = string.Empty;
     [ObservableProperty] private DateTimeOffset? _dateValue;
     [ObservableProperty] private bool _booleanValue;
     [ObservableProperty] private bool _isDate;
@@ -60,7 +60,7 @@ public partial class FieldFilterRowViewModel : ObservableObject
         IsDate = DataType == 2;
         IsBoolean = DataType == 3;
         IsTextLike = !IsDate && !IsBoolean;
-        Value = "";
+        Value = string.Empty;
         DateValue = null;
         BooleanValue = false;
     }

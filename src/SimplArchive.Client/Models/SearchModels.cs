@@ -18,15 +18,15 @@ public record SearchHit
 
     public Guid Id { get; set; }
 
-    public string Name { get; set; } = "";
+    public string Name { get; set; } = string.Empty;
 
     public bool IsFolder { get; set; }
 
     public Guid? ParentId { get; set; }
 
-    public string Path { get; set; } = "";
+    public string Path { get; set; } = string.Empty;
 
-    public string Highlight { get; set; } = "";
+    public string Highlight { get; set; } = string.Empty;
 
     /// <summary>
     /// What this hit lets you do: <c>self</c> always, and <c>versions</c> for a document — the rel a preview
@@ -73,7 +73,7 @@ public record FacetsDto
 /// <summary>One index field's facet dimension.</summary>
 public record FieldFacetDto
 {
-    public string Name { get; set; } = "";
+    public string Name { get; set; } = string.Empty;
 
     public List<FacetBucket> Buckets { get; set; } = [];
 }
@@ -81,7 +81,7 @@ public record FieldFacetDto
 /// <summary>One selectable facet value and how many results carry it.</summary>
 public record FacetBucket
 {
-    public string Value { get; set; } = "";
+    public string Value { get; set; } = string.Empty;
 
     public long Count { get; set; }
 }
@@ -95,7 +95,7 @@ public record SearchFieldsResponse
 /// <summary>An index field the refinement panel can filter by, with the data type that picks its operators.</summary>
 public record SearchFieldItem
 {
-    public string Name { get; set; } = "";
+    public string Name { get; set; } = string.Empty;
 
     public int DataType { get; set; }
 }
@@ -113,15 +113,15 @@ public record SavedSearchDto
 {
     public Guid Id { get; set; }
 
-    public string Name { get; set; } = "";
+    public string Name { get; set; } = string.Empty;
 
-    public string QueryString { get; set; } = "";
+    public string QueryString { get; set; } = string.Empty;
 
     public int ShareScope { get; set; }
 
     public bool IsMine { get; set; }
 
-    public string OwnerName { get; set; } = "";
+    public string OwnerName { get; set; } = string.Empty;
 
     public List<LinkResponse> Links { get; set; } = [];
 
@@ -145,7 +145,7 @@ public record ShareTargetUserDto
 {
     public Guid Id { get; set; }
 
-    public string DisplayName { get; set; } = "";
+    public string DisplayName { get; set; } = string.Empty;
 }
 
 /// <summary>A group the share picker offers.</summary>
@@ -153,7 +153,7 @@ public record ShareTargetGroupDto
 {
     public Guid Id { get; set; }
 
-    public string Name { get; set; } = "";
+    public string Name { get; set; } = string.Empty;
 }
 
 /// <summary>Who a saved search is currently shared with.</summary>
@@ -165,7 +165,7 @@ public record SharesResponse
 /// <summary>One principal a saved search is shared with.</summary>
 public record ShareGrantDto
 {
-    public string PrincipalType { get; set; } = "";
+    public string PrincipalType { get; set; } = string.Empty;
 
     public Guid PrincipalId { get; set; }
 }

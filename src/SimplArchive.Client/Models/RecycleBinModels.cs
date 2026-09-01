@@ -31,14 +31,14 @@ public record RecycleBinItem
 {
     public Guid Id { get; set; }
 
-    public string Name { get; set; } = "";
+    public string Name { get; set; } = string.Empty;
 
     /// <summary>Where it used to live, for telling two same-named documents apart.</summary>
-    public string Path { get; set; } = "";
+    public string Path { get; set; } = string.Empty;
 
     public DateTimeOffset DeletedAt { get; set; }
 
-    public string DeletedBy { get; set; } = "";
+    public string DeletedBy { get; set; } = string.Empty;
 
     public List<LinkResponse> Links { get; set; } = [];
 

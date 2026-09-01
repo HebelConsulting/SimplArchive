@@ -36,7 +36,7 @@ public class PersonalRepositoryController : ControllerBase
     public class PersonalRepositoryResource : HypermediaResource
     {
         public Guid Id { get; set; }
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
         // For the client's tree node (same computed flags as the repository-list resources).
         public bool HasChildren { get; set; }
         public bool HasSubfolders { get; set; }

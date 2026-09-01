@@ -91,7 +91,7 @@ public sealed class ChatSystemEntryRecorder
             Kind = kind,
             DocumentVersionId = documentVersionId,
             // Empty, not null: Body is required, and a system entry's words live in the clients' resources.
-            Body = "",
+            Body = string.Empty,
             CreatedByUserId = userId,
             CreatedByServiceAccountId = serviceAccountId,
             CreatedAt = at,

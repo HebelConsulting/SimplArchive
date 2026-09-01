@@ -118,7 +118,7 @@ public sealed partial class ExternalLinkDetailDialogViewModel : ObservableObject
     // Null means unlimited, which is also what the server takes: there is no "0 = unlimited" convention to learn.
     [ObservableProperty] private int? _maxAccesses;
 
-    [ObservableProperty] private string _status = "";
+    [ObservableProperty] private string _status = string.Empty;
 
     // True once a renewal succeeded, so the list behind this dialog knows to reload — the row's expiry, cap and
     // ETag all just changed, and a stale ETag would make its next action fail a precondition.

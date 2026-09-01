@@ -38,7 +38,7 @@ public record MaskFieldInfo
 {
     public Guid Id { get; set; }
 
-    public string Name { get; set; } = "";
+    public string Name { get; set; } = string.Empty;
 
     /// <summary>Text / Number / Date / DateTime / Boolean / SingleSelect / MultiSelect / EmailAddress.</summary>
     public string DataType { get; set; } = "Text";
@@ -77,7 +77,7 @@ public sealed class EditField
 {
     public Guid FieldDefinitionId { get; init; }
 
-    public string Label { get; init; } = "";
+    public string Label { get; init; } = string.Empty;
 
     public string DataType { get; init; } = "Text";
 
@@ -90,7 +90,7 @@ public sealed class EditField
     /// caller without the routing right. Rendered read-only, so the refusal happens here instead of on save.</summary>
     public bool Locked { get; init; }
 
-    public string TextValue { get; set; } = "";
+    public string TextValue { get; set; } = string.Empty;
 
     public DateTime? DateValue { get; set; }
 

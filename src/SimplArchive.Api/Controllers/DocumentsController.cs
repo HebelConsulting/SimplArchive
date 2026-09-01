@@ -106,13 +106,13 @@ public class DocumentsController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
         // Data-classification / sensitivity label (ADR "Configurable sensitivity labels + upload defaults") — the
         // per-tenant label id (null = None) + its name/colour + whether it triggers the watermark, for the
         // detail-pane picker + badge + preview watermark.
         public Guid? SensitivityLabelId { get; set; }
-        public string SensitivityLabelName { get; set; } = "";
+        public string SensitivityLabelName { get; set; } = string.Empty;
         public string? SensitivityLabelColor { get; set; }
         public bool SensitivityWatermark { get; set; }
 
@@ -180,14 +180,14 @@ public class DocumentsController : ControllerBase
     public class RetentionInfo
     {
         public int RetentionYears { get; set; }
-        public string DispositionDate { get; set; } = "";
+        public string DispositionDate { get; set; } = string.Empty;
         public bool SuspendedByHold { get; set; }
     }
 
     public class CheckoutInfo
     {
         public Guid ByUserId { get; set; }
-        public string ByName { get; set; } = "";
+        public string ByName { get; set; } = string.Empty;
         public DateTimeOffset At { get; set; }
 
         // True when the caller is the lock holder (offer check-in); false = held by someone else (offer override).
@@ -561,7 +561,7 @@ public class DocumentsController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string DisplayName { get; set; } = "";
+        public string DisplayName { get; set; } = string.Empty;
     }
 
     // The item's ancestor folders, repository-root first down to its immediate parent (the item itself excluded) —
@@ -626,7 +626,7 @@ public class DocumentsController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
     }
 
     // Lets a client check the current ETag before a PUT without transferring the full representation —
@@ -655,7 +655,7 @@ public class DocumentsController : ControllerBase
     // negotiation") needs a parameterless constructor and settable properties.
     public class RenameRequest
     {
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
     }
 
     // PUT, not PATCH — RenameRequest.Name is the full intended value of the field this endpoint owns, not

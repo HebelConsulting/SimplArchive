@@ -18,13 +18,13 @@ public sealed partial class VersionsViewModel : ObservableObject
     private Guid _documentId;
 
     // The advertised href, threaded from the row the dialog was opened on (ADR 0543, issue #416).
-    private string _versionsHref = "";
+    private string _versionsHref = string.Empty;
 
     // Exposed so the Compare dialog opened from here follows the same advertised href.
     public string VersionsHref => _versionsHref;
 
-    [ObservableProperty] private string _documentName = "";
-    [ObservableProperty] private string _status = "";
+    [ObservableProperty] private string _documentName = string.Empty;
+    [ObservableProperty] private string _status = string.Empty;
     [ObservableProperty][NotifyPropertyChangedFor(nameof(HasMultiple))] private bool _loaded;
 
     // The single-selected row (ADR "Deliberate make-current in the Versions dialog"); "Make current" is only

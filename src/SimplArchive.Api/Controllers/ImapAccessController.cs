@@ -57,9 +57,9 @@ public class ImapAccessController : ControllerBase
         /// <summary>The caller holds a generated IMAP password.</summary>
         public bool Enabled { get; set; }
 
-        public string Username { get; set; } = "";
+        public string Username { get; set; } = string.Empty;
 
-        public string Host { get; set; } = "";
+        public string Host { get; set; } = string.Empty;
 
         public int? Port { get; set; }
 
@@ -72,7 +72,7 @@ public class ImapAccessController : ControllerBase
     public class ImapPasswordResource : ImapStatusResource
     {
         // The generated password — returned ONCE at generation; only its hash is stored.
-        public string Password { get; set; } = "";
+        public string Password { get; set; } = string.Empty;
     }
 
     public class ImapSettingsRequest

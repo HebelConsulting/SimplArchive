@@ -66,7 +66,7 @@ public class TenantMailDomainsController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string Domain { get; set; } = "";
+        public string Domain { get; set; } = string.Empty;
 
         public bool Verified { get; set; }
 
@@ -93,7 +93,7 @@ public class TenantMailDomainsController : ControllerBase
 
     public class AddMailDomainRequest
     {
-        public string Domain { get; set; } = "";
+        public string Domain { get; set; } = string.Empty;
     }
 
     [HttpGet]

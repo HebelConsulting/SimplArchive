@@ -71,16 +71,16 @@ public partial class DocumentAnnotationsController : ControllerBase
         public double? Height { get; set; }
         // A Freehand stroke's normalized path ("x,y x,y …"); null for every other kind (ADR 0525).
         public string? Points { get; set; }
-        public string Text { get; set; } = "";
-        public string Color { get; set; } = "";
+        public string Text { get; set; } = string.Empty;
+        public string Color { get; set; } = string.Empty;
         // How the text is rendered (ADR 0542); null when the annotation is unstyled or draws no text.
         public AnnotationTextStyleResource? TextStyle { get; set; }
-        public string AuthorName { get; set; } = "";
+        public string AuthorName { get; set; } = string.Empty;
         public DateTimeOffset CreatedAt { get; set; }
         public DateTimeOffset UpdatedAt { get; set; }
         // The optimistic-concurrency token to send back as If-Match on PUT/DELETE — embedded so the client
         // (which drag-moves notes) doesn't need a HEAD round-trip before each edit.
-        public string Etag { get; set; } = "";
+        public string Etag { get; set; } = string.Empty;
         // Client hints: whether this caller may edit (author) / delete (author or a CanEditContent holder).
         public bool CanEdit { get; set; }
         public bool CanDelete { get; set; }
@@ -118,8 +118,8 @@ public partial class DocumentAnnotationsController : ControllerBase
         public double? Width { get; set; }
         public double? Height { get; set; }
         public string? Points { get; set; } // Freehand only: "x,y x,y …"
-        public string Text { get; set; } = "";
-        public string Color { get; set; } = "";
+        public string Text { get; set; } = string.Empty;
+        public string Color { get; set; } = string.Empty;
         public AnnotationTextStyleResource? TextStyle { get; set; } // text-bearing kinds only (ADR 0542)
     }
 
@@ -131,8 +131,8 @@ public partial class DocumentAnnotationsController : ControllerBase
         public double? Width { get; set; }
         public double? Height { get; set; }
         public string? Points { get; set; } // Freehand only: "x,y x,y …"
-        public string Text { get; set; } = "";
-        public string Color { get; set; } = "";
+        public string Text { get; set; } = string.Empty;
+        public string Color { get; set; } = string.Empty;
         public AnnotationTextStyleResource? TextStyle { get; set; } // text-bearing kinds only (ADR 0542)
     }
 

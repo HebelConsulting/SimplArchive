@@ -46,7 +46,7 @@ public partial class EditProfileDialog : Window
         }
         catch (Exception)
         {
-            EmailText.Text = "";
+            EmailText.Text = string.Empty;
         }
 
         // The photo is bearer-protected, so it is fetched with the authenticated client and decoded here — a

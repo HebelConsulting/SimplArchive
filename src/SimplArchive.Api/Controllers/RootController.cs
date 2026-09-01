@@ -21,7 +21,7 @@ public class RootController : ControllerBase
     {
         // The server's own build version (ADR 0512), so the desktop client's self-update check can tell whether it
         // is behind THIS deployment before looking for a matching client release on GitHub. Read-only, informational.
-        public string ServerVersion { get; set; } = "";
+        public string ServerVersion { get; set; } = string.Empty;
     }
 
     [HttpGet]

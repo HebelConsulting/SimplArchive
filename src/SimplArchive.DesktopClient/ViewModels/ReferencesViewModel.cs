@@ -45,7 +45,7 @@ public sealed partial class ReferencesViewModel : ObservableObject
 
     public ObservableCollection<ReferencingFolderViewModel> Items { get; } = [];
 
-    [ObservableProperty] private string _status = "";
+    [ObservableProperty] private string _status = string.Empty;
 
     public async Task LoadAsync()
     {

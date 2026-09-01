@@ -160,7 +160,7 @@ public class IntrayPreviewController(
 
     public class IntrayPreviewPageResource
     {
-        public string Url { get; set; } = "";
+        public string Url { get; set; } = string.Empty;
     }
 
     public class IntrayTextLayoutResource : HypermediaResource
@@ -175,7 +175,7 @@ public class IntrayPreviewController(
 
     public class IntrayTextLayoutWordResource
     {
-        public string Text { get; set; } = "";
+        public string Text { get; set; } = string.Empty;
 
         public double X { get; set; }
 

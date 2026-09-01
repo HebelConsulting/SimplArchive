@@ -109,7 +109,7 @@ public class RepositoriesController : ControllerBase
 
         public Guid Id { get; set; }
 
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
         // Presentation metadata for the browse tree (ADR "Blazor repository/document browsing"):
         // HasChildren governs whether the contents list can drill in; HasVersions picks the icon;
@@ -327,7 +327,7 @@ public class RepositoriesController : ControllerBase
 
     public class CreateRepositoryRequest
     {
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
     }
 
     // Requires ServiceAccount.CanManageRepositories or User.CanManageRepositories — a dedicated right
@@ -534,7 +534,7 @@ public class RepositoriesController : ControllerBase
 
         public Guid Id { get; set; }
 
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
         // Presentation metadata for the browse tree (ADR "Blazor repository/document browsing").
         public bool HasChildren { get; set; }
@@ -664,7 +664,7 @@ public class RepositoriesController : ControllerBase
 
     public class CreateDocumentRequest
     {
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
     }
 
     [HttpPost("{repositoryId:guid}/documents")]
@@ -730,7 +730,7 @@ public class RepositoriesController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
         public DateTimeOffset DeletedAt { get; set; }
     }

@@ -38,14 +38,14 @@ public class WebDavAccessController : ControllerBase
     public class WebDavStatusResource : HypermediaResource
     {
         public bool Enabled { get; set; }
-        public string Username { get; set; } = "";
-        public string Url { get; set; } = "";
+        public string Username { get; set; } = string.Empty;
+        public string Url { get; set; } = string.Empty;
     }
 
     public class WebDavPasswordResource : WebDavStatusResource
     {
         // The generated password — returned ONCE at generation; only its hash is stored.
-        public string Password { get; set; } = "";
+        public string Password { get; set; } = string.Empty;
     }
 
     [HttpGet]

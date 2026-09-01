@@ -505,7 +505,7 @@ public class WorkflowController : ControllerBase
     public class WorkflowResource : HypermediaResource
     {
         public int Status { get; set; }
-        public string StatusName { get; set; } = "";
+        public string StatusName { get; set; } = string.Empty;
         public Guid? AssignedToUserId { get; set; }
         public string? AssignedToName { get; set; }
         public DateTimeOffset? DueAt { get; set; }
@@ -516,9 +516,9 @@ public class WorkflowController : ControllerBase
     public class WorkflowTransitionResource
     {
         public int FromStatus { get; set; }
-        public string FromStatusName { get; set; } = "";
+        public string FromStatusName { get; set; } = string.Empty;
         public int ToStatus { get; set; }
-        public string ToStatusName { get; set; } = "";
+        public string ToStatusName { get; set; } = string.Empty;
         public string? RejectionReason { get; set; }
         public string? AssignedToName { get; set; }
         public string? PerformedByName { get; set; }

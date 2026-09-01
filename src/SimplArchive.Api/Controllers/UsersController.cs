@@ -82,9 +82,9 @@ public class UsersController : ControllerBase
     {
         public Guid UserId { get; set; }
 
-        public string DisplayName { get; set; } = "";
+        public string DisplayName { get; set; } = string.Empty;
 
-        public string Email { get; set; } = "";
+        public string Email { get; set; } = string.Empty;
 
         // A deactivated colleague still authored past messages, so the card renders but can say so.
         public bool IsActive { get; set; }
@@ -97,9 +97,9 @@ public class UsersController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string Email { get; set; } = "";
+        public string Email { get; set; } = string.Empty;
 
-        public string DisplayName { get; set; } = "";
+        public string DisplayName { get; set; } = string.Empty;
 
         public bool IsActive { get; set; }
 
@@ -123,9 +123,9 @@ public class UsersController : ControllerBase
 
     public class CreateUserRequest
     {
-        public string Email { get; set; } = "";
+        public string Email { get; set; } = string.Empty;
 
-        public string DisplayName { get; set; } = "";
+        public string DisplayName { get; set; } = string.Empty;
 
         // Optional admin-provisioned initial credential — this project has no email-sending capability
         // for an invite-link flow, so a CanManageUsers holder sets it directly. A User created without
@@ -137,14 +137,14 @@ public class UsersController : ControllerBase
 
     public class RenameUserRequest
     {
-        public string DisplayName { get; set; } = "";
+        public string DisplayName { get; set; } = string.Empty;
     }
 
     public class ChangePasswordRequest
     {
-        public string CurrentPassword { get; set; } = "";
+        public string CurrentPassword { get; set; } = string.Empty;
 
-        public string NewPassword { get; set; } = "";
+        public string NewPassword { get; set; } = string.Empty;
     }
 
     [HttpPost]
@@ -516,7 +516,7 @@ public class UsersController : ControllerBase
 
     public class ResetPasswordResponse
     {
-        public string Password { get; set; } = "";
+        public string Password { get; set; } = string.Empty;
     }
 
     // Admin password reset (ADR "User password management"): sets a fresh random password and returns it
@@ -553,17 +553,17 @@ public class UsersController : ControllerBase
 
     public class MfaEnrollResponse
     {
-        public string Secret { get; set; } = "";
+        public string Secret { get; set; } = string.Empty;
 
-        public string OtpauthUri { get; set; } = "";
+        public string OtpauthUri { get; set; } = string.Empty;
 
         // The enrollment QR as a data URL (image/png), so the client can render it directly.
-        public string QrDataUrl { get; set; } = "";
+        public string QrDataUrl { get; set; } = string.Empty;
     }
 
     public class MfaEnableRequest
     {
-        public string Code { get; set; } = "";
+        public string Code { get; set; } = string.Empty;
     }
 
     public class MfaRecoveryCodesResponse

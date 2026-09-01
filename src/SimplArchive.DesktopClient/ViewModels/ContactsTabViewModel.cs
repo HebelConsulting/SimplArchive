@@ -18,10 +18,10 @@ public sealed partial class ContactRowViewModel : ObservableObject
 
     public required string CollectionName { get; init; }
 
-    [ObservableProperty] private string _fullName = "";
-    [ObservableProperty] private string _organization = "";
-    [ObservableProperty] private string _email = "";
-    [ObservableProperty] private string _phone = "";
+    [ObservableProperty] private string _fullName = string.Empty;
+    [ObservableProperty] private string _organization = string.Empty;
+    [ObservableProperty] private string _email = string.Empty;
+    [ObservableProperty] private string _phone = string.Empty;
 
     /// <summary>The card's own picture once fetched, or null while it loads and when there is none.</summary>
     [ObservableProperty] private Bitmap? _photo;
@@ -91,7 +91,7 @@ public sealed partial class ContactsTabViewModel : ObservableObject
 
     [ObservableProperty] private ContactRowViewModel? _selected;
     [ObservableProperty] private bool _busy;
-    [ObservableProperty] private string _filter = "";
+    [ObservableProperty] private string _filter = string.Empty;
 
     /// <summary>
     /// What the list says when it has nothing to show. Two different sentences, deliberately: telling someone

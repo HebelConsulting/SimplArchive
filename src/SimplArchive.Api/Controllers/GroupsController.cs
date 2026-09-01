@@ -58,7 +58,7 @@ public class GroupsController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
         public Guid? ParentGroupId { get; set; }
 
@@ -75,23 +75,23 @@ public class GroupsController : ControllerBase
 
     public class CreateGroupRequest
     {
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
         public Guid? ParentGroupId { get; set; }
     }
 
     public class RenameGroupRequest
     {
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
     }
 
     public class MemberResource : HypermediaResource
     {
         public Guid Id { get; set; }
 
-        public string Email { get; set; } = "";
+        public string Email { get; set; } = string.Empty;
 
-        public string DisplayName { get; set; } = "";
+        public string DisplayName { get; set; } = string.Empty;
     }
 
     public class MembersListResource : HypermediaResource

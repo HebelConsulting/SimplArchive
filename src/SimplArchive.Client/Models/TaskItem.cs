@@ -15,7 +15,7 @@ public record TaskItem
 
     public Guid VersionId { get; set; }
 
-    public string DocumentName { get; set; } = "";
+    public string DocumentName { get; set; } = string.Empty;
 
     public int? VersionNumber { get; set; }
 

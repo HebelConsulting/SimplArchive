@@ -10,7 +10,7 @@ public record SensitivityLabel
 {
     public Guid Id { get; set; }
 
-    public string Name { get; set; } = "";
+    public string Name { get; set; } = string.Empty;
 
     /// <summary>Higher outranks lower; a caller's clearance is compared against this.</summary>
     public int Rank { get; set; }

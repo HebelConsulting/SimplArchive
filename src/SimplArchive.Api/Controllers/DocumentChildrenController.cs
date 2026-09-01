@@ -95,7 +95,7 @@ public class DocumentChildrenController : ControllerBase
 
         public Guid Id { get; set; }
 
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
         // Presentation metadata (ADR "Blazor repository/document browsing", "Workbench pane content fixes"):
         // HasVersions picks the icon (folder when false, downloadable document when true — a folder is a
@@ -127,16 +127,16 @@ public class DocumentChildrenController : ControllerBase
 
         // The display name of the lock holder (ADR "Check-out working-copy stash") — the clients prefix a
         // checked-out row with "[name] ". Empty when not checked out.
-        public string CheckedOutByName { get; set; } = "";
+        public string CheckedOutByName { get; set; } = string.Empty;
 
         // The latest confirmed version's file extension (e.g. ".zip") — Document.Name is a bare stem (ADR 0277),
         // so the client reads the type from here (e.g. to browse a zip). Empty for folders / version-less docs.
-        public string FileExtension { get; set; } = "";
+        public string FileExtension { get; set; } = string.Empty;
 
         // List-row columns (ADR "List-row columns and sorting") — the document type (the assigned mask's name;
         // "" for a folder / unclassified), the latest confirmed version's document date + byte size, and the
         // tags. All derived/projected, never new stored columns.
-        public string DocumentType { get; set; } = "";
+        public string DocumentType { get; set; } = string.Empty;
 
         public DateOnly? DocumentDate { get; set; }
 
@@ -147,7 +147,7 @@ public class DocumentChildrenController : ControllerBase
         // Who filed the current version, falling back to who created the document (#768). A NAME, not an id:
         // the column is read by a person, and a listing that returned an id would make every client fetch the
         // user per row — one request per row, which is what ADR 0557 exists to prevent.
-        public string CreatedBy { get; set; } = "";
+        public string CreatedBy { get; set; } = string.Empty;
 
         /// <summary>
         /// The kinds of child this folder will accept, each with the address that creates one (#673).
@@ -178,7 +178,7 @@ public class DocumentChildrenController : ControllerBase
         // the list-row badge: the label id (null = None, no badge), its name + colour. Derived, never stored here.
         public Guid? SensitivityLabelId { get; set; }
 
-        public string SensitivityLabelName { get; set; } = "";
+        public string SensitivityLabelName { get; set; } = string.Empty;
 
         public string? SensitivityLabelColor { get; set; }
 
@@ -457,7 +457,7 @@ public class DocumentChildrenController : ControllerBase
 
     public class CreateChildRequest
     {
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
         /// <summary>
         /// Which kind of folder to create (#564 slice 2, ADR 0620) — omitted means a plain folder, as before.
@@ -650,10 +650,10 @@ public class DocumentChildrenController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
         // Full folder path, e.g. "Repositories / Contracts / 2026" — disambiguates same-named folders.
-        public string Path { get; set; } = "";
+        public string Path { get; set; } = string.Empty;
     }
 
     // The document's real (primary) home folder — where it actually lives, as opposed to the folders that merely
@@ -662,9 +662,9 @@ public class DocumentChildrenController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
-        public string Path { get; set; } = "";
+        public string Path { get; set; } = string.Empty;
     }
 
     public class ReferencingFoldersResource : HypermediaResource

@@ -62,7 +62,7 @@ public class AclEntriesController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string PrincipalType { get; set; } = "";
+        public string PrincipalType { get; set; } = string.Empty;
 
         public Guid PrincipalId { get; set; }
 
@@ -93,9 +93,9 @@ public class AclEntriesController : ControllerBase
 
     public class GrantablePrincipal : HypermediaResource
     {
-        public string Type { get; set; } = "";   // users | groups | service-accounts
+        public string Type { get; set; } = string.Empty;   // users | groups | service-accounts
         public Guid Id { get; set; }
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
     }
 
     public class AclEntriesListResource : HypermediaResource
@@ -167,10 +167,10 @@ public class AclEntriesController : ControllerBase
 
     public class EffectiveAccessEntry
     {
-        public string Type { get; set; } = "";     // users | groups | service-accounts
+        public string Type { get; set; } = string.Empty;     // users | groups | service-accounts
         public Guid Id { get; set; }
-        public string Name { get; set; } = "";
-        public string Access { get; set; } = "";    // direct | group | admin
+        public string Name { get; set; } = string.Empty;
+        public string Access { get; set; } = string.Empty;    // direct | group | admin
         public string? ViaGroup { get; set; }        // the group name when Access == "group"
         public bool CanSee { get; set; }
         public bool CanReadContent { get; set; }
@@ -740,7 +740,7 @@ public class AclEntriesController : ControllerBase
     {
         public AclEntry Rights { get; } = new();
         public int Rank { get; set; } = -1;
-        public string Access { get; set; } = "";
+        public string Access { get; set; } = string.Empty;
         public string? ViaGroup { get; set; }
     }
 

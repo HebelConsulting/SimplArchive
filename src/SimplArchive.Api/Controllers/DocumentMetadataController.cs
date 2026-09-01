@@ -229,7 +229,7 @@ public class DocumentMetadataController : ControllerBase
     public class SensitivityResource : HypermediaResource
     {
         public Guid? SensitivityLabelId { get; set; }
-        public string SensitivityLabelName { get; set; } = "";
+        public string SensitivityLabelName { get; set; } = string.Empty;
     }
 
     // Sets the document's data-classification / sensitivity label (ADR "Configurable sensitivity labels + upload
@@ -414,7 +414,7 @@ public class DocumentMetadataController : ControllerBase
     {
         public Guid FieldDefinitionId { get; set; }
 
-        public string FieldName { get; set; } = "";
+        public string FieldName { get; set; } = string.Empty;
 
         public List<string> Values { get; set; } = [];
     }

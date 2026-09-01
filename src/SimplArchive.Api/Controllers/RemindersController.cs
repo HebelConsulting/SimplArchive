@@ -35,11 +35,11 @@ public class RemindersController : ControllerBase
         public Guid Id { get; set; }
         public Guid DocumentId { get; set; }
         public Guid? ParentId { get; set; }
-        public string DocumentName { get; set; } = "";
+        public string DocumentName { get; set; } = string.Empty;
         public DateTimeOffset RemindAt { get; set; }
         public string? Note { get; set; }
         public int Recurrence { get; set; }
-        public string RecurrenceName { get; set; } = "";
+        public string RecurrenceName { get; set; } = string.Empty;
         public bool Overdue { get; set; }
     }
 

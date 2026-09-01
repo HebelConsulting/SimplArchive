@@ -51,13 +51,13 @@ public class PasskeysModel : PageModel
     public int? Loopback { get; set; }
 
     [BindProperty]
-    public string NewName { get; set; } = "";
+    public string NewName { get; set; } = string.Empty;
 
     [BindProperty]
-    public string PasskeyToken { get; set; } = "";
+    public string PasskeyToken { get; set; } = string.Empty;
 
     [BindProperty]
-    public string PasskeyResponse { get; set; } = "";
+    public string PasskeyResponse { get; set; } = string.Empty;
 
     public string? Error { get; set; }
     public string? Notice { get; set; }
@@ -165,7 +165,7 @@ public class PasskeysModel : PageModel
         }
 
         Notice = $"Passkey “{NewName.Trim()}” added.";
-        NewName = "";
+        NewName = string.Empty;
         await LoadAsync(cancellationToken);
         return Page();
     }

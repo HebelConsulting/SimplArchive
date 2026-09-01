@@ -61,10 +61,10 @@ public class TenantSettingsController : ControllerBase
     public class TenantSettingsResource : HypermediaResource
     {
         public Guid Id { get; set; }
-        public string Name { get; set; } = "";
-        public string Status { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
         public DateTimeOffset CreatedAt { get; set; }
-        public string DefaultOcrLanguages { get; set; } = "";
+        public string DefaultOcrLanguages { get; set; } = string.Empty;
         public int AuditRetentionDays { get; set; }
         public int CheckoutTtlDays { get; set; }
         public int CheckoutWarningDays { get; set; }
@@ -115,12 +115,12 @@ public class TenantSettingsController : ControllerBase
     // Plain mutable classes with parameterless ctors — the XmlSerializer needs that shape.
     public class UpdateGeneralSettingsRequest
     {
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
     }
 
     public class UpdateCaptureSettingsRequest
     {
-        public string DefaultOcrLanguages { get; set; } = "";
+        public string DefaultOcrLanguages { get; set; } = string.Empty;
         public bool RestrictTagsToCatalog { get; set; }
     }
 

@@ -9,7 +9,7 @@ namespace SimplArchive.Client.Models;
 /// </remarks>
 public record FieldGroup
 {
-    public string FieldName { get; set; } = "";
+    public string FieldName { get; set; } = string.Empty;
 
     public List<string> Values { get; set; } = [];
 }
@@ -21,9 +21,9 @@ public record ChatMessageResponse
 
     public Guid? ParentMessageId { get; set; }
 
-    public string Body { get; set; } = "";
+    public string Body { get; set; } = string.Empty;
 
-    public string AuthorName { get; set; } = "";
+    public string AuthorName { get; set; } = string.Empty;
 
     public Guid? AuthorUserId { get; set; }
 
@@ -47,7 +47,7 @@ public record ChatMentionResponse
 {
     public Guid UserId { get; set; }
 
-    public string DisplayName { get; set; } = "";
+    public string DisplayName { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -57,7 +57,7 @@ public record ChatMentionResponse
 public record DetailRetentionDto
 {
     public int RetentionYears { get; set; }
-    public string DispositionDate { get; set; } = "";
+    public string DispositionDate { get; set; } = string.Empty;
     public bool SuspendedByHold { get; set; }
 }
 
@@ -65,8 +65,8 @@ public record DetailRetentionDto
 public record UserCardResponse
 {
     public Guid UserId { get; set; }
-    public string DisplayName { get; set; } = "";
-    public string Email { get; set; } = "";
+    public string DisplayName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
     public bool IsActive { get; set; }
     public bool HasPhoto { get; set; }
     public List<LinkResponse> Links { get; set; } = [];
@@ -79,5 +79,5 @@ public record UserCardResponse
 public record MentionableUserResponse
 {
     public Guid Id { get; set; }
-    public string DisplayName { get; set; } = "";
+    public string DisplayName { get; set; } = string.Empty;
 }

@@ -23,7 +23,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
     private string _documentSelfHref = string.Empty;
     private List<DocumentsClient.GrantablePrincipalInfo> _principals = [];
 
-    [ObservableProperty] private string _documentName = "";
+    [ObservableProperty] private string _documentName = string.Empty;
     [ObservableProperty] private bool _loading = true;
     [ObservableProperty] private bool _forbidden;
     [ObservableProperty] private bool _loadFailed;
@@ -35,7 +35,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
     [ObservableProperty][NotifyPropertyChangedFor(nameof(CanToggleInheritance))] private string? _inheritanceHref;
 
     public bool CanToggleInheritance => InheritanceHref is not null;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(HasStatus))] private string _status = "";
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(HasStatus))] private string _status = string.Empty;
     public bool HasStatus => !string.IsNullOrEmpty(Status);
 
     public ObservableCollection<AclRowViewModel> Entries { get; } = [];
@@ -52,7 +52,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
     // ---- effective-access view (ADR 0488): resolved to people, lazy-loaded on expand ----
     [ObservableProperty] private bool _effectiveExpanded;
     [ObservableProperty] private bool _effectiveLoading;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(HasInheritedFrom))][NotifyPropertyChangedFor(nameof(InheritedFromText))] private string _effectiveInheritedFrom = "";
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(HasInheritedFrom))][NotifyPropertyChangedFor(nameof(InheritedFromText))] private string _effectiveInheritedFrom = string.Empty;
     private bool _effectiveLoadedOnce;
     public ObservableCollection<EffectiveRowViewModel> Effective { get; } = [];
     public bool HasInheritedFrom => !string.IsNullOrEmpty(EffectiveInheritedFrom);
@@ -112,8 +112,8 @@ public sealed partial class ManageAccessViewModel : ObservableObject
     [ObservableProperty] private bool _isNew;
     public ObservableCollection<GranteeOption> AvailablePrincipals { get; } = [];
     [ObservableProperty][NotifyPropertyChangedFor(nameof(CanSave))] private GranteeOption? _selectedPrincipal;
-    [ObservableProperty] private string _editingPrincipalLabel = "";
-    private string _editingPrincipalType = "";
+    [ObservableProperty] private string _editingPrincipalLabel = string.Empty;
+    private string _editingPrincipalType = string.Empty;
     private Guid _editingPrincipalId;
 
     // The entry being edited — carried so Save writes at the address that row advertised (ADR 0555).
@@ -130,7 +130,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
     [ObservableProperty] private bool _canAnnotate;
     [ObservableProperty] private bool _canManagePermissions;
 
-    [ObservableProperty] private string _presetLabel = "";
+    [ObservableProperty] private string _presetLabel = string.Empty;
 
     public bool EditorVisible => Editing;
     public bool AddButtonEnabled => !Editing && AvailablePrincipals.Count > 0;
@@ -223,7 +223,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
         IsNew = true;
         SelectedPrincipal = AvailablePrincipals.FirstOrDefault();
         Load(ViewerBundle());
-        Status = "";
+        Status = string.Empty;
         Editing = true;
     }
 
@@ -235,7 +235,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
         _editingEntry = row.Entry;
         EditingPrincipalLabel = $"{row.PrincipalLabel} ({row.TypeLabel})";
         Load(row.Rights);
-        Status = "";
+        Status = string.Empty;
         Editing = true;
     }
 
@@ -243,7 +243,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
     private void CancelEdit()
     {
         Editing = false;
-        Status = "";
+        Status = string.Empty;
     }
 
     [RelayCommand]

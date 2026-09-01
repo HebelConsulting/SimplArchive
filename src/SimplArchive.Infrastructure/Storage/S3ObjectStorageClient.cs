@@ -137,7 +137,7 @@ public class S3ObjectStorageClient : IObjectStorageClient
                     {
                         Id = "abort-incomplete-multipart-uploads",
                         Status = LifecycleRuleStatus.Enabled,
-                        Filter = new LifecycleFilter { LifecycleFilterPredicate = new LifecyclePrefixPredicate { Prefix = "" } },
+                        Filter = new LifecycleFilter { LifecycleFilterPredicate = new LifecyclePrefixPredicate { Prefix = string.Empty } },
                         AbortIncompleteMultipartUpload = new LifecycleRuleAbortIncompleteMultipartUpload { DaysAfterInitiation = incompleteUploadCleanupDays },
                     },
                 ],

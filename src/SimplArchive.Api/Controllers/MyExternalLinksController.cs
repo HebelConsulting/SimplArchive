@@ -52,7 +52,7 @@ public class MyExternalLinksController : ControllerBase
         public Guid DocumentId { get; set; }
 
         // Which document this shares — the whole point of a cross-document view is knowing WHAT was shared.
-        public string DocumentName { get; set; } = "";
+        public string DocumentName { get; set; } = string.Empty;
 
         // The document's folder, so the client's "Go to" can open that folder and select the row inside it. Null
         // only for a repository root, which cannot be shared anyway (a folder is not shareable).
@@ -64,13 +64,13 @@ public class MyExternalLinksController : ControllerBase
 
         public int AccessCount { get; set; }
 
-        public string CreatedByName { get; set; } = "";
+        public string CreatedByName { get; set; } = string.Empty;
 
         public DateTimeOffset CreatedAt { get; set; }
 
         public bool CanExtend { get; set; }
 
-        public string Etag { get; set; } = "";
+        public string Etag { get; set; } = string.Empty;
     }
 
     public class MyExternalLinkListResource : HypermediaResource

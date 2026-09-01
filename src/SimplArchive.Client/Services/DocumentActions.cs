@@ -854,7 +854,7 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
     {
         public Guid Id { get; set; }
 
-        public string DisplayName { get; set; } = "";
+        public string DisplayName { get; set; } = string.Empty;
     }
 
     private sealed record GroupsDirectoryResponse
@@ -868,6 +868,6 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
     {
         public Guid Id { get; set; }
 
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
     }
 }

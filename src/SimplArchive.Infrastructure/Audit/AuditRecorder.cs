@@ -70,7 +70,7 @@ public class AuditRecorder : IAuditRecorder
             TargetId = targetId,
             TargetName = targetName,
             Details = details,
-            Hash = "", // set by AppendAsync
+            Hash = string.Empty, // set by AppendAsync
         }, effectiveTenant, cancellationToken);
     }
 
@@ -99,7 +99,7 @@ public class AuditRecorder : IAuditRecorder
             TargetId = targetId,
             TargetName = targetName,
             Details = details,
-            Hash = "", // set by AppendAsync
+            Hash = string.Empty, // set by AppendAsync
         }, tenantId, cancellationToken);
     }
 

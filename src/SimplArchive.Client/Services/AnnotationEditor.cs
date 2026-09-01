@@ -270,7 +270,7 @@ public sealed class AnnotationEditor(HttpClient http, IDialogService dialogs, IS
 
         var dialog = await dialogs.ShowAsync<AnnotationDialog>(Strings.Get("AnnNewNoteTitle"), new DialogParameters
         {
-            ["Text"] = "",
+            ["Text"] = string.Empty,
             ["NoteColor"] = DefaultColor,
             ["CanEdit"] = true,
             ["CanDelete"] = false,
@@ -596,13 +596,13 @@ public sealed class AnnotationEditor(HttpClient http, IDialogService dialogs, IS
 
         public double? Height { get; set; }
 
-        public string Text { get; set; } = "";
+        public string Text { get; set; } = string.Empty;
 
-        public string Color { get; set; } = "";
+        public string Color { get; set; } = string.Empty;
 
-        public string AuthorName { get; set; } = "";
+        public string AuthorName { get; set; } = string.Empty;
 
-        public string Etag { get; set; } = "";
+        public string Etag { get; set; } = string.Empty;
 
         public bool CanEdit { get; set; }
 

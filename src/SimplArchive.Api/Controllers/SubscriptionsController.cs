@@ -32,7 +32,7 @@ public class SubscriptionsController : ControllerBase
     {
         public Guid DocumentId { get; set; }
         public Guid? ParentId { get; set; }
-        public string DocumentName { get; set; } = "";
+        public string DocumentName { get; set; } = string.Empty;
         public DateTimeOffset FollowedAt { get; set; }
     }
 

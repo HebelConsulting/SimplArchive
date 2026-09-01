@@ -17,9 +17,9 @@ public sealed record AttendeeRowViewModel(string Name, string Address, string St
 /// </summary>
 public sealed partial class AppointmentEditViewModel : StructuredEditFormViewModel
 {
-    [ObservableProperty] private string _summary = "";
-    [ObservableProperty] private string _location = "";
-    [ObservableProperty] private string _description = "";
+    [ObservableProperty] private string _summary = string.Empty;
+    [ObservableProperty] private string _location = string.Empty;
+    [ObservableProperty] private string _description = string.Empty;
     [ObservableProperty] private bool _isAllDay;
 
     /// <summary>
@@ -38,17 +38,17 @@ public sealed partial class AppointmentEditViewModel : StructuredEditFormViewMod
     /// meeting from drifting across a daylight-saving change. The empty entry means a floating time, which
     /// stays floating.
     /// </summary>
-    [ObservableProperty] private string _startTimeZoneId = "";
+    [ObservableProperty] private string _startTimeZoneId = string.Empty;
 
     /// <summary>
     /// The zone the END is written in, which iCalendar allows to DIFFER from the start's — a flight leaving
     /// Zurich at 09:00 and landing in Boston at 11:30 is one appointment with two zones, and one field for
     /// both makes it read as two and a half hours.
     /// </summary>
-    [ObservableProperty] private string _endTimeZoneId = "";
+    [ObservableProperty] private string _endTimeZoneId = string.Empty;
 
     /// <summary>The event's web address (a meeting link, a ticket page). Absolute, or the save is refused.</summary>
-    [ObservableProperty] private string _url = "";
+    [ObservableProperty] private string _url = string.Empty;
 
     /// <summary>
     /// The zones the two pickers offer: IANA ids, with an empty first entry meaning "floating".

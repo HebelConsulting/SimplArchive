@@ -194,7 +194,7 @@ internal sealed class WorkbenchDragDrop
                 }
                 finally
                 {
-                    dragVm.Status = "";
+                    dragVm.Status = string.Empty;
                 }
             }
         }
@@ -275,7 +275,7 @@ internal sealed class WorkbenchDragDrop
             }
             finally
             {
-                dragVm.Status = "";
+                dragVm.Status = string.Empty;
             }
         }
 

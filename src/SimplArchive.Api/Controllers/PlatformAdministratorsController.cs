@@ -46,9 +46,9 @@ public class PlatformAdministratorsController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
-        public string ClientId { get; set; } = "";
+        public string ClientId { get; set; } = string.Empty;
 
         public bool IsActive { get; set; }
     }
@@ -57,7 +57,7 @@ public class PlatformAdministratorsController : ControllerBase
     {
         // Present only in the create response — never retrievable again, OpenIddict only ever stores it
         // hashed.
-        public string ClientSecret { get; set; } = "";
+        public string ClientSecret { get; set; } = string.Empty;
     }
 
     public class PlatformAdministratorsListResource : HypermediaResource
@@ -67,14 +67,14 @@ public class PlatformAdministratorsController : ControllerBase
 
     public class CreatePlatformAdministratorRequest
     {
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
     }
 
     public class RotateSecretResource : HypermediaResource
     {
-        public string ClientId { get; set; } = "";
+        public string ClientId { get; set; } = string.Empty;
 
-        public string ClientSecret { get; set; } = "";
+        public string ClientSecret { get; set; } = string.Empty;
     }
 
     [HttpPost]

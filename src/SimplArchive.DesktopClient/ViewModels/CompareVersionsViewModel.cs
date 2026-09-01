@@ -23,8 +23,8 @@ public sealed partial class CompareVersionsViewModel : ObservableObject
     // The collection's advertised `compare` address; the two versions travel as query parameters (issue #416).
     private string? _compareHref;
 
-    [ObservableProperty] private string _documentName = "";
-    [ObservableProperty] private string _status = "";
+    [ObservableProperty] private string _documentName = string.Empty;
+    [ObservableProperty] private string _status = string.Empty;
     [ObservableProperty] private bool _notAvailable;
 
     public ObservableCollection<VersionOption> Versions { get; } = [];

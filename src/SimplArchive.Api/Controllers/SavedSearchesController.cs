@@ -37,14 +37,14 @@ public class SavedSearchesController : ControllerBase
     public class SavedSearchResource : HypermediaResource
     {
         public Guid Id { get; set; }
-        public string Name { get; set; } = "";
-        public string QueryString { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
+        public string QueryString { get; set; } = string.Empty;
         // The visibility scope (ADR "Scoped saved-search sharing"). IsMine gates the client's edit/share/delete; a
         // search shared by someone else shows OwnerName and is run-only (or "Save a copy" as a new private one).
         public int ShareScope { get; set; }
-        public string ShareScopeName { get; set; } = "";
+        public string ShareScopeName { get; set; } = string.Empty;
         public bool IsMine { get; set; }
-        public string OwnerName { get; set; } = "";
+        public string OwnerName { get; set; } = string.Empty;
         public DateTimeOffset CreatedAt { get; set; }
     }
 
@@ -56,22 +56,22 @@ public class SavedSearchesController : ControllerBase
     // A principal reference in a create/update request (Type = "user" | "group").
     public class SharePrincipal
     {
-        public string Type { get; set; } = "";
+        public string Type { get; set; } = string.Empty;
         public Guid Id { get; set; }
     }
 
     public class CreateSavedSearchRequest
     {
-        public string Name { get; set; } = "";
-        public string QueryString { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
+        public string QueryString { get; set; } = string.Empty;
         public int ShareScope { get; set; }
         public List<SharePrincipal>? Shares { get; set; }
     }
 
     public class UpdateSavedSearchRequest
     {
-        public string Name { get; set; } = "";
-        public string QueryString { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
+        public string QueryString { get; set; } = string.Empty;
         public int ShareScope { get; set; }
         public List<SharePrincipal>? Shares { get; set; }
     }
@@ -84,9 +84,9 @@ public class SavedSearchesController : ControllerBase
 
     public class ShareGrantResource
     {
-        public string PrincipalType { get; set; } = "";
+        public string PrincipalType { get; set; } = string.Empty;
         public Guid PrincipalId { get; set; }
-        public string PrincipalName { get; set; } = "";
+        public string PrincipalName { get; set; } = string.Empty;
     }
 
     // The picker options for the share dialog — active users + groups (any authenticated user, a bounded list).
@@ -99,13 +99,13 @@ public class SavedSearchesController : ControllerBase
     public class ShareTargetUser
     {
         public Guid Id { get; set; }
-        public string DisplayName { get; set; } = "";
+        public string DisplayName { get; set; } = string.Empty;
     }
 
     public class ShareTargetGroup
     {
         public Guid Id { get; set; }
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
     }
 
     [HttpGet]

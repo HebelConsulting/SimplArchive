@@ -137,7 +137,7 @@ public sealed class UploadConflictResolver
     {
         public Guid Id { get; set; }
 
-        public string UploadUrl { get; set; } = "";
+        public string UploadUrl { get; set; } = string.Empty;
 
         public List<LinkResponse> Links { get; set; } = [];
     }

@@ -14,8 +14,8 @@ namespace SimplArchive.DesktopClient.Services;
 // things in one product, and put the wrong one on the first screen a newcomer sees (issue #417).
 public sealed class ServerProfile
 {
-    public string Name { get; set; } = "";
-    public string ApiRootUrl { get; set; } = "";
+    public string Name { get; set; } = string.Empty;
+    public string ApiRootUrl { get; set; } = string.Empty;
 
     // The style this server wears (ADR 0578) — an id from ThemeCatalog, or null/"default" for the shipped
     // design. Per PROFILE rather than per application, so connecting to a customer's server shows their

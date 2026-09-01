@@ -11,7 +11,7 @@ public record LegalHoldDto
 {
     public Guid Id { get; set; }
 
-    public string Name { get; set; } = "";
+    public string Name { get; set; } = string.Empty;
 
     public string? Reason { get; set; }
 
@@ -39,7 +39,7 @@ public record LegalHoldItemDto
 {
     public Guid DocumentId { get; set; }
 
-    public string DocumentName { get; set; } = "";
+    public string DocumentName { get; set; } = string.Empty;
 
     /// <summary>The document's home folder (null for a repository root) — what Go to navigates by.</summary>
     public Guid? ParentId { get; set; }

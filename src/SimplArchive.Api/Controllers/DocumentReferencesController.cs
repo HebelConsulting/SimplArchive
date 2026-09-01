@@ -61,7 +61,7 @@ public class DocumentReferencesController : ControllerBase
         // read the same way client-side.
         public Guid Id { get; set; }
 
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
         public bool HasChildren { get; set; }
 
@@ -85,9 +85,9 @@ public class DocumentReferencesController : ControllerBase
         // appearance of a document, so its row is the same row — these were absent, and the contents list drew
         // blank Type / Doc date / Size / Tags cells for every referenced item while its columns worked
         // perfectly for children.
-        public string FileExtension { get; set; } = "";
+        public string FileExtension { get; set; } = string.Empty;
 
-        public string DocumentType { get; set; } = "";
+        public string DocumentType { get; set; } = string.Empty;
 
         public DateOnly? DocumentDate { get; set; }
 
@@ -95,7 +95,7 @@ public class DocumentReferencesController : ControllerBase
 
         public List<string> Tags { get; set; } = [];
 
-        public string SensitivityLabelName { get; set; } = "";
+        public string SensitivityLabelName { get; set; } = string.Empty;
 
         public string? SensitivityLabelColor { get; set; }
 
@@ -106,7 +106,7 @@ public class DocumentReferencesController : ControllerBase
         public string? Icon { get; set; }
 
         /// <inheritdoc cref="DocumentChildrenController.DocumentSummaryResource.CreatedBy"/>
-        public string CreatedBy { get; set; } = "";
+        public string CreatedBy { get; set; } = string.Empty;
     }
 
     public class ReferenceListResource : HypermediaResource

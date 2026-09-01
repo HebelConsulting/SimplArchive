@@ -12,7 +12,7 @@ namespace SimplArchive.Client.Models;
 public record TagCatalogEntry
 {
     public Guid Id { get; set; }
-    public string Name { get; set; } = ""; public string? Color { get; set; }
+    public string Name { get; set; } = string.Empty; public string? Color { get; set; }
     public List<LinkResponse> Links { get; set; } = [];
 
     // self (rename/recolour), retire, merge — the catalog lists only LIVE tags, so `unretire` has no row

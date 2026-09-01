@@ -68,10 +68,10 @@ public class RecycleBinController : ControllerBase
     public class RecycleBinItemResource : HypermediaResource
     {
         public Guid Id { get; set; }
-        public string Name { get; set; } = "";
-        public string Path { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
+        public string Path { get; set; } = string.Empty;
         public DateTimeOffset DeletedAt { get; set; }
-        public string DeletedBy { get; set; } = "";
+        public string DeletedBy { get; set; } = string.Empty;
     }
 
     public class RestoreManyRequest

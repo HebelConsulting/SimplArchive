@@ -24,7 +24,7 @@ public sealed partial class IntrayItemViewModel : ObservableObject
     public string? GroupName { get; init; }
     public Guid? UserId { get; init; }
     public string? UserName { get; init; }
-    public string MoveUrl { get; init; } = "";
+    public string MoveUrl { get; init; } = string.Empty;
 
     // The row the server sent — preview / mask / file / delete follow the addresses IT advertised, each already
     // carrying the right source prefix (ADR 0543/0555). Null only for the designer-preview rows below.

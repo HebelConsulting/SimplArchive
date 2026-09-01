@@ -49,7 +49,7 @@ public partial class TagsController : ControllerBase
     public class TagResource : HypermediaResource
     {
         public Guid Id { get; set; }
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
         public string? Color { get; set; }
     }
 
@@ -62,7 +62,7 @@ public partial class TagsController : ControllerBase
         public bool CanManage { get; set; }
     }
 
-    public class CreateTagRequest { public string Name { get; set; } = ""; public string? Color { get; set; } }
+    public class CreateTagRequest { public string Name { get; set; } = string.Empty; public string? Color { get; set; } }
     public class UpdateTagRequest { public string? Name { get; set; } public string? Color { get; set; } }
     public class MergeTagRequest { public Guid IntoId { get; set; } }
 

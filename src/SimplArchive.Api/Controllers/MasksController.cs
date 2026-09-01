@@ -48,7 +48,7 @@ public class MasksController : ControllerBase
     // negotiation") needs a parameterless constructor and settable properties.
     public class FieldDefinitionRequest
     {
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
         public FieldDataType DataType { get; set; }
 
@@ -68,7 +68,7 @@ public class MasksController : ControllerBase
 
     public class CreateMaskRequest
     {
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
         // The approval-review SLA (days) for documents of this mask type (ADR "Workflow escalation / SLA
         // reminders"). Null = no SLA / no deadline tracking.
@@ -89,9 +89,9 @@ public class MasksController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
-        public string DataType { get; set; } = "";
+        public string DataType { get; set; } = string.Empty;
 
         public bool IsRequired { get; set; }
 
@@ -120,7 +120,7 @@ public class MasksController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
         public int VersionNumber { get; set; }
 
@@ -180,7 +180,7 @@ public class MasksController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
         public int VersionNumber { get; set; }
 

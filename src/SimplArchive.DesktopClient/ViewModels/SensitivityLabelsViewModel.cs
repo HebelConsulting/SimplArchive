@@ -19,11 +19,11 @@ public sealed partial class SensitivityLabelsViewModel : ObservableObject
 
     public ObservableCollection<SensitivityLabelRow> Labels { get; } = [];
 
-    [ObservableProperty] private string _newName = "";
-    [ObservableProperty] private string _newColor = "";
+    [ObservableProperty] private string _newName = string.Empty;
+    [ObservableProperty] private string _newColor = string.Empty;
     [ObservableProperty] private int _newRank = 1;
     [ObservableProperty] private bool _newWatermark;
-    [ObservableProperty] private string _status = "";
+    [ObservableProperty] private string _status = string.Empty;
 
     /// <summary>Whether the server said THIS caller may manage the label catalog (#873).</summary>
     /// <remarks>
@@ -63,7 +63,7 @@ public sealed partial class SensitivityLabelsViewModel : ObservableObject
         try
         {
             await _api.Admin.CreateSensitivityLabelAsync(NewName.Trim(), NewRank, string.IsNullOrWhiteSpace(NewColor) ? null : NewColor.Trim(), NewWatermark);
-            NewName = ""; NewColor = ""; NewWatermark = false;
+            NewName = string.Empty; NewColor = string.Empty; NewWatermark = false;
             await LoadAsync();
         }
         catch (Exception e) { Status = e is ApiActionException a ? a.Message : "Could not add the label."; }

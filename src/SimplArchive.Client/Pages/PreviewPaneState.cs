@@ -10,14 +10,14 @@ namespace SimplArchive.Client.Pages;
 public sealed class PreviewPaneState
 {
     // image / pdf / text / unsupported / error.
-    public string Kind { get; set; } = "";
+    public string Kind { get; set; } = string.Empty;
 
     // Page-rendered formats (image/pdf) use the JS host; other kinds render as text or a placeholder.
     public bool HasPages => Kind is "image" or "pdf";
 
     public string? Text { get; set; }
 
-    public string FindQuery { get; set; } = "";
+    public string FindQuery { get; set; } = string.Empty;
 
     public int Count { get; set; }
 
@@ -32,11 +32,11 @@ public sealed class PreviewPaneState
     // to the caller — exiting it is an async JS-interop side effect, not pure state.
     public void Clear()
     {
-        Kind = "";
+        Kind = string.Empty;
         Text = null;
         Count = 0;
         Index = 0;
-        FindQuery = "";
+        FindQuery = string.Empty;
         Converted = false;
     }
 }

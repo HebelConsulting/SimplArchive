@@ -31,12 +31,12 @@ public sealed partial class LogonViewModel : ObservableObject
     private ServerProfile? _selectedServer;
 
     [ObservableProperty] private LanguageOption? _selectedLanguage;
-    [ObservableProperty] private string _username = "";
-    [ObservableProperty] private string _status = "";
+    [ObservableProperty] private string _username = string.Empty;
+    [ObservableProperty] private string _status = string.Empty;
 
     // Self-update notice for the selected deployment (issue #271), shown above the Login button: a message plus,
     // when a build is offered, a clickable download link.
-    [ObservableProperty] private string _updateStatus = "";
+    [ObservableProperty] private string _updateStatus = string.Empty;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasUpdateLink))]
@@ -162,7 +162,7 @@ public sealed partial class LogonViewModel : ObservableObject
         var cts = new CancellationTokenSource();
         _updateCts = cts;
 
-        UpdateStatus = "";
+        UpdateStatus = string.Empty;
         UpdateDownloadUrl = null;
 
         var profile = SelectedServer;

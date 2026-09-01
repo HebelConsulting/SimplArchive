@@ -18,9 +18,9 @@ public record CheckoutDto
     public bool? IsSigned { get; set; }
 
     public Guid Id { get; set; }
-    public string Name { get; set; } = "";
-    public string Path { get; set; } = "";
-    public string FileExtension { get; set; } = "";
+    public string Name { get; set; } = string.Empty;
+    public string Path { get; set; } = string.Empty;
+    public string FileExtension { get; set; } = string.Empty;
     public bool HasStash { get; set; }
     public bool IsModified { get; set; }
 
@@ -34,4 +34,4 @@ public record CheckoutDto
     public DateTimeOffset? ExpiresAt { get; set; }
     public List<LinkResponse> Links { get; set; } = [];
 }
-public record WorkingCopyUploadResponse { public string UploadUrl { get; set; } = ""; }
+public record WorkingCopyUploadResponse { public string UploadUrl { get; set; } = string.Empty; }

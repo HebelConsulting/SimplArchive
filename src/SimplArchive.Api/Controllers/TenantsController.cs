@@ -48,7 +48,7 @@ public class TenantsController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
     }
 
     public class TenantsListResource : HypermediaResource
@@ -58,11 +58,11 @@ public class TenantsController : ControllerBase
 
     public class CreateTenantRequest
     {
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
-        public string AdministratorEmail { get; set; } = "";
+        public string AdministratorEmail { get; set; } = string.Empty;
 
-        public string AdministratorDisplayName { get; set; } = "";
+        public string AdministratorDisplayName { get; set; } = string.Empty;
 
         // Defaults to the tenant's own Name if omitted.
         public string? RepositoryName { get; set; }
@@ -72,24 +72,24 @@ public class TenantsController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string Email { get; set; } = "";
+        public string Email { get; set; } = string.Empty;
 
         // Present only here — never retrievable again, only ever stored hashed (PasswordHasher<User>).
-        public string Password { get; set; } = "";
+        public string Password { get; set; } = string.Empty;
     }
 
     public class CreatedRepositoryResource
     {
         public Guid Id { get; set; }
 
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
     }
 
     public class CreateTenantResource : HypermediaResource
     {
         public Guid Id { get; set; }
 
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
         public TenantAdministratorResource TenantAdministrator { get; set; } = new();
 

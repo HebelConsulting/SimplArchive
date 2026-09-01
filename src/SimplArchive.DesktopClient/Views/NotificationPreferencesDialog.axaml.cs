@@ -31,7 +31,7 @@ public partial class NotificationPreferencesDialog : Window
     public sealed class PrefRow
     {
         public int Type { get; init; }
-        public string Label { get; init; } = "";
+        public string Label { get; init; } = string.Empty;
         public bool EmailEnabled { get; set; }
     }
 

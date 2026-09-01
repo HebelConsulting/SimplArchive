@@ -30,20 +30,20 @@ public sealed partial class AuditTabViewModel : ObservableObject
 
     public ObservableCollection<AuditEventRowViewModel> AuditEvents { get; } = [];
 
-    [ObservableProperty] private string _auditActionFilter = "";
+    [ObservableProperty] private string _auditActionFilter = string.Empty;
     [ObservableProperty] private DateTimeOffset? _auditFrom;
     [ObservableProperty] private DateTimeOffset? _auditTo;
     [ObservableProperty] private bool _auditHasMore;
     [ObservableProperty] private bool _auditBusy;
-    [ObservableProperty] private string _auditVerifyStatus = "";
+    [ObservableProperty] private string _auditVerifyStatus = string.Empty;
     [ObservableProperty] private bool _auditVerifyValid;
     [ObservableProperty] private bool _auditVerifyShown;
     // WORM-segment verification (ADR "Audit WORM segment verify").
-    [ObservableProperty] private string _wormVerifyStatus = "";
+    [ObservableProperty] private string _wormVerifyStatus = string.Empty;
     [ObservableProperty] private bool _wormVerifyValid;
     [ObservableProperty] private bool _wormVerifyShown;
     [ObservableProperty] private int _auditRetentionDays = 365;
-    [ObservableProperty] private string _auditRetentionNote = "";
+    [ObservableProperty] private string _auditRetentionNote = string.Empty;
     private string? _auditNextCursor;
 
     public void SetApi(SimplArchiveApiClient api) => _api = api;
@@ -75,7 +75,7 @@ public sealed partial class AuditTabViewModel : ObservableObject
     [RelayCommand]
     private async Task ClearAuditFilters()
     {
-        AuditActionFilter = "";
+        AuditActionFilter = string.Empty;
         AuditFrom = null;
         AuditTo = null;
         await LoadAuditPageAsync(reset: true);

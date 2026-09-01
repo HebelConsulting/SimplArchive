@@ -30,7 +30,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     // ---- Session / tabs -------------------------------------------------------------------------------
 
     [ObservableProperty] private bool _isLoggedIn;
-    [ObservableProperty] private string _userEmail = "";
+    [ObservableProperty] private string _userEmail = string.Empty;
     [ObservableProperty] private string _status = "Not logged in.";
 
     // The bottom TabControl's selected index (0 = Repositories) — bound so opening a search result can switch
@@ -314,28 +314,28 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     private NodeViewModel? _selectedItem;
 
     public ObservableCollection<BreadcrumbViewModel> Breadcrumbs { get; } = [];
-    [ObservableProperty] private string _detailTitle = "";
-    [ObservableProperty] private string _maskLine = "";
+    [ObservableProperty] private string _detailTitle = string.Empty;
+    [ObservableProperty] private string _maskLine = string.Empty;
 
     // System fields — always shown, separate from the mask (ADR "System fields + OCR-language mask field").
     // Name / DocumentDate / OCR languages are read-write; Created / CreatedBy / File extension are read-only.
     // Every read-write field is only editable while the whole pane is in edit mode (ADR "Single pane-level
     // edit toggle on the detail pane"). OCR languages shows only for a TIFF-sourced document.
-    [ObservableProperty] private string _sysName = "";
+    [ObservableProperty] private string _sysName = string.Empty;
     [ObservableProperty][NotifyPropertyChangedFor(nameof(SysDocumentDateText))] private DateTimeOffset? _sysDocumentDate;
-    [ObservableProperty] private string _sysCreated = "";
-    [ObservableProperty] private string _sysCreatedBy = "";
-    [ObservableProperty] private string _sysFileExtension = "";
+    [ObservableProperty] private string _sysCreated = string.Empty;
+    [ObservableProperty] private string _sysCreatedBy = string.Empty;
+    [ObservableProperty] private string _sysFileExtension = string.Empty;
     [ObservableProperty][NotifyPropertyChangedFor(nameof(CanEditOcr))] private bool _sysHasTiff;
-    [ObservableProperty] private string _sysOcrLanguages = "";
+    [ObservableProperty] private string _sysOcrLanguages = string.Empty;
     // The document's current (latest confirmed) version number — the last line of the detail pane (ADR "Mask-pane
     // current-version line"). Empty for a folder / a document with no confirmed version.
-    [ObservableProperty] private string _sysCurrentVersion = "";
+    [ObservableProperty] private string _sysCurrentVersion = string.Empty;
 
     // Sensitivity label (ADR "Configurable sensitivity labels + upload defaults"): the current per-tenant label
     // (read-only display: name + colour) + the staged edit value bound to the ComboBox (a picker item).
     [ObservableProperty][NotifyPropertyChangedFor(nameof(HasSensitivity))][NotifyPropertyChangedFor(nameof(DetailSensitivityText))][NotifyPropertyChangedFor(nameof(DetailSensitivityBrush))] private Guid? _detailSensitivityId;
-    private string _detailSensitivityName = "";
+    private string _detailSensitivityName = string.Empty;
     private string? _detailSensitivityColor;
     private bool _detailSensitivityWatermark;
     public string DetailSensitivityText => _detailSensitivityName;
@@ -420,7 +420,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     public ObservableCollection<string> EditTags { get; } = [];
     public ObservableCollection<string> TagCatalog { get; } = [];
     [ObservableProperty] private bool _hasDetailTags;
-    [ObservableProperty] private string _newTag = "";
+    [ObservableProperty] private string _newTag = string.Empty;
     private List<string> _origTags = [];
 
     // Follow / unfollow the selected document (ADR "Document subscriptions") — set from the detail load; the
@@ -486,7 +486,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         RecycleBin.Preview.ExitFullscreen();
     }
 
-    [ObservableProperty] private string _newComment = "";
+    [ObservableProperty] private string _newComment = string.Empty;
 
     // ---- @-mentions (issue #383) ----------------------------------------------------------------------------
 
@@ -940,8 +940,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         _archiveDocumentId = null;
         _localFolders = null;
         _currentUserId = null;
-        UserEmail = "";
-        UserDisplayName = "";
+        UserEmail = string.Empty;
+        UserDisplayName = string.Empty;
 
         // Reset the right-gated tabs so the next user's rights apply cleanly.
         IsTenantAdmin = false;
@@ -963,7 +963,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         Notifications.Clear();
         UnreadNotificationCount = 0;
         Search.SavedSearches.Clear();
-        Search.LastSearchQueryString = "";
+        Search.LastSearchQueryString = string.Empty;
         SelectedTab = 0;
         Status = Strings.Get("StSignedOut");
 
@@ -2695,7 +2695,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
             EditTags.Add(t);
         }
 
-        NewTag = "";
+        NewTag = string.Empty;
     }
 
     [RelayCommand]
@@ -3165,7 +3165,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
 
     public bool HasSelectedPrincipal => SelectedPrincipal is not null;
 
-    [ObservableProperty] private string _principalRightsHeader = "";
+    [ObservableProperty] private string _principalRightsHeader = string.Empty;
     [ObservableProperty] private bool _selectedPrincipalIsGroup;
     [ObservableProperty] private bool _ugBusy;
 
@@ -3204,7 +3204,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         PrincipalRights.Clear();
         if (value is null)
         {
-            PrincipalRightsHeader = "";
+            PrincipalRightsHeader = string.Empty;
             return;
         }
 
@@ -3704,7 +3704,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     // Read-only until Edit; Save/Cancel in edit mode. Gated on IsTenantAdmin (the tab's IsVisible).
     [ObservableProperty][NotifyPropertyChangedFor(nameof(HasTenantSettings))] private bool _tenantSettingsLoaded;
 
-    [ObservableProperty] private string _tenantName = "";
+    [ObservableProperty] private string _tenantName = string.Empty;
     [ObservableProperty] private int _tenantAuditRetentionDays;
     [ObservableProperty] private int _tenantCheckoutTtlDays;
     [ObservableProperty] private int _tenantCheckoutWarningDays = 1;
@@ -3733,15 +3733,15 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     // Per-tenant storage quota (ADR "Per-tenant storage quota"): the editable limit in MB (null = unlimited) and a
     // read-only "used of limit" display line.
     [ObservableProperty] private int? _tenantStorageQuotaMb;
-    [ObservableProperty] private string _tenantStorageUsage = "";
-    [ObservableProperty] private string _tenantStorageWarning = "";
+    [ObservableProperty] private string _tenantStorageUsage = string.Empty;
+    [ObservableProperty] private string _tenantStorageWarning = string.Empty;
     // Per-tenant bucket lifecycle: abort incomplete multipart uploads after N days (0 = off, ADR "Per-tenant
     // bucket policy knobs").
     [ObservableProperty] private int _tenantIncompleteUploadCleanupDays;
     // Audit webhook / SIEM streaming (ADR "Audit webhook streaming"). The secret is write-only; the box is left
     // blank on load and a non-empty value (re)sets it. TenantWebhookConfigured reports whether one is stored.
-    [ObservableProperty] private string _tenantAuditWebhookUrl = "";
-    [ObservableProperty] private string _tenantAuditWebhookSecret = "";
+    [ObservableProperty] private string _tenantAuditWebhookUrl = string.Empty;
+    [ObservableProperty] private string _tenantAuditWebhookSecret = string.Empty;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TenantWebhookSecretStatus))]
     [NotifyPropertyChangedFor(nameof(TenantWebhookSecretWatermark))]
@@ -3757,14 +3757,14 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TenantWebhookHealthVisible))]
     [NotifyPropertyChangedFor(nameof(TenantWebhookHealthBrush))]
-    private string _tenantWebhookHealth = "";
+    private string _tenantWebhookHealth = string.Empty;
     public bool TenantWebhookHealthy { get; private set; }
     public bool TenantWebhookHealthVisible => !string.IsNullOrEmpty(TenantWebhookHealth);
     public Avalonia.Media.IBrush TenantWebhookHealthBrush => TenantWebhookHealthy ? HealthyBrush : FailingBrush;
-    [ObservableProperty] private string _tenantOcrDisplay = "";
-    [ObservableProperty] private string _tenantId = "";
-    [ObservableProperty] private string _tenantStatus = "";
-    [ObservableProperty] private string _tenantCreated = "";
+    [ObservableProperty] private string _tenantOcrDisplay = string.Empty;
+    [ObservableProperty] private string _tenantId = string.Empty;
+    [ObservableProperty] private string _tenantStatus = string.Empty;
+    [ObservableProperty] private string _tenantCreated = string.Empty;
 
     public bool HasTenantSettings => TenantSettingsLoaded;
 
@@ -3822,11 +3822,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         else
         {
             TenantStorageUsage = "Used: " + FormatBytes(s.StorageUsedBytes) + " (no limit)";
-            TenantStorageWarning = "";
+            TenantStorageWarning = string.Empty;
         }
         TenantIncompleteUploadCleanupDays = s.IncompleteUploadCleanupDays;
         TenantAuditWebhookUrl = s.AuditWebhookUrl ?? "";
-        TenantAuditWebhookSecret = "";
+        TenantAuditWebhookSecret = string.Empty;
         TenantWebhookConfigured = s.AuditWebhookConfigured;
         TenantWebhookHealthy = s.AuditWebhookConsecutiveFailures == 0;
         TenantWebhookHealth = DescribeWebhookHealth(s);
@@ -3943,7 +3943,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     }
 
     // The corner: current user's DisplayName + photo (or initials); the email that used to show here is gone.
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(UserInitials))] private string _userDisplayName = "";
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(UserInitials))] private string _userDisplayName = string.Empty;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasProfilePhoto))]
@@ -4547,8 +4547,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
 
     // ---- Tag catalog admin (ADR "Tag controlled vocabulary") --------------------------------------------
     public ObservableCollection<TagCatalogRow> TagCatalogAdmin { get; } = [];
-    [ObservableProperty] private string _newTagName = "";
-    [ObservableProperty] private string _newTagColor = "";
+    [ObservableProperty] private string _newTagName = string.Empty;
+    [ObservableProperty] private string _newTagColor = string.Empty;
 
     private async Task LoadTagCatalogAsync()
     {
@@ -4579,8 +4579,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         try
         {
             await _api.Documents.CreateTagAsync(NewTagName.Trim(), string.IsNullOrWhiteSpace(NewTagColor) ? null : NewTagColor.Trim());
-            NewTagName = "";
-            NewTagColor = "";
+            NewTagName = string.Empty;
+            NewTagColor = string.Empty;
             await LoadTagCatalogAsync();
         }
         catch (Exception e) { Status = e is ApiActionException a ? a.Message : "Could not add the tag."; }
@@ -4691,14 +4691,14 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     {
         SysName = name;
         SysDocumentDate = null;
-        SysCreated = "";
-        SysCreatedBy = "";
+        SysCreated = string.Empty;
+        SysCreatedBy = string.Empty;
         SysWorkflowStatus = null;
         WorkflowTransitions.Clear();
-        SysFileExtension = "";
+        SysFileExtension = string.Empty;
         SysHasTiff = false;
-        SysOcrLanguages = "";
-        SysCurrentVersion = "";
+        SysOcrLanguages = string.Empty;
+        SysCurrentVersion = string.Empty;
         _sysOcrCodes = [];
         _stagedOcrCodes = [];
 
@@ -4729,7 +4729,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
             _detailSortOrder = detail.ContentsSortOrder;
             OnPropertyChanged(nameof(DetailSortText));
         }
-        catch (Exception) { _detailSensitivityName = ""; _detailSensitivityColor = null; _detailSensitivityWatermark = false; DetailSensitivityId = null; _detailExternalLinksHref = null; CanShareDocument = false; }
+        catch (Exception) { _detailSensitivityName = string.Empty; _detailSensitivityColor = null; _detailSensitivityWatermark = false; DetailSensitivityId = null; _detailExternalLinksHref = null; CanShareDocument = false; }
         // Sensitivity watermark on the preview (ADR "Document watermarking") — when the label's watermark flag is set.
         Preview.WatermarkText = _detailSensitivityWatermark ? $"{_detailSensitivityName} · {UserDisplayName}" : "";
         // Whether the current user follows this document (ADR "Document subscriptions").
@@ -4813,7 +4813,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     public ObservableCollection<MaskFieldEditViewModel> MaskEditFields { get; } = [];
 
     private Guid? _originalMaskId;
-    private string _originalName = "";
+    private string _originalName = string.Empty;
     private DateTimeOffset? _originalDocumentDate;
     private bool _loadingMaskEdit;
 
@@ -4842,7 +4842,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
             EditTags.Clear();
             foreach (var t in DetailTags) EditTags.Add(t);
             _origTags = [.. DetailTags];
-            NewTag = "";
+            NewTag = string.Empty;
             if (TagCatalog.Count == 0)
             {
                 try { foreach (var t in await _api.Documents.GetTagCatalogAsync()) TagCatalog.Add(t); } catch (Exception) { /* optional */ }
@@ -5170,7 +5170,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
             ? href
             : throw new InvalidOperationException($"The '{rel}' rel was not advertised for the open document.");
 
-    private string _detailDocumentName = "";
+    private string _detailDocumentName = string.Empty;
 
     [ObservableProperty] private bool _canShareDocument;
 
@@ -5273,7 +5273,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         foreach (var other in Comments)
         {
             other.IsReplying = false;
-            other.ReplyText = "";
+            other.ReplyText = string.Empty;
         }
 
         message.IsReplying = opening;
@@ -5313,7 +5313,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         try
         {
             await _api.Documents.PostCommentAsync(DetailHref("chat"), NewComment, parentCommentId: null);
-            NewComment = "";
+            NewComment = string.Empty;
             await LoadCommentsAsync(DetailHref("chat"));
         }
         catch (Exception e)
@@ -5325,9 +5325,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     private void ClearDetail()
     {
         _selectedDocumentId = null;
-        DetailTitle = "";
-        MaskLine = "";
-        _detailSensitivityName = "";
+        DetailTitle = string.Empty;
+        MaskLine = string.Empty;
+        _detailSensitivityName = string.Empty;
         _detailSensitivityColor = null;
         _detailSensitivityWatermark = false;
         DetailSensitivityId = null;
@@ -5336,19 +5336,19 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         HasDetailTags = false;
         IndexFields.Clear();
         Comments.Clear();
-        Preview.WatermarkText = "";
+        Preview.WatermarkText = string.Empty;
         Preview.Reset("Select a document.");
         Preview.PreviewConverted = false;
-        SysName = "";
+        SysName = string.Empty;
         SysDocumentDate = null;
-        SysCreated = "";
-        SysCreatedBy = "";
+        SysCreated = string.Empty;
+        SysCreatedBy = string.Empty;
         SysWorkflowStatus = null;
         WorkflowTransitions.Clear();
-        SysFileExtension = "";
+        SysFileExtension = string.Empty;
         SysHasTiff = false;
-        SysOcrLanguages = "";
-        SysCurrentVersion = "";
+        SysOcrLanguages = string.Empty;
+        SysCurrentVersion = string.Empty;
         _sysOcrCodes = [];
         _stagedOcrCodes = [];
         _sysCurrentVersionId = Guid.Empty;
@@ -5412,7 +5412,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         {
             Id = Guid.Empty,
             AuthorName = "Demo Admin",
-            Body = "",
+            Body = string.Empty,
             Kind = 1,
             VersionNumber = 1,
             VersionComment = "Scanned from the paper original.",
@@ -5662,7 +5662,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
             Name = docName,
             IsFolder = false,
             ParentId = sub.Id,
-            Path = "",
+            Path = string.Empty,
             Links = new Dictionary<string, string> { ["self"] = docRow.Href("self"), ["parent"] = sub.Href("self") },
         });
 

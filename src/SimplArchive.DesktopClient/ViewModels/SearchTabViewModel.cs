@@ -66,7 +66,7 @@ public partial class SearchTabViewModel : ObservableObject
     /// <summary>Runs a tag search — the Tags tab's entry point; the shell switches tab, this runs the query.</summary>
     public async Task RunForTagAsync(string tag)
     {
-        SearchQuery = "";
+        SearchQuery = string.Empty;
         ClearFacetSelections();
         _facetTagSet.Add(tag);
         await SearchAsync();
@@ -76,9 +76,9 @@ public partial class SearchTabViewModel : ObservableObject
 
     public ObservableCollection<SearchResultViewModel> SearchResults { get; } = [];
 
-    [ObservableProperty] private string _searchQuery = "";
+    [ObservableProperty] private string _searchQuery = string.Empty;
 
-    [ObservableProperty] private string _searchStatus = "";
+    [ObservableProperty] private string _searchStatus = string.Empty;
 
     [ObservableProperty] private SearchResultViewModel? _selectedSearchResult;
 
@@ -102,7 +102,7 @@ public partial class SearchTabViewModel : ObservableObject
 
     [ObservableProperty] private DateTimeOffset? _createdTo;
 
-    [ObservableProperty] private string _createdByFilter = "";
+    [ObservableProperty] private string _createdByFilter = string.Empty;
 
     private IReadOnlyList<string> _availableFieldNames = [];
 
@@ -161,10 +161,10 @@ public partial class SearchTabViewModel : ObservableObject
     [RelayCommand]
     private async Task ResetSearchCriteriaAsync()
     {
-        SearchQuery = "";
+        SearchQuery = string.Empty;
         SelectedSearchRepository = SearchRepositories.Count > 0 ? SearchRepositories[0] : null;
         DocDateFrom = DocDateTo = CreatedFrom = CreatedTo = null;
-        CreatedByFilter = "";
+        CreatedByFilter = string.Empty;
         FieldFilters.Clear();
         ClearFacetSelections();
         SelectedSearchResult = null;
@@ -246,7 +246,7 @@ public partial class SearchTabViewModel : ObservableObject
             FacetSensitivity.Clear();
             FieldFacets.Clear();
             HasFacetTypes = HasFacetFileTypes = HasFacetCreatedBy = HasFacetYears = HasFacetTags = HasFacetSensitivity = false;
-            SearchStatus = "";
+            SearchStatus = string.Empty;
             return;
         }
 
@@ -336,7 +336,7 @@ public partial class SearchTabViewModel : ObservableObject
     // ---- Saved searches (ADR "Saved searches") ------------------------------------------------------
     public ObservableCollection<SearchClient.SavedSearchInfo> SavedSearches { get; } = [];
 
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(CanSaveSearch))] private string _lastSearchQueryString = "";
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(CanSaveSearch))] private string _lastSearchQueryString = string.Empty;
 
     public bool CanSaveSearch => !string.IsNullOrEmpty(LastSearchQueryString);
 

@@ -211,7 +211,7 @@ public sealed partial class IntrayTabViewModel : ObservableObject
     /// <summary>And the mirror: a group or other-user item is the one you can move to your own intray.</summary>
     public bool CanClaimSelectedItem => SelectedServerItem is { IsOwn: false };
 
-    [ObservableProperty] private string _status = "";
+    [ObservableProperty] private string _status = string.Empty;
 
     // Whether the caller holds CanManageIntrays (own or via a group) — gates the intray user-picker that opens
     // another user's intray for triage (ADR 0532); set from whoami on login.
@@ -368,9 +368,9 @@ public sealed partial class IntrayTabViewModel : ObservableObject
     [ObservableProperty] private bool _itemFocused;
 
     [ObservableProperty] private bool _isEmail; // .eml/.msg → classified by the system, no mask offered
-    [ObservableProperty] private string _detailTitle = "";
+    [ObservableProperty] private string _detailTitle = string.Empty;
 
-    [ObservableProperty] private string _name = "";
+    [ObservableProperty] private string _name = string.Empty;
 
     [ObservableProperty] private DateTime? _documentDate;
 
@@ -400,7 +400,7 @@ public sealed partial class IntrayTabViewModel : ObservableObject
 
         DetailTitle = value.Name;
         Preview.Reset("Loading…");
-        Preview.FindQuery = "";
+        Preview.FindQuery = string.Empty;
 
         // An email (.eml/.msg) is classified automatically by the system when filed — the mask isn't offered
         // in the intray for it (ADR "Consume the staged mask sidecar at filing").
@@ -524,7 +524,7 @@ public sealed partial class IntrayTabViewModel : ObservableObject
     // staged into the pane, and consumed at filing to OCR the searchable-PDF successor in the chosen languages.
     [ObservableProperty] private bool _stgScannable;
 
-    [ObservableProperty] private string _ocrDisplay = "";
+    [ObservableProperty] private string _ocrDisplay = string.Empty;
 
     private List<string> _stgOcrCodes = [];
 
@@ -541,8 +541,8 @@ public sealed partial class IntrayTabViewModel : ObservableObject
     {
         ItemFocused = false;
         IsEmail = false;
-        DetailTitle = "";
-        Name = "";
+        DetailTitle = string.Empty;
+        Name = string.Empty;
         DocumentDate = null;
         AvailableMasks.Clear();
         MaskEditFields.Clear();
@@ -550,7 +550,7 @@ public sealed partial class IntrayTabViewModel : ObservableObject
         Preview.Reset("Select a server intray item.");
         Preview.PreviewConverted = false;
         Preview.CanFindInDocument = false;
-        Preview.FindQuery = "";
+        Preview.FindQuery = string.Empty;
     }
 
     // Opens a server intray item natively: download it to the temp folder, then hand it to its OS app.
@@ -622,8 +622,8 @@ public sealed partial class IntrayTabViewModel : ObservableObject
     // which tab is in front — so neither side needs a hook into the other just to pose for a picture.
     internal void PopulateDemo()
     {
-        ServerItems.Add(new IntrayItemViewModel { Name = "invoice-2026-03.pdf", Size = 132_004, DownloadUrl = "", HasMask = true });
-        ServerItems.Add(new IntrayItemViewModel { Name = "meeting-notes.eml", Size = 8_942, DownloadUrl = "", HasMask = false });
+        ServerItems.Add(new IntrayItemViewModel { Name = "invoice-2026-03.pdf", Size = 132_004, DownloadUrl = string.Empty, HasMask = true });
+        ServerItems.Add(new IntrayItemViewModel { Name = "meeting-notes.eml", Size = 8_942, DownloadUrl = string.Empty, HasMask = false });
         Status = "2 item(s).";
 
         // Focus the first server item so the right panes (mask + preview) show in the screenshot.

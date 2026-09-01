@@ -36,9 +36,9 @@ public class NotificationsController : ControllerBase
     public class NotificationResource : HypermediaResource
     {
         public Guid Id { get; set; }
-        public string Type { get; set; } = "";
-        public string Title { get; set; } = "";
-        public string Body { get; set; } = "";
+        public string Type { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string Body { get; set; } = string.Empty;
         // How many coalesced events this notification represents (ADR "Notification digest / coalescing"); 1 for a
         // normal one. The clients render "… (×N)" when > 1.
         public int EventCount { get; set; } = 1;
@@ -67,7 +67,7 @@ public class NotificationsController : ControllerBase
     public class PreferenceResource
     {
         public int Type { get; set; }
-        public string TypeName { get; set; } = "";
+        public string TypeName { get; set; } = string.Empty;
         public bool EmailEnabled { get; set; }
     }
 

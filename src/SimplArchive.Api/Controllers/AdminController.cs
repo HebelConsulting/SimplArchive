@@ -70,8 +70,8 @@ public class AdminController : ControllerBase
 
 
         public Guid UserId { get; set; }
-        public string DisplayName { get; set; } = "";
-        public string Email { get; set; } = "";
+        public string DisplayName { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
         public bool UserIsActive { get; set; }
         // The user's personal repository, with its advertised addresses (#443): `document` (the repository seen
         // as a document) and `children` (browse it, via the admin's ACL bypass) — a row naming a repository

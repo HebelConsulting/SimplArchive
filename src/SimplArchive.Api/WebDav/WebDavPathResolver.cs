@@ -13,7 +13,7 @@ internal sealed class WebDavNode
     public Document? Document { get; init; }
     public bool IsRoot { get; init; }
     public bool IsCollection { get; init; }
-    public string WebDavName { get; init; } = "";
+    public string WebDavName { get; init; } = string.Empty;
     public string? ObjectKey { get; init; }
     public long Length { get; init; }
     public string ContentType { get; init; } = "application/octet-stream";

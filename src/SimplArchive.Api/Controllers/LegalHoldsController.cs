@@ -54,7 +54,7 @@ public class LegalHoldsController : ControllerBase
     public class LegalHoldResource : HypermediaResource
     {
         public Guid Id { get; set; }
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
         public string? Reason { get; set; }
         public DateTimeOffset PlacedAt { get; set; }
         public DateTimeOffset? ReleasedAt { get; set; }
@@ -66,7 +66,7 @@ public class LegalHoldsController : ControllerBase
     public class LegalHoldItemResource : HypermediaResource
     {
         public Guid DocumentId { get; set; }
-        public string DocumentName { get; set; } = "";
+        public string DocumentName { get; set; } = string.Empty;
 
         // The document's home folder (null for a repository root) — lets the client jump to it in the tree
         // (the SearchResultResource precedent).
@@ -80,7 +80,7 @@ public class LegalHoldsController : ControllerBase
 
     public class CreateLegalHoldRequest
     {
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
         public string? Reason { get; set; }
     }
 

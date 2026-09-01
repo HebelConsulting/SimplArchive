@@ -10,7 +10,7 @@ namespace SimplArchive.DesktopClient.ViewModels;
 /// <summary>One typed multi-value row (an e-mail or a phone number).</summary>
 public sealed partial class ContactFieldRowViewModel : ObservableObject
 {
-    [ObservableProperty] private string _value = "";
+    [ObservableProperty] private string _value = string.Empty;
     [ObservableProperty] private string _type = "work";
 
     /// <summary>The three the form offers. vCard allows many more; these are the ones a person picks.</summary>
@@ -21,11 +21,11 @@ public sealed partial class ContactFieldRowViewModel : ObservableObject
 public sealed partial class ContactAddressRowViewModel : ObservableObject
 {
     [ObservableProperty] private string _type = "home";
-    [ObservableProperty] private string _street = "";
-    [ObservableProperty] private string _city = "";
-    [ObservableProperty] private string _region = "";
-    [ObservableProperty] private string _postalCode = "";
-    [ObservableProperty] private string _country = "";
+    [ObservableProperty] private string _street = string.Empty;
+    [ObservableProperty] private string _city = string.Empty;
+    [ObservableProperty] private string _region = string.Empty;
+    [ObservableProperty] private string _postalCode = string.Empty;
+    [ObservableProperty] private string _country = string.Empty;
 
     public static IReadOnlyList<string> Types { get; } = ["home", "work"];
 }
@@ -36,13 +36,13 @@ public sealed partial class ContactAddressRowViewModel : ObservableObject
 /// </summary>
 public sealed partial class ContactEditViewModel : StructuredEditFormViewModel
 {
-    [ObservableProperty] private string _givenName = "";
-    [ObservableProperty] private string _familyName = "";
-    [ObservableProperty] private string _organization = "";
-    [ObservableProperty] private string _title = "";
-    [ObservableProperty] private string _birthday = "";
-    [ObservableProperty] private string _url = "";
-    [ObservableProperty] private string _note = "";
+    [ObservableProperty] private string _givenName = string.Empty;
+    [ObservableProperty] private string _familyName = string.Empty;
+    [ObservableProperty] private string _organization = string.Empty;
+    [ObservableProperty] private string _title = string.Empty;
+    [ObservableProperty] private string _birthday = string.Empty;
+    [ObservableProperty] private string _url = string.Empty;
+    [ObservableProperty] private string _note = string.Empty;
 
     public ObservableCollection<ContactFieldRowViewModel> Emails { get; } = [];
 

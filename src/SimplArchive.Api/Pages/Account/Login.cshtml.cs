@@ -128,10 +128,10 @@ public class LoginModel : PageModel
     {
         [Required]
         [EmailAddress]
-        public string Email { get; set; } = "";
+        public string Email { get; set; } = string.Empty;
 
         [Required]
-        public string Password { get; set; } = "";
+        public string Password { get; set; } = string.Empty;
     }
 
     public void OnGet()
@@ -645,7 +645,7 @@ public class LoginModel : PageModel
     private bool TryReadEnrollTicket(string ticket, out Guid userId, out string secret)
     {
         userId = Guid.Empty;
-        secret = "";
+        secret = string.Empty;
         try
         {
             var parts = _enrollProtector.Unprotect(ticket).Split('|');

@@ -95,7 +95,7 @@ public class IntrayController : ControllerBase
 
     public class IntrayItemResource : HypermediaResource
     {
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
         public long Size { get; set; }
 
@@ -133,7 +133,7 @@ public class IntrayController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
     }
 
     public class IntrayGroupsResource : HypermediaResource
@@ -146,7 +146,7 @@ public class IntrayController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
     }
 
     public class IntrayUsersResource : HypermediaResource
@@ -156,12 +156,12 @@ public class IntrayController : ControllerBase
 
     public class UploadIntrayRequest
     {
-        public string FileName { get; set; } = "";
+        public string FileName { get; set; } = string.Empty;
     }
 
     public class UploadIntrayResource : HypermediaResource
     {
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
         public Uri UploadUrl { get; set; } = null!;
     }

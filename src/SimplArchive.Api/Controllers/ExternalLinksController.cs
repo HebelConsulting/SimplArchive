@@ -58,9 +58,9 @@ public class ExternalLinksController : ControllerBase
 
     public class ExternalLinkRedemptionResource : HypermediaResource
     {
-        public string DownloadUrl { get; set; } = "";
+        public string DownloadUrl { get; set; } = string.Empty;
 
-        public string FileName { get; set; } = "";
+        public string FileName { get; set; } = string.Empty;
 
         public DateTimeOffset ExpiresAt { get; set; }
     }

@@ -34,9 +34,9 @@ public sealed partial class ServerManagerViewModel : ObservableObject
     private bool _isEditing;
 
     [ObservableProperty] private bool _isAdding;
-    [ObservableProperty] private string _editName = "";
-    [ObservableProperty] private string _editUrl = "";
-    [ObservableProperty] private string _error = "";
+    [ObservableProperty] private string _editName = string.Empty;
+    [ObservableProperty] private string _editUrl = string.Empty;
+    [ObservableProperty] private string _error = string.Empty;
 
     // The styles this installation can offer: the ones bundled with the client, plus anything dropped into a
     // themes/ folder beside it (ADR 0578). Read once — a picker that rescanned the disk on every keystroke
@@ -218,7 +218,7 @@ public sealed partial class ServerManagerViewModel : ObservableObject
         EditUrl = Selected.ApiRootUrl;
         EditTheme = ThemeFor(Selected.Theme);
         EditEnvironment = EnvironmentFor(Selected.Environment);
-        Error = "";
+        Error = string.Empty;
         IsEditing = true;
     }
 
@@ -228,10 +228,10 @@ public sealed partial class ServerManagerViewModel : ObservableObject
     private void Add()
     {
         IsAdding = true;
-        EditName = "";
-        EditUrl = "";
+        EditName = string.Empty;
+        EditUrl = string.Empty;
         EditEnvironment = Environments.First(); // "(none)" — a new server declares nothing until told otherwise
-        Error = "";
+        Error = string.Empty;
         IsEditing = true;
     }
 
@@ -314,7 +314,7 @@ public sealed partial class ServerManagerViewModel : ObservableObject
     {
         IsEditing = false;
         IsAdding = false;
-        Error = "";
+        Error = string.Empty;
 
         // The live preview is an edit like any other, so cancelling has to undo it too. Leaving the previewed
         // style on screen would be the one edit a Cancel button did not cancel.

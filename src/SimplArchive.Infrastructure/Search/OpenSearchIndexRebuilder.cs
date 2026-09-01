@@ -285,7 +285,7 @@ public sealed class OpenSearchIndexRebuilder
         var versionCreatedBy = version is null ? null
             : await ResolveCreatorNameAsync(version.CreatedByUserId, version.CreatedByServiceAccountId, cancellationToken);
 
-        var content = "";
+        var content = string.Empty;
         if (version is not null)
         {
             try

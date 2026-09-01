@@ -115,11 +115,11 @@ public sealed class DetailState
     /// the detail loads — so saving an edited date follows the rel rather than rebuilding the path (ADR 0543).</summary>
     public string? SysDocumentDateHref { get; set; }
     public int? SysCurrentVersion { get; set; }
-    public string SysName { get; set; } = "";
-    public string SysFileExtension { get; set; } = "";
+    public string SysName { get; set; } = string.Empty;
+    public string SysFileExtension { get; set; } = string.Empty;
     public DateTime? SysDocumentDate { get; set; }
-    public string SysCreated { get; set; } = "";
-    public string SysCreatedBy { get; set; } = "";
+    public string SysCreated { get; set; } = string.Empty;
+    public string SysCreatedBy { get; set; } = string.Empty;
 
     /// <summary>Whether the current version is a TIFF, which is what offers the searchable-PDF conversion.</summary>
     public bool SysHasTiff { get; set; }
@@ -165,7 +165,7 @@ public sealed class DetailState
     public bool CanEditIndexData { get; set; }
     public bool BreaksInheritance { get; set; }
     public Guid? SensitivityId { get; set; }
-    public string SensitivityName { get; set; } = "";
+    public string SensitivityName { get; set; } = string.Empty;
     public string? SensitivityColor { get; set; }
     public bool SensitivityWatermark { get; set; }
 
@@ -184,7 +184,7 @@ public sealed class DetailState
     /// </summary>
     public bool IsEditing { get; set; }
 
-    public string EditName { get; set; } = "";
+    public string EditName { get; set; } = string.Empty;
     public DateTime? EditDocumentDate { get; set; }
     public Guid? EditMaskId { get; set; }
     public List<string> EditOcrCodes { get; set; } = [];
@@ -208,7 +208,7 @@ public sealed class DetailState
     // live beside the working copy rather than in DetailEditor because they are half of the same answer: without
     // them a form restored after a tab switch would think every field had changed.
 
-    public string OrigName { get; set; } = "";
+    public string OrigName { get; set; } = string.Empty;
     public DateTime? OrigDocumentDate { get; set; }
     public Guid? OrigMaskId { get; set; }
     public List<string> OrigOcrCodes { get; set; } = [];

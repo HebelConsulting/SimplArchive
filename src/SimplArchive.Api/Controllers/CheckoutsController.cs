@@ -70,12 +70,12 @@ public class CheckoutsController : ControllerBase
     public class CheckoutResource : HypermediaResource
     {
         public Guid Id { get; set; }
-        public string Name { get; set; } = "";
-        public string Path { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
+        public string Path { get; set; } = string.Empty;
         // The current confirmed version's SHA-256 (hex) — compared against the local working copy's hash.
-        public string Sha256 { get; set; } = "";
+        public string Sha256 { get; set; } = string.Empty;
         // The current version's file extension (Document.Name is a bare stem, ADR 0277) — the working-copy filename.
-        public string FileExtension { get; set; } = "";
+        public string FileExtension { get; set; } = string.Empty;
         public DateTimeOffset CheckedOutAt { get; set; }
 
         // When an idle check-out will be auto-released (CheckedOutAt + the tenant's CheckoutTtlDays), null when

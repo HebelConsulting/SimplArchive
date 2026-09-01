@@ -31,7 +31,7 @@ public sealed partial class WorkflowWindowViewModel : ObservableObject
     public bool Changed { get; private set; }
 
     [ObservableProperty] private bool _hasWorkflow;
-    [ObservableProperty] private string _statusName = "";
+    [ObservableProperty] private string _statusName = string.Empty;
     [ObservableProperty] private string? _assignedTo;
     [ObservableProperty] private bool _canSubmit;
     [ObservableProperty] private bool _canReview;   // the review SECTION is shown when either action is offered
@@ -47,9 +47,9 @@ public sealed partial class WorkflowWindowViewModel : ObservableObject
     [ObservableProperty] private bool _canReassign;  // delegate/re-route (reviewer or editor)
     [ObservableProperty] private bool _hasHistory;
     [ObservableProperty] private UserOptionInfo? _selectedReviewer;
-    [ObservableProperty] private string _rejectReason = "";
+    [ObservableProperty] private string _rejectReason = string.Empty;
     [ObservableProperty] private bool _busy;
-    [ObservableProperty] private string _status = "";
+    [ObservableProperty] private string _status = string.Empty;
 
     public ObservableCollection<WorkflowHistoryItemViewModel> History { get; } = [];
     public ObservableCollection<UserOptionInfo> Reviewers { get; } = [];
@@ -59,7 +59,7 @@ public sealed partial class WorkflowWindowViewModel : ObservableObject
         HasWorkflow = false;
         History.Clear();
         CanSubmit = CanReview = CanRelease = CanReassign = CanApprove = CanReject = false;
-        RejectReason = "";
+        RejectReason = string.Empty;
         SelectedReviewer = null;
 
         WorkflowClient.WorkflowInfo? wf;

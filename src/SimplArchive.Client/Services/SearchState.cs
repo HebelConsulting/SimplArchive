@@ -24,7 +24,7 @@ namespace SimplArchive.Client.Services;
 public sealed class SearchState
 {
     /// <summary>The free-text term in the search box.</summary>
-    public string Query { get; set; } = "";
+    public string Query { get; set; } = string.Empty;
 
     /// <summary>The current result set, flattened across every page of the last search.</summary>
     public List<SearchHit> Results { get; set; } = [];
@@ -33,13 +33,13 @@ public sealed class SearchState
     public FacetsDto? Facets { get; set; }
 
     /// <summary>The status line under the search bar ("12 result(s).", "No matches.", a failure).</summary>
-    public string Status { get; set; } = "";
+    public string Status { get; set; } = string.Empty;
 
     /// <summary>
     /// The query string the last search actually ran, which is what "Save search" persists — assembled from the
     /// whole UI, so it is not reconstructible from <see cref="Query"/> alone.
     /// </summary>
-    public string LastQueryString { get; set; } = "";
+    public string LastQueryString { get; set; } = string.Empty;
 
     /// <summary>Whether the refinement panel is expanded.</summary>
     public bool FiltersExpanded { get; set; }
@@ -55,7 +55,7 @@ public sealed class SearchState
 
     public DateTime? CreatedTo { get; set; }
 
-    public string CreatedBy { get; set; } = "";
+    public string CreatedBy { get; set; } = string.Empty;
 
     /// <summary>The index-field filter rows the user has added.</summary>
     public List<FieldFilterRow> FieldFilters { get; set; } = [];
@@ -120,10 +120,10 @@ public sealed class SearchState
     /// </remarks>
     public void ResetCriteria()
     {
-        Query = "";
+        Query = string.Empty;
         RepositoryId = null;
         DocDateFrom = DocDateTo = CreatedFrom = CreatedTo = null;
-        CreatedBy = "";
+        CreatedBy = string.Empty;
         FieldFilters = [];
         ClearFacetSelections();
     }
@@ -136,14 +136,14 @@ public sealed class SearchState
 /// </remarks>
 public sealed class FieldFilterRow
 {
-    public string FieldName { get; set; } = "";
+    public string FieldName { get; set; } = string.Empty;
 
     /// <summary>FieldDataType: Text=0, Number=1, Date=2, Boolean=3, SingleSelect=4, MultiSelect=5.</summary>
     public int DataType { get; set; }
 
-    public string Operator { get; set; } = "";
+    public string Operator { get; set; } = string.Empty;
 
-    public string Value { get; set; } = "";
+    public string Value { get; set; } = string.Empty;
 
     /// <summary>Used instead of <see cref="Value"/> when <see cref="DataType"/> is Date.</summary>
     public DateTime? DateValue { get; set; }

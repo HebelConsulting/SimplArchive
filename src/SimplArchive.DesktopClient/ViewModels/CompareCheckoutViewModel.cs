@@ -17,11 +17,11 @@ public sealed partial class CompareCheckoutViewModel : ObservableObject
 {
     private SimplArchiveApiClient? _api;
     private string? _downloadUrl;
-    private string _fileExtension = "";
+    private string _fileExtension = string.Empty;
     private string? _stashDownloadUrl;
 
-    [ObservableProperty] private string _documentName = "";
-    [ObservableProperty] private string _status = "";
+    [ObservableProperty] private string _documentName = string.Empty;
+    [ObservableProperty] private string _status = string.Empty;
     [ObservableProperty] private bool _notAvailable;
 
     // The rendered side-by-side rows — computed client-side from the two texts the server extracts (ADR 0712).

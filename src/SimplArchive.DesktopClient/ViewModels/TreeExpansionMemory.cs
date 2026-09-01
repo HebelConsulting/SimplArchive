@@ -25,7 +25,7 @@ namespace SimplArchive.DesktopClient.ViewModels;
 public sealed class TreeExpansionMemory
 {
     private readonly HashSet<ExpandedNode> _expanded = [];
-    private string _key = "";
+    private string _key = string.Empty;
     private bool _restoring;
 
     /// <summary>Points the memory at one server-and-user context; call before recording or restoring.</summary>

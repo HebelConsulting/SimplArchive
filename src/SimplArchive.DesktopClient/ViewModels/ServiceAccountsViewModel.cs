@@ -34,14 +34,14 @@ public sealed partial class ServiceAccountsViewModel : ObservableObject
     public ObservableCollection<ServiceAccountRowViewModel> Accounts { get; } = [];
 
     // The create form. Only the five grantable rights (the server caps them at the caller's own).
-    [ObservableProperty] private string _newName = "";
+    [ObservableProperty] private string _newName = string.Empty;
     [ObservableProperty] private bool _newCanExport;
     [ObservableProperty] private bool _newCanImport;
     [ObservableProperty] private bool _newCanManageRepositories;
     [ObservableProperty] private bool _newCanManageMasks;
     [ObservableProperty] private bool _newCanManageServiceAccounts;
 
-    [ObservableProperty] private string _status = "";
+    [ObservableProperty] private string _status = string.Empty;
     [ObservableProperty] private bool _busy;
 
     public async Task LoadAsync(CancellationToken cancellationToken = default)
@@ -55,7 +55,7 @@ public sealed partial class ServiceAccountsViewModel : ObservableObject
                 Accounts.Add(new ServiceAccountRowViewModel(a));
             }
 
-            Status = "";
+            Status = string.Empty;
         }
         catch (Exception ex)
         {
@@ -71,7 +71,7 @@ public sealed partial class ServiceAccountsViewModel : ObservableObject
 
     public void ResetNewForm()
     {
-        NewName = "";
+        NewName = string.Empty;
         NewCanExport = NewCanImport = NewCanManageRepositories = NewCanManageMasks = NewCanManageServiceAccounts = false;
     }
 }

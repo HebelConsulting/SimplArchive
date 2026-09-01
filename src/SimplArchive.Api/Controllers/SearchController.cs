@@ -65,7 +65,7 @@ public partial class SearchController : ControllerBase
     {
         public Guid Id { get; set; }
 
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
         public bool IsFolder { get; set; }
 
@@ -74,12 +74,12 @@ public partial class SearchController : ControllerBase
         public Guid? ParentId { get; set; }
 
         // Full display path, e.g. "Repositories / Contracts / Invoice 42".
-        public string Path { get; set; } = "";
+        public string Path { get; set; } = string.Empty;
 
         // A snippet with the matched terms wrapped in <em>…</em> (ADR "Search result highlighting") — a content
         // excerpt, else a matched index-field value, else the name; empty when nothing textual matched or the
         // metadata fallback is in use. Surrounding text is HTML-escaped, so the only markup is the <em> tags.
-        public string Highlight { get; set; } = "";
+        public string Highlight { get; set; } = string.Empty;
 
         /// <summary>What to draw for this hit — the mask's token, or null for the shape default.</summary>
         /// <remarks>
@@ -139,13 +139,13 @@ public partial class SearchController : ControllerBase
 
     public class FieldFacetResource
     {
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
         public List<FacetBucketResource> Buckets { get; set; } = [];
     }
 
     public class FacetBucketResource
     {
-        public string Value { get; set; } = "";
+        public string Value { get; set; } = string.Empty;
         public long Count { get; set; }
     }
 
@@ -474,7 +474,7 @@ public partial class SearchController : ControllerBase
 
     public class SearchFieldResource : HypermediaResource
     {
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
 
         // The FieldDataType as an integer (Text=0, Number=1, Date=2, Boolean=3, SingleSelect=4, MultiSelect=5),
         // consistent with every other enum on this Api — lets the client pick the right operators/input.
