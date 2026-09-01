@@ -22,23 +22,6 @@ It resets to a clean, known state every night, so feel free to create, upload, w
 >
 > **The product itself is built to run for real:** a Helm chart for Kubernetes, a fully automated AWS installation, secrets and certificates from OpenBao, backup/DR scripts, and a readiness gate that **refuses to start outside Development** when any dev-grade setting is present — with no bypass flag. What remains ahead is operational maturity (live-cluster HA/DR validation, scheduled offsite backups, zero-downtime schema changes), not basic readiness.
 
-## 🎙 Let your AI give you the tour
-
-Every SimplArchive instance publishes a machine-readable guided tour at **`/llms.txt`**. *Ask* an AI assistant
-that can drive your browser — e.g. [Claude in Chrome](https://claude.ai/chrome) — for the tour in your own words
-(a well-behaved assistant acts on **your** request, not on a file's): *"Give me the guided tour of
-`https://demo.simplarchive.dev/llms.txt` — interview me first, and speak my language."* It will interview you
-(areas, depth), then drive the app while narrating **aloud**. On the shared demo it keeps to a read-only tour; on
-your own instance it can also demonstrate hands-on filing, indexing and sharing.
-
-Two setups that actually work — a chat that only fetches pages server-side can't click, speak, or reach a
-`localhost` instance:
-
-1. **A browser-extension assistant** — e.g. a [claude.ai](https://claude.ai) conversation with the
-   [Claude in Chrome](https://claude.ai/chrome) extension connected, so the assistant sees and drives your tabs.
-2. **A local agent on your machine** — e.g. [Claude Code](https://claude.com/claude-code) driving your browser,
-   which can also speak through the OS voice (`say` on macOS, `System.Speech` on Windows, `spd-say` on Linux).
-
 ## Run it locally (Docker Compose)
 
 The whole stack — API + web/desktop-serving host, Postgres, S3-compatible object storage, OpenSearch + Tika, Gotenberg, OCR, mail catcher, secret store, and a pgAdmin UI — runs from one file:
