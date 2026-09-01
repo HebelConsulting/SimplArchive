@@ -121,7 +121,13 @@ public class WorkbenchShellSizeTests
     // that was clobbering it.
     // 3,417 → 3,426 for the same fix's second half (#811): the survival rule covered document rows only, and
     // a FOLDER row clicked during the reload was reverted to the parent. Same seam, same owner, same reason.
-    private const int Ceiling = 2_930;
+    // 2,930 → 2,510: the filing tranche. Every path that puts BYTES into the workbench — an ordinary drop, a
+    // new version onto a document row, a working copy returning to Check-out, and the Intray's drop and
+    // template paths — moved to Home.Filing.razor.cs, 407 lines under five headings that had accumulated
+    // beneath one saying "Upload orchestration". Not shell coordination: the shell owns WHERE a drop lands,
+    // which stays; creating the version, PUTting the bytes and finalizing against the advertised address is
+    // the filing subject, and it has no markup of its own to bring (ADR 0733 — a partial, not a component).
+    private const int Ceiling = 2_510;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()
