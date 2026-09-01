@@ -139,7 +139,19 @@ public class OverLimitFileCeilingTests
         // photo was split between two of them six hundred lines apart -- its STATE under "Profile photo", its
         // load/set/remove OPERATIONS under "Passwords". Two banners had stopped describing what followed them
         // (#941): "Passwords" was true of its first 48 lines and of nothing for the 286 after it.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 4409,
+        // 4,409 -> 4,100: the desktop half of two subjects the WEB client had already been given, dealt out of
+        // a heading reading "Tag chip editor" that held three of them.
+        //
+        //   MainWindowViewModel.Filing.cs (210)   files dropped as new documents, onto a row, and the filing
+        //                                        decision a drop onto an existing document raises
+        //   MainWindowViewModel.Reveal.cs (100)   a search result, and the tree walk that makes it current
+        //
+        // Named to MATCH their web counterparts (Home.Filing.razor.cs, and the Go-to methods now in
+        // Home.Navigation) on purpose: ADR 0511 asks that a web/desktop pair be reviewed as a single surface,
+        // which is only possible if both halves can be found. Neither of these could be -- the web's Go-to sat
+        // under "Rename / delete / recycle bin" and the desktop's filing under "Tag chip editor". A subject
+        // that is hard to locate on one side is how the two clients drift apart unnoticed (#941).
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 4100,
 
         // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
         // the one authenticated ApiCore. Four areas left it:
