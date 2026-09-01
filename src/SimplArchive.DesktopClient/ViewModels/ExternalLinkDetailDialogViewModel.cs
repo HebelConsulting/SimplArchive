@@ -106,7 +106,7 @@ public sealed partial class ExternalLinkDetailDialogViewModel : ObservableObject
         }
     }
 
-    /// <summary>Supplied by the view — the VM stays toolkit-agnostic, as StatusReporter does elsewhere.</summary>
+    /// <summary>Supplied by the view: reaching a clipboard needs a toolkit type, and this VM holds none.</summary>
     public Func<string, Task>? CopyToClipboard { get; set; }
 
     // Offered only while the link is near enough to its end to be worth renewing — the same "nearly up" hint the

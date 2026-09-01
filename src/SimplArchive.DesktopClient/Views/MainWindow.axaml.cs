@@ -39,7 +39,7 @@ public partial class MainWindow : Window
 
         // Provide the sticky-note dialog to the Repositories/Intray preview (ADR "Document annotations"). Set on
         // the main Preview only, so the Recycle-bin preview never offers note editing. Kept in code-behind since
-        // it opens an Avalonia Window owned by this window, keeping the VM view-agnostic (mirrors StatusReporter).
+        // it opens an Avalonia Window owned by this window, keeping the view-model view-agnostic.
         DataContextChanged += (_, _) =>
         {
             if (DataContext is MainWindowViewModel vm)

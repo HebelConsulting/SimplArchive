@@ -22,8 +22,8 @@ public partial class ExternalLinkDetailDialog : Window
             // the reader having to dismiss a dialog whose numbers are already stale.
             viewModel.RequestClose = Close;
 
-            // The clipboard is the view's to reach (the VM stays toolkit-agnostic, as StatusReporter does):
-            // revealing a URL is only useful if it can be pasted somewhere.
+            // The clipboard is the view's to reach, so the view-model stays free of a toolkit type: revealing
+            // a URL is only useful if it can be pasted somewhere.
             viewModel.CopyToClipboard = async text =>
             {
                 if (Clipboard is { } clipboard)

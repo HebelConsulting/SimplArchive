@@ -14,12 +14,21 @@ namespace SimplArchive.DesktopClient.ViewModels;
 /// This is the whole of that list, and a tab reaches the shell through here or not at all.
 /// </para>
 /// <para>
-/// <b>Why an interface rather than the settable callbacks the other tabs use.</b> The six existing tab
-/// view-models each expose an <c>Action&lt;string&gt;? StatusReporter</c> that the shell assigns after
-/// construction. That shape fails in the safe-looking direction: a tab whose wiring line is forgotten does not
-/// break, it silently reports nothing — the same trap as a capability flag defaulting to <c>false</c>
-/// (ADR 0723). Taken as a constructor argument, the seam cannot be forgotten, because omitting it does not
-/// compile.
+/// <b>Why an interface rather than a settable callback.</b> Every tab used to expose an
+/// <c>Action&lt;string&gt;? StatusReporter</c> that the shell assigned after construction. That shape failed in
+/// the safe-looking direction: a tab whose wiring line was forgotten did not break, it silently reported
+/// nothing — the same trap as a capability flag defaulting to <c>false</c> (ADR 0723). Taken as a constructor
+/// argument, the seam cannot be forgotten, because omitting it does not compile. All seven tabs take it
+/// (ADR 0730); the past tense here is the point, not a description of anything still in the tree.
+/// </para>
+/// <para>
+/// <b>A view-supplied capability is a different case, and deliberately stays a settable callback.</b>
+/// <c>CopyToClipboard</c>, <c>RequestClose</c> and <c>AnnotationDialog</c> are nullable properties a VIEW
+/// assigns, and converting them to constructor arguments is NOT the next tranche of this work. The shell
+/// exists when a tab is constructed, so it can be required; a window's clipboard and its owned dialogs belong
+/// to a view that does not exist yet, and demanding one at construction would invert who builds whom. The
+/// failure mode differs too: a forgotten status reporter is silent, while a forgotten clipboard callback
+/// disables a button the user then reports.
 /// </para>
 /// <para>
 /// <b>What does NOT belong here.</b> A callback only one tab wants — Search's <c>OpenResultRequested</c>, its
