@@ -218,11 +218,18 @@ public class OverLimitFileCeilingTests
         // watched file and into an unwatched one, which is the shape this guard exists to catch.
         ["src/SimplArchive.Client/Components/Tabs/IntrayTab.razor"] = 1_482,
 
-        // 987 (#520, "Program.cs leaves the debt list") → 1,287. Left by burn-down, re-crossed by +300.
-        // 1,287 → 1237: this file is over the limit BECAUSE all 28 headless hooks are inline in it, so a new hook
-        // paid its way by moving the largest existing one (--list-scroll-test, 64 lines) into its own class
-        // alongside it. The guard asked for exactly this — give new code a home rather than raise the number.
-        ["src/SimplArchive.DesktopClient/Program.cs"] = 1237,
+        // DesktopClient/Program.cs is GONE from this list: 1,237 → 672. The entry above it had already named the
+        // cause — "over the limit BECAUSE all 28 headless hooks are inline in it" — and the remedy it had been
+        // paying in instalments (one hook moved out per new hook) was never going to close a 237-line gap. The
+        // two FAT bodies were two thirds of the excess and were not hooks at all: rendering a screen
+        // (ScreenshotRenderer, 265 lines) and driving the api-client (ApiClientChecks, 264) are each their own
+        // responsibility, and neither is dispatching a command line, which is what Main is for. The small
+        // per-hook bodies stayed: they are 5–45 lines each, they read as the dispatch chain they belong to, and
+        // ~20 files holding one check apiece would be a worse file to read than the one they came from.
+        //
+        // Deleting the entry is safe in a way it was NOT at #520, when this file left the list at 987 and came
+        // back at 1,287 with nothing watching it: Every_authored_file_over_the_limit_has_an_entry now measures
+        // every authored file, so a re-crossing fails the build rather than going unnoticed for three months.
 
         // 907 at the #466 close → 1,050. Crossed quietly; no single change is to blame, which is the usual way.
         ["src/SimplArchive.Api/Documents/RepositoryImporter.cs"] = 1_050,

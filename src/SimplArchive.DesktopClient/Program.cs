@@ -351,7 +351,7 @@ internal static class Program
         {
             var pdfIndex = Array.IndexOf(args, "--pdf");
             var pdfPath = pdfIndex >= 0 && pdfIndex + 1 < args.Length ? args[pdfIndex + 1] : null;
-            RenderScreenshot(args[screenshotIndex + 1], demo: args.Contains("--demo"), pdfPath);
+            Views.ScreenshotRenderer.Render(args[screenshotIndex + 1], demo: args.Contains("--demo"), pdfPath);
             return;
         }
 
@@ -502,7 +502,7 @@ internal static class Program
         var newFolderIndex = Array.IndexOf(args, "--newfolder-test");
         if (newFolderIndex >= 0 && newFolderIndex + 2 < args.Length)
         {
-            RunNewFolderTestAsync(args[newFolderIndex + 1], args[newFolderIndex + 2]).GetAwaiter().GetResult();
+            Services.ApiClientChecks.NewFolderAsync(args[newFolderIndex + 1], args[newFolderIndex + 2]).GetAwaiter().GetResult();
             return;
         }
 
@@ -511,7 +511,7 @@ internal static class Program
         var modifyIndex = Array.IndexOf(args, "--modify-test");
         if (modifyIndex >= 0 && modifyIndex + 1 < args.Length)
         {
-            RunModifyTestAsync(args[modifyIndex + 1]).GetAwaiter().GetResult();
+            Services.ApiClientChecks.ModifyAsync(args[modifyIndex + 1]).GetAwaiter().GetResult();
             return;
         }
 
@@ -520,7 +520,7 @@ internal static class Program
         var saveAsIndex = Array.IndexOf(args, "--saveas-test");
         if (saveAsIndex >= 0 && saveAsIndex + 2 < args.Length)
         {
-            RunSaveAsTestAsync(args[saveAsIndex + 1], args[saveAsIndex + 2]).GetAwaiter().GetResult();
+            Services.ApiClientChecks.SaveAsAsync(args[saveAsIndex + 1], args[saveAsIndex + 2]).GetAwaiter().GetResult();
             return;
         }
 
@@ -529,7 +529,7 @@ internal static class Program
         var referenceIndex = Array.IndexOf(args, "--reference-test");
         if (referenceIndex >= 0 && referenceIndex + 1 < args.Length)
         {
-            RunReferenceTestAsync(args[referenceIndex + 1]).GetAwaiter().GetResult();
+            Services.ApiClientChecks.ReferenceAsync(args[referenceIndex + 1]).GetAwaiter().GetResult();
             return;
         }
 
@@ -537,7 +537,7 @@ internal static class Program
         var searchIndex = Array.IndexOf(args, "--search-test");
         if (searchIndex >= 0 && searchIndex + 2 < args.Length)
         {
-            RunSearchTestAsync(args[searchIndex + 1], args[searchIndex + 2]).GetAwaiter().GetResult();
+            Services.ApiClientChecks.SearchAsync(args[searchIndex + 1], args[searchIndex + 2]).GetAwaiter().GetResult();
             return;
         }
 
@@ -546,7 +546,7 @@ internal static class Program
         var referencingIndex = Array.IndexOf(args, "--referencing-test");
         if (referencingIndex >= 0 && referencingIndex + 1 < args.Length)
         {
-            RunReferencingTestAsync(args[referencingIndex + 1]).GetAwaiter().GetResult();
+            Services.ApiClientChecks.ReferencingAsync(args[referencingIndex + 1]).GetAwaiter().GetResult();
             return;
         }
 
@@ -554,7 +554,7 @@ internal static class Program
         var uploadIndex = Array.IndexOf(args, "--upload-test");
         if (uploadIndex >= 0 && uploadIndex + 2 < args.Length)
         {
-            RunUploadTestAsync(args[uploadIndex + 1], args[uploadIndex + 2]).GetAwaiter().GetResult();
+            Services.ApiClientChecks.UploadAsync(args[uploadIndex + 1], args[uploadIndex + 2]).GetAwaiter().GetResult();
             return;
         }
 
@@ -602,7 +602,7 @@ internal static class Program
         var selfTestIndex = Array.IndexOf(args, "--selftest");
         if (selfTestIndex >= 0 && selfTestIndex + 1 < args.Length)
         {
-            RunSelfTestAsync(args[selfTestIndex + 1]).GetAwaiter().GetResult();
+            Services.ApiClientChecks.SelfAsync(args[selfTestIndex + 1]).GetAwaiter().GetResult();
             return;
         }
 
@@ -611,7 +611,7 @@ internal static class Program
         var wfTestIndex = Array.IndexOf(args, "--workflow-test");
         if (wfTestIndex >= 0 && wfTestIndex + 1 < args.Length)
         {
-            RunWorkflowTestAsync(args[wfTestIndex + 1]).GetAwaiter().GetResult();
+            Services.ApiClientChecks.WorkflowAsync(args[wfTestIndex + 1]).GetAwaiter().GetResult();
             return;
         }
 
@@ -622,7 +622,7 @@ internal static class Program
         var multipageIndex = Array.IndexOf(args, "--multipage-test");
         if (multipageIndex >= 0 && multipageIndex + 2 < args.Length)
         {
-            RunMultipageTestAsync(args[multipageIndex + 1], args[multipageIndex + 2]).GetAwaiter().GetResult();
+            Services.ApiClientChecks.MultipageAsync(args[multipageIndex + 1], args[multipageIndex + 2]).GetAwaiter().GetResult();
             return;
         }
 
@@ -635,42 +635,6 @@ internal static class Program
         }
 
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
-    }
-
-    private static async Task RunMultipageTestAsync(string token, string documentName)
-    {
-        var api = new Services.SimplArchiveApiClient(token);
-        var document = (await api.Documents.GetRepositoriesAsync())
-            .SelectMany(r => api.Documents.GetChildrenAsync(r.Href("children")).GetAwaiter().GetResult())
-            .FirstOrDefault(c => c.Name == documentName)
-            ?? throw new InvalidOperationException($"No document named '{documentName}' in any visible repository's top level.");
-        var preview = await api.Documents.GetPreviewAsync(document.Href("versions"));
-        Console.WriteLine($"preview-pages link present: {preview.PreviewPagesUrl is not null}");
-        if (preview.PreviewPagesUrl is not { } url)
-        {
-            Console.WriteLine("FAILED: no preview-pages link.");
-            return;
-        }
-
-        var pages = await api.Versions.GetPreviewPagesAsync(url);
-        Console.WriteLine($"page urls: {pages?.Count ?? 0}");
-        if (pages is null)
-        {
-            Console.WriteLine("FAILED: preview-pages returned null.");
-            return;
-        }
-
-        var i = 0;
-        foreach (var pageUrl in pages)
-        {
-            var (bytes, _) = await Services.SimplArchiveApiClient.DownloadAsync(pageUrl);
-            // PNG IHDR: width/height at bytes 16..24 (big-endian) — validates it's a real page image.
-            var w = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
-            var h = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
-            Console.WriteLine($"  page {++i}: {w}x{h} ({bytes.Length} bytes)");
-        }
-
-        Console.WriteLine(i > 1 ? "OK: multiple pages fetched." : "FAILED: expected multiple pages.");
     }
 
     private static void RunHitCopyTest()
@@ -704,534 +668,5 @@ internal static class Program
             .WithInterFont()
             .LogToTrace();
 
-    private static void RenderScreenshot(string path, bool demo, string? pdfPath = null)
-    {
-        AppBuilder.Configure<App>()
-            .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
-            .UseSkia()
-            .WithInterFont()
-            .SetupWithoutStarting();
 
-        if (Environment.GetCommandLineArgs().Contains("--dark") && Application.Current is { } app)
-        {
-            app.RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Dark;
-        }
-
-        var viewModel = new MainWindowViewModel();
-        // `--envbanner <id>` renders the environment strip (#501) — the only way to see it headlessly, since
-        // it otherwise exists only after a real login chose a real profile.
-        var envIndex = Array.IndexOf(Environment.GetCommandLineArgs(), "--envbanner");
-        if (envIndex >= 0)
-        {
-            viewModel.EnvBanner.Set(Environment.GetCommandLineArgs()[envIndex + 1]);
-        }
-
-        if (demo)
-        {
-            if (Environment.GetCommandLineArgs().Contains("--search"))
-            {
-                viewModel.PopulateSearchDemoForScreenshot();
-            }
-            else if (Environment.GetCommandLineArgs().Contains("--intray"))
-            {
-                viewModel.PopulateIntrayDemoForScreenshot();
-            }
-            else if (Environment.GetCommandLineArgs().Contains("--hitoverlay"))
-            {
-                PopulateHitOverlayScreenshot(viewModel);
-            }
-            else if (Environment.GetCommandLineArgs().Contains("--maskedit"))
-            {
-                viewModel.PopulateMaskEditForScreenshot();
-            }
-            else if (Environment.GetCommandLineArgs().Contains("--workflow"))
-            {
-                viewModel.PopulateWorkflowDemoForScreenshot();
-                if (Environment.GetCommandLineArgs().Contains("--tasks"))
-                {
-                    viewModel.SelectedTab = 5; // Tasks tab
-                }
-            }
-            else if (Environment.GetCommandLineArgs().Contains("--users"))
-            {
-                viewModel.PopulateUsersGroupsDemoForScreenshot();
-                viewModel.SelectedTab = 6; // Users & groups tab
-            }
-            else if (Environment.GetCommandLineArgs().Contains("--audit"))
-            {
-                viewModel.PopulateAuditDemoForScreenshot();
-                viewModel.SelectedTab = 7; // Audit tab
-            }
-            else if (Environment.GetCommandLineArgs().Contains("--recyclebin"))
-            {
-                viewModel.IsLoggedIn = true;
-                viewModel.RecycleBin.PopulateDemoForScreenshot();
-                viewModel.SelectedTab = 4; // Recycle bin tab
-            }
-            else if (Environment.GetCommandLineArgs().Contains("--legalholds"))
-            {
-                viewModel.PopulateLegalHoldsDemoForScreenshot();
-                viewModel.SelectedTab = 8; // Legal holds tab
-            }
-            else if (Environment.GetCommandLineArgs().Contains("--retention"))
-            {
-                viewModel.PopulateRetentionDemoForScreenshot();
-                viewModel.SelectedTab = 9; // Retention tab
-            }
-            else if (Environment.GetCommandLineArgs().Contains("--tagstab"))
-            {
-                viewModel.PopulateTagsDemoForScreenshot();
-                viewModel.SelectedTab = 12; // Tag catalog tab
-            }
-            else if (Environment.GetCommandLineArgs().Contains("--tenant"))
-            {
-                viewModel.PopulateTenantSettingsDemoForScreenshot();
-                viewModel.SelectedTab = 10; // Tenant tab
-            }
-            else if (Environment.GetCommandLineArgs().Contains("--contacts"))
-            {
-                viewModel.IsLoggedIn = true;
-                viewModel.ContactsTab.PopulateDemoForScreenshot();
-                viewModel.SelectedTab = 13; // Contacts tab
-            }
-            else if (Environment.GetCommandLineArgs().Contains("--calendar"))
-            {
-                viewModel.IsLoggedIn = true;
-                viewModel.CalendarTab.PopulateDemoForScreenshot();
-                viewModel.SelectedTab = 14; // Calendar tab
-            }
-            else if (Environment.GetCommandLineArgs().Contains("--checkout"))
-            {
-                viewModel.IsLoggedIn = true;
-                viewModel.Checkout.PopulateDemoForScreenshot();
-                viewModel.SelectedTab = 2; // Check-out tab
-            }
-            else
-            {
-                viewModel.PopulateDemoForScreenshot();
-            }
-        }
-
-        if (pdfPath is not null)
-        {
-            viewModel.SetPreviewPagesForScreenshot(Services.PreviewRenderer.RenderPdfPages(File.ReadAllBytes(pdfPath)));
-            if (demo)
-            {
-                // Match the seeded web annotations on the invoice (ADR 0502): a yellow sticky note over the first
-                // line item + an amber highlight over the total row (Kind 0 = note, 1 = highlight; normalized coords).
-                viewModel.SetPreviewNotesForScreenshot(
-                [
-                    new NoteBox(Guid.NewGuid(), 0, 0.085, 0.30, 0.30, 0.085, "#FFF59D", CanEdit: true, "Pos. 1: Preis gemäss Rahmenvertrag geprüft ✓"),
-                    new NoteBox(Guid.NewGuid(), 1, 0.575, 0.49, 0.345, 0.03, "#FFD54A", CanEdit: true),
-                ]);
-            }
-        }
-
-        // Maximize the preview before first render so the full-screen overlay is arranged from the start.
-        if (Environment.GetCommandLineArgs().Contains("--fullscreen"))
-        {
-            viewModel.Preview.PreviewFullscreen = true;
-        }
-
-        // `--narrow`: hand the preview's neighbours most of the width, so the preview column is about as narrow
-        // as a user can drag it to. Issue #480's second half is only visible here — the default layout is wide
-        // enough to hide a toolbar that does not wrap.
-        if (Environment.GetCommandLineArgs().Contains("--narrow"))
-        {
-            viewModel.TreeWidth = new Avalonia.Controls.GridLength(4, Avalonia.Controls.GridUnitType.Star);
-            viewModel.ListWidth = new Avalonia.Controls.GridLength(9, Avalonia.Controls.GridUnitType.Star);
-            viewModel.ChatWidth = new Avalonia.Controls.GridLength(6, Avalonia.Controls.GridUnitType.Star);
-        }
-
-        var window = new MainWindow { DataContext = viewModel };
-        window.Show();
-        Dispatcher.UIThread.RunJobs();
-
-        // `--fit-page`: the zoom that fits the whole page (#480), applied AFTER the first arrange because it is
-        // measured from the pane the preview actually got.
-        if (Environment.GetCommandLineArgs().Contains("--fit-page"))
-        {
-            viewModel.Preview.FitPageCommand.Execute(null);
-            Dispatcher.UIThread.RunJobs();
-        }
-
-        // `--marked`: put the selected-node ring on a real tree node so it can be looked at (#696). The ring is
-        // the kind of thing that is perfectly true in the view-model and absent on screen, which no assertion
-        // about IsMarked can catch.
-        //
-        // It marks a NAMED node rather than "the first child": the first attempt marked the demo tree's "…"
-        // placeholder and rendered nothing, which read as a broken style and was not one. Two things had
-        // changed between that render and the working one — the brush AND the target — and only re-running with
-        // the original brush showed which mattered. It was the target.
-        if (Environment.GetCommandLineArgs().Contains("--marked"))
-        {
-            var target = viewModel.Tree.FirstOrDefault(n => n.Name == "Demo Repository") ?? viewModel.Tree.First();
-            target.IsMarked = true;
-            Dispatcher.UIThread.RunJobs();
-        }
-
-        // `--menu`: open the tree context menu with its "New" submenu expanded, so the one part of this client
-        // nobody could see gets into a screenshot.
-        //
-        // It turns out Avalonia's headless platform hosts a ContextMenu as an OVERLAY inside the window rather
-        // than as a separate top-level, so CaptureRenderedFrame includes it — I had previously asserted the
-        // opposite and left the desktop menu unlooked-at through three changes on the strength of that guess.
-        // The first thing this flag rendered was a real defect: the submenu's entries were the only items in
-        // that menu with no icon, because the ItemContainerTheme bound Header and Command and nothing else.
-        //
-        // The admits list is SYNTHETIC — demo data carries no masks, so the entries stand in for what a server
-        // sends. That makes this a check on how the menu RENDERS (icons, alignment, nesting), not on which
-        // entries a folder offers; the latter is CreatableChildrenTests and DesktopAdmitsMenuTests.
-        if (Environment.GetCommandLineArgs().Contains("--menu"))
-        {
-            viewModel.TreeContextAdmits =
-            [
-                ViewModels.TreeMenuEntry.Create("Folder", "mdi-folder", () => { }),
-                ViewModels.TreeMenuEntry.Create("Addressbook", "mdi-book-account", () => { }),
-                ViewModels.TreeMenuEntry.Create("Calendar", "mdi-calendar", () => { }),
-                // The two item kinds (#689). No real folder offers all five at once — an Addressbook offers
-                // only Contact — but this list exists to check how an entry RENDERS, and an item's glyph
-                // beside a folder's is the comparison worth being able to see.
-                ViewModels.TreeMenuEntry.Create("Contact", "mdi-card-account-details", () => { }),
-                ViewModels.TreeMenuEntry.Create("Appointment", "mdi-calendar-clock", () => { }),
-            ];
-            viewModel.TreeContextCanCreateAny = true;
-            Dispatcher.UIThread.RunJobs();
-
-            if (window.GetVisualDescendants().OfType<Avalonia.Controls.TreeView>().FirstOrDefault()?.ContextMenu is { } menu)
-            {
-                menu.Open();
-                Dispatcher.UIThread.RunJobs();
-
-                // The submenu has to be opened EXPLICITLY: it expands on hover, and a headless run has no
-                // pointer, so without this the capture shows a collapsed "New ▸" and proves nothing.
-                foreach (var item in menu.GetLogicalDescendants().OfType<Avalonia.Controls.MenuItem>().Where(m => m.ItemCount > 0))
-                {
-                    item.Open();
-                }
-
-                Dispatcher.UIThread.RunJobs();
-            }
-        }
-
-        // Force a hovered word so the light-grey hover box (ADR "Copy a preview word to the clipboard") shows in
-        // the otherwise-static screenshot.
-        if (Environment.GetCommandLineArgs().Contains("--hitoverlay"))
-        {
-            var overlay = window.GetVisualDescendants().OfType<Views.HighlightOverlay>().FirstOrDefault();
-            if (overlay?.Words is { } words && words.FirstOrDefault(w => w.Text == "Xylophonkatze") is { } word)
-            {
-                overlay.SetHoveredForScreenshot(word);
-                Dispatcher.UIThread.RunJobs();
-            }
-        }
-
-        // Collapse AFTER the first arrange (as an interactive click would), then re-arrange — this reproduces
-        // the collapse re-layout path (which previously NRE'd when the GridSplitter was nested in a gutter Grid).
-        if (Environment.GetCommandLineArgs().Contains("--collapsed"))
-        {
-            viewModel.ToggleTreeCommand.Execute(null);
-            viewModel.ToggleChatCommand.Execute(null);
-            viewModel.ToggleIndexCommand.Execute(null);
-            Dispatcher.UIThread.RunJobs();
-        }
-
-        var frame = window.CaptureRenderedFrame();
-        frame?.Save(path);
-    }
-
-    // Seeds the workbench with the sample scanned invoice + its real OCR word boxes and a find query, to show
-    // the search hit-overlay (ADR "Search hit overlay") in a headless screenshot.
-    private static void PopulateHitOverlayScreenshot(MainWindowViewModel viewModel)
-    {
-        viewModel.PopulateDemoForScreenshot();
-
-        var samplePath = Path.Combine(AppContext.BaseDirectory, "Assets", "hitoverlay-sample.png");
-        if (!File.Exists(samplePath))
-        {
-            return;
-        }
-
-        using var stream = File.OpenRead(samplePath);
-        var image = new Avalonia.Media.Imaging.Bitmap(stream);
-
-        // Real boxes measured from the sample invoice's OCR layout (normalized 0..1).
-        var words = new List<Services.VersionsClient.TextLayoutBox>
-        {
-            new("Alpsteinwerk", 0.0871, 0.0490, 0.2315, 0.0251),
-            new("RECHNUNG", 0.0831, 0.2668, 0.2395, 0.0257),
-            new("Rechnungsnummer:", 0.0798, 0.3107, 0.2024, 0.0165),
-            new("Rechnungsdatum:", 0.0790, 0.3347, 0.1831, 0.0165),
-            new("Kennwort:", 0.0774, 0.3803, 0.1000, 0.0205),
-            new("Xylophonkatze", 0.2379, 0.3854, 0.1492, 0.0160),
-            new("Total:", 0.6581, 0.5981, 0.0589, 0.0205),
-        };
-
-        viewModel.PopulateHitOverlayForScreenshot(image, words, "Rechnung");
-    }
-
-    private static async Task RunNewFolderTestAsync(string accessToken, string name)
-    {
-        var api = new Services.SimplArchiveApiClient(accessToken);
-        var root = (await api.Documents.GetRepositoriesAsync()).First();
-        Console.WriteLine($"creating folder '{name}' in '{root.Name}'…");
-
-        await api.Documents.CreateFolderAsync(root.Href("children"), name);
-
-        var match = (await api.Documents.GetChildrenAsync(root.Href("children"))).FirstOrDefault(c => c.Name == name);
-        Console.WriteLine(match is null
-            ? "FAILED: folder not found."
-            : $"OK: '{match.Name}' present, isFolder={!match.HasVersions}");
-    }
-
-    private static async Task RunModifyTestAsync(string accessToken)
-    {
-        var api = new Services.SimplArchiveApiClient(accessToken);
-        var root = (await api.Documents.GetRepositoriesAsync()).First();
-
-        var original = $"modify-test-{Guid.NewGuid():N}";
-        var renamed = $"{original}-renamed";
-        Console.WriteLine($"creating folder '{original}' in '{root.Name}'…");
-        await api.Documents.CreateFolderAsync(root.Href("children"), original);
-        var created = (await api.Documents.GetChildrenAsync(root.Href("children"))).First(c => c.Name == original);
-
-        Console.WriteLine($"renaming to '{renamed}'…");
-        await api.Documents.RenameAsync(created.Href("self"), renamed);
-        var afterRename = await api.Documents.GetChildrenAsync(root.Href("children"));
-        Console.WriteLine(afterRename.Any(c => c.Name == renamed) && afterRename.All(c => c.Name != original)
-            ? "OK: rename reflected."
-            : "FAILED: rename not reflected.");
-
-        Console.WriteLine("deleting…");
-        await api.Documents.DeleteAsync(created.Href("self"));
-        var afterDelete = await api.Documents.GetChildrenAsync(root.Href("children"));
-        var recycled = await api.Documents.GetRecycleBinAsync(root);
-        Console.WriteLine(afterDelete.All(c => c.Id != created.Id) && recycled.Any(r => r.Id == created.Id)
-            ? "OK: gone from folder, present in recycle bin."
-            : "FAILED: delete/recycle-bin state wrong.");
-
-        Console.WriteLine("restoring…");
-        await api.Documents.RestoreAsync(recycled.Single(r => r.Id == created.Id));
-        var afterRestore = await api.Documents.GetChildrenAsync(root.Href("children"));
-        var recycledAfter = await api.Documents.GetRecycleBinAsync(root);
-        Console.WriteLine(afterRestore.Any(c => c.Id == created.Id) && recycledAfter.All(r => r.Id != created.Id)
-            ? "OK: restored to folder, cleared from recycle bin."
-            : "FAILED: restore state wrong.");
-
-        // Clean up so repeated runs don't accumulate folders.
-        await api.Documents.DeleteAsync(created.Href("self"));
-    }
-
-    private static async Task RunSaveAsTestAsync(string accessToken, string outPath)
-    {
-        var api = new Services.SimplArchiveApiClient(accessToken);
-        var root = (await api.Documents.GetRepositoriesAsync()).First();
-
-        var name = $"saveas-test-{Guid.NewGuid():N}.txt";
-        var content = System.Text.Encoding.UTF8.GetBytes("save-as round-trip test\n");
-        Console.WriteLine($"uploading '{name}' to '{root.Name}'…");
-        await api.Documents.UploadFileAsync(root.Href("children"), name, content);
-        var document = (await api.Documents.GetChildrenAsync(root.Href("children"))).First(c => c.Name == name);
-
-        var preview = await api.Documents.GetPreviewAsync(document.Href("versions"));
-        if (preview.DownloadUrl is null)
-        {
-            Console.WriteLine("FAILED: no download URL.");
-            return;
-        }
-
-        var (bytes, _) = await Services.SimplArchiveApiClient.DownloadAsync(preview.DownloadUrl);
-        await File.WriteAllBytesAsync(outPath, bytes);
-        Console.WriteLine(bytes.SequenceEqual(content)
-            ? $"OK: saved {bytes.Length} bytes -> {outPath}; round-trip matches."
-            : "FAILED: saved bytes don't match the uploaded content.");
-
-        await api.Documents.DeleteAsync(document.Href("self")); // cleanup
-    }
-
-    private static async Task RunReferenceTestAsync(string accessToken)
-    {
-        var api = new Services.SimplArchiveApiClient(accessToken);
-        var root = (await api.Documents.GetRepositoriesAsync()).First();
-        var s = Guid.NewGuid().ToString("N")[..6];
-
-        await api.Documents.CreateFolderAsync(root.Href("children"), $"ref-A-{s}");
-        await api.Documents.CreateFolderAsync(root.Href("children"), $"ref-B-{s}");
-        var a = (await api.Documents.GetChildrenAsync(root.Href("children"))).First(c => c.Name == $"ref-A-{s}");
-        var b = (await api.Documents.GetChildrenAsync(root.Href("children"))).First(c => c.Name == $"ref-B-{s}");
-        await api.Documents.CreateFolderAsync(a.Href("children"), $"ref-C-{s}");
-        var c = (await api.Documents.GetChildrenAsync(a.Href("children"))).First(n => n.Name == $"ref-C-{s}");
-
-        Console.WriteLine("moving C from A to B…");
-        await api.Documents.MoveAsync(c.Href("self"), b.Id);
-        var cInB = (await api.Documents.GetChildrenAsync(b.Href("children"))).Any(n => n.Id == c.Id);
-        var cGoneFromA = !(await api.Documents.GetChildrenAsync(a.Href("children"))).Any(n => n.Id == c.Id);
-        Console.WriteLine(cInB && cGoneFromA ? "OK: moved." : "FAILED: move state wrong.");
-
-        Console.WriteLine("referencing C into A…");
-        await api.Documents.CreateReferenceAsync(a.Href("references"), c.Id);
-        var refs = await api.Documents.GetReferencesAsync(a.Href("references"));
-        var reference = refs.FirstOrDefault(r => r.TargetId == c.Id);
-        Console.WriteLine(reference is not null && reference.RealParentId == b.Id
-            ? $"OK: reference present, realParentId points to B; go-to folder = '{(await api.GetDocumentByAddressAsync(reference.Links!["go-to"])).Name}'."
-            : "FAILED: reference/realParentId wrong.");
-
-        Console.WriteLine("removing the reference…");
-        await api.Documents.DeleteReferenceAsync(reference!.DeleteHref!);
-        Console.WriteLine((await api.Documents.GetReferencesAsync(a.Href("references"))).Count == 0 ? "OK: reference removed." : "FAILED: reference still present.");
-
-        await api.Documents.DeleteAsync(a.Href("self")); // cleanup (cascades C)
-        await api.Documents.DeleteAsync(b.Href("self"));
-    }
-
-    private static async Task RunSearchTestAsync(string accessToken, string query)
-    {
-        var api = new Services.SimplArchiveApiClient(accessToken);
-        Console.WriteLine($"searching for '{query}'…");
-        var results = await api.Search.SearchAsync(query);
-        Console.WriteLine($"{results.Count} result(s):");
-        foreach (var result in results)
-        {
-            Console.WriteLine($"  {(result.IsFolder ? "[folder]" : "[doc]   ")} {result.Name}   —   {result.Path}");
-        }
-    }
-
-    private static async Task RunReferencingTestAsync(string accessToken)
-    {
-        var api = new Services.SimplArchiveApiClient(accessToken);
-        var root = (await api.Documents.GetRepositoriesAsync()).First();
-        var s = Guid.NewGuid().ToString("N")[..6];
-
-        await api.Documents.CreateFolderAsync(root.Href("children"), $"rt-A-{s}");
-        await api.Documents.CreateFolderAsync(root.Href("children"), $"rt-B-{s}");
-        var a = (await api.Documents.GetChildrenAsync(root.Href("children"))).First(c => c.Name == $"rt-A-{s}");
-        var b = (await api.Documents.GetChildrenAsync(root.Href("children"))).First(c => c.Name == $"rt-B-{s}");
-        await api.Documents.CreateFolderAsync(a.Href("children"), $"rt-C-{s}");
-        var c = (await api.Documents.GetChildrenAsync(a.Href("children"))).First(n => n.Name == $"rt-C-{s}");
-
-        await api.Documents.CreateReferenceAsync(b.Href("references"), c.Id);
-
-        var cRow = (await api.Documents.GetChildrenAsync(a.Href("children"))).First(n => n.Id == c.Id);
-        Console.WriteLine(cRow.HasReferences ? "OK: hasReferences=true on the referenced item." : "FAILED: hasReferences not set.");
-
-        var folders = await api.Documents.GetReferencingFoldersAsync(c.Href("referencing-folders"));
-        var match = folders.FirstOrDefault(f => f.Id == b.Id);
-        Console.WriteLine(match is not null
-            ? $"OK: referencing folder listed with path '{match.Path}'."
-            : "FAILED: referencing folder not listed.");
-
-        await api.Documents.DeleteAsync(a.Href("self"));
-        await api.Documents.DeleteAsync(b.Href("self"));
-    }
-
-    private static async Task RunUploadTestAsync(string accessToken, string filePath)
-    {
-        var api = new Services.SimplArchiveApiClient(accessToken);
-        var root = (await api.Documents.GetRepositoriesAsync()).First();
-        var name = Path.GetFileName(filePath);
-        Console.WriteLine($"uploading '{name}' into '{root.Name}'…");
-
-        await api.Documents.UploadFileAsync(root.Href("children"), name, await File.ReadAllBytesAsync(filePath));
-
-        var match = (await api.Documents.GetChildrenAsync(root.Href("children"))).FirstOrDefault(c => c.Name == name);
-        Console.WriteLine(match is null
-            ? "FAILED: uploaded document not found in the folder."
-            : $"OK: '{match.Name}' present, hasVersions={match.HasVersions}");
-    }
-
-    private static async Task RunWorkflowTestAsync(string accessToken)
-    {
-        var api = new Services.SimplArchiveApiClient(accessToken);
-        var me = await api.GetWhoAmIAsync();
-        var repo = (await api.Documents.GetRepositoriesAsync()).First();
-        Console.WriteLine($"repo '{repo.Name}', me {me.UserId}");
-
-        await api.Documents.UploadFileAsync(repo.Href("children"), "wf-desktop-test.txt", System.Text.Encoding.UTF8.GetBytes("workflow desktop test"));
-        var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).First(c => c.Name == "wf-desktop-test");
-        Console.WriteLine($"created doc {doc.Name} ({doc.Id})");
-
-        var wf = await api.Documents.GetWorkflowAsync(doc.Href("versions"));
-        Console.WriteLine($"initial: {wf?.StatusName} | links: {string.Join(",", wf?.Links.Keys ?? [])}");
-
-        await api.Workflow.PostWorkflowActionAsync(wf!.Links["submit"], new { reviewerId = me.UserId });
-        wf = await api.Documents.GetWorkflowAsync(doc.Href("versions"));
-        Console.WriteLine($"after submit: {wf?.StatusName} | assignedTo: {wf?.AssignedToName} | links: {string.Join(",", wf?.Links.Keys ?? [])}");
-
-        var tasks = await api.Workflow.GetTasksAsync();
-        Console.WriteLine($"tasks: {tasks.Count} -> {string.Join(",", tasks.Select(t => $"{t.DocumentName}/v{t.VersionNumber}"))}");
-
-        await api.Workflow.PostWorkflowActionAsync(wf!.Links["approve"], null);
-        wf = await api.Documents.GetWorkflowAsync(doc.Href("versions"));
-        Console.WriteLine($"after approve: {wf?.StatusName} | links: {string.Join(",", wf?.Links.Keys ?? [])}");
-
-        await api.Workflow.PostWorkflowActionAsync(wf!.Links["release"], null);
-        wf = await api.Documents.GetWorkflowAsync(doc.Href("versions"));
-        Console.WriteLine($"after release: {wf?.StatusName}");
-        Console.WriteLine("history:");
-        foreach (var h in wf!.History)
-        {
-            Console.WriteLine($"  {h.ToStatusName} by {h.PerformedByName}{(h.AssignedToName is { } a ? $" -> {a}" : "")}{(h.RejectionReason is { } r ? $" · {r}" : "")}");
-        }
-    }
-
-    private static async Task RunSelfTestAsync(string accessToken)
-    {
-        var api = new Services.SimplArchiveApiClient(accessToken);
-
-        var repositories = await api.Documents.GetRepositoriesAsync();
-        Console.WriteLine($"repositories: {repositories.Count}");
-        foreach (var repository in repositories)
-        {
-            Console.WriteLine($"  📁 {repository.Name} (hasChildren={repository.HasChildren})");
-        }
-
-        var root = repositories.FirstOrDefault();
-        if (root is null)
-        {
-            Console.WriteLine("no repositories visible; stopping.");
-            return;
-        }
-
-        var children = await api.Documents.GetChildrenAsync(root.Href("children"));
-        Console.WriteLine($"children of '{root.Name}': {children.Count}");
-
-        var document = children.FirstOrDefault(c => c.HasVersions);
-        if (document is null)
-        {
-            Console.WriteLine("no document with a version in the first repository; stopping.");
-            return;
-        }
-
-        var mask = await api.Documents.GetMaskAsync(document.Href("mask"));
-        Console.WriteLine($"mask: {mask.Name ?? "(none)"} v{mask.VersionNumber}");
-
-        var indexData = await api.Documents.GetIndexDataAsync(document.Href("index-data"));
-        Console.WriteLine($"index-data fields: {indexData.Count}");
-        foreach (var field in indexData)
-        {
-            Console.WriteLine($"  {field.FieldName} = {string.Join(", ", field.Values)}");
-        }
-
-        var comments = await api.Documents.GetCommentsAsync(document.Href("chat"));
-        Console.WriteLine($"comments: {comments.Count}");
-
-        var preview = await api.Documents.GetPreviewAsync(document.Href("versions"));
-        Console.WriteLine($"preview: {(preview.PreviewUrl is null ? "(none)" : "resolved")} converted={preview.PreviewConverted}; download: {(preview.DownloadUrl is null ? "(none)" : "resolved")}");
-
-        if (preview.PreviewUrl is not null)
-        {
-            var (bytes, contentType) = await Services.SimplArchiveApiClient.DownloadAsync(preview.PreviewUrl);
-            Console.WriteLine($"preview content-type: {contentType} ({bytes.Length} bytes)");
-        }
-
-        if (preview.DownloadUrl is not null)
-        {
-            // Reconstruct the filename with the version's extension (Document.Name is a bare stem now).
-            var fileName = document.Name.EndsWith(preview.FileExtension, StringComparison.OrdinalIgnoreCase)
-                ? document.Name
-                : document.Name + preview.FileExtension;
-            var path = await Services.NativeFileOpener.DownloadToTempAsync(preview.DownloadUrl, fileName);
-            Console.WriteLine($"downloaded '{document.Name}' (ext '{preview.FileExtension}') -> {path} ({new FileInfo(path).Length} bytes)");
-        }
-    }
 }
