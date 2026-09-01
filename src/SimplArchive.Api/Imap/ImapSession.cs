@@ -285,15 +285,15 @@ public sealed class ImapSession
             case "CREATE":
                 // The one opening in the read-only tree (#564): a section inside the notebook. Everything else
                 // is refused by CreateAsync itself, with the same sentence DELETE and RENAME give.
-                await RunScopedAsync(scope => ImapWrites.CreateAsync(this, scope, tag, arguments));
+                await RunScopedAsync(scope => ImapMailboxes.CreateAsync(this, scope, tag, arguments));
                 return true;
             case "DELETE":
                 // A USER mail folder deletes (soft, to the recycle bin); everything else keeps the standing
                 // refusal — the tree is managed in the workbench, where the ACL and naming rules live (#802).
-                await RunScopedAsync(scope => ImapWrites.DeleteMailboxAsync(this, scope, tag, arguments));
+                await RunScopedAsync(scope => ImapMailboxes.DeleteMailboxAsync(this, scope, tag, arguments));
                 return true;
             case "RENAME":
-                await RunScopedAsync(scope => ImapWrites.RenameMailboxAsync(this, scope, tag, arguments));
+                await RunScopedAsync(scope => ImapMailboxes.RenameMailboxAsync(this, scope, tag, arguments));
                 return true;
             // SEARCH is MANDATORY in the IMAP4rev1 we advertise, and refusing it is what made a mail client
             // that enumerates with UID SEARCH show every folder as empty (ADR 0626).

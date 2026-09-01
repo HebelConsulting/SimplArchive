@@ -234,8 +234,16 @@ public class OverLimitFileCeilingTests
         // 907 at the #466 close → 1,050. Crossed quietly; no single change is to blame, which is the usual way.
         ["src/SimplArchive.Api/Documents/RepositoryImporter.cs"] = 1_050,
 
-        // Born over the limit (2026-08-17, #562 slice 3) with no exception on record.
-        ["src/SimplArchive.Api/Imap/ImapWrites.cs"] = 1_022,
+        // ImapWrites is GONE from this list: 1,022 -> 725. It was born over the limit (2026-08-17, #562 slice 3)
+        // with no exception on record, and what it was carrying was two subjects: the MESSAGE writes (APPEND,
+        // EXPUNGE, MOVE/COPY) and the MAILBOX lifecycle (CREATE, DELETE, RENAME). The second moved to
+        // ImapMailboxes (597 -> 903), where LIST, STATUS and SELECT already read the catalog those commands
+        // mutate.
+        //
+        // The file's own header comment is what gave it away: it described APPEND, EXPUNGE, MOVE and COPY and
+        // never once mentioned CREATE, DELETE or RENAME. A comment narrower than its file is a boundary
+        // somebody drew correctly and then did not keep — so the move made the documentation true rather than
+        // needing it rewritten.
 
         // The three barely-over controllers are GONE from this list — UsersController 1,019 → 855,
         // AclEntriesController 1,007 → 975, DocumentVersionsController 1,001 → 991 — and deleting their entries
