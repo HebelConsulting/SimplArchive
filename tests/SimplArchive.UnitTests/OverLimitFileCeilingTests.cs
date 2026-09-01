@@ -131,7 +131,15 @@ public class OverLimitFileCeilingTests
         // preview, the selection, the mask editor -- so a separate class would take the whole view model as a
         // parameter and be a partial wearing a constructor. Nor can it move to the test project: it seeds a
         // RUNNING application's view model, and ScreenshotRenderer and Program.cs call it.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 4995,
+        // 4,995 -> 4,409: the Users & groups tab's view-model work moved to MainWindowViewModel.Principals.cs
+        // -- the principal list and rights matrix, group membership, the profile photo, the MFA and IMAP status
+        // lines, impersonation, passwords, and creating or deactivating a principal.
+        //
+        // It did not look like one subject, which is why it stayed: it was spread over FOUR headings, and the
+        // photo was split between two of them six hundred lines apart -- its STATE under "Profile photo", its
+        // load/set/remove OPERATIONS under "Passwords". Two banners had stopped describing what followed them
+        // (#941): "Passwords" was true of its first 48 lines and of nothing for the 286 after it.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 4409,
 
         // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
         // the one authenticated ApiCore. Four areas left it:
