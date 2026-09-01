@@ -390,16 +390,32 @@ internal static class Program
                 "3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 600 800]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj\n" +
                 "4 0 obj<</Length 46>>stream\nBT /F1 30 Tf 80 700 Td (No background) Tj ET\nendstream endobj\n" +
                 "5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\ntrailer<</Root 1 0 R/Size 6>>\n%%EOF");
-            var bmp = (Avalonia.Media.Imaging.WriteableBitmap)Services.PreviewRenderer.RenderPdfFirstPage(pdf);
-            using var fb = bmp.Lock();
-            var bytes = new byte[fb.RowBytes * bmp.PixelSize.Height];
-            System.Runtime.InteropServices.Marshal.Copy(fb.Address, bytes, 0, bytes.Length);
+            // Read the pixels back through CopyPixels rather than by casting to WriteableBitmap and calling
+            // Lock(). The cast is what silently disabled this guard (#925): RenderPdfFirstPage has always
+            // DECLARED Bitmap, but returned a WriteableBitmap until #522 made it construct an immutable one on
+            // purpose (Skia's ResizeBitmap accepts only immutable sources). Legal against the declared type, so
+            // the compiler said nothing, and a correct change turned off the check for a different bug (#196).
+            // CopyPixels asks only for what Bitmap itself promises, so narrowing the concrete type cannot
+            // break it again.
+            var bmp = Services.PreviewRenderer.RenderPdfFirstPage(pdf);
+            var stride = bmp.PixelSize.Width * 4;
+            var bytes = new byte[stride * bmp.PixelSize.Height];
+            var pin = System.Runtime.InteropServices.GCHandle.Alloc(bytes, System.Runtime.InteropServices.GCHandleType.Pinned);
+            try
+            {
+                bmp.CopyPixels(new PixelRect(default, bmp.PixelSize), pin.AddrOfPinnedObject(), bytes.Length, stride);
+            }
+            finally
+            {
+                pin.Free();
+            }
+
             var transparent = 0;
             for (var y = 0; y < bmp.PixelSize.Height; y++)
             {
                 for (var x = 0; x < bmp.PixelSize.Width; x++)
                 {
-                    if (bytes[y * fb.RowBytes + x * 4 + 3] != 255) { transparent++; }
+                    if (bytes[y * stride + x * 4 + 3] != 255) { transparent++; }
                 }
             }
 
