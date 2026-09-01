@@ -335,7 +335,8 @@ public class OverLimitFileCeilingTests
         // A test file earns the same rule as product code for the same reason: the fifteen tests here shared
         // nothing but a fixture, so the only thing the single file bought was a longer scroll.
 
-        // EloIxPorter/Program.cs is GONE from this list: 1,233 -> 865. Same disease as DesktopClient/Program.cs
+        // The interop tool's Program.cs is GONE from this list: 1,233 -> 865. Same disease as
+        // DesktopClient/Program.cs
         // and the same cure: every probe's BODY lived inline in the `if (args is ["--x", ..])` dispatch chain.
         // Six probes on ONE subject -- the external system's notes/annotation investigation -- moved to a
         // NoteProbes class (412), and the chain kept the rest.

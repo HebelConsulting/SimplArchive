@@ -18,7 +18,7 @@ namespace SimplArchive.UnitTests;
 public class PublicMirrorBoundaryTests
 {
     // The forbidden token is ASSEMBLED rather than written out: spelling it literally would make this very file
-    // trip the gate it exists to enforce (this file is under tests/, which is published). Mirrors ELO_PATTERN in
+    // trip the gate it exists to enforce (this file is under tests/, which is published). Mirrors the two patterns in
     // publish/publish-public.sh — the bare word, the domain, and the XML-format name.
     //
     // Declared first because the withheld-file list below has to be built from it for the same reason — the first
@@ -39,6 +39,14 @@ public class PublicMirrorBoundaryTests
 
     private static readonly Regex Forbidden =
         new($@"(\b{Brand}\b)|({Brand}\.com)|({Brand}xml)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    // The IDENTIFIER form, and the reason this test grew a second pattern: the one above needs a word boundary
+    // AFTER the brand, so a comment naming the private interop tool by its PROJECT NAME passed both this test and
+    // the publish gate, and reached the public mirror. Case-SENSITIVE deliberately — the brand followed by an
+    // uppercase letter or an underscore is a camelCase or SCREAMING_CASE identifier, while an ignore-case version
+    // would match "eloquent" and "Eloise". Character classes so this file still never contains the literal.
+    private static readonly Regex ForbiddenIdentifier =
+        new(@"\b[Ee][Ll][Oo][A-Z_]", RegexOptions.Compiled);
 
     [Fact]
     public void No_published_file_names_the_commercial_dms()
@@ -68,7 +76,7 @@ public class PublicMirrorBoundaryTests
             var lines = File.ReadAllLines(file);
             for (var i = 0; i < lines.Length; i++)
             {
-                if (Forbidden.IsMatch(lines[i]))
+                if (Forbidden.IsMatch(lines[i]) || ForbiddenIdentifier.IsMatch(lines[i]))
                 {
                     offenders.Add($"  {relative}:{i + 1}: {lines[i].Trim()}");
                 }
