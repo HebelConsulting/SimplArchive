@@ -1113,7 +1113,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     }
 
     // The Personal repository nests the Intray + Check-out launcher nodes above its real subfolders, mirroring
-    // /webdav/Personal (ADR "GUI-tree Personal space grouping"). Selecting a launcher switches to the matching
+    // /SimplArchive/Personal (ADR "GUI-tree Personal space grouping"). Selecting a launcher switches to the matching
     // bottom tab (OnSelectedTreeNodeChanged), where the full staging / check-out UX lives.
     private async Task<IEnumerable<TreeNodeViewModel>> LoadPersonalChildrenAsync(TreeNodeViewModel node)
     {

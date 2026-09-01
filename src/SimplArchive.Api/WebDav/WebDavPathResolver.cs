@@ -144,7 +144,7 @@ internal static class WebDavPathResolver
     {
         // The user's Personal repository + shared repositories (root documents). ACL is enforced per operation;
         // the listing here is intentionally simple (the tenant filter already scopes it). The Personal repository
-        // is ordered first so /webdav/Personal resolves to it even if a shared repository shares the name.
+        // is ordered first so /SimplArchive/Personal resolves to it even if a shared repository shares the name.
         var roots = await db.Documents
             .Where(d => d.ParentId == null && (d.PersonalOfUserId == null || d.PersonalOfUserId == user.Id))
             .ToListAsync();

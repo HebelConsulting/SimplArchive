@@ -232,6 +232,53 @@ public class OverLimitFileCeilingTests
         // (rather than being deleted at the 1,000 threshold) until the ratchet's general rule exists — a file
         // this central re-crossing the line deserves to fail a build, not a review.
         ["src/SimplArchive.Infrastructure/Persistence/SimplArchiveDbContext.cs"] = 898,
+
+        // ---- Re-entered 2026-09-01 (issue #909) -------------------------------------------------------
+        // Eight authored files were at/over 1000 with no entry here and no exception on record. That is this
+        // guard's OWN stated failure mode — its header says a file burned down to 967 can climb back over with
+        // nothing objecting, and five of these did exactly that: four regrew after a deliberate burn-down, two
+        // were born over the limit in new features. WebDavMiddleware is that sentence with the biggest number.
+        //
+        // Re-entering is NOT granting an exception (which is the owner's alone) and NOT calling the debt paid.
+        // It restores the ratchet at today's measurement so the number cannot rise further while each file
+        // waits for its own answer — burn-down, or an owner-confirmed exception recorded here.
+
+        // 964 (ADR 0572) → 1,600. The largest silent regression this list has had: +636 through the WebDAV
+        // interop work of 2026-08-26/28 (#762, #794, #795), none of which was watched because the file had
+        // EARNED its way off the list and nothing re-added it. ADR 0572 already proved a split recipe on this
+        // exact file (1,762 → 964), so the burn-down route is known rather than hypothetical.
+        // Measured at 1601, not the 1,600 #909 reported: the same PR's prose fix (#910) net-added one line
+        // here, and a ceiling is only honest at the size it is actually taken.
+        ["src/SimplArchive.Api/WebDav/WebDavMiddleware.cs"] = 1601,
+
+        // Born over the limit (2026-08-17, #561) and never watched. Home.razor has WorkbenchShellSizeTests, but
+        // the tab components EXTRACTED from it inherited no guard — the extraction moved the lines out of the
+        // watched file and into an unwatched one, which is the shape this guard exists to catch.
+        ["src/SimplArchive.Client/Components/Tabs/IntrayTab.razor"] = 1_482,
+
+        // 987 (#520, "Program.cs leaves the debt list") → 1,287. Left by burn-down, re-crossed by +300.
+        ["src/SimplArchive.DesktopClient/Program.cs"] = 1_287,
+
+        // 907 at the #466 close → 1,050. Crossed quietly; no single change is to blame, which is the usual way.
+        ["src/SimplArchive.Api/Documents/RepositoryImporter.cs"] = 1_050,
+
+        // Born over the limit (2026-08-17, #562 slice 3) with no exception on record.
+        ["src/SimplArchive.Api/Imap/ImapWrites.cs"] = 1_022,
+
+        // 951 (#516, "Three controllers leave the 1000-line debt list") → 1,019. Re-crossed.
+        ["src/SimplArchive.Api/Controllers/UsersController.cs"] = 1_019,
+
+        // 947 at the #466 close → 1,007. Its GetCallerRightsAsync returns EffectiveRights? and so was NOT one of
+        // the eleven copies #911 deleted — it needs its own burn-down rather than inheriting that one's.
+        ["src/SimplArchive.Api/Controllers/AclEntriesController.cs"] = 1_007,
+
+        // 993 (#516) → 1,001. Re-crossed by eight lines. Like AclEntries it kept its caller-access methods
+        // through #911 — they already forwarded, so there was nothing there to delete.
+        ["src/SimplArchive.Api/Controllers/DocumentVersionsController.cs"] = 1_001,
+
+        // NOT listed, deliberately: Home.razor (3,390) has its own richer guard, WorkbenchShellSizeTests, and
+        // this file's header is explicit that one guard per file is the rule — two guards on one file will
+        // eventually disagree. RepositoriesController left the list under its own steam at 977 (#911).
     };
 
     public static TheoryData<string> Files => [.. Ceilings.Keys];

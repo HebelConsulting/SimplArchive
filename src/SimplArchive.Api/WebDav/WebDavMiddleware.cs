@@ -23,15 +23,14 @@ public sealed class WebDavMiddleware
 {
     // The single mounted resource is served at /SimplArchive so an OS mount (Finder / Explorer / Nautilus) is
     // named "SimplArchive" — the OS takes the volume name from the URL's last path segment, not the DAV
-    // displayname (ADR 0509). The original /webdav path stays accepted for already-saved mounts; hrefs are always
-    // emitted under /SimplArchive (the canonical path).
+    // displayname (ADR 0509). It is the ONLY path the gateway answers on; hrefs are always emitted under it.
     public const string BasePath = "/SimplArchive";
     // The legacy `/webdav` alias is RETIRED (#794). It existed so mounts predating ADR 0509 kept working, and
     // the cost of keeping it was two ways in: two code paths to reason about, and — the part that actually bit —
     // an entire test suite exercising the alias while every real client used /SimplArchive. One mount, one path.
 
-    // The gateway answers at /SimplArchive (canonical) and /webdav (legacy). Returns whichever prefix the request
-    // used, or null when the path isn't the gateway's.
+    // Returns BasePath when the path is the gateway's, else null — one path, so the "which prefix?" question the
+    // retired alias used to pose no longer exists.
     /// <summary>
     /// Whether this path is the WebDAV gateway's — asked by the DAV wire trace, which must cover this surface
     /// too (#595). One matcher, so the trace cannot disagree with the gateway about what it serves.
@@ -46,8 +45,8 @@ public sealed class WebDavMiddleware
     // Two special folders nested under the caller's Personal repository (ADR "WebDAV Inbox + Check-out folders",
     // grouped under Personal by ADR "WebDAV Inbox/Check-out under Personal"): the per-user Intray (an S3-backed
     // staging prefix) and Check-out (the caller's checked-out documents + their working-copy stash). Their WebDAV
-    // paths are /webdav/Personal/Intray and /webdav/Personal/Check-out — virtual (not Documents), shadowing any
-    // real same-named child of Personal.
+    // paths are /SimplArchive/Personal/Intray and /SimplArchive/Personal/Check-out — virtual (not Documents),
+    // shadowing any real same-named child of Personal.
     internal const string IntrayName = "Intray";
     internal const string CheckoutName = "Check-out";
 
@@ -151,7 +150,9 @@ public sealed class WebDavMiddleware
             .Select(Uri.UnescapeDataString).ToList();
 
         // A mount saved before the #795 heal still addresses the space as "Personal" — canonicalise the alias
-        // to the owner name (the /webdav → /SimplArchive recipe: the canonical name moved, the alias serves).
+        // to the owner name — the same recipe as the /webdav → /SimplArchive move: the canonical name changes and
+        // the old one is served as an alias. (That particular alias was later retired outright, #794; the recipe
+        // is the precedent here, not a claim that /webdav still routes.)
         // Guarded twice: a space genuinely still named "Personal" needs no alias, and a REAL shared root that
         // happens to be called "Personal" must keep winning over the alias — an alias that shadows a real name
         // serves the wrong archive, which is worse than a broken mount.

@@ -215,7 +215,7 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
             .OrderBy(c => c.DisplayName, StringComparer.OrdinalIgnoreCase).Select(BrowseService.ToTreeItem).ToList();
 
         // The Personal repository nests the Intray + Check-out launcher nodes above its real subfolders,
-        // mirroring /webdav/Personal (ADR "GUI-tree Personal space grouping"). Clicking a launcher switches to
+        // mirroring /SimplArchive/Personal (ADR "GUI-tree Personal space grouping"). Clicking a launcher switches to
         // the corresponding bottom tab, where the full staging / check-out UX lives.
         if (node.PersonalKind == "personal-root")
         {

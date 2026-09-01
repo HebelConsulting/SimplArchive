@@ -17,8 +17,9 @@ namespace SimplArchive.Api.Documents;
 /// </para>
 /// <para>
 /// The mounts the original decision protected are kept working the other way around: WebDavMiddleware accepts
-/// the legacy "Personal" first segment as an ALIAS for the caller's own space — the /webdav → /SimplArchive
-/// recipe (ADR 0509). The canonical name moves; the alias serves.
+/// the legacy "Personal" first segment as an ALIAS for the caller's own space — the same recipe as the
+/// /webdav → /SimplArchive move (ADR 0509): the canonical name changes, the old one is served as an alias.
+/// That alias was itself retired later (#794), so read this as the precedent, not as a live route.
 /// </para>
 /// <para>
 /// One space per SaveChanges, so a defect on one row cannot abort every other user's heal. NOT because of name

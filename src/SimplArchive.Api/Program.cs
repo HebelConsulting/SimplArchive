@@ -682,7 +682,7 @@ app.UseSerilogRequestLogging(options =>
 // refused before any password is verified. The login page throttles itself: its failure answers 200.
 app.UseMiddleware<SimplArchive.Api.Security.SignInThrottleMiddleware>();
 
-// The WebDAV gateway (ADRs "WebDAV gateway" / 0509) handles /SimplArchive (and the /webdav alias) with its own
+// The WebDAV gateway (ADRs "WebDAV gateway" / 0509) handles /SimplArchive — the only path it answers — with its own
 // HTTP Basic auth, ahead of the normal OIDC/JWT pipeline; it short-circuits for those and passes the rest through.
 app.UseMiddleware<SimplArchive.Api.WebDav.WebDavMiddleware>();
 

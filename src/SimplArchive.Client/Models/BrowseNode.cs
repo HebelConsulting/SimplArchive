@@ -30,7 +30,7 @@ public record BrowseNode(Guid Id, string Name, bool HasChildren, bool HasVersion
     string AdminKind = "",
     // Synthetic Personal-space tree nodes (ADR "GUI-tree Personal space grouping"): "personal-root" (the
     // Personal repository, which also injects Intray/Check-out children) and the leaf launchers "intray" /
-    // "checkout" (clicking them switches to the corresponding bottom tab, mirroring /webdav/Personal).
+    // "checkout" (clicking them switches to the corresponding bottom tab, mirroring /SimplArchive/Personal).
     string PersonalKind = "",
     // List-row columns (ADR "List-row columns and sorting"). CreatedBy is who filed the current version,
     // falling back to who created the document (#768) — a name, ready to draw.
