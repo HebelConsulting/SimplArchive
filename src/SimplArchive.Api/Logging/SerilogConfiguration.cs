@@ -25,7 +25,9 @@ public static class SerilogConfiguration
             .ReadFrom.Services(services)
             .Enrich.FromLogContext()
             .Enrich.WithProperty("Application", "SimplArchive.Api")
-            .Enrich.WithProperty("Environment", environment.EnvironmentName);
+            .Enrich.WithProperty("Environment", environment.EnvironmentName)
+            // The audit chain's designed contention, which EF reports at Error (issue #759).
+            .Filter.ByExcluding(e => AuditChainContentionFilter.IsDesignedContention(e.Exception));
 
         if (environment.IsDevelopment())
         {
@@ -36,6 +38,7 @@ public static class SerilogConfiguration
             logger.WriteTo.Console(new CompactJsonFormatter());
         }
     }
+
 
     /// <summary>The bootstrap logger used before the host (and its configuration/services) is available.</summary>
     public static Serilog.ILogger CreateBootstrapLogger() =>

@@ -46,7 +46,7 @@ public class AuditWormVerifierTests
         new(new DbContextOptionsBuilder<SimplArchiveDbContext>().UseSqlite(connection).Options, tenant);
 
     private static AuditRecorder CreateRecorder(SimplArchiveDbContext db, CurrentTenantAccessor tenant, CurrentUserAccessor user) =>
-        new(db, user, new CurrentServiceAccountAccessor(), new CurrentPlatformAdministratorAccessor(), tenant, new CurrentImpersonationAccessor(), TimeProvider.System);
+        new(db, user, new CurrentServiceAccountAccessor(), new CurrentPlatformAdministratorAccessor(), tenant, new CurrentImpersonationAccessor(), TimeProvider.System, NullLogger<AuditRecorder>.Instance);
 
     [Fact]
     public async Task Sealed_segments_verify_clean_and_a_rechained_db_tamper_is_caught()

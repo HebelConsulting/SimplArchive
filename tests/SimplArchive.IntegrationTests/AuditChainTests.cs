@@ -5,6 +5,7 @@ using SimplArchive.Domain.Tenants;
 using SimplArchive.Domain.Users;
 using SimplArchive.Infrastructure.Audit;
 using SimplArchive.Infrastructure.Persistence;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace SimplArchive.IntegrationTests;
 
@@ -18,7 +19,7 @@ public class AuditChainTests
         new(new DbContextOptionsBuilder<SimplArchiveDbContext>().UseSqlite(connection).Options, tenantAccessor);
 
     private static AuditRecorder CreateRecorder(SimplArchiveDbContext db, CurrentTenantAccessor tenant, CurrentUserAccessor user) =>
-        new(db, user, new CurrentServiceAccountAccessor(), new CurrentPlatformAdministratorAccessor(), tenant, new CurrentImpersonationAccessor(), TimeProvider.System);
+        new(db, user, new CurrentServiceAccountAccessor(), new CurrentPlatformAdministratorAccessor(), tenant, new CurrentImpersonationAccessor(), TimeProvider.System, NullLogger<AuditRecorder>.Instance);
 
     [Fact]
     public async Task Recorded_chain_verifies_and_tampering_is_detected()

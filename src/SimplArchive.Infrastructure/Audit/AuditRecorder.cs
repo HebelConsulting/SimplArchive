@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Audit;
 using SimplArchive.Infrastructure.Persistence;
@@ -22,6 +23,7 @@ public class AuditRecorder : IAuditRecorder
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly ICurrentImpersonationAccessor _currentImpersonationAccessor;
     private readonly TimeProvider _timeProvider;
+    private readonly ILogger<AuditRecorder> _logger;
 
     public AuditRecorder(
         SimplArchiveDbContext dbContext,
@@ -30,8 +32,10 @@ public class AuditRecorder : IAuditRecorder
         ICurrentPlatformAdministratorAccessor currentPlatformAdministratorAccessor,
         ICurrentTenantAccessor currentTenantAccessor,
         ICurrentImpersonationAccessor currentImpersonationAccessor,
-        [FromKeyedServices("demo-clock")] TimeProvider timeProvider)
+        [FromKeyedServices("demo-clock")] TimeProvider timeProvider,
+        ILogger<AuditRecorder> logger)
     {
+        _logger = logger;
         _dbContext = dbContext;
         _currentUserAccessor = currentUserAccessor;
         _currentServiceAccountAccessor = currentServiceAccountAccessor;
@@ -131,7 +135,30 @@ public class AuditRecorder : IAuditRecorder
             catch (DbUpdateException) when (attempt < MaxAppendAttempts)
             {
                 // Lost the race for this Sequence — detach and recompute against the new tip.
+                //
+                // DEBUG, not Warning, though CLAUDE.md lists "a transient failure that will retry" under
+                // Warning: this is not a failure retried, it is the arbitration mechanism working. Two
+                // same-tenant appends reached the same Sequence and the loser recomputes; nothing degraded and
+                // no admin has anything to act on. Logging it at Warning would recreate one level down exactly
+                // the problem issue #759 is about — a level an operator learns to ignore on this service.
+                _logger.LogDebug(
+                    "Audit append for tenant {TenantId} lost sequence {Sequence} to a concurrent append; retrying ({Attempt} of {MaxAttempts})",
+                    tenantId, auditEvent.Sequence, attempt, MaxAppendAttempts);
+
                 _dbContext.Entry(auditEvent).State = EntityState.Detached;
+            }
+            catch (DbUpdateException ex)
+            {
+                // Attempts exhausted. THIS is the one an admin must investigate, and it is the reason the
+                // EF-generated Error lines for the ordinary contention can be filtered out at all (see
+                // SerilogConfiguration.IsAuditChainContention): the case that matters keeps a line of its own,
+                // which names the audit chain rather than reporting an anonymous duplicate key.
+                _logger.LogError(
+                    ex,
+                    "Audit append for tenant {TenantId} failed after {MaxAttempts} attempts at sequence {Sequence}; the {Action} event on {TargetType} {TargetId} was NOT recorded",
+                    tenantId, MaxAppendAttempts, auditEvent.Sequence, auditEvent.Action, auditEvent.TargetType, auditEvent.TargetId);
+
+                throw;
             }
         }
     }
