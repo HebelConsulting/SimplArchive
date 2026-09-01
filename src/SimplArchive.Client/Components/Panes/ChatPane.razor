@@ -169,11 +169,11 @@
     /// DetailState exists).
     /// </summary>
     [Parameter] public string? NewComment { get; set; }
-    [Parameter] public EventCallback<string?> NewCommentChanged { get; set; }
+    [Parameter, EditorRequired] public EventCallback<string?> NewCommentChanged { get; set; }
 
     /// <summary>The reply box's text — unsaved input too, so likewise the shell's.</summary>
     [Parameter] public string? ReplyText { get; set; }
-    [Parameter] public EventCallback<string?> ReplyTextChanged { get; set; }
+    [Parameter, EditorRequired] public EventCallback<string?> ReplyTextChanged { get; set; }
 
     /// <summary>The message currently being replied to, if any.</summary>
     [Parameter] public Guid? ReplyingTo { get; set; }
@@ -181,14 +181,14 @@
     /// <summary>The @-mention autocomplete's current candidates.</summary>
     [Parameter] public IReadOnlyList<MentionableUserResponse> MentionCandidates { get; set; } = [];
 
-    [Parameter] public EventCallback PostComment { get; set; }
+    [Parameter, EditorRequired] public EventCallback PostComment { get; set; }
     /// <summary>Post the reply box's text against the message it is threaded under.</summary>
-    [Parameter] public EventCallback<Guid> PostReply { get; set; }
-    [Parameter] public EventCallback ToggleFolderSubscription { get; set; }
-    [Parameter] public EventCallback<Guid> ToggleReplyTo { get; set; }
-    [Parameter] public EventCallback<MentionableUserResponse> PickMention { get; set; }
-    [Parameter] public EventCallback<string?> ComposeChanged { get; set; }
-    [Parameter] public EventCallback<string?> ReplyChanged { get; set; }
+    [Parameter, EditorRequired] public EventCallback<Guid> PostReply { get; set; }
+    [Parameter, EditorRequired] public EventCallback ToggleFolderSubscription { get; set; }
+    [Parameter, EditorRequired] public EventCallback<Guid> ToggleReplyTo { get; set; }
+    [Parameter, EditorRequired] public EventCallback<MentionableUserResponse> PickMention { get; set; }
+    [Parameter, EditorRequired] public EventCallback<string?> ComposeChanged { get; set; }
+    [Parameter, EditorRequired] public EventCallback<string?> ReplyChanged { get; set; }
 
     private const int ChatUserPost = 0, ChatVersionFiled = 1, ChatVersionActivated = 2, ChatAttachmentRefused = 3;
 

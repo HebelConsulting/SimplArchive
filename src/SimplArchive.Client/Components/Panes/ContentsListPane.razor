@@ -161,16 +161,16 @@
     [Parameter] public BrowseNode? SelectedNode { get; set; }
 
     /// <summary>A row click, with its modifiers — the shell owns what selection means.</summary>
-    [Parameter] public EventCallback<(BrowseNode Node, MouseEventArgs Args)> RowClick { get; set; }
+    [Parameter, EditorRequired] public EventCallback<(BrowseNode Node, MouseEventArgs Args)> RowClick { get; set; }
 
     /// <summary>A row double-click: drill into a folder, open a document.</summary>
-    [Parameter] public EventCallback<BrowseNode> RowDoubleClick { get; set; }
+    [Parameter, EditorRequired] public EventCallback<BrowseNode> RowDoubleClick { get; set; }
 
     /// <summary>Raised when the pane's empty area is clicked — "nothing is selected any more".</summary>
-    [Parameter] public EventCallback BackgroundClick { get; set; }
+    [Parameter, EditorRequired] public EventCallback BackgroundClick { get; set; }
 
     /// <summary>Raised on Esc in this pane. The SHELL decides what it means; the pane only reports the gesture.</summary>
-    [Parameter] public EventCallback EscapePressed { get; set; }
+    [Parameter, EditorRequired] public EventCallback EscapePressed { get; set; }
 
     // No preventDefault: Escape has nothing worth suppressing, and suppressing keys wholesale in a pane is what
     // broke text entry elsewhere in this workbench.

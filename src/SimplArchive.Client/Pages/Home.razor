@@ -787,7 +787,7 @@
                             <PreviewPane @ref="_repoPreview" DataPane="preview" DataTour="pane-preview"
                                          EmptyText="@(_selectedItem is null ? Strings.Get("NoDocSelected") : Strings.Get("NoPreview"))"
                                          ConvertedBadgeTooltip="@Strings.Get("ConvertedPreviewTooltip")"
-                                         AnnotationHost="Annotations" WordCopied="OnPreviewWordCopiedAsync">
+                                         AnnotationHost="Annotations">
                                 <Toolbar>
                                     <AnnotationToolbar TouchOnly="_isTouchOnly" />
                                 </Toolbar>
@@ -1092,14 +1092,6 @@
         await Annotations.ApplyAnnotatableAsync(hasVersion);
     }
 
-
-    // Reached via the pane's WordCopied callback rather than from JS directly: the pane owns the
-    // DotNetObjectReference that preview.js calls into (ADR 0558).
-    private Task OnPreviewWordCopiedAsync((string Word, bool Append) e)
-    {
-        Snackbar.Add(string.Format(Strings.Get(e.Append ? "StAppendedWord" : "StCopiedWord"), e.Word), Severity.Success);
-        return Task.CompletedTask;
-    }
 
     // --- Annotations -------------------------------------------------------------------------------------
     // The whole lifecycle — the authoring mode, the selection, the clipboard and every write — belongs to

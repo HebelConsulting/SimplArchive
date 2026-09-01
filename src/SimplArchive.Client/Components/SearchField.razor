@@ -27,10 +27,6 @@
     [Parameter]
     public EventCallback<string?> ValueChanged { get; set; }
 
-    /// <summary>Raised after the field is emptied by the × or by Esc, for a caller that re-runs a query.</summary>
-    [Parameter]
-    public EventCallback Cleared { get; set; }
-
     /// <summary>Raised for every key, so a caller can still act on Enter. Esc is consumed here.</summary>
     [Parameter]
     public EventCallback<KeyboardEventArgs> OnKeyDown { get; set; }
@@ -84,7 +80,6 @@
     private async Task ClearAsync()
     {
         await OnValueChangedAsync(string.Empty);
-        await Cleared.InvokeAsync();
 
         if (_field is not null)
         {

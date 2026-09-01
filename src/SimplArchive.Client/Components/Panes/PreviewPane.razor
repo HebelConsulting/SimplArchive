@@ -2,6 +2,7 @@
 @using SimplArchive.Client.Pages
 @inject HttpClient Http
 @inject IJSRuntime JS
+@inject ISnackbar Snackbar
 @implements IAsyncDisposable
 @implements IAnnotationSurface
 
@@ -134,10 +135,6 @@
     /// <summary>Where annotation gestures go; <c>null</c> for a pane without annotations.</summary>
     [Parameter]
     public IPreviewAnnotationHost? AnnotationHost { get; set; }
-
-    /// <summary>A word was ⌥/Alt-clicked in the hit-overlay to copy it into an index field.</summary>
-    [Parameter]
-    public EventCallback<(string Word, bool Append)> WordCopied { get; set; }
 
     /// <summary>
     /// The display state (kind/text/find/converted/url). Exposed because parents read it — the Repositories
@@ -381,8 +378,18 @@
         }
     }
 
+    // A word was ⌥/Alt-clicked in the hit-overlay to copy it. preview.js does the copying; this is only the
+    // confirmation — and it belongs HERE rather than to each caller, because all five of them want the same
+    // sentence. It used to be a WordCopied callback, and four of the five never wired it: Check-out, Intray,
+    // Recycle bin and — worst — Search, where hit-word copy is the whole point, copied silently. The desktop
+    // confirmed on all five surfaces the whole time (ADR 0511). A callback every caller must implement
+    // identically is not a seam, it is the component's own behaviour with four chances to forget it.
     [JSInvokable]
-    public Task OnPreviewWordCopied(string word, bool append) => WordCopied.InvokeAsync((word, append));
+    public Task OnPreviewWordCopied(string word, bool append)
+    {
+        Snackbar.Add(string.Format(Strings.Get(append ? "StAppendedWord" : "StCopiedWord"), word), Severity.Success);
+        return Task.CompletedTask;
+    }
 
     // Every gesture below belongs to the annotations, not to the preview — see IPreviewAnnotationHost. A pane
     // with no host silently ignores them, which is what a staged file or a deleted document should do.

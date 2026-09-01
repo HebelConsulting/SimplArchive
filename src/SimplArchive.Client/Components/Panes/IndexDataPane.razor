@@ -306,7 +306,7 @@
 
 @code {
     /// <summary>Open the workflow dialog for the shown document — the shell owns the dialog.</summary>
-    [Parameter]
+    [Parameter, EditorRequired]
     public EventCallback OpenWorkflow { get; set; }
 
     /// <summary>Invoked with the REL of the transition the user pressed (#691) — the shell performs it.</summary>
@@ -315,7 +315,7 @@
     /// name the server used, and the shell follows the matching href. A transition added server-side therefore
     /// reaches the user through here without a client change (ADR 0543).
     /// </remarks>
-    [Parameter]
+    [Parameter, EditorRequired]
     public EventCallback<string> WorkflowTransition { get; set; }
 
     /// <summary>
@@ -374,16 +374,16 @@
     private IReadOnlyList<OcrLanguageOption> OcrCatalog => Catalogs.Ocr;
     private IReadOnlyList<SensitivityLabel> SensitivityLabels => Catalogs.Sensitivity;
 
-    [Parameter] public EventCallback Save { get; set; }
-    [Parameter] public EventCallback Cancel { get; set; }
-    [Parameter] public EventCallback<KeyboardEventArgs> KeyDown { get; set; }
-    [Parameter] public EventCallback<Guid?> EditMaskChanged { get; set; }
+    [Parameter, EditorRequired] public EventCallback Save { get; set; }
+    [Parameter, EditorRequired] public EventCallback Cancel { get; set; }
+    [Parameter, EditorRequired] public EventCallback<KeyboardEventArgs> KeyDown { get; set; }
+    [Parameter, EditorRequired] public EventCallback<Guid?> EditMaskChanged { get; set; }
 
     /// <summary>Toggle one OCR language on the open edit — order matters, so the shell owns the list.</summary>
-    [Parameter] public EventCallback<string> ToggleOcrCode { get; set; }
+    [Parameter, EditorRequired] public EventCallback<string> ToggleOcrCode { get; set; }
 
     /// <summary>Clicking a tag chip searches for it, which is a workbench-level navigation.</summary>
-    [Parameter] public EventCallback<string> SearchByTag { get; set; }
+    [Parameter, EditorRequired] public EventCallback<string> SearchByTag { get; set; }
 
     private string? TagColor(string name) => Catalogs.TagColor(name);
 

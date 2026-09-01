@@ -76,10 +76,10 @@
     [Parameter] public bool CanEdit { get; set; }
     [Parameter] public bool Busy { get; set; }
 
-    [Parameter] public EventCallback Follow { get; set; }
-    [Parameter] public EventCallback Remind { get; set; }
-    [Parameter] public EventCallback Share { get; set; }
-    [Parameter] public EventCallback Compare { get; set; }
-    [Parameter] public EventCallback ManageAccess { get; set; }
-    [Parameter] public EventCallback Edit { get; set; }
+    [Parameter, EditorRequired] public EventCallback Follow { get; set; }
+    [Parameter, EditorRequired] public EventCallback Remind { get; set; }
+    [Parameter, EditorRequired] public EventCallback Share { get; set; }
+    [Parameter, EditorRequired] public EventCallback Compare { get; set; }
+    [Parameter, EditorRequired] public EventCallback ManageAccess { get; set; }
+    [Parameter, EditorRequired] public EventCallback Edit { get; set; }
 }

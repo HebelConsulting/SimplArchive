@@ -100,7 +100,7 @@
     [Parameter] public Guid? SelectedId { get; set; }
 
     /// <summary>Raised when a node is clicked, or right-clicked (which selects before opening the menu).</summary>
-    [Parameter] public EventCallback<BrowseNode?> FolderSelected { get; set; }
+    [Parameter, EditorRequired] public EventCallback<BrowseNode?> FolderSelected { get; set; }
 
     /// <summary>
     /// The context-menu items for one node. The tree decides WHERE and WHETHER a menu opens; the actions in it
