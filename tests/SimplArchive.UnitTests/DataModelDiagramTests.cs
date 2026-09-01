@@ -15,11 +15,11 @@ namespace SimplArchive.UnitTests;
 //
 // Private-repository-only, on the same footing as AdrIndexTests: `docs/` is withheld from the public mirror
 // (ADR 0484) while `tests/` is published byte-for-byte, so in the mirror this guard's input does not exist by
-// design. Note it also stands down inside a git WORKTREE, whose `.git` is a file rather than a directory (#583)
-// — so a green run in a worktree proves nothing, and this one was verified from a full clone.
+// design. It used to stand down inside a git WORKTREE too, whose `.git` is a file rather than a directory, so a
+// green run there proved nothing; PrivateRepositoryGate now resolves the worktree and only a checkout with no
+// `.git` at all stands down (#583).
 public partial class DataModelDiagramTests
 {
-    private const string PrivateRepo = "HebelConsulting/SimplArchivePrivate";
     private const string Doc = "docs/data-model.md";
 
     // A node either sits on one side of a relationship line — `Parent ||--o{ Child : "label"` — or is declared
@@ -37,7 +37,7 @@ public partial class DataModelDiagramTests
     [Fact]
     public void Every_configured_entity_is_drawn_and_nothing_else_is()
     {
-        if (RepoRoot() is not { } root || !IsPrivateRepository(root))
+        if (PrivateRepositoryGate.RepoRoot() is not { } root || !PrivateRepositoryGate.IsPrivateRepository(root))
         {
             return; // the public mirror has no docs/, by design
         }
@@ -80,25 +80,5 @@ public partial class DataModelDiagramTests
             + string.Join("\n", stale.Select(e => $"  {e}"))
             + "\n\nEither the name is misspelled (so the entity it means is silently missing too), or the table is "
             + "gone and the diagram still describes it.");
-    }
-
-    private static bool IsPrivateRepository(string root)
-    {
-        // A worktree's .git is a file, and a source export has no .git at all — in either case the origin cannot
-        // be established, so the guard stands down rather than guessing (#583).
-        var config = Path.Combine(root, ".git", "config");
-        return File.Exists(config)
-            && File.ReadAllText(config).Contains(PrivateRepo, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string? RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName;
     }
 }

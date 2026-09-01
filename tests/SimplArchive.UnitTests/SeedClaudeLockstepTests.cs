@@ -26,7 +26,6 @@ namespace SimplArchive.UnitTests;
 // CLAUDE.md or seed fails loudly rather than skipping.
 public partial class SeedClaudeLockstepTests
 {
-    private const string PrivateRepo = "HebelConsulting/SimplArchivePrivate";
     private const string Seed = "docs/SeedCLAUDE.md";
 
     // The em-dash form is what carries a title; the trailing "(`docs/adr/0543`)" reference is not part of it.
@@ -36,7 +35,7 @@ public partial class SeedClaudeLockstepTests
     [Fact]
     public void Every_standing_principle_is_carried_or_explicitly_not_portable()
     {
-        if (RepoRoot() is not { } root || !IsPrivateRepository(root))
+        if (PrivateRepositoryGate.RepoRoot() is not { } root || !PrivateRepositoryGate.IsPrivateRepository(root))
         {
             return; // the public mirror has neither input, by design
         }
@@ -73,7 +72,7 @@ public partial class SeedClaudeLockstepTests
     [Fact]
     public void The_seeds_markers_all_name_a_real_standing_principle()
     {
-        if (RepoRoot() is not { } root || !IsPrivateRepository(root))
+        if (PrivateRepositoryGate.RepoRoot() is not { } root || !PrivateRepositoryGate.IsPrivateRepository(root))
         {
             return;
         }
@@ -91,25 +90,5 @@ public partial class SeedClaudeLockstepTests
             $"{Seed} names principles that no longer appear in CLAUDE.md (reworded or removed):\n"
             + string.Join("\n", dangling.Select(t => $"  {t}"))
             + "\n\nUpdate the marker to the new wording, or drop the section if the principle is gone.");
-    }
-
-    private static bool IsPrivateRepository(string root)
-    {
-        // A worktree's .git is a file, and a source export has no .git at all — in either case the origin cannot
-        // be established, so the guard stands down rather than guessing.
-        var config = Path.Combine(root, ".git", "config");
-        return File.Exists(config)
-            && File.ReadAllText(config).Contains(PrivateRepo, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string? RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName;
     }
 }

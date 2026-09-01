@@ -23,7 +23,6 @@ namespace SimplArchive.UnitTests;
 // deleted it", because a guard that quietly passes when its input vanishes is not a guard.
 public partial class AdrIndexTests
 {
-    private const string PrivateRepo = "HebelConsulting/SimplArchivePrivate";
     private const string Index = "docs/adr/README.md";
 
     [GeneratedRegex(@"^\| (\d{4}) \| \[(?<title>.+?)\]\((?<href>[^)]+)\) \|")]
@@ -32,7 +31,7 @@ public partial class AdrIndexTests
     [Fact]
     public void The_index_stays_sorted_unique_and_one_to_one_with_the_adr_files()
     {
-        if (RepoRoot() is not { } root || !IsPrivateRepository(root))
+        if (PrivateRepositoryGate.RepoRoot() is not { } root || !PrivateRepositoryGate.IsPrivateRepository(root))
         {
             return; // the public mirror has no docs/, by design
         }
@@ -76,25 +75,5 @@ public partial class AdrIndexTests
         Assert.True(missingFromDisk.Count == 0,
             $"{Index} links to files that do not exist (renamed or deleted without updating the row):\n"
             + string.Join("\n", missingFromDisk.Select(h => $"  {h}")));
-    }
-
-    private static bool IsPrivateRepository(string root)
-    {
-        // A worktree's .git is a file, and a source export has no .git at all — in either case the origin cannot
-        // be established, so the guard stands down rather than guessing.
-        var config = Path.Combine(root, ".git", "config");
-        return File.Exists(config)
-            && File.ReadAllText(config).Contains(PrivateRepo, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string? RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName;
     }
 }
