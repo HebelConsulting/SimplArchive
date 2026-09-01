@@ -187,7 +187,17 @@ public class OverLimitFileCeilingTests
         // EXISTING key handler, and a tunnel-phase pointer handler for a press that landed outside any row.
         // Both are input plumbing for a control this file already handles; an attached behaviour would scatter
         // one list's input across two places for the sake of the number.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_190,
+        // MainWindow.axaml.cs is GONE from this list: 1,190 -> 710. #519's plan, finished by the route #466
+        // already established for this file -- a partial per feature, view glue whose logic lives in the view
+        // models it calls. The two remaining clusters were contiguous and went whole:
+        //
+        //   MainWindow.Tree.axaml.cs (298)    the tap, the context menu, and the fourteen things it offers
+        //   MainWindow.Intray.axaml.cs (220)  the page operations, their three auto-preferences, the row actions
+        //
+        // A partial rather than per-tab UserControls, deliberately. The notes above kept deferring a shared
+        // vm/node guard to "#519 moves all of them into per-tab UserControls" -- but these handlers reach the
+        // window's DataContext, its context-node field and its dialog owner, so a control of its own would have
+        // meant passing all three somewhere. The split that costs nothing is the one that keeps the class.
 
 
         // Entered 2026-08-20 (#673, ADR 0655) — over the line since well before it was noticed, and never on
