@@ -89,15 +89,15 @@ internal static class ApiClientChecks
         Console.WriteLine("deleting…");
         await api.Documents.DeleteAsync(created.Href("self"));
         var afterDelete = await api.Documents.GetChildrenAsync(root.Href("children"));
-        var recycled = await api.Documents.GetRecycleBinAsync(root);
+        var recycled = await api.RecycleBin.GetRecycleBinAsync(root);
         Console.WriteLine(afterDelete.All(c => c.Id != created.Id) && recycled.Any(r => r.Id == created.Id)
             ? "OK: gone from folder, present in recycle bin."
             : "FAILED: delete/recycle-bin state wrong.");
 
         Console.WriteLine("restoring…");
-        await api.Documents.RestoreAsync(recycled.Single(r => r.Id == created.Id));
+        await api.RecycleBin.RestoreAsync(recycled.Single(r => r.Id == created.Id));
         var afterRestore = await api.Documents.GetChildrenAsync(root.Href("children"));
-        var recycledAfter = await api.Documents.GetRecycleBinAsync(root);
+        var recycledAfter = await api.RecycleBin.GetRecycleBinAsync(root);
         Console.WriteLine(afterRestore.Any(c => c.Id == created.Id) && recycledAfter.All(r => r.Id != created.Id)
             ? "OK: restored to folder, cleared from recycle bin."
             : "FAILED: restore state wrong.");
@@ -153,16 +153,16 @@ internal static class ApiClientChecks
         Console.WriteLine(cInB && cGoneFromA ? "OK: moved." : "FAILED: move state wrong.");
 
         Console.WriteLine("referencing C into A…");
-        await api.Documents.CreateReferenceAsync(a.Href("references"), c.Id);
-        var refs = await api.Documents.GetReferencesAsync(a.Href("references"));
+        await api.References.CreateReferenceAsync(a.Href("references"), c.Id);
+        var refs = await api.References.GetReferencesAsync(a.Href("references"));
         var reference = refs.FirstOrDefault(r => r.TargetId == c.Id);
         Console.WriteLine(reference is not null && reference.RealParentId == b.Id
             ? $"OK: reference present, realParentId points to B; go-to folder = '{(await api.GetDocumentByAddressAsync(reference.Links!["go-to"])).Name}'."
             : "FAILED: reference/realParentId wrong.");
 
         Console.WriteLine("removing the reference…");
-        await api.Documents.DeleteReferenceAsync(reference!.DeleteHref!);
-        Console.WriteLine((await api.Documents.GetReferencesAsync(a.Href("references"))).Count == 0 ? "OK: reference removed." : "FAILED: reference still present.");
+        await api.References.DeleteReferenceAsync(reference!.DeleteHref!);
+        Console.WriteLine((await api.References.GetReferencesAsync(a.Href("references"))).Count == 0 ? "OK: reference removed." : "FAILED: reference still present.");
 
         await api.Documents.DeleteAsync(a.Href("self")); // cleanup (cascades C)
         await api.Documents.DeleteAsync(b.Href("self"));
@@ -193,12 +193,12 @@ internal static class ApiClientChecks
         await api.Documents.CreateFolderAsync(a.Href("children"), $"rt-C-{s}");
         var c = (await api.Documents.GetChildrenAsync(a.Href("children"))).First(n => n.Name == $"rt-C-{s}");
 
-        await api.Documents.CreateReferenceAsync(b.Href("references"), c.Id);
+        await api.References.CreateReferenceAsync(b.Href("references"), c.Id);
 
         var cRow = (await api.Documents.GetChildrenAsync(a.Href("children"))).First(n => n.Id == c.Id);
         Console.WriteLine(cRow.HasReferences ? "OK: hasReferences=true on the referenced item." : "FAILED: hasReferences not set.");
 
-        var folders = await api.Documents.GetReferencingFoldersAsync(c.Href("referencing-folders"));
+        var folders = await api.References.GetReferencingFoldersAsync(c.Href("referencing-folders"));
         var match = folders.FirstOrDefault(f => f.Id == b.Id);
         Console.WriteLine(match is not null
             ? $"OK: referencing folder listed with path '{match.Path}'."

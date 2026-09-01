@@ -33,15 +33,15 @@ public class DesktopReferencesPrimaryLocationTests
         var doc = (await api.Documents.GetChildrenAsync(folderA.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(docName));
 
         // A pre-existing reference to the doc in Folder B — promotion should drop it as redundant.
-        await api.Documents.CreateReferenceAsync(folderB.Href("references"), doc.Id);
+        await api.References.CreateReferenceAsync(folderB.Href("references"), doc.Id);
 
-        var before = await api.Documents.GetReferencesViewAsync(doc.Href("referencing-folders"));
+        var before = await api.References.GetReferencesViewAsync(doc.Href("referencing-folders"));
         Assert.Equal(folderA.Id, before.Primary!.Id);
         Assert.Contains(before.Folders, f => f.Id == folderB.Id);
 
         await api.Documents.SetPrimaryLocationAsync(doc.Href("self"), folderB.Id);
 
-        var after = await api.Documents.GetReferencesViewAsync(doc.Href("referencing-folders"));
+        var after = await api.References.GetReferencesViewAsync(doc.Href("referencing-folders"));
         Assert.Equal(folderB.Id, after.Primary!.Id);                     // re-homed into Folder B
         Assert.Contains(after.Folders, f => f.Id == folderA.Id);         // reference left at the former home
         Assert.DoesNotContain(after.Folders, f => f.Id == folderB.Id);   // redundant reference removed

@@ -29,7 +29,11 @@ public class StringEmptyRatchetTests
     private static readonly Dictionary<string, int> MandatedEmptyLiterals = new()
     {
         ["src/SimplArchive.Client/Models/BrowseNode.cs"] = 6,
-        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 2,
+        // Moved from DocumentsClient to ReferencesClient with the Reference record (#518's per-area split): its
+        // positional parameters carry `= ""` defaults, which CS1736 requires -- string.Empty is a static
+        // readonly field, not a constant expression. Two LINES, three literals: this guard counts lines that
+        // contain a match, not matches, so `string CreatedBy = "", string SensitivityLabelName = ""` scores 1.
+        ["src/SimplArchive.DesktopClient/Services/ReferencesClient.cs"] = 2,
         ["src/SimplArchive.DesktopClient/Services/DragOutStager.cs"] = 1,
         ["src/SimplArchive.DesktopClient/Services/IntrayApi.cs"] = 1,
         ["src/SimplArchive.DesktopClient/Services/SharedRecords.cs"] = 3,

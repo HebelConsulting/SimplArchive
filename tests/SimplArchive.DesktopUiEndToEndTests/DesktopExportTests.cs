@@ -29,8 +29,8 @@ public class DesktopExportTests
         var payload = Encoding.UTF8.GetBytes($"desktop-export-{Guid.NewGuid():N}");
         await api.Documents.UploadFileAsync(repo.Href("children"), "report.txt", payload);
 
-        var options = new DocumentsClient.RepositoryExportOptions(ActiveOnly: false, null, null, null, null, null);
-        var zipBytes = await api.Documents.ExportRepositoryAsync(await api.Documents.RelViaSelfAsync(repo.Href("document"), "export"), options);
+        var options = new RepositoryArchiveClient.RepositoryExportOptions(ActiveOnly: false, null, null, null, null, null);
+        var zipBytes = await api.RepositoryArchive.ExportRepositoryAsync(await api.Documents.RelViaSelfAsync(repo.Href("document"), "export"), options);
 
         using var archive = new ZipArchive(new MemoryStream(zipBytes), ZipArchiveMode.Read);
 

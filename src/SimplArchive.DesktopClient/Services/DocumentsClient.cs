@@ -58,25 +58,12 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
     public sealed record AclInfo(bool Forbidden, bool BreaksInheritance, List<AclEntryInfo> Entries, List<GrantablePrincipalInfo> Principals, string? InheritanceHref,
         AclRights? GrantableRights = null);
 
-    // A folder that references a given item, with its full display path — see ADR "References-of-an-item list".
-    // OpenHref is the row's own `open` address (ADR 0555) — null where the server withheld it.
-    public sealed record ReferencingFolder(Guid Id, string Name, string Path, string? OpenHref = null);
 
-    // The references-of-an-item view: the document's real primary location (null when it's a repository root or
-    // the caller can't see the parent) plus the folders that reference it (ADR 0506).
-    public sealed record ReferencesView(ReferencingFolder? Primary, IReadOnlyList<ReferencingFolder> Folders);
 
     public sealed record IndexField(string FieldName, IReadOnlyList<string> Values);
 
     public sealed record MentionableUser(Guid Id, string DisplayName);
 
-    // The per-repository view of a soft-deleted item. Same actions as the tenant-wide row below and therefore
-    // the same shape, so restore/purge are written ONCE and take either (CLAUDE.md: one generic, not N copies).
-    public sealed record RecycleBinItem(Guid Id, string Name, DateTimeOffset DeletedAt,
-        IReadOnlyDictionary<string, string>? Links = null) : IAdvertisesLinks
-    {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
-    }
 
     // A file entry inside a browsed .zip (ADR "Zip file browsing") — not a real Document.
     // A zip entry. DownloadHref is the address its own row advertised — an entry is not a storage object, so
@@ -90,20 +77,6 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
     // deletion — each already carrying the right source prefix for a group or another user's intray, which is
     // exactly the part the client used to rebuild by hand (ADR 0543/0555, issue #416).
     // A reference (shortcut) filed in a folder — see ADR "Desktop drag-and-drop move and reference".
-    // TargetId/Name/HasVersions/HasSubfolders describe the referenced item; ReferenceId identifies the
-    // shortcut row (for delete); RealParentId is the target's real home folder (for "Go to …").
-    // DeleteHref is the shortcut row's own `delete` address (ADR 0543) — the pair of ids that used to rebuild
-    // it are still here because the tree needs them, but nothing composes a URL out of them any more.
-    public sealed record Reference(
-        Guid ReferenceId, Guid TargetId, string Name, bool HasChildren, bool HasVersions, bool HasSubfolders, bool HasReferences, Guid? RealParentId,
-        string? DeleteHref = null, IReadOnlyDictionary<string, string>? Links = null,
-        // The TARGET's list-row columns, exactly as a children row carries them (#768). Without these a
-        // shortcut row drew blank Type / Doc date / Size / Tags / Owner cells beside a real row that filled
-        // them — the same defect on both clients, from the same missing projection.
-        string DocumentType = "", DateOnly? DocumentDate = null, long? SizeBytes = null,
-        IReadOnlyList<string>? Tags = null, string CreatedBy = "", string SensitivityLabelName = "",
-        string? SensitivityLabelColor = null, int VersionCount = 0, DateTimeOffset? VersionCreatedAt = null,
-        string? Icon = null);
 
     public async Task<List<Node>> GetRepositoriesAsync(CancellationToken cancellationToken = default) =>
         await _core.LoadPagedAsync(await _core.RootHrefAsync("repositories", cancellationToken), "repositories", ParseNode, cancellationToken);
@@ -223,20 +196,6 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         }
     }
 
-    // Free-form tags (ADR "Document tags"). GET the document's tags; PUT-replaces the whole set (the server
-    // normalizes/dedupes and returns the stored set); the tenant tag catalog backs add-box autocomplete.
-    // Takes the advertised href (detail.Href("tags")), not a document id (ADR 0543, issue #416).
-    public async Task<IReadOnlyList<string>> GetTagsAsync(string tagsHref, CancellationToken cancellationToken = default)
-    {
-        var json = await _core.Http.GetFromJsonAsync<JsonElement>(tagsHref, cancellationToken);
-        return ReadTags(json);
-    }
-
-    public async Task<IReadOnlyList<string>> GetTagCatalogAsync(CancellationToken cancellationToken = default)
-    {
-        var json = await _core.Http.GetFromJsonAsync<JsonElement>(await _core.RootHrefAsync("tags", cancellationToken), cancellationToken);
-        return ReadTags(json);
-    }
 
     public async Task<BulkResult> BulkMoveAsync(IEnumerable<Guid> ids, Guid parentId, CancellationToken cancellationToken = default) =>
         await PostBulkAsync(await BulkRelAsync("move", cancellationToken), new { ids = ids.ToArray(), parentId }, cancellationToken);
@@ -473,85 +432,11 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         response.EnsureSuccessStatusCode();
     }
 
-    // Restores a soft-deleted document/folder (and its cascade-deleted descendants). Idempotent, no If-Match
-    // (ADR 0196). 403 = no permission (CanDelete).
-    public async Task RestoreAsync(IAdvertisesLinks entry, CancellationToken cancellationToken = default)
-    {
-        using var response = await _core.Http.PostAsync(ApiCore.RequireHref(entry, "restore"), null, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to restore this item.");
-        }
 
-        response.EnsureSuccessStatusCode();
-    }
 
-    // Every deleted Document at any depth under a repository root (ADR 0196).
-    // Follows the repository ROW's own `recycle-bin` rel (issue #416) — a repository is a document, and its bin
-    // is one of the addresses the listing hands over.
-    public Task<List<RecycleBinItem>> GetRecycleBinAsync(Node repository, CancellationToken cancellationToken = default) =>
-        _core.LoadPagedAsync(
-            repository.Href("recycle-bin") ?? throw new InvalidOperationException($"The repository '{repository.Name}' advertised no 'recycle-bin' rel (ADR 0543/0555)."),
-            "items", ParseRecycleBinItem, cancellationToken);
 
-    // Permanently purges a recycle-bin item + its subtree (ADR "Manual hard-delete / purge") — tenant-admin only.
-    public async Task PurgeAsync(IAdvertisesLinks entry, CancellationToken cancellationToken = default)
-    {
-        using var response = await _core.Http.PostAsync(ApiCore.RequireHref(entry, "purge"), null, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("Only a tenant administrator can permanently purge items.");
-        }
 
-        if (response.StatusCode == HttpStatusCode.Conflict)
-        {
-            throw new ApiActionException("This item is under a legal hold and cannot be purged.");
-        }
 
-        response.EnsureSuccessStatusCode();
-    }
-
-    // The references (shortcuts) filed in a folder — see ADR "Desktop drag-and-drop move and reference".
-    public Task<List<Reference>> GetReferencesAsync(string referencesHref, CancellationToken cancellationToken = default) =>
-        _core.LoadPagedAsync(referencesHref, "references", ParseReference, cancellationToken);
-
-    // The folders that reference a given item (with full paths) — see ADR "References-of-an-item list".
-    public async Task<List<ReferencingFolder>> GetReferencingFoldersAsync(string referencingFoldersHref, CancellationToken cancellationToken = default) =>
-        await _core.LoadPagedAsync(referencingFoldersHref, "folders", ParseReferencingFolder, cancellationToken);
-
-    // The full references view — the item's real primary location plus every referencing folder (ADR 0506). The
-    // primary location is a top-level object on the first page (not part of the paged array), so this can't reuse
-    // LoadPagedAsync; it walks the pages itself.
-    public async Task<ReferencesView> GetReferencesViewAsync(string referencingFoldersHref, CancellationToken cancellationToken = default)
-    {
-        var folders = new List<ReferencingFolder>();
-        ReferencingFolder? primary = null;
-        string? next = referencingFoldersHref;
-        var first = true;
-
-        while (next is not null)
-        {
-            var page = await _core.Http.GetFromJsonAsync<JsonElement>(next, cancellationToken);
-            if (first)
-            {
-                if (page.TryGetProperty("primaryLocation", out var pl) && pl.ValueKind == JsonValueKind.Object)
-                {
-                    primary = ParseReferencingFolder(pl);
-                }
-
-                first = false;
-            }
-
-            if (page.TryGetProperty("folders", out var array))
-            {
-                folders.AddRange(array.EnumerateArray().Select(ParseReferencingFolder));
-            }
-
-            next = ApiCore.FindLink(page, "next");
-        }
-
-        return new ReferencesView(primary, folders);
-    }
 
     // Promotes a referenced folder to be the document's primary location (ADR 0506): atomic move + leave a
     // reference at the former home. Same If-Match contract as MoveAsync.
@@ -634,41 +519,7 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         response.EnsureSuccessStatusCode();
     }
 
-    // Files a reference (shortcut) to an item into a folder. 400 = into its own subtree, 403 = no permission,
-    // 409 = already referenced here.
 
-    public async Task CreateReferenceAsync(string referencesHref, Guid targetId, CancellationToken cancellationToken = default)
-    {
-        using var response = await _core.Http.PostAsJsonAsync(referencesHref, new { targetId }, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.BadRequest)
-        {
-            throw new ApiActionException("Can't reference an item into itself or one of its own sub-folders.");
-        }
-
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to place a reference here.");
-        }
-
-        if (response.StatusCode == HttpStatusCode.Conflict)
-        {
-            throw new ApiActionException("This item is already referenced in that folder.");
-        }
-
-        response.EnsureSuccessStatusCode();
-    }
-
-    // Removes a reference (the shortcut only, never the target) at the address its own row advertised.
-    public async Task DeleteReferenceAsync(string deleteHref, CancellationToken cancellationToken = default)
-    {
-        using var response = await _core.Http.DeleteAsync(deleteHref, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to remove this reference.");
-        }
-
-        response.EnsureSuccessStatusCode();
-    }
 
     // Uploads a file into a folder, mirroring the web client's drag-drop flow (ADR 0216): create the child
     // Document, create a Pending version, PUT the bytes straight to the presigned URL (never proxied), then
@@ -800,42 +651,8 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
                 e.TryGetProperty("icon", out var ei) && ei.ValueKind == JsonValueKind.String ? ei.GetString() : null))]
             : [];
 
-    private static ReferencingFolder ParseReferencingFolder(JsonElement item) => new(
-        item.GetProperty("id").GetGuid(),
-        item.GetProperty("name").GetString() ?? "",
-        item.TryGetProperty("path", out var p) ? p.GetString() ?? "" : "",
-        // The row's own `open` address (ADR 0555) — how "Go to"/promote-then-navigate reaches the folder.
-        ApiCore.RelHref(item, "open"));
 
-    private static Reference ParseReference(JsonElement item) => new(
-        item.GetProperty("referenceId").GetGuid(),
-        item.GetProperty("id").GetGuid(),
-        item.GetProperty("name").GetString() ?? "",
-        item.TryGetProperty("hasChildren", out var hc) && hc.GetBoolean(),
-        item.TryGetProperty("hasVersions", out var hv) && hv.GetBoolean(),
-        item.TryGetProperty("hasSubfolders", out var hs) && hs.GetBoolean(),
-        item.TryGetProperty("hasReferences", out var hr) && hr.GetBoolean(),
-        item.TryGetProperty("realParentId", out var rp) && rp.ValueKind != JsonValueKind.Null ? rp.GetGuid() : null,
-        ApiCore.RelHref(item, "delete"),
-        // A reference row stands for a REAL document, and the server advertises the same target sub-resources
-        // a children row gets (#416) — carry them so the row is not quietly less capable than its neighbour.
-        ApiCore.ParseLinks(item),
-        item.TryGetProperty("documentType", out var dt) ? dt.GetString() ?? "" : "",
-        item.TryGetProperty("documentDate", out var dd) && dd.ValueKind == JsonValueKind.String && DateOnly.TryParse(dd.GetString(), out var date) ? date : null,
-        item.TryGetProperty("sizeBytes", out var sz) && sz.ValueKind == JsonValueKind.Number ? sz.GetInt64() : null,
-        item.TryGetProperty("tags", out var tg) && tg.ValueKind == JsonValueKind.Array ? tg.EnumerateArray().Select(x => x.GetString() ?? "").Where(v => v.Length > 0).ToList() : [],
-        item.TryGetProperty("createdBy", out var cb) ? cb.GetString() ?? "" : "",
-        item.TryGetProperty("sensitivityLabelName", out var sln) ? sln.GetString() ?? "" : "",
-        item.TryGetProperty("sensitivityLabelColor", out var slc) && slc.ValueKind == JsonValueKind.String ? slc.GetString() : null,
-        item.TryGetProperty("versionCount", out var vc) && vc.ValueKind == JsonValueKind.Number ? vc.GetInt32() : 0,
-        item.TryGetProperty("versionCreatedAt", out var vca) && vca.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(vca.GetString(), out var vcaDt) ? vcaDt : null,
-        item.TryGetProperty("icon", out var ic) && ic.ValueKind == JsonValueKind.String ? ic.GetString() : null);
 
-    private static RecycleBinItem ParseRecycleBinItem(JsonElement item) => new(
-        item.GetProperty("id").GetGuid(),
-        item.GetProperty("name").GetString() ?? "",
-        item.GetProperty("deletedAt").GetDateTimeOffset(),
-        ApiCore.ParseLinks(item));
 
     private static Comment ParseComment(JsonElement item) => new(
         item.GetProperty("id").GetGuid(),
@@ -862,10 +679,6 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
             m.TryGetProperty("displayName", out var n) ? n.GetString() ?? "" : ""))];
     }
 
-    private static IReadOnlyList<string> ReadTags(JsonElement json) =>
-        json.TryGetProperty("tags", out var t) && t.ValueKind == JsonValueKind.Array
-            ? t.EnumerateArray().Select(x => x.GetString() ?? "").Where(s => s.Length > 0).ToList()
-            : [];
 
     // The five operations are rels on the batch INDEX, which the root advertises as `documentsBulk` — a set of
     // ids belongs to no single resource, so there was nowhere else for them to hang (ADR 0543, issue #416).
@@ -963,53 +776,8 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         Guid CurrentVersionId, int CurrentVersionNumber, DateTimeOffset CreatedAt, string CreatedByName, string DocumentDate,
         bool HasTiffVersion, string? OcrLanguages, string FileExtension, string? DocumentDateHref = null, string? WorkflowStatus = null);
 
-    public sealed record RepositoryExportOptions(bool ActiveOnly, DateOnly? DocumentDateFrom, DateOnly? DocumentDateTo, DateTimeOffset? FiledFrom, DateTimeOffset? FiledTo, string? CreatedBy, bool IncludePermissions = false);
 
-    public sealed record ImportResultInfo(Guid RootId, string RootName, int Documents, int Versions, int Skipped);
 
-    // Exports a repository/folder + subtree to a .zip (ADR "Repository export"). Tenant-admin-only server-side.
-    public async Task<byte[]> ExportRepositoryAsync(string exportHref, RepositoryExportOptions options, CancellationToken cancellationToken = default)
-    {
-        var query = new List<string> { $"versions={(options.ActiveOnly ? "active" : "all")}" };
-        if (options.DocumentDateFrom is { } df) query.Add($"documentDateFrom={df:yyyy-MM-dd}");
-        if (options.DocumentDateTo is { } dt) query.Add($"documentDateTo={dt:yyyy-MM-dd}");
-        if (options.FiledFrom is { } ff) query.Add($"filedFrom={Uri.EscapeDataString(ff.UtcDateTime.ToString("o"))}");
-        if (options.FiledTo is { } ft) query.Add($"filedTo={Uri.EscapeDataString(ft.UtcDateTime.ToString("o"))}");
-        if (!string.IsNullOrWhiteSpace(options.CreatedBy)) query.Add($"createdBy={Uri.EscapeDataString(options.CreatedBy.Trim())}");
-        if (options.IncludePermissions) query.Add("includePermissions=true");
-
-        return await _core.Http.GetByteArrayAsync(exportHref + "?" + string.Join("&", query), cancellationToken);
-    }
-
-    // Imports an export archive (ADR "Repository import"). targetFolderId == null → a new repository; otherwise
-    // grafted under that folder. Tenant-admin-only server-side. Returns the imported root's name + counts.
-    public async Task<ImportResultInfo> ImportRepositoryAsync(string? importHref, byte[] zip, bool updateExisting = false, bool includePermissions = false, bool merge = false, string leafConflict = "rename", CancellationToken cancellationToken = default)
-    {
-        using var content = new MultipartFormDataContent();
-        var file = new ByteArrayContent(zip);
-        file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
-        content.Add(file, "file", "import.zip");
-
-        // Into a folder → the folder's own `import` rel; a brand-new repository → the one the repositories
-        // COLLECTION advertises, since the archive's root becomes a sibling of everything in it and belongs to
-        // no repository in particular. `?limit=1` so learning one address doesn't drag back a page of
-        // ACL-filtered repositories (ADR 0543, issue #416).
-        var basePath = importHref
-            ?? ApiCore.RequireRel(
-                await _core.Http.GetFromJsonAsync<JsonElement>(await _core.RootHrefAsync("repositories", cancellationToken) + "?limit=1", cancellationToken),
-                "import",
-                "The repositories collection");
-        var url = $"{basePath}?updateExisting={(updateExisting ? "true" : "false")}&includePermissions={(includePermissions ? "true" : "false")}&merge={(merge ? "true" : "false")}&leafConflict={leafConflict}";
-        var response = await _core.Http.PostAsync(url, content, cancellationToken);
-        response.EnsureSuccessStatusCode();
-        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-        return new ImportResultInfo(
-            json.GetProperty("rootId").GetGuid(),
-            json.GetProperty("rootName").GetString() ?? "",
-            json.GetProperty("documents").GetInt32(),
-            json.GetProperty("versions").GetInt32(),
-            json.GetProperty("skipped").GetInt32());
-    }
 
     public async Task<MaskInfo> GetMaskAsync(string maskHref, CancellationToken cancellationToken = default)
     {
@@ -1083,17 +851,6 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         }
     }
 
-    // Same advertised href as the GET — the tags resource is one address, read or replaced (ADR 0543, #416).
-    public async Task<IReadOnlyList<string>> SetTagsAsync(string tagsHref, IEnumerable<string> tags, CancellationToken cancellationToken = default)
-    {
-        var response = await _core.Http.PutAsJsonAsync(tagsHref, new { tags = tags.ToArray() }, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new ApiActionException($"Could not set tags ({(int)response.StatusCode}).");
-        }
-
-        return ReadTags(await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken));
-    }
 
     public async Task<BulkResult> BulkReferenceAsync(IEnumerable<Guid> ids, Guid parentId, CancellationToken cancellationToken = default) =>
         await PostBulkAsync(await BulkRelAsync("reference", cancellationToken), new { ids = ids.ToArray(), parentId }, cancellationToken);

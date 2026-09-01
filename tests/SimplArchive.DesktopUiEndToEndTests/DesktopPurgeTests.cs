@@ -27,10 +27,10 @@ public class DesktopPurgeTests
 
         // Delete it, then purge it permanently.
         await api.Documents.DeleteAsync(folder.Href("self"));
-        var recycled = await api.Documents.GetRecycleBinAsync(repo);
+        var recycled = await api.RecycleBin.GetRecycleBinAsync(repo);
         Assert.Contains(recycled, i => i.Id == folder.Id);
 
-        await api.Documents.PurgeAsync(recycled.Single(i => i.Id == folder.Id));
-        Assert.DoesNotContain(await api.Documents.GetRecycleBinAsync(repo), i => i.Id == folder.Id);
+        await api.RecycleBin.PurgeAsync(recycled.Single(i => i.Id == folder.Id));
+        Assert.DoesNotContain(await api.RecycleBin.GetRecycleBinAsync(repo), i => i.Id == folder.Id);
     }
 }

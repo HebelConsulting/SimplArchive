@@ -39,7 +39,7 @@ public class DesktopBulkActionsTests
         Assert.Equal(3, tagged.Succeeded);
         foreach (var id in ids)
         {
-            Assert.Equal(new[] { "batch", "reviewed" }, await api.Documents.GetTagsAsync((await api.Documents.GetDocumentDetailAsync(await TestRels.DocumentSelfAsync(api, repo, id))).Href("tags")));
+            Assert.Equal(new[] { "batch", "reviewed" }, await api.Tags.GetTagsAsync((await api.Documents.GetDocumentDetailAsync(await TestRels.DocumentSelfAsync(api, repo, id))).Href("tags")));
         }
 
         var confidential = (await api.Admin.GetSensitivityLabelsAsync()).Items.Single(l => l.Name == "Confidential");
@@ -87,7 +87,7 @@ public class DesktopBulkActionsTests
         var stillHome = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Select(n => n.Id).ToHashSet();
         Assert.Contains(ids[0], stillHome);
         Assert.Contains(ids[1], stillHome);
-        var refs = (await api.Documents.GetReferencesAsync(target.Href("references"))).Select(r => r.TargetId).ToHashSet();
+        var refs = (await api.References.GetReferencesAsync(target.Href("references"))).Select(r => r.TargetId).ToHashSet();
         Assert.Contains(ids[0], refs);
         Assert.Contains(ids[1], refs);
 

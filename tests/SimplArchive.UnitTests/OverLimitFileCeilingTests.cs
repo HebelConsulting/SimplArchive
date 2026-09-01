@@ -122,7 +122,29 @@ public class OverLimitFileCeilingTests
         // business in an override list for files at or over 1000.
         ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6011,
 
-        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1_235,
+        // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
+        // the one authenticated ApiCore. Four areas left it:
+        //
+        //   ReferencesClient (159, new)          shortcuts: what a folder references, what references an item
+        //   RecycleBinClient (91 -> 155)         the SINGLE-item restore/purge/list joined the tenant-wide ones
+        //   RepositoryArchiveClient (66, new)    export a subtree to a .zip, import one back
+        //   TagsClient (50, new)                 a document's tags + the tenant catalog
+        //
+        // The recycle-bin move was a REPAIR, not a relocation: this client already owned the tenant-wide bin
+        // while the per-item operations sat in DocumentsClient, so RecycleBinTabViewModel called TWO clients to
+        // drive ONE tab and had to know which answered what. Restore/Purge already took IAdvertisesLinks so one
+        // implementation served both row types -- a generic over both belongs with both.
+        //
+        // SetPrimaryLocationAsync deliberately STAYED. Promoting a referencing folder to primary is a reparent
+        // sharing MoveAsync's If-Match contract, and it is one of several paths that change a document's
+        // parent; a rule about reparenting that lives in one of two files gets applied in one of two places.
+        //
+        // Recorded because the estimate was wrong and the owner overruled the recommendation: the first two
+        // areas were sized at ~260 lines and were 169, leaving 1,066. Reaching 992 took TagsClient, a 50-line
+        // file this guard's own header would call "a file that exists to satisfy a number". That objection was
+        // raised and the owner chose to clear the entry anyway (2026-09-01). If a later reader thinks TagsClient
+        // is too small to justify itself, they are not the first -- but the tags resource IS one address read
+        // or replaced (ADR 0719), so it is at least a real subject and not an arbitrary cut.
 
         // Re-entered 2026-08-17 (ADR 0613): burned down to 967 in an earlier pass, back to 1,156 since — the
         // handlers here are what #519 moves into per-tab UserControls, which is what takes it under again.

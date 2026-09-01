@@ -52,7 +52,7 @@ public sealed partial class ReferencesViewModel : ObservableObject
         Items.Clear();
         try
         {
-            var view = await _api.Documents.GetReferencesViewAsync(
+            var view = await _api.References.GetReferencesViewAsync(
                 _referencingFoldersHref ?? await _api.Documents.RelViaSelfAsync(DocumentSelfHref, "referencing-folders"));
             PrimaryLocation = view.Primary is { } p
                 ? new ReferencingFolderViewModel { Id = p.Id, Name = p.Name, Path = p.Path, OpenHref = p.OpenHref }

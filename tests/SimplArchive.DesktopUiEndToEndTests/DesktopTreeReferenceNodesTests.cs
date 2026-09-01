@@ -20,7 +20,7 @@ public class DesktopTreeReferenceNodesTests
             Guid.NewGuid(), "Carol", hasSubfolders: true, loadChildren: null,
             links: new Dictionary<string, string> { ["children"] = "/api/documents/x/children" });
 
-        Assert.Empty(await TreeReferenceNodes.ForAsync(node, documents: null!, expand: _ => throw new Xunit.Sdk.XunitException("must not expand")));
+        Assert.Empty(await TreeReferenceNodes.ForAsync(node, references: null!, expand: _ => throw new Xunit.Sdk.XunitException("must not expand")));
     }
 
     [Fact]
@@ -29,6 +29,6 @@ public class DesktopTreeReferenceNodesTests
         // The synthetic rows — Administration, the personal groupings — carry no links whatsoever.
         var node = new TreeNodeViewModel(Guid.Empty, "Administration", hasSubfolders: true, loadChildren: null);
 
-        Assert.Empty(await TreeReferenceNodes.ForAsync(node, documents: null!, expand: _ => throw new Xunit.Sdk.XunitException("must not expand")));
+        Assert.Empty(await TreeReferenceNodes.ForAsync(node, references: null!, expand: _ => throw new Xunit.Sdk.XunitException("must not expand")));
     }
 }

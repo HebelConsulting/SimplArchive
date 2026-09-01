@@ -210,7 +210,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
 
         try
         {
-            await _api.Documents.RestoreAsync(item.Entry!);
+            await _api.RecycleBin.RestoreAsync(item.Entry!);
             Report($"Restored '{item.Name}'.");
             await LoadAsync();
         }
@@ -314,7 +314,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
 
         try
         {
-            await _api.Documents.PurgeAsync(item.Entry!);
+            await _api.RecycleBin.PurgeAsync(item.Entry!);
             Report($"Permanently deleted '{item.Name}'.");
             await LoadAsync();
         }

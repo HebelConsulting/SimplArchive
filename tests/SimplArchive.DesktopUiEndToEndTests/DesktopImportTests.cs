@@ -24,11 +24,11 @@ public class DesktopImportTests
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(r => r.Name == repoName);
         await api.Documents.UploadFileAsync(repo.Href("children"), "report.txt", System.Text.Encoding.UTF8.GetBytes($"import-{Guid.NewGuid():N}"));
 
-        var zip = await api.Documents.ExportRepositoryAsync(await api.Documents.RelViaSelfAsync(repo.Href("document"), "export"), new DocumentsClient.RepositoryExportOptions(false, null, null, null, null, null));
+        var zip = await api.RepositoryArchive.ExportRepositoryAsync(await api.Documents.RelViaSelfAsync(repo.Href("document"), "export"), new RepositoryArchiveClient.RepositoryExportOptions(false, null, null, null, null, null));
 
         // Import as a new repository (targetFolderId == null). The root name collides with the original, so it's
         // auto-renamed ("… (imported)").
-        var result = await api.Documents.ImportRepositoryAsync(null, zip);
+        var result = await api.RepositoryArchive.ImportRepositoryAsync(null, zip);
         Assert.StartsWith(repoName, result.RootName);
         Assert.True(result.Documents >= 1);
         Assert.Equal(1, result.Versions);

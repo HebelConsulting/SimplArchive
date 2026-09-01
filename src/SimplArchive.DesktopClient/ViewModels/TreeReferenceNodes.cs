@@ -28,7 +28,7 @@ public static class TreeReferenceNodes
     /// <param name="expand">How a reference's own children load — the target's subtree, not the shortcut's.</param>
     public static async Task<IEnumerable<TreeNodeViewModel>> ForAsync(
         TreeNodeViewModel node,
-        DocumentsClient documents,
+        ReferencesClient references,
         Func<TreeNodeViewModel, Task<IEnumerable<TreeNodeViewModel>>> expand)
     {
         if (!node.HasRel("references"))
@@ -41,7 +41,7 @@ public static class TreeReferenceNodes
         //
         // A reference node's Id is the TARGET folder's, so expanding it walks the target's subtree and
         // selecting it lists the target (ADR "Referenced folder in the tree").
-        return (await documents.GetReferencesAsync(node.Href("references")))
+        return (await references.GetReferencesAsync(node.Href("references")))
             .Where(r => !r.HasVersions)
             .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
             .Select(r => new TreeNodeViewModel(

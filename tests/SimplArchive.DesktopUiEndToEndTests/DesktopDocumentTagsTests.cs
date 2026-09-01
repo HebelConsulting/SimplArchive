@@ -25,15 +25,15 @@ public class DesktopDocumentTagsTests
         await api.Documents.UploadFileAsync(repo.Href("children"), name, Encoding.UTF8.GetBytes("tagged"));
         var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
 
-        Assert.Empty(await api.Documents.GetTagsAsync((await api.Documents.GetDocumentDetailAsync(doc.Href("self"))).Href("tags"))); // none by default
+        Assert.Empty(await api.Tags.GetTagsAsync((await api.Documents.GetDocumentDetailAsync(doc.Href("self"))).Href("tags"))); // none by default
 
         var unique = $"dt{Guid.NewGuid():N}"[..10];
         // Mixed case + a duplicate + blank → normalized (trimmed lowercase), deduped, sorted.
-        var stored = await api.Documents.SetTagsAsync((await api.Documents.GetDocumentDetailAsync(doc.Href("self"))).Href("tags"), [$"  {unique.ToUpperInvariant()} ", "Contract", unique, ""]);
+        var stored = await api.Tags.SetTagsAsync((await api.Documents.GetDocumentDetailAsync(doc.Href("self"))).Href("tags"), [$"  {unique.ToUpperInvariant()} ", "Contract", unique, ""]);
         Assert.Equal(new[] { "contract", unique }, stored);
-        Assert.Equal(new[] { "contract", unique }, await api.Documents.GetTagsAsync((await api.Documents.GetDocumentDetailAsync(doc.Href("self"))).Href("tags")));
+        Assert.Equal(new[] { "contract", unique }, await api.Tags.GetTagsAsync((await api.Documents.GetDocumentDetailAsync(doc.Href("self"))).Href("tags")));
 
-        var catalog = await api.Documents.GetTagCatalogAsync();
+        var catalog = await api.Tags.GetTagCatalogAsync();
         Assert.Contains(unique, catalog);
         Assert.Contains("contract", catalog);
     }

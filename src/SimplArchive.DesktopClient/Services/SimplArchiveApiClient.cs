@@ -64,6 +64,9 @@ public sealed class SimplArchiveApiClient
     private AuditClient? _audit;
     private VersionsClient? _versions;
     private RecycleBinClient? _recycleBin;
+    private ReferencesClient? _references;
+    private TagsClient? _tags;
+    private RepositoryArchiveClient? _repositoryArchive;
     private ExternalLinksClient? _externalLinks;
     private ProfileClient? _profile;
     private DavCollectionsClient? _davCollections;
@@ -115,6 +118,15 @@ public sealed class SimplArchiveApiClient
 
     /// <summary>The recycle-bin area (#443, ops tranche).</summary>
     public RecycleBinClient RecycleBin => _recycleBin ??= new RecycleBinClient(Core);
+
+    /// <summary>References (shortcuts): what a folder references, what references an item, create and remove.</summary>
+    public ReferencesClient References => _references ??= new ReferencesClient(Core);
+
+    /// <summary>Free-form document tags and the tenant tag catalog.</summary>
+    public TagsClient Tags => _tags ??= new TagsClient(Core);
+
+    /// <summary>Repository archive transfer: export a subtree to a .zip, import one back.</summary>
+    public RepositoryArchiveClient RepositoryArchive => _repositoryArchive ??= new RepositoryArchiveClient(Core);
 
     /// <summary>The external-sharing-links area (#443, ops tranche).</summary>
     public ExternalLinksClient ExternalLinks => _externalLinks ??= new ExternalLinksClient(Core);

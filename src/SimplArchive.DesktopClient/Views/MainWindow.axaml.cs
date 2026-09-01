@@ -550,7 +550,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var options = await new ExportDialog(vm.ExportRootName).ShowDialog<DocumentsClient.RepositoryExportOptions?>(this);
+        var options = await new ExportDialog(vm.ExportRootName).ShowDialog<RepositoryArchiveClient.RepositoryExportOptions?>(this);
         if (options is null || vm.ExportRepositoryBytesAsync(options) is not { } bytesTask)
         {
             return;

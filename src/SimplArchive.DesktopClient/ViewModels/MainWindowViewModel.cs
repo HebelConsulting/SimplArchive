@@ -629,17 +629,17 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     // The open folder's name for the import target label — null at the repository-list root (a new repository).
     public string? CurrentFolderName => _currentFolderId is null || Breadcrumbs.Count == 0 ? null : Breadcrumbs[^1].Name;
 
-    public Task<byte[]>? ExportRepositoryBytesAsync(DocumentsClient.RepositoryExportOptions options) =>
+    public Task<byte[]>? ExportRepositoryBytesAsync(RepositoryArchiveClient.RepositoryExportOptions options) =>
         _currentFolderLinks is { } links && _api is { } api ? ExportRepositoryCoreAsync(api, links, options) : null;
 
     // The export rel lives on the document RESOURCE, not the listing row — one fetch of the folder's own
     // resource, then the follow (ADR 0559).
-    private static async Task<byte[]> ExportRepositoryCoreAsync(SimplArchiveApiClient api, IReadOnlyDictionary<string, string> folderLinks, DocumentsClient.RepositoryExportOptions options) =>
-        await api.Documents.ExportRepositoryAsync(await api.Documents.RelViaSelfAsync(folderLinks["self"], "export"), options);
+    private static async Task<byte[]> ExportRepositoryCoreAsync(SimplArchiveApiClient api, IReadOnlyDictionary<string, string> folderLinks, RepositoryArchiveClient.RepositoryExportOptions options) =>
+        await api.RepositoryArchive.ExportRepositoryAsync(await api.Documents.RelViaSelfAsync(folderLinks["self"], "export"), options);
 
     // Imports an archive (ADR "Repository import") under the current folder, or as a new repository when at the
     // repository-list root, then rebuilds the tree so the imported content shows. Returns null if not signed in.
-    public async Task<DocumentsClient.ImportResultInfo?> ImportAndReloadAsync(byte[] zip, bool updateExisting, bool includePermissions, bool merge, string leafConflict = "rename")
+    public async Task<RepositoryArchiveClient.ImportResultInfo?> ImportAndReloadAsync(byte[] zip, bool updateExisting, bool includePermissions, bool merge, string leafConflict = "rename")
     {
         if (_api is not { } api)
         {
@@ -651,7 +651,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         var importHref = _currentFolderLinks is { } folderLinks
             ? await api.Documents.RelViaSelfAsync(folderLinks["self"], "import")
             : null;
-        var result = await api.Documents.ImportRepositoryAsync(importHref, zip, updateExisting, includePermissions, merge, leafConflict);
+        var result = await api.RepositoryArchive.ImportRepositoryAsync(importHref, zip, updateExisting, includePermissions, merge, leafConflict);
         await ReloadTreeAsync();
         if (_currentFolderId is { } folderId)
         {
@@ -1137,7 +1137,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
 
         // Shortcuts, or none where the folder advertises none — see TreeReferenceNodes for why that is not the
         // same question as `children` above, and for the crash it stopped being (#735).
-        var referenceNodes = await TreeReferenceNodes.ForAsync(node, _api.Documents, LoadTreeChildrenAsync);
+        var referenceNodes = await TreeReferenceNodes.ForAsync(node, _api.References, LoadTreeChildrenAsync);
 
         return folderNodes.Concat(referenceNodes);
     }
@@ -1195,7 +1195,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
             // The folder's persisted default contents order (ADR "Per-folder contents sort order") arrives with
             // the contents; opening a fresh folder resets any ephemeral column-header sort back to that default.
             (var children, var sortOrder, CanCreateFolder) = await _api.Documents.GetFolderContentsAsync(links["children"]);
-            var references = await _api.Documents.GetReferencesAsync(links["references"]);
+            var references = await _api.References.GetReferencesAsync(links["references"]);
             _folderSortOrder = sortOrder;
             _headerSortActive = false;
             OnPropertyChanged(nameof(DetailSortText));
@@ -1812,7 +1812,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
 
         try
         {
-            await _api.Documents.CreateReferenceAsync(targetReferencesHref, folderId);
+            await _api.References.CreateReferenceAsync(targetReferencesHref, folderId);
             Status = string.Format(Strings.Get("StPlacedRef"), folderName);
             await ReloadTreeAsync();
             if (_currentFolderId is { } current)
@@ -1920,7 +1920,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
                     return;
                 }
 
-                await _api.Documents.DeleteReferenceAsync(referenceDeleteHref);
+                await _api.References.DeleteReferenceAsync(referenceDeleteHref);
                 Status = string.Format(Strings.Get("StRemovedRef"), node.Name);
             }
             else
@@ -1996,7 +1996,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
             return [];
         }
 
-        try { return await _api.Documents.GetTagCatalogAsync(); } catch (Exception) { return []; }
+        try { return await _api.Tags.GetTagCatalogAsync(); } catch (Exception) { return []; }
     }
 
     public Task BulkMoveAsync(Guid targetFolderId) =>
@@ -2048,7 +2048,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
 
         try
         {
-            await _api.Documents.CreateReferenceAsync(targetReferencesHref, node.Id);
+            await _api.References.CreateReferenceAsync(targetReferencesHref, node.Id);
             Status = string.Format(Strings.Get("StPlacedRef"), node.Name);
             await LoadFolderContentsAsync(folderId);
         }
@@ -2881,7 +2881,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
 
                         if (choice.Action == "reference")
                         {
-                            await _api.Documents.CreateReferenceAsync(folderLinks["references"], choice.TargetId);
+                            await _api.References.CreateReferenceAsync(folderLinks["references"], choice.TargetId);
                             uploaded++;
                             continue;
                         }
@@ -4733,7 +4733,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
 
         // Free-form tags (ADR "Document tags").
         DetailTags.Clear();
-        try { foreach (var t in await _api.Documents.GetTagsAsync(DetailHref("tags"))) DetailTags.Add(t); } catch (Exception) { /* leave empty */ }
+        try { foreach (var t in await _api.Tags.GetTagsAsync(DetailHref("tags"))) DetailTags.Add(t); } catch (Exception) { /* leave empty */ }
         HasDetailTags = DetailTags.Count > 0;
 
         if (versionsHref is null)
@@ -4841,7 +4841,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
             NewTag = string.Empty;
             if (TagCatalog.Count == 0)
             {
-                try { foreach (var t in await _api.Documents.GetTagCatalogAsync()) TagCatalog.Add(t); } catch (Exception) { /* optional */ }
+                try { foreach (var t in await _api.Tags.GetTagCatalogAsync()) TagCatalog.Add(t); } catch (Exception) { /* optional */ }
             }
 
             AvailableMasks.Clear();
@@ -4973,7 +4973,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         {
             try
             {
-                var stored = await _api.Documents.SetTagsAsync(DetailHref("tags"), editTags);
+                var stored = await _api.Tags.SetTagsAsync(DetailHref("tags"), editTags);
                 DetailTags.Clear();
                 foreach (var t in stored) DetailTags.Add(t);
                 HasDetailTags = DetailTags.Count > 0;
@@ -5541,7 +5541,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         await _api.Documents.CreateFolderAsync(a.Href("children"), $"rtree-F-{s}");
         var f = (await _api.Documents.GetChildrenAsync(a.Href("children"))).First(c => c.Name == $"rtree-F-{s}");
 
-        await _api.Documents.CreateReferenceAsync(b.Href("references"), f.Id);
+        await _api.References.CreateReferenceAsync(b.Href("references"), f.Id);
 
         var bTreeChildren = (await LoadTreeChildrenAsync(new TreeNodeViewModel(b.Id, b.Name, false, null, links: b.Links))).ToList();
         var refNode = bTreeChildren.FirstOrDefault(n => n.IsReference);
@@ -5685,7 +5685,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         var refFolder = Items.First(n => n.IsFolder && !n.IsReference && n.Name == refFolderName);
         var docName = "refopen-doc-" + Guid.NewGuid().ToString("N")[..8] + ".txt";
         var docId = await _api.Documents.UploadFileAsync(repo.Href("children"), docName, System.Text.Encoding.UTF8.GetBytes("body"));
-        await _api.Documents.CreateReferenceAsync(refFolder.Href("references"), docId);
+        await _api.References.CreateReferenceAsync(refFolder.Href("references"), docId);
 
         // Open the primary location selecting the doc → its real (non-reference) row is selected.
         await OpenFolderAsync(repo.DocumentSelfHref, docId);
@@ -5818,7 +5818,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
 
         // Place a reference to the moved folder back under the repository root.
         await PlaceReferenceAsync(subject.Id, subject.Name, root.Href("references"));
-        var referenced = (await _api.Documents.GetReferencesAsync(root.Href("references"))).Any(r => r.TargetId == subject.Id);
+        var referenced = (await _api.References.GetReferencesAsync(root.Href("references"))).Any(r => r.TargetId == subject.Id);
 
         await DeleteFolderAsync(destination.Id, destination.Href("self")); // clean up (takes the subject with it)
         return (moved, referenced);
