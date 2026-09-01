@@ -121,7 +121,7 @@ public class WorkbenchShellSizeTests
     // that was clobbering it.
     // 3,417 → 3,426 for the same fix's second half (#811): the survival rule covered document rows only, and
     // a FOLDER row clicked during the reload was reverted to the parent. Same seam, same owner, same reason.
-    private const int Ceiling = 3_426;
+    private const int Ceiling = 2_930;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()
