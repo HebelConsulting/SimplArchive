@@ -253,8 +253,19 @@ public class OverLimitFileCeilingTests
         // back at 1,287 with nothing watching it: Every_authored_file_over_the_limit_has_an_entry now measures
         // every authored file, so a re-crossing fails the build rather than going unnoticed for three months.
 
-        // 907 at the #466 close → 1,050. Crossed quietly; no single change is to blame, which is the usual way.
-        ["src/SimplArchive.Api/Documents/RepositoryImporter.cs"] = 1_050,
+        // RepositoryImporter is GONE from this list: 1,050 -> 865 (it was 907 at the #466 close and crossed
+        // quietly, which is the usual way). ArchiveIdentityMapper took the four methods that answer "who, or
+        // what, is this archive's principal / mask / label in THIS tenant?" plus the ten format records they
+        // speak in. That is a different job from walking a zip and writing documents: not one of them knows
+        // about archive entries, blobs, the four import phases, or the transaction they run inside.
+        //
+        // Two things deliberately did NOT move, and both are the interesting half of the split. ResolveCreator
+        // attributes an unmapped creator to the IMPORTING admin, which arrives after construction via
+        // SetImporter — it reads the importer's own mutable state rather than answering a question about the
+        // archive, so moving it would mean threading that state across purely to keep a method family together
+        // (ADR 0730). And UniqueName has callers on BOTH sides, so it became internal rather than being copied:
+        // its subject is naming a document among its siblings, which is the importer's job, and one shared pure
+        // function beats a second copy that drifts.
 
         // ImapWrites is GONE from this list: 1,022 -> 725. It was born over the limit (2026-08-17, #562 slice 3)
         // with no exception on record, and what it was carrying was two subjects: the MESSAGE writes (APPEND,

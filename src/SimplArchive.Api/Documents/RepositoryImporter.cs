@@ -55,6 +55,7 @@ public sealed class RepositoryImporter
 
     public RepositoryImporter(SimplArchiveDbContext dbContext, IObjectStorageClient objectStorage, ICurrentTenantAccessor tenant, IWellKnownMaskSeeder seeder, IStorageQuotaService storageQuota, IDocumentIndexQueue indexQueue, ISearchablePdfQueue searchablePdfQueue, PersonalRepositoryProvisioner personalRepositories, PersonalMailboxProvisioner personalMailboxes, ILogger<RepositoryImporter> logger)
     {
+        _identities = new ArchiveIdentityMapper(dbContext);
         _personalRepositories = personalRepositories;
         _personalMailboxes = personalMailboxes;
         _logger = logger;
@@ -70,6 +71,7 @@ public sealed class RepositoryImporter
     private readonly PersonalRepositoryProvisioner _personalRepositories;
     private readonly PersonalMailboxProvisioner _personalMailboxes;
     private readonly ILogger<RepositoryImporter> _logger;
+    private readonly ArchiveIdentityMapper _identities;
 
     /// <param name="Relocated">
     /// How many documents were placed somewhere other than where the archive put them, because the personal
@@ -140,7 +142,7 @@ public sealed class RepositoryImporter
         // leave existing ones' config untouched — and build a name → id map that documents + mask defaults resolve
         // against. Labels are document classification metadata, so they travel regardless of the permissions toggle.
         var archiveLabels = ReadJson<List<ArchiveLabel>>(archive, "labels/labels.json") ?? [];
-        var labelMap = await EnsureLabelsAsync(archiveLabels, tenantId, cancellationToken);
+        var labelMap = await _identities.EnsureLabelsAsync(archiveLabels, tenantId, cancellationToken);
 
         // Match archive documents to already-imported ones by their origin key. A matched document is reused
         // (its target id seeds docMap); an unmatched one is created fresh. updateExisting decides whether a
@@ -217,11 +219,11 @@ public sealed class RepositoryImporter
         var createdDocs = newDocs.Where(d => createdIds.Contains(d.Id)).ToList();
         var touchedDocs = createdDocs.Concat(updatedDocs).ToList();
 
-        var userMap = await MapPrincipalsAsync(principals, tenantId, includePermissions, cancellationToken);
+        var userMap = await _identities.MapPrincipalsAsync(principals, tenantId, includePermissions, cancellationToken);
 
         // Only map (and create) masks actually referenced by a created/updated document.
         var neededMaskVersionIds = touchedDocs.Where(d => d.MaskVersionId is not null).Select(d => d.MaskVersionId!.Value).ToHashSet();
-        var (maskVersionMap, fieldDefMap) = await MapMasksAsync(masks.Where(m => neededMaskVersionIds.Contains(m.Version.MaskVersionId)).ToList(), tenantId, labelMap, cancellationToken);
+        var (maskVersionMap, fieldDefMap) = await _identities.MapMasksAsync(masks.Where(m => neededMaskVersionIds.Contains(m.Version.MaskVersionId)).ToList(), tenantId, labelMap, cancellationToken);
 
         // Phase A: persist the placeholder principals + new custom masks (assigns MaskVersion numbering).
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -493,7 +495,7 @@ public sealed class RepositoryImporter
         // matched by name (a placeholder is created if absent); users/service-accounts reuse the principal map.
         if (includePermissions && aclEntries.Count > 0)
         {
-            var groupMap = await MapGroupsAsync(principals.Groups, tenantId, cancellationToken);
+            var groupMap = await _identities.MapGroupsAsync(principals.Groups, tenantId, cancellationToken);
             var updatedTargets = updatedDocs.Select(d => docMap[d.Id]).ToHashSet();
             if (updatedTargets.Count > 0)
             {
@@ -591,70 +593,7 @@ public sealed class RepositoryImporter
         return new ImportResult(docMap[rootDoc.Id], rootDoc.Name, docMap.Count, versions.Count(v => createdIds.Contains(v.DocumentId)), messageMap.Count, existingByOrigin.Count, relocated);
     }
 
-    // Matches each archived group by name, creating a deactivated (empty) placeholder if absent — so an ACL grant
-    // to a group survives the import even when the target tenant doesn't have that group yet. Memberships are a
-    // tenant concern and aren't imported (ADR "ACL in export/import").
-    private async Task<Dictionary<Guid, Guid>> MapGroupsAsync(List<ArchiveGroup> groups, Guid tenantId, CancellationToken cancellationToken)
-    {
-        var map = new Dictionary<Guid, Guid>();
-        foreach (var group in groups)
-        {
-            var existing = await _dbContext.Groups.FirstOrDefaultAsync(g => g.Name == group.Name && g.ParentGroupId == null, cancellationToken);
-            if (existing is null)
-            {
-                existing = new Group { Id = Guid.NewGuid(), TenantId = tenantId, Name = group.Name, CreatedAt = DateTimeOffset.UtcNow };
-                _dbContext.Groups.Add(existing);
-            }
 
-            // Clearance travels with permissions, applied max-never-lower (ADR "Classification in export/import").
-            if (group.ClearanceRank is { } rank)
-            {
-                existing.ClearanceRank = Math.Max(existing.ClearanceRank, rank);
-            }
-
-            map[group.Id] = existing.Id;
-        }
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return map;
-    }
-
-    // Ensures each archived sensitivity label exists in the destination tenant (created by name if absent, with
-    // the archived rank/colour/watermark; an existing label's config is left untouched), returning a name → id map
-    // — see ADR "Classification in export/import". Committed here so documents + mask defaults can reference the ids.
-    private async Task<Dictionary<string, Guid>> EnsureLabelsAsync(List<ArchiveLabel> labels, Guid tenantId, CancellationToken cancellationToken)
-    {
-        var map = new Dictionary<string, Guid>(StringComparer.Ordinal);
-        if (labels.Count == 0)
-        {
-            return map;
-        }
-
-        var existing = await _dbContext.SensitivityLabelDefinitions.ToDictionaryAsync(l => l.Name, l => l, cancellationToken);
-        foreach (var label in labels)
-        {
-            if (!existing.TryGetValue(label.Name, out var entity))
-            {
-                entity = new SimplArchive.Domain.Documents.SensitivityLabelDefinition
-                {
-                    Id = Guid.NewGuid(),
-                    TenantId = tenantId,
-                    Name = label.Name,
-                    Rank = label.Rank,
-                    Color = label.Color,
-                    Watermark = label.Watermark,
-                    CreatedAt = DateTimeOffset.UtcNow,
-                };
-                _dbContext.SensitivityLabelDefinitions.Add(entity);
-                existing[label.Name] = entity;
-            }
-
-            map[label.Name] = entity.Id;
-        }
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return map;
-    }
 
     // The personal space's landing folder for anything its first level will not hold. Looked up by NAME today
     // because it wears the plain Folder mask and is indistinguishable from a user folder by mask alone; #634
@@ -795,118 +734,7 @@ public sealed class RepositoryImporter
         }
     }
 
-    // Matches each archived user by email (else a deactivated placeholder) and each service account by name (else
-    // a deactivated placeholder with an inert client id). Returns archive-principal-id → target-id, keyed for
-    // both principal kinds (ids are Guids, so one map is unambiguous).
-    private async Task<Dictionary<Guid, PrincipalRef>> MapPrincipalsAsync(ArchivePrincipals principals, Guid tenantId, bool includePermissions, CancellationToken cancellationToken)
-    {
-        var map = new Dictionary<Guid, PrincipalRef>();
 
-        foreach (var user in principals.Users)
-        {
-            var normalized = user.Email.ToUpperInvariant();
-            var existing = await _dbContext.Users.FirstOrDefaultAsync(u => u.NormalizedEmail == normalized, cancellationToken);
-            if (existing is null)
-            {
-                existing = new User { Id = Guid.NewGuid(), TenantId = tenantId, Email = user.Email, DisplayName = user.DisplayName, IsActive = false, CreatedAt = DateTimeOffset.UtcNow, ImapShowAllDocuments = await _dbContext.Tenants.Where(t => t.Id == tenantId).Select(t => t.ImapShowAllDocumentsDefault).SingleAsync(cancellationToken) };
-                _dbContext.Users.Add(existing);
-            }
-
-            // Clearance travels with permissions, applied max-never-lower (ADR "Classification in export/import").
-            if (includePermissions && user.ClearanceRank is { } rank)
-            {
-                existing.ClearanceRank = Math.Max(existing.ClearanceRank, rank);
-            }
-
-            map[user.Id] = new PrincipalRef(existing.Id, null);
-        }
-
-        foreach (var svc in principals.ServiceAccounts)
-        {
-            var existing = await _dbContext.ServiceAccounts.FirstOrDefaultAsync(s => s.Name == svc.Name, cancellationToken);
-            if (existing is null)
-            {
-                existing = new ServiceAccount { Id = Guid.NewGuid(), TenantId = tenantId, Name = svc.Name, OpenIddictApplicationClientId = $"imported:{Guid.NewGuid():N}", IsActive = false, CreatedAt = DateTimeOffset.UtcNow };
-                _dbContext.ServiceAccounts.Add(existing);
-            }
-
-            if (includePermissions && svc.ClearanceRank is { } rank)
-            {
-                existing.ClearanceRank = Math.Max(existing.ClearanceRank, rank);
-            }
-
-            map[svc.Id] = new PrincipalRef(null, existing.Id);
-        }
-
-        return map;
-    }
-
-    // Well-known masks merge into the target's current version (fields matched by name); custom masks are created
-    // fresh. Returns archive-MaskVersionId → target-MaskVersionId and archive-FieldDefinitionId → target-FieldDefinitionId.
-    private async Task<(Dictionary<Guid, Guid> MaskVersions, Dictionary<Guid, Guid> Fields)> MapMasksAsync(List<ArchiveMask> masks, Guid tenantId, IReadOnlyDictionary<string, Guid> labelMap, CancellationToken cancellationToken)
-    {
-        var maskVersionMap = new Dictionary<Guid, Guid>();
-        var fieldMap = new Dictionary<Guid, Guid>();
-        var takenNames = await _dbContext.MaskVersions.Where(m => m.IsCurrent).Select(m => m.Name).ToListAsync(cancellationToken);
-
-        foreach (var mask in masks)
-        {
-            if (mask.WellKnown)
-            {
-                var current = await _dbContext.MaskVersions.FirstOrDefaultAsync(m => m.MaskId == mask.MaskId && m.IsCurrent, cancellationToken);
-                if (current is null)
-                {
-                    continue; // the well-known mask isn't present (shouldn't happen after seeding) — drop the mapping
-                }
-
-                maskVersionMap[mask.Version.MaskVersionId] = current.Id;
-                var targetFields = await _dbContext.FieldDefinitions.Where(f => f.MaskVersionId == current.Id).ToListAsync(cancellationToken);
-                foreach (var field in mask.Fields)
-                {
-                    if (targetFields.FirstOrDefault(t => t.Name == field.Name) is { } match)
-                    {
-                        fieldMap[field.FieldDefinitionId] = match.Id;
-                    }
-                }
-
-                continue;
-            }
-
-            var newMask = new Mask { Id = Guid.NewGuid(), TenantId = tenantId, CreatedAt = DateTimeOffset.UtcNow };
-            var name = UniqueName(mask.Version.Name, takenNames);
-            takenNames.Add(name);
-            // A custom mask's default sensitivity label (ADR "Classification in export/import") resolves by name;
-            // a well-known mask (merged above) keeps the destination's own default rather than being overwritten.
-            var defaultLabelId = mask.Version.DefaultSensitivityLabel is { } dl && labelMap.TryGetValue(dl, out var lid) ? lid : (Guid?)null;
-            var newVersion = new MaskVersion { Id = Guid.NewGuid(), TenantId = tenantId, MaskId = newMask.Id, Name = name, ReviewSlaDays = mask.Version.ReviewSlaDays, RetentionYears = mask.Version.RetentionYears, DefaultSensitivityLabelId = defaultLabelId, CreatedAt = DateTimeOffset.UtcNow };
-            _dbContext.Masks.Add(newMask);
-            _dbContext.MaskVersions.Add(newVersion);
-            maskVersionMap[mask.Version.MaskVersionId] = newVersion.Id;
-
-            foreach (var field in mask.Fields)
-            {
-                var newField = new FieldDefinition
-                {
-                    Id = Guid.NewGuid(),
-                    TenantId = tenantId,
-                    MaskVersionId = newVersion.Id,
-                    Name = field.Name,
-                    DataType = (FieldDataType)field.DataType,
-                    IsRequired = field.IsRequired,
-                    IsList = field.IsList,
-                    FormatPattern = field.FormatPattern,
-                    MaxTextLength = field.MaxTextLength,
-                    MinValue = field.MinValue,
-                    MaxValue = field.MaxValue,
-                    CreatedAt = DateTimeOffset.UtcNow,
-                };
-                _dbContext.FieldDefinitions.Add(newField);
-                fieldMap[field.FieldDefinitionId] = newField.Id;
-            }
-        }
-
-        return (maskVersionMap, fieldMap);
-    }
 
     private (Guid? UserId, Guid? ServiceAccountId) ResolveCreator(Guid? archiveUserId, Guid? archiveServiceAccountId, IReadOnlyDictionary<Guid, PrincipalRef> userMap)
     {
@@ -968,7 +796,10 @@ public sealed class RepositoryImporter
         return null;
     }
 
-    private static string UniqueName(string desired, ICollection<string> taken)
+    // internal, not private: ArchiveIdentityMapper needs it too (for a custom mask's name), and one shared
+    // pure function beats a second copy that drifts (CLAUDE.md). It stays HERE rather than moving with the
+    // mapper because its subject is naming a document among its siblings, which is this class's job.
+    internal static string UniqueName(string desired, ICollection<string> taken)
     {
         if (!taken.Contains(desired))
         {
@@ -1016,26 +847,10 @@ public sealed class RepositoryImporter
         return result;
     }
 
-    private readonly record struct PrincipalRef(Guid? UserId, Guid? ServiceAccountId);
 
     private sealed record ArchiveManifest(int FormatVersion, ManifestSource Source, ManifestRoot Root);
     private sealed record ManifestSource(Guid TenantId, string TenantName);
     private sealed record ManifestRoot(Guid DocumentId, string Name);
-    private sealed record ArchiveMask(Guid MaskId, bool WellKnown, ArchiveMaskVersion Version, List<ArchiveField> Fields);
-    private sealed record ArchiveMaskVersion(Guid MaskVersionId, string Name, int VersionNumber, int? ReviewSlaDays, int? RetentionYears, string? DefaultSensitivityLabel);
-    // `IsList` is ADDITIVE and FormatVersion deliberately stays 2 — the same call issue #383's "mentions" made.
-    // An archive written before #703 simply has no `isList` property, which deserializes to false: exactly
-    // what every field in it was. Bumping the version would refuse those archives to gain nothing (#703).
-    private sealed record ArchiveField(Guid FieldDefinitionId, string Name, int DataType, bool IsRequired, bool IsList, string? FormatPattern, int? MaxTextLength, string? MinValue, string? MaxValue);
-    private sealed record ArchivePrincipals(List<ArchiveUser> Users, List<ArchiveServiceAccount> ServiceAccounts, List<ArchiveGroup> Groups, List<ArchiveMembership>? Memberships)
-    {
-        public List<ArchiveMembership> Memberships { get; init; } = Memberships ?? [];
-    }
-    private sealed record ArchiveUser(Guid Id, string Email, string DisplayName, bool IsActive, int? ClearanceRank);
-    private sealed record ArchiveServiceAccount(Guid Id, string Name, bool IsActive, int? ClearanceRank);
-    private sealed record ArchiveGroup(Guid Id, string Name, int? ClearanceRank);
-    private sealed record ArchiveLabel(string Name, int Rank, string? Color, bool Watermark);
-    private sealed record ArchiveMembership(Guid GroupId, Guid UserId);
     private sealed record ArchiveAcl(Guid DocumentId, Guid? UserId, Guid? GroupId, Guid? ServiceAccountId, bool CanSee, bool CanReadContent, bool CanEditContent, bool CanEditIndexData, bool CanDelete, bool CanCreateSubItems, bool CanMove, bool CanManagePermissions, bool CanAnnotate);
     private sealed record ArchiveDocument(Guid Id, Guid? ParentId, string Name, Guid? MaskVersionId, string? SensitivityLabel, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, DateTimeOffset CreatedAt, bool BreaksInheritance, Guid? PersonalOfUserId = null);
     private sealed record ArchiveVersion(Guid Id, Guid DocumentId, int? VersionNumber, string DocumentDate, DateTimeOffset FiledAt, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, string? Sha256, string? FileExtension, string? OcrLanguages, string? Comment, string? BlobRef);
