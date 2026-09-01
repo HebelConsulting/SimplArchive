@@ -152,7 +152,10 @@
     .wb-pv-hl { opacity: .38; border-radius: 2px; cursor: move; }
     .wb-pv-rect { border: 2px solid #F44336; background: transparent; cursor: move; }
     .wb-pv-arrow { overflow: visible; cursor: move; }
-    .wb-pv-arrow line { stroke: #F44336; stroke-width: .8; vector-effect: non-scaling-stroke; }
+    /* 2px committed / 1.5px while dragging — the desktop's pen widths (ADR 0511). non-scaling-stroke keeps it
+       a true CSS pixel width, so the 0..100 viewBox's non-uniform scaling cannot stretch it (#921). */
+    .wb-pv-arrow line { stroke: #F44336; stroke-width: 2; vector-effect: non-scaling-stroke; }
+    .wb-pv-shape-preview.wb-pv-arrow line { stroke-width: 1.5; }
     .wb-pv-arrow polygon { fill: #F44336; }
     .wb-pv-stamp { border: 2px solid #F44336; background: transparent; color: #F44336; display: flex; align-items: center; justify-content: center; text-align: center; font-weight: 700; text-transform: uppercase; font-size: .8rem; letter-spacing: .05em; opacity: .85; border-radius: 3px; overflow: hidden; cursor: move; }
     .wb-pv-textbox { border: 1px solid #1976D2; background: rgba(255,255,255,.75); color: #222; padding: 2px 4px; font-size: .72rem; overflow: hidden; cursor: move; }

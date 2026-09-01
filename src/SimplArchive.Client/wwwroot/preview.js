@@ -35,6 +35,20 @@ function applyZoom(host, z) {
     host.dataset.zoom = z;
     host.style.setProperty('--wb-pv-zoom', z);
     host.classList.toggle('wb-pv-zoomed', z > 1.001);
+    // The page just changed size; the arrows' heads are in page pixels and must be re-drawn (#921).
+    requestAnimationFrame(() => relayoutArrows(host));
+}
+
+// The arrowhead is 11 PAGE PIXELS, so it has to be re-drawn whenever the page's rendered size changes. Zoom is
+// a pure CSS variable (see the top of this file) — nothing re-renders — so without this the head would go back
+// to being a percentage of the page the moment anyone zoomed, which is exactly the defect #921 fixed.
+function relayoutArrows(host) {
+    host.querySelectorAll('.wb-pv-arrow').forEach(svg => {
+        const g = (svg.dataset.arrowGeom || '').split(',').map(Number);
+        if (g.length === 4 && g.every(n => !Number.isNaN(n))) {
+            layoutShape(svg, 3, g[0], g[1], g[2], g[3], null);
+        }
+    });
 }
 
 export function zoomBy(host, mult) { applyZoom(host, parseFloat(host.dataset.zoom || '1') * mult); }
@@ -237,7 +251,6 @@ export function setAnnotations(annos) {
         // vs the original sticky note.
         if (a.kind && a.kind > 0) {
             const s = a.kind === 7 ? freehandEl(a.points, a.color) : shapeEl(a.kind);
-            if (a.kind !== 7) layoutShape(s, a.kind, a.x, a.y, a.w || 0, a.h || 0, a.color);
             s.style.pointerEvents = 'auto';
             // Stamp + text-box show their caption/content as a centered label.
             if (a.kind === 4 || a.kind === 6) s.textContent = a.text || '';
@@ -251,6 +264,9 @@ export function setAnnotations(annos) {
                 s.appendChild(grip);
             }
             p.overlay.appendChild(s);
+            // Laid out AFTER attaching: the arrow sizes its head in page pixels, which it cannot measure until
+            // the element is in the tree (#921).
+            if (a.kind !== 7) layoutShape(s, a.kind, a.x, a.y, a.w || 0, a.h || 0, a.color);
             p.notes.push(s);
             continue;
         }
@@ -388,6 +404,10 @@ function makeShapeResizable(grip, elm, p, a) {
     });
 }
 
+// The arrowhead's length in PAGE PIXELS. Matches the desktop's `hd` exactly (HighlightOverlayDrawing), because
+// ADR 0511 makes the desktop canonical and an arrow is the same drawing on both surfaces.
+const ARROW_HEAD_PX = 11;
+
 // A shape element for a markup kind (1 highlight, 2 rectangle, 3 arrow). Arrows are an SVG overlay spanning the
 // page (0..100 viewBox, non-uniform); box shapes are positioned divs.
 function shapeEl(kind) {
@@ -426,11 +446,22 @@ function layoutShape(elm, kind, x, y, w, h, color) {
         const x1 = x * 100, y1 = y * 100, x2 = (x + w) * 100, y2 = (y + h) * 100;
         const line = elm.querySelector('line');
         line.setAttribute('x1', x1); line.setAttribute('y1', y1); line.setAttribute('x2', x2); line.setAttribute('y2', y2);
-        // Arrowhead: a small triangle at the end, oriented along the line (viewBox units; minor skew on non-square pages).
-        const ang = Math.atan2(y2 - y1, x2 - x1), hd = 3.5, sp = 0.5;
+        // Arrowhead: the same triangle the desktop draws (HighlightOverlayDrawing.DrawShape) — hd = 11 PAGE
+        // PIXELS, spread 0.5 rad. It has to be built in pixel space and converted back, because the viewBox is
+        // 0..100 with preserveAspectRatio="none": a head sized in viewBox units is a PERCENTAGE of the page, so
+        // it grew with the page while the non-scaling tail stayed put (that is #921 — a hairline tail under a
+        // head six times too big), and it was skewed by the page's aspect ratio on top.
+        const box = elm.parentElement ? elm.parentElement.getBoundingClientRect() : null;
+        const pw = box && box.width > 0 ? box.width : 0, ph = box && box.height > 0 ? box.height : 0;
+        // The angle must also be measured in pixel space, or the barbs sit at the wrong angle on a non-square page.
+        const ang = pw && ph ? Math.atan2((y2 - y1) * ph, (x2 - x1) * pw) : Math.atan2(y2 - y1, x2 - x1);
+        const sp = 0.5;
+        // Fall back to the old viewBox-unit head only if the page cannot be measured (not laid out yet).
+        const hx = pw ? ARROW_HEAD_PX * 100 / pw : 3.5, hy = ph ? ARROW_HEAD_PX * 100 / ph : 3.5;
+        elm.dataset.arrowGeom = `${x},${y},${w},${h}`;   // so a zoom can re-draw the head at the new page size
         const p1 = `${x2},${y2}`;
-        const p2 = `${x2 - hd * Math.cos(ang - sp)},${y2 - hd * Math.sin(ang - sp)}`;
-        const p3 = `${x2 - hd * Math.cos(ang + sp)},${y2 - hd * Math.sin(ang + sp)}`;
+        const p2 = `${x2 - hx * Math.cos(ang - sp)},${y2 - hy * Math.sin(ang - sp)}`;
+        const p3 = `${x2 - hx * Math.cos(ang + sp)},${y2 - hy * Math.sin(ang + sp)}`;
         elm.querySelector('polygon').setAttribute('points', `${p1} ${p2} ${p3}`);
         if (color) { line.style.stroke = color; elm.querySelector('polygon').style.fill = color; }
         return;

@@ -57,6 +57,9 @@ public static class ClientUpdate
     // The running client's version, stamped by the packaging (`-p:Version`, ADR "Windows + Linux desktop
     // packaging"): the informational version, with any build metadata (`+sha`) stripped. A plain `dotnet run`
     // dev build defaults to "1.0.0".
+    /// <summary>What an UNSTAMPED build reports — deliberately below every release, so it never looks current.</summary>
+    internal const string DevVersion = "0.0.0-dev";
+
     public static string RunningVersion
     {
         get
@@ -65,7 +68,7 @@ public static class ClientUpdate
                 .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
             var raw = informational
                 ?? typeof(DesktopClientOptions).Assembly.GetName().Version?.ToString()
-                ?? "1.0.0";
+                ?? DevVersion;
             var plus = raw.IndexOf('+');
             return plus >= 0 ? raw[..plus] : raw;
         }

@@ -10,6 +10,11 @@
          (16/32/48/64/96/128/256) generated from the same Assets/cabinet-1024.png artwork as the macOS .icns. -->
     <ApplicationIcon>Assets/app.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <!-- An unstamped build must not claim a version it never had. Without this, .NET defaults to 1.0.0 — which the
+         About box shows and the auto-updater compares against the server's. 1.0.0 sorts ABOVE every real release,
+         so a development build concluded it was UP TO DATE and would never offer an update. The packaging scripts
+         override this with -p:Version from the release tag, so a shipped build still reports its real version. -->
+    <Version>0.0.0-dev</Version>
   </PropertyGroup>
 
   <ItemGroup>
