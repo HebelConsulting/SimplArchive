@@ -296,7 +296,16 @@ public class OverLimitFileCeilingTests
         //
         // A test file earns the same rule as product code for the same reason: the fifteen tests here shared
         // nothing but a fixture, so the only thing the single file bought was a longer scroll.
-        ["tools/SimplArchive.EloIxPorter/Program.cs"] = 1_233,
+
+        // EloIxPorter/Program.cs is GONE from this list: 1,233 -> 865. Same disease as DesktopClient/Program.cs
+        // and the same cure: every probe's BODY lived inline in the `if (args is ["--x", ..])` dispatch chain.
+        // Six probes on ONE subject -- the external system's notes/annotation investigation -- moved to a
+        // NoteProbes class (412), and the chain kept the rest.
+        //
+        // Their usage comments went with them, which is half the point. Three had DRIFTED to the top of the
+        // file and sat above unrelated blocks: `--notes`' description was above `--pdf-dims`' code, and
+        // `--probe`'s was 860 lines from its own. An inline dispatch chain is exactly where a comment quietly
+        // stops being next to the thing it documents, because nothing moves when a block is inserted above it.
 
         // NOT listed, deliberately: Home.razor (3,390) has its own richer guard, WorkbenchShellSizeTests, and
         // this file's header is explicit that one guard per file is the rule — two guards on one file will
