@@ -108,74 +108,19 @@
             <MudIcon Icon="@Icons.Material.Filled.Delete" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonDelete")</span>
         </MudButton>
 
-        @* Page operations (#487, ADR 0575), matching the desktop ribbon's group. Each appears only when the
-           server said it can succeed: one checked item with more than one page for split/sort, two or more for
-           join. A missing rel means "not available to you, here, now" (ADR 0543/0554). *@
-        @if (_pages is { CanSplit: true })
-        {
-            <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="SplitPagesAsync"
-                       title="@Strings.Get("IntraySplit")" aria-label="@Strings.Get("IntraySplit")">
-                <MudIcon Icon="@Icons.Material.Filled.CallSplit" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntraySplit")</span>
-            </MudButton>
-        }
-        @if (_pages is { CanSort: true })
-        {
-            <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="SortPagesAsync"
-                       title="@Strings.Get("IntraySortTitle")" aria-label="@Strings.Get("IntraySortTitle")">
-                <MudIcon Icon="@Icons.Material.Filled.Sort" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntraySortTitle")</span>
-            </MudButton>
-        }
-        @if (_intrayChecked.Count >= 2 && _joinHref is not null)
-        {
-            <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="JoinItemsAsync"
-                       title="@Strings.Get("IntrayJoinTitle")" aria-label="@Strings.Get("IntrayJoinTitle")">
-                <MudIcon Icon="@Icons.Material.Filled.CallMerge" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntrayJoinTitle")</span>
-            </MudButton>
-        }
-        @if (_pages is { CanDeskew: true })
-        {
-            <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="DeskewAsync"
-                       title="@Strings.Get("IntrayDeskewNow")" aria-label="@Strings.Get("IntrayDeskewNow")">
-                <MudIcon Icon="@Icons.Material.Filled.Straighten" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntrayDeskewNow")</span>
-            </MudButton>
-        }
-        @if (_pages is { CanCutAtPatchCodes: true })
-        {
-            <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="CutAtPatchCodesAsync"
-                       title="@Strings.Get("IntrayPatchCutNow")" aria-label="@Strings.Get("IntrayPatchCutNow")">
-                <MudIcon Icon="@Icons.Material.Filled.ContentCut" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntrayPatchCutNow")</span>
-            </MudButton>
-        }
-        @* The sticky preferences, held DOWN while on — the desktop's ribbon toggles, in this tab's toolbar
-           (ADR 0511). Server-side per user, because the Worker's sweep reads them for WebDAV arrivals.
-
-           Size.Small on every one of these: an icon button defaults to Medium (a 24px glyph in a 48px button)
-           while a Size.Small MudButton is a 20px glyph in a 28px one — mixing the two made this bar 52px tall
-           against the Repositories ribbon's 41px, which reads as "the Intray has bigger icons". A toolbar is one
-           row of one size. *@
-        <MudToggleIconButton Toggled="_rotateAutomatically" ToggledChanged="SetRotateAutomaticallyAsync" Size="Size.Small"
-                             Icon="@Icons.Material.Outlined.RotateRight" ToggledIcon="@Icons.Material.Filled.RotateRight"
-                             Color="Color.Default" ToggledColor="Color.Primary" Class="ml-2"
-                             title="@Strings.Get("IntrayRotateAutoTip")" />
-        <MudToggleIconButton Toggled="_deskewAutomatically" ToggledChanged="SetDeskewAutomaticallyAsync" Size="Size.Small"
-                             Icon="@Icons.Material.Outlined.AutoFixHigh" ToggledIcon="@Icons.Material.Filled.AutoFixHigh"
-                             Color="Color.Default" ToggledColor="Color.Primary" Class="ml-1"
-                             title="@Strings.Get("IntrayDeskewAutoTipTiff")" />
-        <MudToggleIconButton Toggled="_cutAtPatchCodesAutomatically" ToggledChanged="SetCutAtPatchCodesAutomaticallyAsync" Size="Size.Small"
-                             Icon="@Icons.Material.Outlined.ContentCut" ToggledIcon="@Icons.Material.Filled.ContentCut"
-                             Color="Color.Default" ToggledColor="Color.Primary" Class="ml-1"
-                             title="@Strings.Get("IntrayPatchAutoTip")" />
-        @if (_patchCodeSheetHref is { } sheetHref)
-        {
-            @* A plain link, because the browser already knows how to show a PDF and then print it — a fetch
-               into a blob would take that away and give nothing back. *@
-            <MudIconButton Href="@sheetHref" Target="_blank" Icon="@Icons.Material.Filled.Print" Class="ml-1" Size="Size.Small"
-                           title="@Strings.Get("IntrayPatchSheetTip")" />
-        }
-        @if (_intrayBusy)
-        {
-            <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="ml-2" />
-        }
+        @* Page operations (#487, ADR 0575) — its own component. It owns the "what can be done to this
+           item" answer and re-asks it whenever the checked set changes; busy, the status line and the
+           three sticky preferences stay here, because this tab sets busy around its own uploads, owns the
+           one status line, and seeds the preferences from the `me` resource it fetches at init. *@
+        <IntrayPageOperations Checked="@_intrayChecked.ToList()"
+                              JoinHref="@_joinHref"
+                              PatchCodeSheetHref="@_patchCodeSheetHref"
+                              @bind-Busy="_intrayBusy"
+                              @bind-DeskewAutomatically="_deskewAutomatically"
+                              @bind-RotateAutomatically="_rotateAutomatically"
+                              @bind-CutAtPatchCodesAutomatically="_cutAtPatchCodesAutomatically"
+                              StatusChanged="@(s => _intrayStatus = s)"
+                              OnChanged="@LoadIntrayAsync" />
     </div>
     <div class="wb-search-status">@_intrayStatus</div>
     @if (CanManageIntrays)
@@ -451,6 +396,27 @@
     private List<IntrayItem> _intrayItems = [];
     private string _intrayStatus = "";
     private bool _intrayBusy;
+
+    // Passed down to IntrayPageOperations. They stay HERE rather than moving with the buttons because this
+    // component is what learns them: the join address comes from the listing it loads, the separator sheet
+    // from the same response, and the three preferences from the `me` resource it fetches at init.
+    private string? _joinHref;
+    private string? _patchCodeSheetHref;
+    private bool _deskewAutomatically = true;
+    private bool _rotateAutomatically = true;
+    private bool _cutAtPatchCodesAutomatically = true;
+
+    // The three preference flags this component seeds from `me` at init. IntrayPageOperations declares its
+    // own view of the same resource: a DTO is a description of what a caller reads, and these two read
+    // different subsets — sharing one would couple each to the other's fields for no gain.
+    private record MeResponse
+    {
+        public bool DeskewIntrayUploads { get; set; }
+
+        public bool RotateIntrayUploads { get; set; }
+
+        public bool CutIntrayUploadsAtPatchCodes { get; set; }
+    }
     private IntrayItem? _selectedIntrayItem;
     // Intray view filters (ADR 0532): own-items-only by default; a toggle reveals my group intrays, and a
     // CanManageIntrays holder can open a specific user's intray via the user-picker (mutually exclusive with groups).
@@ -486,18 +452,6 @@
         return true;
     }
 
-    private record IntrayItem(string Name, long Size, bool HasMask, string? DownloadHref, string? PreviewHref, string? FileHref, string? DeleteHref, string? MoveHref, string? MaskHref, Guid? GroupId, string? GroupName, Guid? UserId, string? UserName, string? PagesHref, bool Signed)
-    {
-        // Un-classified items (no staged mask sidecar) show in square brackets (ADRs 0279/0281).
-        public string DisplayName => HasMask ? Name : $"[{Name}]";
-
-        // True for the caller's own items (no group/user source) — they get the "Send to…" action; non-own items
-        // get "Move to my intray".
-        public bool IsOwn => GroupId is null && UserId is null;
-
-        // The `[GroupName]` / `[UserName]` source label shown before the name; null for own items.
-        public string? SourceLabel => GroupName ?? UserName;
-    }
 
     private async Task LoadIntrayAsync()
     {
@@ -839,7 +793,6 @@
             }
 
             _intrayAnchor = item;
-            await LoadPagesAsync();
             return;
         }
 
@@ -854,7 +807,6 @@
                     _intrayChecked.Add(_intrayItems[i]);
                 }
 
-                await LoadPagesAsync();
                 return;
             }
         }
@@ -868,7 +820,6 @@
         _intrayChecked.Add(item);
         _intrayAnchor = item;
         await SelectIntrayItemAsync(item);
-        await LoadPagesAsync();
     }
 
     // One button, one scope. The count is in the name whenever there is more than one thing to move, because
@@ -892,347 +843,7 @@
     {
         if (on) { _intrayChecked.Add(item); } else { _intrayChecked.Remove(item); }
         _intrayAnchor = item;
-        _ = LoadPagesAsync();
     }
-
-    // ---- Page operations (#487, ADR 0575) -------------------------------------------------------------
-    // Every address here was advertised: the row's `pages` rel, and the split/sort rels that resource itself
-    // returns. Nothing is composed (ADR 0543), and each resource is read once and followed many times (0557).
-
-    private string? _joinHref;
-    private PagesInfo? _pages;
-
-    private sealed record PagesInfo(
-        int PageCount,
-        string? SplitHref,
-        string? SortHref,
-        string? DeskewHref,
-        string? PatchCodesHref)
-    {
-        public bool CanSplit => SplitHref is not null;
-
-        public bool CanSort => SortHref is not null;
-
-        public bool CanDeskew => DeskewHref is not null;
-
-        public bool CanCutAtPatchCodes => PatchCodesHref is not null;
-    }
-
-    private bool _deskewAutomatically = true;
-    private bool _rotateAutomatically = true;
-
-    private bool _cutAtPatchCodesAutomatically = true;
-
-    // The printable separator sheet, captured from the intray listing that advertised it (ADR 0557).
-    private string? _patchCodeSheetHref;
-
-    // Asked whenever the checked set changes, and CLEARED first: a rel that has not arrived means "not
-    // available here, now", which during the request is exactly true — so the buttons never describe the
-    // previously checked item while a newer one is loading (ADR 0559).
-    private async Task LoadPagesAsync()
-    {
-        _pages = null;
-        if (_intrayChecked.Count != 1 || _intrayChecked.Single().PagesHref is not { } pagesHref)
-        {
-            StateHasChanged();
-            return;
-        }
-
-        try
-        {
-            var response = await Http.GetFromJsonAsync<IntrayPagesResponse>(pagesHref);
-            _pages = new PagesInfo(
-                response?.PageCount ?? 0,
-                Links.Href(response?.Links, "split"),
-                Links.Href(response?.Links, "sort"),
-                Links.Href(response?.Links, "deskew"),
-                Links.Href(response?.Links, "patchCodes"));
-        }
-        catch (Exception)
-        {
-            _pages = null;
-        }
-
-        StateHasChanged();
-    }
-
-    private async Task SplitPagesAsync()
-    {
-        if (_pages is not { SplitHref: { } splitHref } pages || _intrayChecked.SingleOrDefault() is not { } item)
-        {
-            return;
-        }
-
-        // Splitting adds N items and keeps the source, so the count is worth stating BEFORE it happens: on a
-        // 40-page scan the difference between "split" and "what have I done" is knowing it was 40.
-        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
-        {
-            Title = Strings.Get("IntraySplit"),
-            Message = string.Format(Strings.Get("IntraySplitConfirm"), item.Name, pages.PageCount),
-            YesText = Strings.Get("IntraySplit"),
-            CancelText = Strings.Get("Cancel"),
-        });
-
-        if (confirmed != true)
-        {
-            return;
-        }
-
-        await RunPageOperationAsync(async () =>
-        {
-            var response = await Http.PostAsJsonAsync(splitHref, new { });
-            await ThrowIfRefusedAsync(response);
-            var written = await response.Content.ReadFromJsonAsync<IntrayPageItemsResponse>();
-            _intrayStatus = string.Format(Strings.Get("StIntraySplit"), item.Name, written?.Names.Count ?? 0);
-        });
-    }
-
-    private async Task SortPagesAsync()
-    {
-        if (_pages is not { SortHref: { } sortHref } pages || _intrayChecked.SingleOrDefault() is not { } item)
-        {
-            return;
-        }
-
-        // Thumbnails come from pdf.js, which this client already loads for the preview — the same trade the
-        // desktop makes with PDFium. A failure here costs the pictures, not the dialog: it falls back to
-        // numbered tiles rather than refusing to open.
-        var images = new List<Dialogs.SortPagesDialog.PageThumbnail>();
-        try
-        {
-            var module = await JS.InvokeAsync<IJSObjectReference>("import", "./preview.js");
-            await using (module)
-            {
-                if (NotOffered(item.DownloadHref)) { return; }
-
-                images = (await module.InvokeAsync<Dialogs.SortPagesDialog.PageThumbnail[]>("pageThumbnails", item.DownloadHref, 260)).ToList();
-            }
-        }
-        catch (Exception)
-        {
-            images = [];
-        }
-
-        var parameters = new DialogParameters<Dialogs.SortPagesDialog>
-        {
-            { d => d.ItemName, item.Name },
-            { d => d.PageImages, images },
-            { d => d.PageCount, pages.PageCount },
-        };
-
-        var dialog = await DialogService.ShowAsync<Dialogs.SortPagesDialog>(Strings.Get("IntraySortTitle"), parameters);
-        if (await dialog.Result is not { Canceled: false, Data: Dialogs.SortPagesDialog.Result arrangement })
-        {
-            return;
-        }
-
-        await RunPageOperationAsync(async () =>
-        {
-            // One request writes the whole arrangement — order and turns together (#522).
-            object body = arrangement.Rotations.Count > 0
-                ? new
-                {
-                    pageOrder = arrangement.Order,
-                    rotations = arrangement.Rotations.Select(r => new { page = r.Key, degrees = r.Value }).ToList(),
-                }
-                : new { pageOrder = arrangement.Order };
-            var response = await Http.PostAsJsonAsync(sortHref, body);
-            await ThrowIfRefusedAsync(response);
-            _intrayStatus = string.Format(Strings.Get("StIntraySorted"), item.Name);
-        });
-    }
-
-    // Straighten THIS item, now. The format change is stated before it happens: a TIFF comes back a PDF,
-    // because straightening re-renders the pages, and discovering that afterwards is how a user concludes the
-    // archive is unreliable.
-    private async Task DeskewAsync()
-    {
-        if (_pages is not { DeskewHref: { } deskewHref } || _intrayChecked.SingleOrDefault() is not { } item)
-        {
-            return;
-        }
-
-        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
-        {
-            Title = Strings.Get("IntrayDeskewNow"),
-            Message = string.Format(Strings.Get("IntrayDeskewConfirm"), item.Name),
-            YesText = Strings.Get("IntrayDeskewNow"),
-            CancelText = Strings.Get("Cancel"),
-        });
-
-        if (confirmed != true)
-        {
-            return;
-        }
-
-        await RunPageOperationAsync(async () =>
-        {
-            var response = await Http.PostAsJsonAsync(deskewHref, new { });
-            await ThrowIfRefusedAsync(response);
-            var written = await response.Content.ReadFromJsonAsync<IntrayPageItemsResponse>();
-            var name = written?.Names.FirstOrDefault() ?? string.Empty;
-            _intrayStatus = string.Format(
-                Strings.Get(name.Length > 0 ? "StIntrayDeskewed" : "StIntrayDeskewNothing"),
-                name.Length > 0 ? name : item.Name);
-        });
-    }
-
-    // Cut THIS batch at its separator sheets, now. What happens to the batch is stated before it happens: it
-    // stays, under a name that says it can go — a user who expects it to vanish and finds it still there
-    // concludes the cut did not work.
-    private async Task CutAtPatchCodesAsync()
-    {
-        if (_pages is not { PatchCodesHref: { } patchCodesHref } || _intrayChecked.SingleOrDefault() is not { } item)
-        {
-            return;
-        }
-
-        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
-        {
-            Title = Strings.Get("IntrayPatchCutNow"),
-            Message = string.Format(Strings.Get("IntrayPatchCutConfirm"), item.Name),
-            YesText = Strings.Get("IntrayPatchCutNow"),
-            CancelText = Strings.Get("Cancel"),
-        });
-
-        if (confirmed != true)
-        {
-            return;
-        }
-
-        await RunPageOperationAsync(async () =>
-        {
-            var response = await Http.PostAsJsonAsync(patchCodesHref, new { });
-            await ThrowIfRefusedAsync(response);
-            var written = await response.Content.ReadFromJsonAsync<IntrayPageItemsResponse>();
-            _intrayStatus = string.Format(
-                Strings.Get("StIntrayCutAtPatchCodes"), item.Name, written?.Names.Count ?? 0);
-        });
-    }
-
-    // Writes a toggle through, putting the button back if the server refuses — a control showing a state the
-    // server does not hold is worse than one that failed visibly. Which rel and which field differ; the shape
-    // does not, so the difference arrives as two lambdas rather than as a second copy.
-    private Task SetDeskewAutomaticallyAsync(bool enabled) =>
-        SetPreferenceAsync("deskewPreference", enabled, _deskewAutomatically, value => _deskewAutomatically = value);
-
-    private Task SetRotateAutomaticallyAsync(bool enabled) =>
-        SetPreferenceAsync("rotatePreference", enabled, _rotateAutomatically, value => _rotateAutomatically = value);
-
-    private Task SetCutAtPatchCodesAutomaticallyAsync(bool enabled) =>
-        SetPreferenceAsync("patchCodePreference", enabled, _cutAtPatchCodesAutomatically, value => _cutAtPatchCodesAutomatically = value);
-
-    private async Task SetPreferenceAsync(string rel, bool enabled, bool previous, Action<bool> set)
-    {
-        set(enabled);
-        try
-        {
-            var me = await Http.GetFromJsonAsync<MeResponse>(await ApiRoot.RequireAsync("me"));
-            if (Links.Href(me?.Links, rel) is not { } href)
-            {
-                // REVERT, don't just return (#876). The flip above is optimistic, and the exception path below
-                // already undoes it — this path did not, so a missing rel left the switch showing a setting the
-                // server had never stored, which silently reverts on the next load. A control reporting a state
-                // that does not exist is worse than one that does nothing: the user has no reason to look again.
-                set(previous);
-                _intrayStatus = ApiErrorText.For(null);
-                return;
-            }
-
-            (await Http.PutAsJsonAsync(href, new { enabled })).EnsureSuccessStatusCode();
-        }
-        catch (Exception)
-        {
-            set(previous);
-            _intrayStatus = ApiErrorText.For(null);
-        }
-    }
-
-    private record MeResponse
-    {
-        public bool DeskewIntrayUploads { get; set; }
-
-        public bool RotateIntrayUploads { get; set; }
-
-        public bool CutIntrayUploadsAtPatchCodes { get; set; }
-
-        public List<LinkResponse> Links { get; set; } = [];
-    }
-
-    private async Task JoinItemsAsync()
-    {
-        if (_joinHref is not { } joinHref || _intrayChecked.Count < 2)
-        {
-            return;
-        }
-
-        var names = _intrayChecked.Select(i => i.Name).ToList();
-        var parameters = new DialogParameters<Dialogs.JoinItemsDialog> { { d => d.Names, names } };
-        var dialog = await DialogService.ShowAsync<Dialogs.JoinItemsDialog>(Strings.Get("IntrayJoinTitle"), parameters);
-        if (await dialog.Result is not { Canceled: false, Data: Dialogs.JoinItemsDialog.Result result })
-        {
-            return;
-        }
-
-        await RunPageOperationAsync(async () =>
-        {
-            var response = await Http.PostAsJsonAsync(joinHref, new { names = result.Names, name = result.Name });
-            await ThrowIfRefusedAsync(response);
-            var written = await response.Content.ReadFromJsonAsync<IntrayPageItemsResponse>();
-            _intrayStatus = string.Format(Strings.Get("StIntrayJoined"), result.Names.Count, written?.Names.FirstOrDefault() ?? "");
-        });
-    }
-
-    // Every page operation ends the same way: the server's own words on refusal, and a reload either way — a
-    // failed operation can still have followed one that succeeded, so the list must not be left describing a
-    // state that no longer exists.
-    private async Task RunPageOperationAsync(Func<Task> action)
-    {
-        _intrayBusy = true;
-        try
-        {
-            await action();
-        }
-        catch (Exception e)
-        {
-            _intrayStatus = e.Message;
-        }
-        finally
-        {
-            _intrayBusy = false;
-        }
-
-        await LoadIntrayAsync();
-    }
-
-    // The refusal's ERROR CODE, mapped to words this client owns — never the Problem Details `detail`, which is
-    // English whatever the user's language, because the Api's exception classes carry their message as a
-    // constructor literal (issue #424). The code is the stable, language-neutral contract (ADR 0543).
-    private static async Task ThrowIfRefusedAsync(HttpResponseMessage response)
-    {
-        if (response.IsSuccessStatusCode)
-        {
-            return;
-        }
-
-        string? errorCode = null;
-        try
-        {
-            errorCode = (await response.Content.ReadFromJsonAsync<ProblemResponse>())?.ErrorCode;
-        }
-        catch (Exception)
-        {
-            // No problem body at all (a proxy error page, a connection reset) — the generic text below covers it.
-        }
-
-        throw new InvalidOperationException(ApiErrorText.For(errorCode));
-    }
-
-    private record IntrayPagesResponse { public string? Format { get; set; } public int PageCount { get; set; } public List<LinkResponse> Links { get; set; } = []; }
-
-    private record IntrayPageItemsResponse { public List<string> Names { get; set; } = []; }
-
-    private record ProblemResponse { public string? ErrorCode { get; set; } }
 
     // Shows the context-aware filing dialog seeded with the Repositories tab's current selection (ADR 0286).
     private async Task<FilingDialog.FilingChoice?> ShowFilingDialogAsync(string title, bool bulk)
@@ -1318,55 +929,6 @@
         await LoadIntrayAsync();
     }
 
-    private async Task DownloadIntrayItemAsync(IntrayItem item)
-    {
-        if (NotOffered(item.DownloadHref)) { return; }
-
-        await JS.InvokeVoidAsync("open", item.DownloadHref, "_blank");
-    }
-
-    // Send an OWN item into another intray (ADR 0532): pick a group or a user, then move it there.
-    private async Task SendIntrayItemAsync(IntrayItem item)
-    {
-        var parameters = new DialogParameters<Dialogs.IntraySendDialog> { { x => x.ItemName, item.Name } };
-        var dialog = await DialogService.ShowAsync<Dialogs.IntraySendDialog>(Strings.Get("IntraySendTitle"), parameters);
-        if ((await dialog.Result) is { Canceled: false, Data: Dialogs.IntraySendDialog.SendTarget t })
-        {
-            await MoveIntrayItemAsync(item, t.TargetGroupId, t.TargetUserId);
-        }
-    }
-
-    // Move a NON-own item (a group's, or another user's for an admin) into my own intray to work it privately.
-    private async Task MoveToMyIntrayAsync(IntrayItem item)
-    {
-        if (MyUserId is { } me)
-        {
-            await MoveIntrayItemAsync(item, null, me);
-        }
-    }
-
-    private async Task MoveIntrayItemAsync(IntrayItem item, Guid? targetGroupId, Guid? targetUserId)
-    {
-        try
-        {
-            if (NotOffered(item.MoveHref)) { return; }
-
-            var response = await Http.PostAsJsonAsync(item.MoveHref, new { targetGroupId, targetUserId });
-            if (!response.IsSuccessStatusCode)
-            {
-                Snackbar.Add(string.Format(Strings.Get("StErrMoveItemStatus"), (int)response.StatusCode), Severity.Error);
-                return;
-            }
-
-            Snackbar.Add(string.Format(Strings.Get("StMoved"), item.Name), Severity.Success);
-            ClearIntraySelection(item);
-            await LoadIntrayAsync();
-        }
-        catch (Exception)
-        {
-            Snackbar.Add(Strings.Get("StErrMoveItem"), Severity.Error);
-        }
-    }
 
     // The "show group intrays" filter (ADR 0532) — off by default; clears any admin user-view when toggled.
     private async Task ToggleIntrayGroupsAsync(bool on)
@@ -1388,89 +950,6 @@
         await LoadIntrayAsync();
     }
 
-    private async Task DeleteIntraySelectionAsync()
-    {
-        var items = _intrayChecked.Count > 0 ? _intrayChecked.ToList()
-            : _selectedIntrayItem is { } one ? new List<IntrayItem> { one } : [];
-        if (items.Count <= 1)
-        {
-            if (items.Count == 1)
-            {
-                await DeleteIntrayItemAsync(items[0]);
-            }
-
-            return;
-        }
-
-        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
-        {
-            Title = "Delete intray items",
-            Message = string.Format(Strings.Get("IntrayDeleteManyConfirm"), items.Count),
-            YesText = "Delete",
-            CancelText = "Cancel",
-        });
-        if (confirmed != true)
-        {
-            return;
-        }
-
-        var deleted = 0;
-        foreach (var item in items)
-        {
-            // SKIP rather than abandon the batch: the summary below branches on `deleted == items.Count` and
-            // warns on a partial, which is the design saying a partial delete is an expected outcome (#933).
-            if (NotOffered(item.DeleteHref)) { continue; }
-
-            if ((await Http.DeleteAsync(item.DeleteHref)).IsSuccessStatusCode)
-            {
-                deleted++;
-                ClearIntraySelection(item);
-            }
-        }
-
-        Snackbar.Add(
-            deleted == items.Count ? string.Format(Strings.Get("StDeletedItems"), deleted) : Strings.Get("StErrDeleteSelection"),
-            deleted == items.Count ? Severity.Success : Severity.Warning);
-        await LoadIntrayAsync();
-    }
-
-    private async Task DeleteIntrayItemAsync(IntrayItem item)
-    {
-        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
-        {
-            Title = "Delete intray item",
-            Message = $"Delete '{item.Name}' from your intray?",
-            YesText = "Delete",
-            CancelText = "Cancel",
-        });
-        if (confirmed != true)
-        {
-            return;
-        }
-
-        // After a confirmation, which is the worst place for a silent failure: the user has said yes to
-        // deleting a named item and would otherwise be told nothing at all (#863/#876).
-        if (NotOffered(item.DeleteHref)) { return; }
-
-        if ((await Http.DeleteAsync(item.DeleteHref)).IsSuccessStatusCode)
-        {
-            ClearIntraySelection(item);
-            await LoadIntrayAsync();
-        }
-        else
-        {
-            Snackbar.Add(string.Format(Strings.Get("StErrDeleteNamed"), item.Name), Severity.Error);
-        }
-    }
-
-    private void ClearIntraySelection(IntrayItem item)
-    {
-        if (_selectedIntrayItem == item)
-        {
-            _selectedIntrayItem = null;
-            _preview?.Clear();
-        }
-    }
 
     private record IntrayResponse { public List<IntrayItemDto> Items { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
     private record IntrayItemDto { public string Name { get; set; } = ""; public long Size { get; set; } public bool HasMask { get; set; } public bool Signed { get; set; } public Guid? GroupId { get; set; } public string? GroupName { get; set; } public Guid? UserId { get; set; } public string? UserName { get; set; } public List<LinkResponse> Links { get; set; } = []; }

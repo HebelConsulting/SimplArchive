@@ -245,10 +245,27 @@ public class OverLimitFileCeilingTests
         // still measured. Last time this file left the list, at 964 under ADR 0572, nothing watched it and it
         // came back at 1,601. That is the whole reason the general check exists.
 
-        // Born over the limit (2026-08-17, #561) and never watched. Home.razor has WorkbenchShellSizeTests, but
-        // the tab components EXTRACTED from it inherited no guard — the extraction moved the lines out of the
-        // watched file and into an unwatched one, which is the shape this guard exists to catch.
-        ["src/SimplArchive.Client/Components/Tabs/IntrayTab.razor"] = 1_482,
+        // IntrayTab is GONE from this list: 1,482 -> 961. It was born over the limit (2026-08-17, #561) and never
+        // watched -- Home.razor has WorkbenchShellSizeTests, but the tab components EXTRACTED from it inherited
+        // no guard, which is the shape this guard exists to catch. Three pieces left it, and the difference
+        // between them is the point:
+        //
+        //   IntrayPageOperations.razor (499)      a real CHILD COMPONENT: toolbar markup + the split/sort/join/
+        //                                         deskew/patch-code logic. It owns "what can be done to the
+        //                                         checked item" and re-asks whenever the selection changes.
+        //   IntrayTab.ItemActions.razor.cs (161)  a PARTIAL of the same component: download/send/move/delete.
+        //   IntrayItem.cs (22)                    the row type, now shared by tab and child.
+        //
+        // The item actions are a partial rather than a component ON PURPOSE. They are invoked from the per-row
+        // menu and they read and write the tab's selection and its preview pane, so a child would have needed
+        // four or five callbacks passed down -- a callback bag, and per the component beside it, exactly the
+        // shape in which a Blazor child stops re-rendering. Splitting by responsibility without inventing a
+        // seam the code does not have is the same choice MainWindow's per-feature partials made.
+        //
+        // Two defects the page-operations extraction had to fix, neither visible in a build: the parent passes a
+        // freshly-built list, so an unguarded OnParametersSetAsync would have fired one HTTP request PER RENDER;
+        // and SetPreferenceAsync assigned its flags directly, which is wrong once they are [Parameter]s (Blazor
+        // overwrites them on the next render) -- it invokes the Changed callbacks now.
 
         // DesktopClient/Program.cs is GONE from this list: 1,237 → 672. The entry above it had already named the
         // cause — "over the limit BECAUSE all 28 headless hooks are inline in it" — and the remedy it had been

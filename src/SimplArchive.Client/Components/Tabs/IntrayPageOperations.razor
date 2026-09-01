@@ -1,0 +1,499 @@
+@using System.Net
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
+
+@* The Intray tab's page-operations group (#487, ADR 0575), matching the desktop ribbon's group — split,
+   sort, join, deskew, cut-at-patch-codes, and the three sticky preferences.
+
+   Its own component because IntrayTab was over the 1000-line limit and this is one whole subject: every
+   button here acts on the PAGES of a staged file, and nothing else in the tab does.
+
+   State ownership, which is the part worth reading. `_pages` is the child's — it is the answer to "what can
+   be done to the checked item", asked here and nowhere else, and re-asked whenever `Checked` changes. Busy,
+   the status line and the three preferences stay the PARENT's and arrive as parameters, because the parent
+   sets busy around its own uploads, owns the one status line the whole tab writes to, and seeds the
+   preferences from the `me` resource it already fetches at init.
+
+   That split matters more than it looks: a Blazor child whose parameters are all EventCallbacks never
+   re-renders, because a method-group callback is cached and Blazor sees no parameter change. Every value
+   that CHANGES is a parameter here, and the callbacks only carry changes back up. *@
+
+    @* Page operations (#487, ADR 0575), matching the desktop ribbon's group. Each appears only when the
+       server said it can succeed: one checked item with more than one page for split/sort, two or more for
+       join. A missing rel means "not available to you, here, now" (ADR 0543/0554). *@
+    @if (_pages is { CanSplit: true })
+    {
+        <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="SplitPagesAsync"
+                   title="@Strings.Get("IntraySplit")" aria-label="@Strings.Get("IntraySplit")">
+            <MudIcon Icon="@Icons.Material.Filled.CallSplit" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntraySplit")</span>
+        </MudButton>
+    }
+    @if (_pages is { CanSort: true })
+    {
+        <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="SortPagesAsync"
+                   title="@Strings.Get("IntraySortTitle")" aria-label="@Strings.Get("IntraySortTitle")">
+            <MudIcon Icon="@Icons.Material.Filled.Sort" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntraySortTitle")</span>
+        </MudButton>
+    }
+    @if (Checked.Count >= 2 && JoinHref is not null)
+    {
+        <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="JoinItemsAsync"
+                   title="@Strings.Get("IntrayJoinTitle")" aria-label="@Strings.Get("IntrayJoinTitle")">
+            <MudIcon Icon="@Icons.Material.Filled.CallMerge" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntrayJoinTitle")</span>
+        </MudButton>
+    }
+    @if (_pages is { CanDeskew: true })
+    {
+        <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="DeskewAsync"
+                   title="@Strings.Get("IntrayDeskewNow")" aria-label="@Strings.Get("IntrayDeskewNow")">
+            <MudIcon Icon="@Icons.Material.Filled.Straighten" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntrayDeskewNow")</span>
+        </MudButton>
+    }
+    @if (_pages is { CanCutAtPatchCodes: true })
+    {
+        <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="CutAtPatchCodesAsync"
+                   title="@Strings.Get("IntrayPatchCutNow")" aria-label="@Strings.Get("IntrayPatchCutNow")">
+            <MudIcon Icon="@Icons.Material.Filled.ContentCut" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntrayPatchCutNow")</span>
+        </MudButton>
+    }
+    @* The sticky preferences, held DOWN while on — the desktop's ribbon toggles, in this tab's toolbar
+       (ADR 0511). Server-side per user, because the Worker's sweep reads them for WebDAV arrivals.
+
+       Size.Small on every one of these: an icon button defaults to Medium (a 24px glyph in a 48px button)
+       while a Size.Small MudButton is a 20px glyph in a 28px one — mixing the two made this bar 52px tall
+       against the Repositories ribbon's 41px, which reads as "the Intray has bigger icons". A toolbar is one
+       row of one size. *@
+    <MudToggleIconButton Toggled="RotateAutomatically" ToggledChanged="SetRotateAutomaticallyAsync" Size="Size.Small"
+                         Icon="@Icons.Material.Outlined.RotateRight" ToggledIcon="@Icons.Material.Filled.RotateRight"
+                         Color="Color.Default" ToggledColor="Color.Primary" Class="ml-2"
+                         title="@Strings.Get("IntrayRotateAutoTip")" />
+    <MudToggleIconButton Toggled="DeskewAutomatically" ToggledChanged="SetDeskewAutomaticallyAsync" Size="Size.Small"
+                         Icon="@Icons.Material.Outlined.AutoFixHigh" ToggledIcon="@Icons.Material.Filled.AutoFixHigh"
+                         Color="Color.Default" ToggledColor="Color.Primary" Class="ml-1"
+                         title="@Strings.Get("IntrayDeskewAutoTipTiff")" />
+    <MudToggleIconButton Toggled="CutAtPatchCodesAutomatically" ToggledChanged="SetCutAtPatchCodesAutomaticallyAsync" Size="Size.Small"
+                         Icon="@Icons.Material.Outlined.ContentCut" ToggledIcon="@Icons.Material.Filled.ContentCut"
+                         Color="Color.Default" ToggledColor="Color.Primary" Class="ml-1"
+                         title="@Strings.Get("IntrayPatchAutoTip")" />
+    @if (PatchCodeSheetHref is { } sheetHref)
+    {
+        @* A plain link, because the browser already knows how to show a PDF and then print it — a fetch
+           into a blob would take that away and give nothing back. *@
+        <MudIconButton Href="@sheetHref" Target="_blank" Icon="@Icons.Material.Filled.Print" Class="ml-1" Size="Size.Small"
+                       title="@Strings.Get("IntrayPatchSheetTip")" />
+    }
+    @if (Busy)
+    {
+        <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="ml-2" />
+    }
+
+@code {
+    /// <summary>The checked intray rows. Page operations act on exactly one, except join, which needs two.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<IntrayItem> Checked { get; set; } = [];
+
+    /// <summary>The `join` address the listing advertised, or null when joining is not offered.</summary>
+    [Parameter] public string? JoinHref { get; set; }
+
+    /// <summary>The printable separator sheet's address, captured from the listing that advertised it.</summary>
+    [Parameter] public string? PatchCodeSheetHref { get; set; }
+
+    /// <summary>The tab's busy flag — the PARENT's, because it sets it around its own uploads too.</summary>
+    [Parameter] public bool Busy { get; set; }
+
+    [Parameter] public EventCallback<bool> BusyChanged { get; set; }
+
+    [Parameter] public bool DeskewAutomatically { get; set; }
+
+    [Parameter] public EventCallback<bool> DeskewAutomaticallyChanged { get; set; }
+
+    [Parameter] public bool RotateAutomatically { get; set; }
+
+    [Parameter] public EventCallback<bool> RotateAutomaticallyChanged { get; set; }
+
+    [Parameter] public bool CutAtPatchCodesAutomatically { get; set; }
+
+    [Parameter] public EventCallback<bool> CutAtPatchCodesAutomaticallyChanged { get; set; }
+
+    /// <summary>Writes the tab's one status line.</summary>
+    [Parameter] public EventCallback<string> StatusChanged { get; set; }
+
+    /// <summary>Raised when an operation changed what is in the intray, so the parent reloads its list.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    // Re-asked whenever the checked set changes — which is what makes the buttons describe the CURRENT
+    // selection rather than the one whose answer happened to arrive last (ADR 0559).
+    //
+    // Guarded on a KEY rather than on the collection, and that guard is load-bearing: the parent passes a
+    // freshly-built list, so the reference differs on every render and an unguarded OnParametersSetAsync
+    // would fire one HTTP request per render — invisible in a build, and the sort of thing that only shows
+    // up as a busy network tab. The key is what the answer actually depends on: how many items are checked,
+    // and which one's pages we would be asking about.
+    private string? _askedFor;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = Checked.Count == 1 ? $"1:{Checked[0].PagesHref}" : $"{Checked.Count}";
+        if (key == _askedFor)
+        {
+            return;
+        }
+
+        _askedFor = key;
+        await LoadPagesAsync();
+    }
+
+    private Task SetBusyAsync(bool busy) => BusyChanged.InvokeAsync(busy);
+
+    private Task SetStatusAsync(string status) => StatusChanged.InvokeAsync(status);
+
+    // The child's own, not a copy of the parent's: the RULE is the same ("a missing rel means the action is
+    // not available"), but the status sink differs — this one reports through the callback rather than
+    // assigning the tab's field.
+    private async Task<bool> NotOfferedAsync(string? href)
+    {
+        if (href is not null)
+        {
+            return false;
+        }
+
+        await SetStatusAsync(Strings.Get("IntrayActionUnavailable"));
+        return true;
+    }
+
+    // Every address here was advertised: the row's `pages` rel, and the split/sort rels that resource itself
+    // returns. Nothing is composed (ADR 0543), and each resource is read once and followed many times (0557).
+
+    private PagesInfo? _pages;
+
+    private sealed record PagesInfo(
+        int PageCount,
+        string? SplitHref,
+        string? SortHref,
+        string? DeskewHref,
+        string? PatchCodesHref)
+    {
+        public bool CanSplit => SplitHref is not null;
+
+        public bool CanSort => SortHref is not null;
+
+        public bool CanDeskew => DeskewHref is not null;
+
+        public bool CanCutAtPatchCodes => PatchCodesHref is not null;
+    }
+
+
+
+    // The printable separator sheet, captured from the intray listing that advertised it (ADR 0557).
+
+    // Asked whenever the checked set changes, and CLEARED first: a rel that has not arrived means "not
+    // available here, now", which during the request is exactly true — so the buttons never describe the
+    // previously checked item while a newer one is loading (ADR 0559).
+    private async Task LoadPagesAsync()
+    {
+        _pages = null;
+        if (Checked.Count != 1 || Checked.Single().PagesHref is not { } pagesHref)
+        {
+            StateHasChanged();
+            return;
+        }
+
+        try
+        {
+            var response = await Http.GetFromJsonAsync<IntrayPagesResponse>(pagesHref);
+            _pages = new PagesInfo(
+                response?.PageCount ?? 0,
+                Links.Href(response?.Links, "split"),
+                Links.Href(response?.Links, "sort"),
+                Links.Href(response?.Links, "deskew"),
+                Links.Href(response?.Links, "patchCodes"));
+        }
+        catch (Exception)
+        {
+            _pages = null;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task SplitPagesAsync()
+    {
+        if (_pages is not { SplitHref: { } splitHref } pages || Checked.SingleOrDefault() is not { } item)
+        {
+            return;
+        }
+
+        // Splitting adds N items and keeps the source, so the count is worth stating BEFORE it happens: on a
+        // 40-page scan the difference between "split" and "what have I done" is knowing it was 40.
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = Strings.Get("IntraySplit"),
+            Message = string.Format(Strings.Get("IntraySplitConfirm"), item.Name, pages.PageCount),
+            YesText = Strings.Get("IntraySplit"),
+            CancelText = Strings.Get("Cancel"),
+        });
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        await RunPageOperationAsync(async () =>
+        {
+            var response = await Http.PostAsJsonAsync(splitHref, new { });
+            await ThrowIfRefusedAsync(response);
+            var written = await response.Content.ReadFromJsonAsync<IntrayPageItemsResponse>();
+            await SetStatusAsync(string.Format(Strings.Get("StIntraySplit"), item.Name, written?.Names.Count ?? 0));
+        });
+    }
+
+    private async Task SortPagesAsync()
+    {
+        if (_pages is not { SortHref: { } sortHref } pages || Checked.SingleOrDefault() is not { } item)
+        {
+            return;
+        }
+
+        // Thumbnails come from pdf.js, which this client already loads for the preview — the same trade the
+        // desktop makes with PDFium. A failure here costs the pictures, not the dialog: it falls back to
+        // numbered tiles rather than refusing to open.
+        var images = new List<Dialogs.SortPagesDialog.PageThumbnail>();
+        try
+        {
+            var module = await JS.InvokeAsync<IJSObjectReference>("import", "./preview.js");
+            await using (module)
+            {
+                if (await NotOfferedAsync(item.DownloadHref)) { return; }
+
+                images = (await module.InvokeAsync<Dialogs.SortPagesDialog.PageThumbnail[]>("pageThumbnails", item.DownloadHref, 260)).ToList();
+            }
+        }
+        catch (Exception)
+        {
+            images = [];
+        }
+
+        var parameters = new DialogParameters<Dialogs.SortPagesDialog>
+        {
+            { d => d.ItemName, item.Name },
+            { d => d.PageImages, images },
+            { d => d.PageCount, pages.PageCount },
+        };
+
+        var dialog = await DialogService.ShowAsync<Dialogs.SortPagesDialog>(Strings.Get("IntraySortTitle"), parameters);
+        if (await dialog.Result is not { Canceled: false, Data: Dialogs.SortPagesDialog.Result arrangement })
+        {
+            return;
+        }
+
+        await RunPageOperationAsync(async () =>
+        {
+            // One request writes the whole arrangement — order and turns together (#522).
+            object body = arrangement.Rotations.Count > 0
+                ? new
+                {
+                    pageOrder = arrangement.Order,
+                    rotations = arrangement.Rotations.Select(r => new { page = r.Key, degrees = r.Value }).ToList(),
+                }
+                : new { pageOrder = arrangement.Order };
+            var response = await Http.PostAsJsonAsync(sortHref, body);
+            await ThrowIfRefusedAsync(response);
+            await SetStatusAsync(string.Format(Strings.Get("StIntraySorted"), item.Name));
+        });
+    }
+
+    // Straighten THIS item, now. The format change is stated before it happens: a TIFF comes back a PDF,
+    // because straightening re-renders the pages, and discovering that afterwards is how a user concludes the
+    // archive is unreliable.
+    private async Task DeskewAsync()
+    {
+        if (_pages is not { DeskewHref: { } deskewHref } || Checked.SingleOrDefault() is not { } item)
+        {
+            return;
+        }
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = Strings.Get("IntrayDeskewNow"),
+            Message = string.Format(Strings.Get("IntrayDeskewConfirm"), item.Name),
+            YesText = Strings.Get("IntrayDeskewNow"),
+            CancelText = Strings.Get("Cancel"),
+        });
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        await RunPageOperationAsync(async () =>
+        {
+            var response = await Http.PostAsJsonAsync(deskewHref, new { });
+            await ThrowIfRefusedAsync(response);
+            var written = await response.Content.ReadFromJsonAsync<IntrayPageItemsResponse>();
+            var name = written?.Names.FirstOrDefault() ?? string.Empty;
+            await SetStatusAsync(string.Format(
+                Strings.Get(name.Length > 0 ? "StIntrayDeskewed" : "StIntrayDeskewNothing"),
+                name.Length > 0 ? name : item.Name));
+        });
+    }
+
+    // Cut THIS batch at its separator sheets, now. What happens to the batch is stated before it happens: it
+    // stays, under a name that says it can go — a user who expects it to vanish and finds it still there
+    // concludes the cut did not work.
+    private async Task CutAtPatchCodesAsync()
+    {
+        if (_pages is not { PatchCodesHref: { } patchCodesHref } || Checked.SingleOrDefault() is not { } item)
+        {
+            return;
+        }
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = Strings.Get("IntrayPatchCutNow"),
+            Message = string.Format(Strings.Get("IntrayPatchCutConfirm"), item.Name),
+            YesText = Strings.Get("IntrayPatchCutNow"),
+            CancelText = Strings.Get("Cancel"),
+        });
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        await RunPageOperationAsync(async () =>
+        {
+            var response = await Http.PostAsJsonAsync(patchCodesHref, new { });
+            await ThrowIfRefusedAsync(response);
+            var written = await response.Content.ReadFromJsonAsync<IntrayPageItemsResponse>();
+            await SetStatusAsync(string.Format(
+                Strings.Get("StIntrayCutAtPatchCodes"), item.Name, written?.Names.Count ?? 0));
+        });
+    }
+
+    // Writes a toggle through, putting the button back if the server refuses — a control showing a state the
+    // server does not hold is worse than one that failed visibly. Which rel and which field differ; the shape
+    // does not, so the difference arrives as two lambdas rather than as a second copy.
+    private Task SetDeskewAutomaticallyAsync(bool enabled) =>
+        SetPreferenceAsync("deskewPreference", enabled, DeskewAutomatically, value => DeskewAutomaticallyChanged.InvokeAsync(value));
+
+    private Task SetRotateAutomaticallyAsync(bool enabled) =>
+        SetPreferenceAsync("rotatePreference", enabled, RotateAutomatically, value => RotateAutomaticallyChanged.InvokeAsync(value));
+
+    private Task SetCutAtPatchCodesAutomaticallyAsync(bool enabled) =>
+        SetPreferenceAsync("patchCodePreference", enabled, CutAtPatchCodesAutomatically, value => CutAtPatchCodesAutomaticallyChanged.InvokeAsync(value));
+
+    private async Task SetPreferenceAsync(string rel, bool enabled, bool previous, Func<bool, Task> set)
+    {
+        await set(enabled);
+        try
+        {
+            var me = await Http.GetFromJsonAsync<MeResponse>(await ApiRoot.RequireAsync("me"));
+            if (Links.Href(me?.Links, rel) is not { } href)
+            {
+                // REVERT, don't just return (#876). The flip above is optimistic, and the exception path below
+                // already undoes it — this path did not, so a missing rel left the switch showing a setting the
+                // server had never stored, which silently reverts on the next load. A control reporting a state
+                // that does not exist is worse than one that does nothing: the user has no reason to look again.
+                await set(previous);
+                await SetStatusAsync(ApiErrorText.For(null));
+                return;
+            }
+
+            (await Http.PutAsJsonAsync(href, new { enabled })).EnsureSuccessStatusCode();
+        }
+        catch (Exception)
+        {
+            await set(previous);
+            await SetStatusAsync(ApiErrorText.For(null));
+        }
+    }
+
+    private record MeResponse
+    {
+        public bool DeskewIntrayUploads { get; set; }
+
+        public bool RotateIntrayUploads { get; set; }
+
+        public bool CutIntrayUploadsAtPatchCodes { get; set; }
+
+        public List<LinkResponse> Links { get; set; } = [];
+    }
+
+    private async Task JoinItemsAsync()
+    {
+        if (JoinHref is not { } joinHref || Checked.Count < 2)
+        {
+            return;
+        }
+
+        var names = Checked.Select(i => i.Name).ToList();
+        var parameters = new DialogParameters<Dialogs.JoinItemsDialog> { { d => d.Names, names } };
+        var dialog = await DialogService.ShowAsync<Dialogs.JoinItemsDialog>(Strings.Get("IntrayJoinTitle"), parameters);
+        if (await dialog.Result is not { Canceled: false, Data: Dialogs.JoinItemsDialog.Result result })
+        {
+            return;
+        }
+
+        await RunPageOperationAsync(async () =>
+        {
+            var response = await Http.PostAsJsonAsync(joinHref, new { names = result.Names, name = result.Name });
+            await ThrowIfRefusedAsync(response);
+            var written = await response.Content.ReadFromJsonAsync<IntrayPageItemsResponse>();
+            await SetStatusAsync(string.Format(Strings.Get("StIntrayJoined"), result.Names.Count, written?.Names.FirstOrDefault() ?? ""));
+        });
+    }
+
+    // Every page operation ends the same way: the server's own words on refusal, and a reload either way — a
+    // failed operation can still have followed one that succeeded, so the list must not be left describing a
+    // state that no longer exists.
+    private async Task RunPageOperationAsync(Func<Task> action)
+    {
+        await SetBusyAsync(true);
+        try
+        {
+            await action();
+        }
+        catch (Exception e)
+        {
+            await SetStatusAsync(e.Message);
+        }
+        finally
+        {
+            await SetBusyAsync(false);
+        }
+
+        await OnChanged.InvokeAsync();
+    }
+
+    // The refusal's ERROR CODE, mapped to words this client owns — never the Problem Details `detail`, which is
+    // English whatever the user's language, because the Api's exception classes carry their message as a
+    // constructor literal (issue #424). The code is the stable, language-neutral contract (ADR 0543).
+    private static async Task ThrowIfRefusedAsync(HttpResponseMessage response)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        string? errorCode = null;
+        try
+        {
+            errorCode = (await response.Content.ReadFromJsonAsync<ProblemResponse>())?.ErrorCode;
+        }
+        catch (Exception)
+        {
+            // No problem body at all (a proxy error page, a connection reset) — the generic text below covers it.
+        }
+
+        throw new InvalidOperationException(ApiErrorText.For(errorCode));
+    }
+
+    private record IntrayPagesResponse { public string? Format { get; set; } public int PageCount { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+
+    private record IntrayPageItemsResponse { public List<string> Names { get; set; } = []; }
+
+    private record ProblemResponse { public string? ErrorCode { get; set; } }
+}
