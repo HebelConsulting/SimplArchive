@@ -27,7 +27,7 @@ public class DesktopRecycleBinTests
         await api.Documents.DeleteAsync(folder.Href("self"));
 
         // The tenant-wide recycle-bin list shows it, with a full path and an audit-derived "deleted by".
-        var vm = new RecycleBinTabViewModel();
+        var vm = new RecycleBinTabViewModel(new TestShell());
         vm.SetApi(api);
         await vm.LoadAsync();
         var row = vm.Items.SingleOrDefault(i => i.Id == folder.Id);
@@ -64,7 +64,7 @@ public class DesktopRecycleBinTests
         var folders = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Where(n => names.Contains(n.Name)).ToList();
         foreach (var f in folders) await api.Documents.DeleteAsync(f.Href("self"));
 
-        var vm = new RecycleBinTabViewModel();
+        var vm = new RecycleBinTabViewModel(new TestShell());
         vm.SetApi(api);
         await vm.LoadAsync();
 
@@ -95,7 +95,7 @@ public class DesktopRecycleBinTests
         var folders = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Where(n => names.Contains(n.Name)).ToList();
         foreach (var f in folders) await api.Documents.DeleteAsync(f.Href("self"));
 
-        var vm = new RecycleBinTabViewModel { IsTenantAdmin = true };
+        var vm = new RecycleBinTabViewModel(new TestShell()) { IsTenantAdmin = true };
         vm.SetApi(api);
         await vm.LoadAsync();
         vm.SetSelection(vm.Items.Where(i => names.Contains(i.Name)).ToList());

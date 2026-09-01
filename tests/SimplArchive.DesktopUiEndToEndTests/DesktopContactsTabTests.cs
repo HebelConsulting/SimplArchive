@@ -28,8 +28,8 @@ public class DesktopContactsTabTests
         // The personal space is provisioned on demand, and brings "My Addressbook" with it.
         Assert.NotNull(await api.Profile.GetPersonalRepositoryAsync());
 
-        var vm = new ContactsTabViewModel();
-        vm.Setup(api);
+        var vm = new ContactsTabViewModel(new TestShell());
+        vm.SetApi(api);
         await vm.LoadAsync();
 
         var mine = Assert.Single(vm.Collections, c => c.Collection.IsPersonalDefault);
@@ -76,8 +76,8 @@ public class DesktopContactsTabTests
         var card = $"BEGIN:VCARD\r\nVERSION:3.0\r\nUID:{suffix}\r\nFN:Zora Zimmer\r\nN:Zimmer;Zora;;;\r\nEND:VCARD\r\n";
         await api.Documents.UploadFileAsync(book.Href("children"), $"zora-{suffix}.vcf", Encoding.UTF8.GetBytes(card));
 
-        var vm = new ContactsTabViewModel();
-        vm.Setup(api);
+        var vm = new ContactsTabViewModel(new TestShell());
+        vm.SetApi(api);
         await vm.LoadAsync();
 
         // Named by the card, not by the file: the finalizer classified it as a Contact and took its FN. That
@@ -133,8 +133,8 @@ public class DesktopContactsTabTests
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
         Assert.NotNull(await api.Profile.GetPersonalRepositoryAsync());
 
-        var vm = new ContactsTabViewModel();
-        vm.Setup(api);
+        var vm = new ContactsTabViewModel(new TestShell());
+        vm.SetApi(api);
         await vm.LoadAsync();
 
         // The affordance is gated on the rel, which is the server's answer rather than the client's guess.
@@ -184,8 +184,8 @@ public class DesktopContactsTabTests
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
         Assert.NotNull(await api.Profile.GetPersonalRepositoryAsync());
 
-        var vm = new ContactsTabViewModel();
-        vm.Setup(api);
+        var vm = new ContactsTabViewModel(new TestShell());
+        vm.SetApi(api);
         await vm.LoadAsync();
 
         var geneva = Assert.Single(vm.Contacts, c => c.FullName == "VOLMET Geneva");

@@ -52,7 +52,7 @@ public partial class CalendarTab : UserControl
         // The row the user clicked, not the pane's loaded state (ADR 0559).
         if (await tab.LoadEntryAsync(row) is not { } loaded)
         {
-            tab.StatusReporter?.Invoke(Strings.Get("ApptNotEditable"));
+            tab.Report(Strings.Get("ApptNotEditable"));
             return;
         }
 

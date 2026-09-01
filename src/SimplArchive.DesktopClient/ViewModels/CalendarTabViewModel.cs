@@ -260,7 +260,9 @@ public sealed partial class CalendarTabViewModel : ObservableObject
     private SimplArchiveApiClient? _api;
 
     /// <summary>Routes messages to the shared bottom status bar.</summary>
-    public Action<string>? StatusReporter { get; set; }
+    private readonly IShellContext _shell;
+
+    public CalendarTabViewModel(IShellContext shell) => _shell = shell;
 
     public ObservableCollection<CalendarCollectionViewModel> Collections { get; } = [];
 
@@ -662,7 +664,7 @@ public sealed partial class CalendarTabViewModel : ObservableObject
         }
     }
 
-    public void Setup(SimplArchiveApiClient api) => _api = api;
+    public void SetApi(SimplArchiveApiClient api) => _api = api;
 
     /// <summary>Loads the calendars; the caller's own is checked so the tab opens with content.</summary>
     [RelayCommand]
@@ -859,5 +861,9 @@ public sealed partial class CalendarTabViewModel : ObservableObject
         OnPropertyChanged(nameof(EmptyMessage));
     }
 
-    private void Report(string message) => StatusReporter?.Invoke(message);
+    /// <summary>
+    /// Puts a message on the window's status line. Internal rather than private because this tab's own view
+    /// reports through it — the view has the message, the tab owns the route.
+    /// </summary>
+    internal void Report(string message) => _shell.Report(message);
 }

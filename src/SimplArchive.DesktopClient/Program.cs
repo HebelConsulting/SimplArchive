@@ -512,7 +512,7 @@ internal static class Program
                 "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n" +
                 "3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]/Contents 4 0 R>>endobj\n" +
                 "4 0 obj<</Length 0>>stream\nendstream endobj\ntrailer<</Root 1 0 R/Size 5>>\n%%EOF");
-            var vm = new PreviewViewModel();
+            var vm = new PreviewViewModel(new NoStatusLine());
             vm.SetPreviewPagesForScreenshot([Services.PreviewRenderer.RenderPdfFirstPage(pdf)]);
 
             const double paneWidth = 900, paneHeight = 520;   // wider than tall — a portrait page cannot fit by width

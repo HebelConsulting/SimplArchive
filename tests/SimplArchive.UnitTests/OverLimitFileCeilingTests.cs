@@ -116,8 +116,14 @@ public class OverLimitFileCeilingTests
         // moves cost OUT of the class rather than between its files — 7,330 → 6,795 across every partial. The
         // window's half of the seam is its own partial and is listed below, for the reason above: a new file
         // nothing watches is how the next tranche would quietly become a relocation.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_032,
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.ShellContext.cs"] = 80,
+        // 6,032 → 6,015 and 80 → 107 for #517's finish (ADR 0730): all seven tabs now take IShellContext, which
+        // deleted six StatusReporter properties and the nine `m => Status = m` lambdas in the constructor.
+        // RefreshAfterCheckoutChangeAsync moved to the ShellContext partial, beside the interface member that
+        // calls it — OWNER-CONFIRMED 2026-09-01, chosen over raising the main file, and worth naming as the
+        // trade it is: it lowers one watched file by moving lines into another watched file. That is only not
+        // gaming because BOTH are on this list; if the destination ever leaves, this line stops being honest.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_015,
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.ShellContext.cs"] = 107,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
         // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —

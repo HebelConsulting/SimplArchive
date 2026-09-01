@@ -48,7 +48,7 @@ public sealed partial class IntrayTabViewModel : ObservableObject
     public IntrayTabViewModel(IShellContext shell)
     {
         _shell = shell;
-        Preview.StatusReporter = _shell.Report;
+        Preview = new PreviewViewModel(shell);
         Actions.Connect(() => _api, RefreshAsync, _shell.Report, () => _shell.CurrentUserId);
     }
 
@@ -190,7 +190,7 @@ public sealed partial class IntrayTabViewModel : ObservableObject
     // The Intray tab owns a SEPARATE preview instance so its preview never entangles the Repositories one — a
     // preview shown on one tab must not leak onto the other (mirrors RecycleBin.Preview). Bound by the Intray
     // PreviewPane.
-    public PreviewViewModel Preview { get; } = new();
+    public PreviewViewModel Preview { get; }
 
     public ObservableCollection<IntrayItemViewModel> ServerItems { get; } = [];
 

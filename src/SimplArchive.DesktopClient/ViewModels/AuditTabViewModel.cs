@@ -13,7 +13,7 @@ namespace SimplArchive.DesktopClient.ViewModels;
 /// <remarks>
 /// Extracted from <c>MainWindowViewModel</c> (#517, tranche 1) — the CheckoutTabViewModel shape: its own
 /// view-model because a tab's worth of state belongs to the tab, wired to the shell through
-/// <see cref="StatusReporter"/> and <see cref="Setup"/>. Only <c>CanViewAuditLog</c> stays behind, because it
+/// <see cref="IShellContext"/> and <see cref="SetApi"/>. Only <c>CanViewAuditLog</c> stays behind, because it
 /// gates the TabItem's visibility and the TabItem itself remains the shell's markup.
 /// </remarks>
 public sealed partial class AuditTabViewModel : ObservableObject
@@ -21,7 +21,9 @@ public sealed partial class AuditTabViewModel : ObservableObject
     private SimplArchiveApiClient? _api;
 
     /// <summary>Routes messages to the shared bottom status bar.</summary>
-    public Action<string>? StatusReporter { get; set; }
+    private readonly IShellContext _shell;
+
+    public AuditTabViewModel(IShellContext shell) => _shell = shell;
 
     /// <summary>Set from whoami on login — gates the retention pencil and (via the ribbon) purge.</summary>
     [ObservableProperty] private bool _isTenantAdmin;
@@ -44,7 +46,7 @@ public sealed partial class AuditTabViewModel : ObservableObject
     [ObservableProperty] private string _auditRetentionNote = "";
     private string? _auditNextCursor;
 
-    public void Setup(SimplArchiveApiClient api) => _api = api;
+    public void SetApi(SimplArchiveApiClient api) => _api = api;
 
     /// <summary>Logout: back to the blank state, so the next session's user never sees this one's events.</summary>
     public void Reset()
@@ -301,5 +303,9 @@ public sealed partial class AuditTabViewModel : ObservableObject
         AuditEvents.Add(new AuditEventRowViewModel { Timestamp = now.AddHours(-1), ActorName = "Demo Admin", ActorType = "User", Action = "User.RightsChanged", TargetType = "User", TargetName = "Jane Doe", Details = "Manage repositories" });
     }
 
-    private void Report(string message) => StatusReporter?.Invoke(message);
+    /// <summary>
+    /// Puts a message on the window's status line. Internal rather than private because this tab's own view
+    /// reports through it — the view has the message, the tab owns the route.
+    /// </summary>
+    internal void Report(string message) => _shell.Report(message);
 }

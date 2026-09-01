@@ -112,7 +112,7 @@ public class DesktopAnnotationTests
         await api.Annotations.CreateAnnotationAsync(url, 0, 1, 0.1, 0.8, 0.3, 0.05, "", "#F44336");
 
         // Drive the multi-select commands the overlay fires (ADR "Annotation multi-select").
-        var vm = new PreviewViewModel { Api = api };
+        var vm = new PreviewViewModel(new TestShell()) { Api = api };
         await vm.LoadAnnotationsForTestAsync(url);
         var all = (await api.Annotations.GetAnnotationsAsync(url)).Items;
         var noteOne = all.First(a => a.Text == "note one");
@@ -159,7 +159,7 @@ public class DesktopAnnotationTests
 
         // A highlight (kind 1) drawn in the default colour.
         await api.Annotations.CreateAnnotationAsync(url, 0, 1, 0.1, 0.2, 0.3, 0.05, "", "#FFEB3B");
-        var vm = new PreviewViewModel { Api = api };
+        var vm = new PreviewViewModel(new TestShell()) { Api = api };
         await vm.LoadAnnotationsForTestAsync(url);
         var shape = Assert.Single((await api.Annotations.GetAnnotationsAsync(url)).Items);
 
@@ -199,7 +199,7 @@ public class DesktopAnnotationTests
         var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).First(n => n.Name == $"tool-{suffix}");
         var url = (await api.Documents.GetPreviewAsync(doc.Href("versions"))).AnnotationsUrl!;
 
-        var vm = new PreviewViewModel { Api = api };
+        var vm = new PreviewViewModel(new TestShell()) { Api = api };
         await vm.LoadAnnotationsForTestAsync(url);
 
         // Arm the highlight tool, then draw one shape — the tool deactivates (ADR "Draw-tool behaviour").

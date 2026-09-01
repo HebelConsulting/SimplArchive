@@ -49,7 +49,7 @@ public class DesktopPreviewZoomTests
     [Fact]
     public void The_page_is_drawn_at_the_pane_width_times_the_zoom_and_auto_sized_until_measured()
     {
-        var vm = new PreviewViewModel();
+        var vm = new PreviewViewModel(new TestShell());
 
         // NaN is Avalonia's "Auto": an unmeasured preview lays out as it did before zoom existed.
         Assert.True(double.IsNaN(vm.PageWidth));
@@ -64,7 +64,7 @@ public class DesktopPreviewZoomTests
     [Fact]
     public void Zoom_stops_at_the_ceiling_and_at_fit_width_until_a_whole_page_has_been_asked_for()
     {
-        var vm = new PreviewViewModel();
+        var vm = new PreviewViewModel(new TestShell());
         vm.SetViewport(new Size(900, 520));
 
         for (var i = 0; i < 20; i++)
@@ -87,7 +87,7 @@ public class DesktopPreviewZoomTests
     [Fact]
     public void A_new_document_opens_at_fit_width_however_the_last_one_was_left()
     {
-        var vm = new PreviewViewModel();
+        var vm = new PreviewViewModel(new TestShell());
         vm.SetViewport(new Size(900, 520));
         vm.ZoomInCommand.Execute(null);
         vm.ZoomInCommand.Execute(null);

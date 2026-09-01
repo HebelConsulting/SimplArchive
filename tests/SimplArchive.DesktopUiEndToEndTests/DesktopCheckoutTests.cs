@@ -29,8 +29,8 @@ public class DesktopCheckoutTests
 
         await api.Checkout.CheckOutViaDocumentAsync(doc.Href("self"));
 
-        var vm = new CheckoutTabViewModel();
-        vm.Setup(api);
+        var vm = new CheckoutTabViewModel(new TestShell());
+        vm.SetApi(api);
 
         // No stash yet → Unchanged; the row shows the file WITH its extension (ADR 0513).
         await vm.LoadAsync();
@@ -73,8 +73,8 @@ public class DesktopCheckoutTests
 
         // The row advertises `pages` (extension-based), which is what gates the row menu; the resource's own
         // answer (7 pages, sort offered) is what gates the ribbon (ADR 0593).
-        var vm = new CheckoutTabViewModel();
-        vm.Setup(api);
+        var vm = new CheckoutTabViewModel(new TestShell());
+        vm.SetApi(api);
         await vm.LoadAsync();
         var row = vm.Items.Single(i => i.Id == doc.Id);
         Assert.True(row.CanSortPages);
@@ -108,8 +108,8 @@ public class DesktopCheckoutTests
         await api.Checkout.SaveWorkingCopyAsync((await api.Checkout.GetCheckoutsAsync()).Single(c => c.Id == doc.Id), Encoding.UTF8.GetBytes("line one\nline two CHANGED\nline three\n"));
 
         // Load the row (it carries StashDownloadUrl) and drive the compare VM exactly as the dialog does.
-        var tab = new CheckoutTabViewModel();
-        tab.Setup(api);
+        var tab = new CheckoutTabViewModel(new TestShell());
+        tab.SetApi(api);
         await tab.LoadAsync();
         var row = tab.Items.Single(i => i.Id == doc.Id);
         Assert.True(row.IsModified);
@@ -138,8 +138,8 @@ public class DesktopCheckoutTests
         var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
         await api.Checkout.CheckOutViaDocumentAsync(doc.Href("self"));
 
-        var vm = new CheckoutTabViewModel();
-        vm.Setup(api);
+        var vm = new CheckoutTabViewModel(new TestShell());
+        vm.SetApi(api);
         await vm.LoadAsync();
         var row = vm.Items.Single(i => i.Id == doc.Id);
         Assert.False(row.IsModified);

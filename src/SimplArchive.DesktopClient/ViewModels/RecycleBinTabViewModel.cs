@@ -23,18 +23,18 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
         ? href
         : throw new InvalidOperationException($"The recycle bin advertised no '{rel}' rel (ADR 0543).");
 
-    // Set by MainWindowViewModel to route messages to the shared bottom status bar.
-    public Action<string>? StatusReporter { get; set; }
+    private readonly IShellContext _shell;
 
-    public RecycleBinTabViewModel()
+    public RecycleBinTabViewModel(IShellContext shell)
     {
-        // Route preview hit-word-copy confirmations through this tab's status too.
-        Preview.StatusReporter = Report;
+        _shell = shell;
+        // Its own preview surface, reporting through this tab's status (which forwards to the window's).
+        Preview = new PreviewViewModel(shell);
     }
 
     // This tab's INDEPENDENT preview surface (never shared with Repositories/Intray — ADR "Desktop recycle bin
     // parity"). Read-only: a deleted item is inspected, not edited.
-    public PreviewViewModel Preview { get; } = new();
+    public PreviewViewModel Preview { get; }
 
     public void SetApi(SimplArchiveApiClient api)
     {
@@ -75,7 +75,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
     private void Report(string message)
     {
         Status = message;
-        StatusReporter?.Invoke(message);
+        _shell.Report(message);
     }
 
     public async Task LoadAsync()

@@ -21,13 +21,40 @@ public sealed partial class MainWindowViewModel
     // --- IShellContext: the whole of what a tab may ask of this window ---------------------------------
     // Explicit implementations, so widening the tabs' seam does not silently widen this class's public surface.
 
-    void IShellContext.Report(string status) => Status = status;
+    void IStatusReporter.Report(string status) => Status = status;
 
     void IShellContext.SaveLayout() => SaveLayout();
 
+    // Deliberately still Intray-specific: ADR 0729's trigger for ActivateTab(WorkbenchTab) is a SECOND tab
+    // needing it, and no tab view-model switches tabs — every SelectedTab assignment is this window's, a
+    // view's or Program.cs's. An enum of fifteen members for one caller is the speculative generalisation the
+    // code-style rule warns about, so the trigger stays unfired.
     void IShellContext.ActivateIntray() => SelectedTab = 1;
 
+
     Guid? IShellContext.CurrentUserId => _currentUserId;
+
+    /// <summary>The checked-out set changed: reload the folder on screen and re-raise this window's counts.</summary>
+    Task IShellContext.CheckoutsChangedAsync() => RefreshAfterCheckoutChangeAsync();
+
+    // After a check-out/check-in/override changes lock state: reload the open folder's list (lock glyphs) and
+    // the Check-out tab count.
+    private async Task RefreshAfterCheckoutChangeAsync()
+    {
+        if (_currentFolderId is { } folderId && _archiveDocumentId is null)
+        {
+            var selectedId = SelectedItem?.Id;
+            await LoadFolderContentsAsync(folderId);
+            if (selectedId is { } id && Items.FirstOrDefault(n => n.Id == id) is { } fresh)
+            {
+                SelectedItem = fresh;
+            }
+        }
+
+        OnPropertyChanged(nameof(CheckoutCount));
+        OnPropertyChanged(nameof(HasCheckouts));
+    }
+
 
     OcrLanguageCatalog? IShellContext.OcrLanguages => _ocrLanguages;
 

@@ -35,7 +35,7 @@ public class DesktopCalendarMonthTests
 
     private static CalendarTabViewModel OnMonth(DateOnly month, params AppointmentRowViewModel[] rows)
     {
-        var vm = new CalendarTabViewModel { Month = month };
+        var vm = new CalendarTabViewModel(new TestShell()) { Month = month };
         foreach (var row in rows)
         {
             vm.Appointments.Add(row);

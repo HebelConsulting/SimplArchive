@@ -35,8 +35,9 @@ public class DesktopCheckoutBulkTests
             await api.Checkout.SaveWorkingCopyAsync((await api.Checkout.GetCheckoutsAsync()).Single(c => c.Id == doc.Id), Encoding.UTF8.GetBytes("edited"));
         }
 
-        var vm = new CheckoutTabViewModel();
-        vm.Setup(api);
+        var shell = new TestShell();
+        var vm = new CheckoutTabViewModel(shell);
+        vm.SetApi(api);
         await vm.LoadAsync();
         var rows = vm.Items.Where(i => ids.Contains(i.Id)).ToList();
         Assert.Equal(2, rows.Count);
@@ -52,11 +53,9 @@ public class DesktopCheckoutBulkTests
         Assert.False(vm.SelectedCanExtend);
 
         // Bulk check-in: both promoted, one summary in the "{ok} of {n}" shape.
-        string? reported = null;
-        vm.StatusReporter = m => reported = m;
         await vm.CheckInSelectionAsync(rows);
 
-        Assert.Equal(string.Format(SimplArchive.Localization.Strings.Get("CoBulkCheckedIn"), 2, 2), reported);
+        Assert.Equal(string.Format(SimplArchive.Localization.Strings.Get("CoBulkCheckedIn"), 2, 2), shell.Reports.LastOrDefault());
         Assert.DoesNotContain(vm.Items, i => ids.Contains(i.Id)); // both released, so both left the tab
 
         // And a single-row selection flips the gates back the other way.
@@ -93,16 +92,15 @@ public class DesktopCheckoutBulkTests
             await api.Checkout.SaveWorkingCopyAsync((await api.Checkout.GetCheckoutsAsync()).Single(c => c.Id == doc.Id), Encoding.UTF8.GetBytes("edited"));
         }
 
-        var vm = new CheckoutTabViewModel();
-        vm.Setup(api);
+        var shell = new TestShell();
+        var vm = new CheckoutTabViewModel(shell);
+        vm.SetApi(api);
         await vm.LoadAsync();
         var rows = vm.Items.Where(i => ids.Contains(i.Id)).ToList();
 
-        string? reported = null;
-        vm.StatusReporter = m => reported = m;
         await vm.DiscardSelectionAsync(rows);
 
-        Assert.Equal(string.Format(SimplArchive.Localization.Strings.Get("CoBulkDiscarded"), 2, 2), reported);
+        Assert.Equal(string.Format(SimplArchive.Localization.Strings.Get("CoBulkDiscarded"), 2, 2), shell.Reports.LastOrDefault());
         Assert.DoesNotContain(vm.Items, i => ids.Contains(i.Id));
     }
 }

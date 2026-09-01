@@ -20,7 +20,9 @@ public sealed partial class PreviewViewModel : ObservableObject
     public SimplArchiveApiClient? Api { get; set; }
 
     // Optional status sink (the owner's status bar) — used for the "copied to clipboard" confirmation.
-    public Action<string>? StatusReporter { get; set; }
+    private readonly IStatusReporter _status;
+
+    public PreviewViewModel(IStatusReporter status) => _status = status;
 
     // Preview: exactly one of pages/text is shown; otherwise the placeholder. PreviewPages holds one page per
     // image, or one per PDF page (all pages, stacked) — each carrying its bitmap plus the search hit-overlay.
@@ -193,14 +195,14 @@ public sealed partial class PreviewViewModel : ObservableObject
     {
         if (result is { } r)
         {
-            StatusReporter?.Invoke(r.Appended ? $"Appended '{r.Word}' to the clipboard." : $"Copied '{r.Word}' to the clipboard.");
+            _status.Report(r.Appended ? $"Appended '{r.Word}' to the clipboard." : $"Copied '{r.Word}' to the clipboard.");
         }
     }
 
     // --- Sticky notes / positional annotations (ADR "Document annotations") --------------------------------
     // Only a real document-version preview carries notes (the annotations link + a dialog provider must both be
     // present); the Intray and Recycle-bin previews don't. The dialog itself is supplied by the view (code-behind)
-    // so the VM stays view-agnostic, mirroring StatusReporter.
+    // so the VM stays view-agnostic, mirroring the injected status reporter.
     public Func<AnnotationDialogRequest, Task<AnnotationDialogResult?>>? AnnotationDialog { get; set; }
 
     public sealed record AnnotationDialogRequest(string Text, string Color, string? AuthorName, bool CanEdit, bool CanDelete, bool IsShape = false);
@@ -226,7 +228,7 @@ public sealed partial class PreviewViewModel : ObservableObject
 
         AnnotationTool = 0; // notes and shape-drawing are mutually exclusive
         AddNoteMode = true;
-        StatusReporter?.Invoke("Click a spot on the page to place a note.");
+        _status.Report("Click a spot on the page to place a note.");
     }
 
     [RelayCommand]
@@ -266,7 +268,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         }
         catch (Exception e)
         {
-            StatusReporter?.Invoke(e is ApiActionException ae ? ae.Message : "Could not add the note.");
+            _status.Report(e is ApiActionException ae ? ae.Message : "Could not add the note.");
         }
     }
 
@@ -304,7 +306,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         }
         catch (Exception e)
         {
-            StatusReporter?.Invoke(e is ApiActionException ae ? ae.Message : "Could not update the note.");
+            _status.Report(e is ApiActionException ae ? ae.Message : "Could not update the note.");
         }
     }
 
@@ -331,7 +333,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         }
         catch (Exception e)
         {
-            StatusReporter?.Invoke(e is ApiActionException ae ? ae.Message : "Could not move the note.");
+            _status.Report(e is ApiActionException ae ? ae.Message : "Could not move the note.");
         }
 
         await LoadAnnotationsAsync();
@@ -359,7 +361,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         }
         catch (Exception e)
         {
-            StatusReporter?.Invoke(e is ApiActionException ae ? ae.Message : "Could not resize the note.");
+            _status.Report(e is ApiActionException ae ? ae.Message : "Could not resize the note.");
         }
 
         await LoadAnnotationsAsync();
@@ -401,7 +403,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         }
         catch (Exception e)
         {
-            StatusReporter?.Invoke(e is ApiActionException ae ? ae.Message : "Could not recolour the selection.");
+            _status.Report(e is ApiActionException ae ? ae.Message : "Could not recolour the selection.");
         }
 
         await LoadAnnotationsAsync();
@@ -427,7 +429,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         AnnotationTool = AnnotationTool == kind ? 0 : kind; // clicking the active tool turns it off
         if (AnnotationTool > 0)
         {
-            StatusReporter?.Invoke("Drag on the page to draw.");
+            _status.Report("Drag on the page to draw.");
         }
     }
 
@@ -449,7 +451,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         }
         catch (Exception e)
         {
-            StatusReporter?.Invoke(e is ApiActionException ae ? ae.Message : "Could not add the markup.");
+            _status.Report(e is ApiActionException ae ? ae.Message : "Could not add the markup.");
         }
     }
 
@@ -589,7 +591,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         }
         catch (Exception e)
         {
-            StatusReporter?.Invoke(e is ApiActionException ae ? ae.Message : "Could not move the selection.");
+            _status.Report(e is ApiActionException ae ? ae.Message : "Could not move the selection.");
         }
 
         await LoadAnnotationsAsync();
@@ -614,7 +616,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         }
         catch (Exception e)
         {
-            StatusReporter?.Invoke(e is ApiActionException ae ? ae.Message : "Could not delete the selection.");
+            _status.Report(e is ApiActionException ae ? ae.Message : "Could not delete the selection.");
         }
 
         _selectedAnnotationIds.Clear();
@@ -630,7 +632,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         HasClipboardAnnotations = _annotationClipboard.Count > 0;
         if (HasClipboardAnnotations)
         {
-            StatusReporter?.Invoke($"Copied {_annotationClipboard.Count} annotation(s).");
+            _status.Report($"Copied {_annotationClipboard.Count} annotation(s).");
         }
     }
 
@@ -659,7 +661,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         }
         catch (Exception e)
         {
-            StatusReporter?.Invoke(e is ApiActionException ae ? ae.Message : "Could not paste the annotations.");
+            _status.Report(e is ApiActionException ae ? ae.Message : "Could not paste the annotations.");
         }
 
         await LoadAnnotationsAsync();

@@ -29,11 +29,23 @@ namespace SimplArchive.DesktopClient.ViewModels;
 /// at construction, so it stays a <c>SetApi</c> call.
 /// </para>
 /// </remarks>
-public interface IShellContext
+/// <summary>
+/// Putting a message on the window's one status line.
+/// </summary>
+/// <remarks>
+/// Split out of <see cref="IShellContext"/> because a preview surface is a COMPONENT, not a tab: it needs to
+/// report and nothing else, and handing it <c>SaveLayout</c> and <c>ActivateIntray</c> would be an interface
+/// wider than its caller, which is how the fat interface starts. Constructor-injected all the same, so the
+/// silent-failure mode a settable <c>Action&lt;string&gt;?</c> carries is gone from components too.
+/// </remarks>
+public interface IStatusReporter
 {
     /// <summary>Puts a message on the single status line at the bottom of the window.</summary>
     void Report(string status);
+}
 
+public interface IShellContext : IStatusReporter
+{
     /// <summary>Persists the window's pane sizes, including the tab's own panes.</summary>
     void SaveLayout();
 
@@ -57,4 +69,12 @@ public interface IShellContext
 
     /// <summary>Who is signed in. Session state, so the shell answers it rather than each tab tracking it.</summary>
     Guid? CurrentUserId { get; }
+
+    /// <summary>
+    /// The set of checked-out documents changed. The window reloads the folder it is showing and re-raises its
+    /// own check-out counts — both its state, neither the tab's. Exactly one tab calls this, and it is on the
+    /// interface anyway because it is the SHELL's state; the alternative left Check-out holding the one
+    /// nullable settable callback this whole seam exists to remove.
+    /// </summary>
+    Task CheckoutsChangedAsync();
 }

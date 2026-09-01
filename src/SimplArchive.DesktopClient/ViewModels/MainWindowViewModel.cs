@@ -42,39 +42,40 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
 
     // The Recycle bin tab (ADR "Desktop recycle bin parity") — its own master-detail VM with an INDEPENDENT
     // preview (RecycleBin.Preview), so a deleted document's preview never entangles the Repositories/Intray one.
-    public RecycleBinTabViewModel RecycleBin { get; } = new();
+    public RecycleBinTabViewModel RecycleBin { get; }
 
     // The Search tab's own state (#517 tranche 2) — see SearchTabViewModel for what moved and why.
-    public SearchTabViewModel Search { get; } = new();
+    public SearchTabViewModel Search { get; }
 
     // The Check-out tab (ADR "Document check-out / check-in") — the caller's checked-out documents + their
     // local working-copy status.
-    public CheckoutTabViewModel Checkout { get; } = new();
+    public CheckoutTabViewModel Checkout { get; }
 
     // The Contacts and Calendar tabs (#564) — the caller's addressbooks and calendars. Their own VMs, like
     // Check-out above: a tab's worth of state belongs to the tab, and this file is far over the 1000-line
     // ceiling. Treated as ONE surface in review (ADR 0511), so they are declared together.
-    public ContactsTabViewModel ContactsTab { get; } = new();
+    public ContactsTabViewModel ContactsTab { get; }
 
-    public CalendarTabViewModel CalendarTab { get; } = new();
+    public CalendarTabViewModel CalendarTab { get; }
 
     // The environment strip (#501) — set from the chosen server profile at login, empty for the normal case.
     public EnvironmentBannerViewModel EnvBanner { get; } = new();
 
     public MainWindowViewModel()
     {
-        // Before LoadLayout: the tab restores its own four pane rows, so it has to exist by then.
+        // Everything the window owns is constructed FIRST: each takes this as its context, and LoadLayout
+        // below asks a tab to restore its own pane rows, so a tab built after it would be null (#517).
+        Preview = new PreviewViewModel(this);
+        SearchPreview = new PreviewViewModel(this);
         Intray = new IntrayTabViewModel(this);
+        RecycleBin = new RecycleBinTabViewModel(this);
+        Search = new SearchTabViewModel(this);
+        Checkout = new CheckoutTabViewModel(this);
+        Audit = new AuditTabViewModel(this);
+        ContactsTab = new ContactsTabViewModel(this);
+        CalendarTab = new CalendarTabViewModel(this);
+
         LoadLayout();
-        Preview.StatusReporter = m => Status = m;
-        SearchPreview.StatusReporter = m => Status = m;
-        RecycleBin.StatusReporter = m => Status = m;
-        Search.StatusReporter = m => Status = m;
-        Checkout.StatusReporter = m => Status = m;
-        Audit.StatusReporter = m => Status = m;
-        Checkout.OnChanged = RefreshAfterCheckoutChangeAsync;
-        ContactsTab.StatusReporter = m => Status = m;
-        CalendarTab.StatusReporter = m => Status = m;
         WireContentsFilter(); // VisibleItems follows Items through every mutation site (see the partial)
     }
 
@@ -90,8 +91,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         RecycleBin.SetApi(api);
         Search.SetApi(api);
         Search.OpenResultRequested = OpenSearchResultAsync;
-        ContactsTab.Setup(api);
-        CalendarTab.Setup(api);
+        ContactsTab.SetApi(api);
+        CalendarTab.SetApi(api);
         Intray.SetApi(api);
 
         // Read the API root's link relations once per session (ADR 0543): the root is the one URL a client may
@@ -468,12 +469,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     // The Repositories + Intray preview surface (state + render + find + hit-overlay + full-screen). Extracted to
     // its own PreviewViewModel so the Recycle bin tab can own a SEPARATE instance (RecycleBin.Preview) and the
     // two previews are never entangled — see ADR "Desktop recycle bin parity". Bound by the PreviewPane control.
-    public PreviewViewModel Preview { get; } = new();
+    public PreviewViewModel Preview { get; }
 
 
     // The Search tab's own preview instance, for the same reason as the Intray's (#462): a preview shown while
     // browsing search results must not leak into the Repositories tab, and vice versa.
-    public PreviewViewModel SearchPreview { get; } = new();
+    public PreviewViewModel SearchPreview { get; }
 
     // Leaves full-screen for ALL preview surfaces (the Esc key binding + a tab switch) — only the active tab's
     // preview can actually be full-screen, so clearing all is safe.
@@ -2243,8 +2244,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
             {
                 _localFolders = new LocalFolders(tenantName, userName);
                 NativeFileOpener.TempDirectoryOverride = _localFolders.TempDirectory;
-                Checkout.Setup(_api);
-                Audit.Setup(_api);
+                Checkout.SetApi(_api);
+                Audit.SetApi(_api);
             }
 
             await LoadTasksAsync(); // for the Tasks tab count badge
@@ -2398,24 +2399,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
 
         var fields = await _api.Documents.GetSystemFieldsAsync(versionsHref);
         return fields?.FileExtension ?? "";
-    }
-
-    // After a check-out/check-in/override changes lock state: reload the open folder's list (lock glyphs) and
-    // the Check-out tab count.
-    private async Task RefreshAfterCheckoutChangeAsync()
-    {
-        if (_currentFolderId is { } folderId && _archiveDocumentId is null)
-        {
-            var selectedId = SelectedItem?.Id;
-            await LoadFolderContentsAsync(folderId);
-            if (selectedId is { } id && Items.FirstOrDefault(n => n.Id == id) is { } fresh)
-            {
-                SelectedItem = fresh;
-            }
-        }
-
-        OnPropertyChanged(nameof(CheckoutCount));
-        OnPropertyChanged(nameof(HasCheckouts));
     }
 
     // Reconnect action for the crash-guard dialog (ADR "Desktop crash guard"): re-check the session and reload
@@ -6027,6 +6010,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     // Gates the Audit TabItem's visibility (set from whoami on login); the tab's own state lives on Audit.
     [ObservableProperty] private bool _canViewAuditLog;
 
-    public AuditTabViewModel Audit { get; } = new();
+    public AuditTabViewModel Audit { get; }
 
 }

@@ -16,17 +16,18 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
 {
     private SimplArchiveApiClient? _api;
 
-    // Set by MainWindowViewModel to route messages to the shared bottom status bar.
-    public Action<string>? StatusReporter { get; set; }
+    private readonly IShellContext _shell;
 
-    // Invoked after a check-in / unlock / discard, so the Repositories list (lock glyphs) + the tab count refresh.
-    public Func<Task>? OnChanged { get; set; }
+    public CheckoutTabViewModel(IShellContext shell)
+    {
+        _shell = shell;
+        Preview = new PreviewViewModel(shell);
+    }
 
-    public void Setup(SimplArchiveApiClient api)
+    public void SetApi(SimplArchiveApiClient api)
     {
         _api = api;
         Preview.Api = api;
-        Preview.StatusReporter = m => Report(m);
     }
 
     // ---- Detail panes (ADR "The Check-out tab shows what you are about to check in") -------------------
@@ -38,7 +39,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
     // 1000-line debt list and where this would otherwise have added a dozen more properties.
 
     /// <summary>The working copy's preview — NOT the archived version (ADR 0543's `preview` rel on the row).</summary>
-    public PreviewViewModel Preview { get; } = new();
+    public PreviewViewModel Preview { get; }
 
     public ObservableCollection<IndexFieldViewModel> IndexFields { get; } = [];
 
@@ -207,7 +208,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
     private void Report(string message)
     {
         Status = message;
-        StatusReporter?.Invoke(message);
+        _shell.Report(message);
     }
 
     public async Task LoadAsync()
@@ -475,10 +476,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
     private async Task ReloadAllAsync()
     {
         await LoadAsync();
-        if (OnChanged is not null)
-        {
-            await OnChanged();
-        }
+        await _shell.CheckoutsChangedAsync();
     }
 
     // Populates the Check-out tab for the headless screenshot (no network): one modified (Edit / Check in / Discard)

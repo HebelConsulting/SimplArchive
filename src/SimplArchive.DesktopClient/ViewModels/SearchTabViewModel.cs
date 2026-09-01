@@ -32,12 +32,16 @@ public partial class SearchTabViewModel : ObservableObject
     private SimplArchiveApiClient? _api;
 
     /// <summary>Where this tab's status line goes — the shell wires it to its own status bar.</summary>
-    public Action<string>? StatusReporter { get; set; }
+    private readonly IShellContext _shell;
 
     /// <summary>This tab's OWN preview, never shared with another tab.</summary>
-    public PreviewViewModel Preview { get; } = new();
+    public PreviewViewModel Preview { get; }
 
-    public SearchTabViewModel() => Preview.StatusReporter = Report;
+    public SearchTabViewModel(IShellContext shell)
+    {
+        _shell = shell;
+        Preview = new PreviewViewModel(shell);
+    }
 
     public void SetApi(SimplArchiveApiClient api) => _api = api;
 
@@ -68,7 +72,7 @@ public partial class SearchTabViewModel : ObservableObject
         await SearchAsync();
     }
 
-    private void Report(string message) => StatusReporter?.Invoke(message);
+    private void Report(string message) => _shell.Report(message);
 
     public ObservableCollection<SearchResultViewModel> SearchResults { get; } = [];
 

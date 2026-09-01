@@ -21,8 +21,8 @@ public class DesktopCalendarTabTests
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
         Assert.NotNull(await api.Profile.GetPersonalRepositoryAsync());
 
-        var vm = new CalendarTabViewModel();
-        vm.Setup(api);
+        var vm = new CalendarTabViewModel(new TestShell());
+        vm.SetApi(api);
         await vm.LoadAsync();
 
         var mine = Assert.Single(vm.Collections, c => c.Collection.IsPersonalDefault);
@@ -64,8 +64,8 @@ public class DesktopCalendarTabTests
             + $"SUMMARY:Sprint planning\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
         await api.Documents.UploadFileAsync(calendar.Href("children"), $"evt-{suffix}.ics", Encoding.UTF8.GetBytes(ics));
 
-        var vm = new CalendarTabViewModel();
-        vm.Setup(api);
+        var vm = new CalendarTabViewModel(new TestShell());
+        vm.SetApi(api);
         await vm.LoadAsync();
 
         // Named by the event's SUMMARY, not by the file — that rename is the proof the classifier ran rather
@@ -83,8 +83,8 @@ public class DesktopCalendarTabTests
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
         Assert.NotNull(await api.Profile.GetPersonalRepositoryAsync());
 
-        var vm = new CalendarTabViewModel();
-        vm.Setup(api);
+        var vm = new CalendarTabViewModel(new TestShell());
+        vm.SetApi(api);
         await vm.LoadAsync();
 
         var target = Assert.Single(vm.CreateTargets());
@@ -120,7 +120,7 @@ public class DesktopCalendarTabTests
     [Fact]
     public void The_row_and_the_detail_pane_tell_the_same_time()
     {
-        var vm = new CalendarTabViewModel();
+        var vm = new CalendarTabViewModel(new TestShell());
         vm.PopulateDemoForScreenshot();
 
         var row = vm.Appointments.First(a => a.Start is not null);
@@ -133,7 +133,7 @@ public class DesktopCalendarTabTests
     [Fact]
     public void An_undated_appointment_sorts_after_the_dated_ones()
     {
-        var vm = new CalendarTabViewModel();
+        var vm = new CalendarTabViewModel(new TestShell());
         vm.PopulateDemoForScreenshot();
         vm.Appointments.Add(new AppointmentRowViewModel
         {

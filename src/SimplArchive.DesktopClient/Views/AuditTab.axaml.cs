@@ -39,11 +39,11 @@ public partial class AuditTab : UserControl
             var bytes = await bytesTask;
             await using var stream = await file.OpenWriteAsync();
             await stream.WriteAsync(bytes);
-            vm.StatusReporter?.Invoke($"Exported the audit log to {file.Path.LocalPath}.");
+            vm.Report($"Exported the audit log to {file.Path.LocalPath}.");
         }
         catch (Exception ex)
         {
-            vm.StatusReporter?.Invoke($"Could not export the audit log: {ex.Message}");
+            vm.Report($"Could not export the audit log: {ex.Message}");
         }
     });
 

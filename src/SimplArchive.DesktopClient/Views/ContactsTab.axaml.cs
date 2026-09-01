@@ -62,7 +62,7 @@ public partial class ContactsTab : UserControl
         // The row the user clicked, not the pane's loaded state (ADR 0559).
         if (await tab.LoadCardAsync(row) is not { } loaded)
         {
-            tab.StatusReporter?.Invoke(Strings.Get("ContactNotEditable"));
+            tab.Report(Strings.Get("ContactNotEditable"));
             return;
         }
 

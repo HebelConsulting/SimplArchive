@@ -9,7 +9,7 @@ public class DesktopWatermarkTests
     [Fact]
     public void Watermark_shows_only_with_text_and_a_preview()
     {
-        var pv = new PreviewViewModel();
+        var pv = new PreviewViewModel(new TestShell());
 
         // No text → no watermark, even with a preview.
         pv.HasPreviewPages = true;
