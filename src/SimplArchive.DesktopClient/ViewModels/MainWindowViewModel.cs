@@ -322,7 +322,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     // Every read-write field is only editable while the whole pane is in edit mode (ADR "Single pane-level
     // edit toggle on the detail pane"). OCR languages shows only for a TIFF-sourced document.
     [ObservableProperty] private string _sysName = string.Empty;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(SysDocumentDateText))] private DateTimeOffset? _sysDocumentDate;
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(SysDocumentDateText))] private DateTime? _sysDocumentDate;
     [ObservableProperty] private string _sysCreated = string.Empty;
     [ObservableProperty] private string _sysCreatedBy = string.Empty;
     [ObservableProperty] private string _sysFileExtension = string.Empty;
@@ -4760,7 +4760,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         // The transitions the detail pane may offer (#691) — skipped for the states that offer nothing.
         await LoadWorkflowTransitionsAsync(fields.WorkflowStatus, versionsHref);
         SysFileExtension = fields.FileExtension;
-        SysDocumentDate = DateTimeOffset.TryParse(fields.DocumentDate, out var d) ? new DateTimeOffset(d.Date, TimeSpan.Zero) : null;
+        SysDocumentDate = DateTime.TryParse(fields.DocumentDate, out var d) ? d.Date : null;
         SysHasTiff = fields.HasTiffVersion;
 
         if (SysHasTiff)
@@ -4814,7 +4814,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
 
     private Guid? _originalMaskId;
     private string _originalName = string.Empty;
-    private DateTimeOffset? _originalDocumentDate;
+    private DateTime? _originalDocumentDate;
     private bool _loadingMaskEdit;
 
     [RelayCommand]
@@ -5390,7 +5390,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         SysFileExtension = ".pdf";
         SysCreated = "2026-07-15 09:12";
         SysCreatedBy = "Demo Admin";
-        SysDocumentDate = new DateTimeOffset(2026, 6, 28, 0, 0, 0, TimeSpan.Zero);
+        SysDocumentDate = new DateTime(2026, 6, 28);
         SysHasTiff = false;
         SysOcrLanguages = "German, French";
         MaskLine = "Mask: Basic Entry · version 1";

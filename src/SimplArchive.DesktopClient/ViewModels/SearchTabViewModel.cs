@@ -94,13 +94,13 @@ public partial class SearchTabViewModel : ObservableObject
 
     [ObservableProperty] private SearchRepoOption? _selectedSearchRepository;
 
-    [ObservableProperty] private DateTimeOffset? _docDateFrom;
+    [ObservableProperty] private DateTime? _docDateFrom;
 
-    [ObservableProperty] private DateTimeOffset? _docDateTo;
+    [ObservableProperty] private DateTime? _docDateTo;
 
-    [ObservableProperty] private DateTimeOffset? _createdFrom;
+    [ObservableProperty] private DateTime? _createdFrom;
 
-    [ObservableProperty] private DateTimeOffset? _createdTo;
+    [ObservableProperty] private DateTime? _createdTo;
 
     [ObservableProperty] private string _createdByFilter = string.Empty;
 

@@ -39,7 +39,7 @@
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0"
                     IsVisible="{Binding ShowCreate}">
             <TextBlock Text="{loc:Tr ExtLinkExpires}" VerticalAlignment="Center" />
-            <DatePicker SelectedDate="{Binding Expiry}" />
+            <CalendarDatePicker SelectedDate="{Binding Expiry}" Watermark="yyyy-MM-dd" />
             <TextBlock Text="{loc:Tr ExtLinkMaxAccesses}" VerticalAlignment="Center" />
             <NumericUpDown Value="{Binding MaxAccesses}" Minimum="1" Width="110" />
         </StackPanel>

@@ -28,7 +28,7 @@ public partial class ReminderDialogViewModel : ObservableObject
 
     public string[] RecurrenceOptions { get; } = ["Doesn't repeat", "Daily", "Weekly", "Monthly"];
 
-    [ObservableProperty] private DateTimeOffset? _reminderDate = DateTimeOffset.Now.AddDays(1);
+    [ObservableProperty] private DateTime? _reminderDate = DateTime.Now.AddDays(1);
     [ObservableProperty] private TimeSpan? _reminderTime = new(9, 0, 0);
     [ObservableProperty] private string _note = string.Empty;
     [ObservableProperty] private int _recurrenceIndex;
@@ -110,7 +110,8 @@ public partial class ReminderDialogViewModel : ObservableObject
 
         try
         {
-            var when = new DateTimeOffset(date.Date + (ReminderTime ?? TimeSpan.Zero), date.Offset);
+            var local = date.Date + (ReminderTime ?? TimeSpan.Zero);
+            var when = new DateTimeOffset(local, TimeZoneInfo.Local.GetUtcOffset(local));
             var targetId = SelectedTarget is { } t && t.Id != Guid.Empty ? t.Id : (Guid?)null;
             await _api.Documents.CreateReminderAsync(_remindersHref, when, string.IsNullOrWhiteSpace(Note) ? null : Note, RecurrenceIndex, targetId);
             Note = string.Empty;

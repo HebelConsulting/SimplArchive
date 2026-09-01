@@ -20,7 +20,7 @@ public partial class ExtendRetentionDialog : Window
             Prompt.Text = $"Retain '{documentName}' until:";
         }
 
-        UntilPicker.SelectedDate = DateTimeOffset.Now.AddYears(1);
+        UntilPicker.SelectedDate = DateTime.Now.AddYears(1);
     }
 
     private void OnConfirm(object? sender, RoutedEventArgs e)

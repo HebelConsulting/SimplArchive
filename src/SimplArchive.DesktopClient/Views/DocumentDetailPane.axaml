@@ -94,7 +94,7 @@
 
                     <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr VerColDocDate}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
                     <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SysDocumentDateText}" VerticalAlignment="Center" Margin="0,2" IsVisible="{Binding !IsEditing}" />
-                    <DatePicker Grid.Row="2" Grid.Column="1" SelectedDate="{Binding SysDocumentDate}" HorizontalAlignment="Left" Margin="0,2" IsVisible="{Binding IsEditing}" />
+                    <CalendarDatePicker Grid.Row="2" Grid.Column="1" SelectedDate="{Binding SysDocumentDate}" HorizontalAlignment="Left" Margin="0,2" IsVisible="{Binding IsEditing}" Watermark="yyyy-MM-dd" />
 
                     <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:Tr SysOcrLanguages}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" IsVisible="{Binding SysHasTiff}" />
                     <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SysOcrLanguages}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,2" IsVisible="{Binding SysHasTiff}" />
@@ -204,7 +204,7 @@
                                 <Grid ColumnDefinitions="180,*" Margin="0,3">
                                     <TextBlock Grid.Column="0" Text="{Binding Label}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
                                     <Panel Grid.Column="1">
-                                        <DatePicker IsVisible="{Binding IsDate}" HorizontalAlignment="Left" SelectedDate="{Binding DateValue}" />
+                                        <CalendarDatePicker IsVisible="{Binding IsDate}" HorizontalAlignment="Left" SelectedDate="{Binding DateValue}" Watermark="yyyy-MM-dd" />
                                         <CheckBox IsVisible="{Binding IsBoolean}" IsChecked="{Binding BoolValue}" />
                                         <TextBox IsVisible="{Binding IsMultiLine}" Text="{Binding TextValue}" IsReadOnly="{Binding Locked}" AcceptsReturn="True" Height="60" Watermark="{loc:Tr OneValuePerLine}" />
                                         <TextBox IsVisible="{Binding IsSingleLine}" Text="{Binding TextValue}" Height="28" Padding="4,2" VerticalContentAlignment="Center" />

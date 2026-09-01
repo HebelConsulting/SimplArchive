@@ -72,13 +72,13 @@
             <StackPanel Spacing="6" Margin="0,6,0,0">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <TextBlock Text="{loc:Tr VerColDocDate}" Width="100" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" />
-                    <DatePicker SelectedDate="{Binding DocDateFrom}" />
-                    <DatePicker SelectedDate="{Binding DocDateTo}" />
+                    <CalendarDatePicker SelectedDate="{Binding DocDateFrom}" Watermark="yyyy-MM-dd" />
+                    <CalendarDatePicker SelectedDate="{Binding DocDateTo}" Watermark="yyyy-MM-dd" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <TextBlock Text="{loc:Tr SysCreated}" Width="100" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" />
-                    <DatePicker SelectedDate="{Binding CreatedFrom}" />
-                    <DatePicker SelectedDate="{Binding CreatedTo}" />
+                    <CalendarDatePicker SelectedDate="{Binding CreatedFrom}" Watermark="yyyy-MM-dd" />
+                    <CalendarDatePicker SelectedDate="{Binding CreatedTo}" Watermark="yyyy-MM-dd" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <TextBlock Text="{loc:Tr SysCreatedBy}" Width="100" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" />
@@ -96,7 +96,7 @@
                                         <DataTemplate x:CompileBindings="False"><TextBlock Text="{Binding Label}" /></DataTemplate>
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>
-                                <DatePicker IsVisible="{Binding IsDate}" SelectedDate="{Binding DateValue}" />
+                                <CalendarDatePicker IsVisible="{Binding IsDate}" SelectedDate="{Binding DateValue}" Watermark="yyyy-MM-dd" />
                                 <CheckBox IsVisible="{Binding IsBoolean}" IsChecked="{Binding BooleanValue}" Content="true" VerticalAlignment="Center" />
                                 <TextBox IsVisible="{Binding IsTextLike}" Width="180" Watermark="{loc:Tr FilterValue}" Text="{Binding Value}"
                                          v:SearchField.Clearable="True" />

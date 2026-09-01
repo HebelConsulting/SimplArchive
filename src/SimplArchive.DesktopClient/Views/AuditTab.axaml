@@ -38,8 +38,8 @@
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,6">
             <TextBox Watermark="{loc:Tr MwAuditActionPh}" Text="{Binding AuditActionFilter}" Width="230"
                      v:SearchField.Clearable="True" />
-            <DatePicker SelectedDate="{Binding AuditFrom}" />
-            <DatePicker SelectedDate="{Binding AuditTo}" />
+            <CalendarDatePicker SelectedDate="{Binding AuditFrom}" Watermark="yyyy-MM-dd" />
+            <CalendarDatePicker SelectedDate="{Binding AuditTo}" Watermark="yyyy-MM-dd" />
             <Border Classes="ribbon">
                 <StackPanel Orientation="Horizontal" Spacing="4">
                     <Button AutomationProperties.AutomationId="audit-apply" Command="{Binding RunAuditSearchCommand}"

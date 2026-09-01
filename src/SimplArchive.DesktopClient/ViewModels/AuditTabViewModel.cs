@@ -31,8 +31,8 @@ public sealed partial class AuditTabViewModel : ObservableObject
     public ObservableCollection<AuditEventRowViewModel> AuditEvents { get; } = [];
 
     [ObservableProperty] private string _auditActionFilter = string.Empty;
-    [ObservableProperty] private DateTimeOffset? _auditFrom;
-    [ObservableProperty] private DateTimeOffset? _auditTo;
+    [ObservableProperty] private DateTime? _auditFrom;
+    [ObservableProperty] private DateTime? _auditTo;
     [ObservableProperty] private bool _auditHasMore;
     [ObservableProperty] private bool _auditBusy;
     [ObservableProperty] private string _auditVerifyStatus = string.Empty;

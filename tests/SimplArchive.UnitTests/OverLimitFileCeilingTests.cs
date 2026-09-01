@@ -255,7 +255,10 @@ public class OverLimitFileCeilingTests
         ["src/SimplArchive.Client/Components/Tabs/IntrayTab.razor"] = 1_482,
 
         // 987 (#520, "Program.cs leaves the debt list") → 1,287. Left by burn-down, re-crossed by +300.
-        ["src/SimplArchive.DesktopClient/Program.cs"] = 1_287,
+        // 1,287 → 1237: this file is over the limit BECAUSE all 28 headless hooks are inline in it, so a new hook
+        // paid its way by moving the largest existing one (--list-scroll-test, 64 lines) into its own class
+        // alongside it. The guard asked for exactly this — give new code a home rather than raise the number.
+        ["src/SimplArchive.DesktopClient/Program.cs"] = 1237,
 
         // 907 at the #466 close → 1,050. Crossed quietly; no single change is to blame, which is the usual way.
         ["src/SimplArchive.Api/Documents/RepositoryImporter.cs"] = 1_050,

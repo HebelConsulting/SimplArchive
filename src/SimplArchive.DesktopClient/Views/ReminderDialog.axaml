@@ -30,7 +30,7 @@
 
         <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="8">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr RemDate}" VerticalAlignment="Center" />
-            <DatePicker Grid.Row="0" Grid.Column="1" SelectedDate="{Binding ReminderDate}" HorizontalAlignment="Stretch" />
+            <CalendarDatePicker Grid.Row="0" Grid.Column="1" SelectedDate="{Binding ReminderDate}" HorizontalAlignment="Stretch" Watermark="yyyy-MM-dd" />
 
             <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr RemTime}" VerticalAlignment="Center" />
             <TimePicker Grid.Row="1" Grid.Column="1" SelectedTime="{Binding ReminderTime}" ClockIdentifier="24HourClock" HorizontalAlignment="Left" />

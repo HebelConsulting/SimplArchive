@@ -52,7 +52,7 @@
              fourth column got none and the picker rendered as a two-pixel sliver. Found by capturing it. -->
         <Grid ColumnDefinitions="110,270,8,210,*" RowDefinitions="Auto,Auto,Auto,Auto">
           <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr ApptStart}" VerticalAlignment="Center" />
-          <DatePicker Grid.Row="0" Grid.Column="1" SelectedDate="{Binding StartDate}" />
+          <CalendarDatePicker Grid.Row="0" Grid.Column="1" SelectedDate="{Binding StartDate}" Watermark="yyyy-MM-dd" />
           <TimePicker Grid.Row="0" Grid.Column="3" SelectedTime="{Binding StartTime}"
                       IsVisible="{Binding !IsAllDay}" />
           <ComboBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" ItemsSource="{Binding ZoneChoices}"
@@ -62,7 +62,7 @@
                     AutomationProperties.Name="{loc:Tr ApptStartZone}" />
 
           <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr ApptEnd}" VerticalAlignment="Center" />
-          <DatePicker Grid.Row="2" Grid.Column="1" SelectedDate="{Binding EndDate}" />
+          <CalendarDatePicker Grid.Row="2" Grid.Column="1" SelectedDate="{Binding EndDate}" Watermark="yyyy-MM-dd" />
           <TimePicker Grid.Row="2" Grid.Column="3" SelectedTime="{Binding EndTime}"
                       IsVisible="{Binding !IsAllDay}" />
           <ComboBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="4" ItemsSource="{Binding ZoneChoices}"

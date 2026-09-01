@@ -325,9 +325,9 @@ public static class WindowShots
                     Summary = "Weekly sync",
                     Location = "Room 3",
                     Description = "Agenda in the shared folder.",
-                    StartDate = new DateTimeOffset(new DateTime(2026, 9, 1), TimeSpan.Zero),
+                    StartDate = new DateTime(2026, 9, 1),
                     StartTime = new TimeSpan(14, 0, 0),
-                    EndDate = new DateTimeOffset(new DateTime(2026, 9, 1), TimeSpan.Zero),
+                    EndDate = new DateTime(2026, 9, 1),
                     EndTime = new TimeSpan(15, 0, 0),
                     // Two DIFFERENT zones, so the capture shows what one field could never express (ADR 0690).
                     StartTimeZoneId = "Europe/Zurich",

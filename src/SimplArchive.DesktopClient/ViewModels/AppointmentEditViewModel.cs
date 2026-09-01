@@ -27,9 +27,9 @@ public sealed partial class AppointmentEditViewModel : StructuredEditFormViewMod
     /// times shown are the APPOINTMENT'S own wall clock rather than a value converted into the viewer's zone
     /// (ADR 0631 decision 5).
     /// </summary>
-    [ObservableProperty] private DateTimeOffset? _startDate;
+    [ObservableProperty] private DateTime? _startDate;
     [ObservableProperty] private TimeSpan? _startTime;
-    [ObservableProperty] private DateTimeOffset? _endDate;
+    [ObservableProperty] private DateTime? _endDate;
     [ObservableProperty] private TimeSpan? _endTime;
 
     /// <summary>
@@ -101,13 +101,13 @@ public sealed partial class AppointmentEditViewModel : StructuredEditFormViewMod
 
         if (Parse(Text(body, "start")) is { } start)
         {
-            model.StartDate = new DateTimeOffset(start.Date, TimeSpan.Zero);
+            model.StartDate = start.Date;
             model.StartTime = start.TimeOfDay;
         }
 
         if (Parse(Text(body, "end")) is { } end)
         {
-            model.EndDate = new DateTimeOffset(end.Date, TimeSpan.Zero);
+            model.EndDate = end.Date;
             model.EndTime = end.TimeOfDay;
         }
 
@@ -143,9 +143,9 @@ public sealed partial class AppointmentEditViewModel : StructuredEditFormViewMod
         // value's Kind is Local, and DateTime.Now.Date is Local — so the obvious spelling crashes the dialog on
         // every machine east or west of UTC. Which is also what a zero offset means here: the form holds a wall
         // clock and the zone travels separately, the same shape `From` produces when it parses a stored time.
-        StartDate = new DateTimeOffset(start.Date, TimeSpan.Zero);
+        StartDate = start.Date;
         StartTime = start.TimeOfDay;
-        EndDate = new DateTimeOffset(end.Date, TimeSpan.Zero);
+        EndDate = end.Date;
         EndTime = end.TimeOfDay;
     }
 

@@ -48,7 +48,7 @@ public partial class ExternalLinksDialogViewModel : ObservableObject
     // with offset 0 only, so sending one used to 500 the create endpoint for anybody not sitting in UTC. The
     // server now normalises inbound timestamps, but sending what we mean is still the honest thing — the user
     // picks a DATE, and its zone is not part of what they chose.
-    [ObservableProperty] private DateTimeOffset? _expiry = DateTimeOffset.UtcNow.AddDays(30);
+    [ObservableProperty] private DateTime? _expiry = DateTime.UtcNow.AddDays(30);
 
     [ObservableProperty] private int? _maxAccesses;
 
