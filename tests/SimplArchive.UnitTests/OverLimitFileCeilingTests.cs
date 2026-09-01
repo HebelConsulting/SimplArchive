@@ -131,7 +131,7 @@ public class OverLimitFileCeilingTests
         // preview, the selection, the mask editor -- so a separate class would take the whole view model as a
         // parameter and be a partial wearing a constructor. Nor can it move to the test project: it seeds a
         // RUNNING application's view model, and ScreenshotRenderer and Program.cs call it.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 5305,
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 4995,
 
         // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
         // the one authenticated ApiCore. Four areas left it:
