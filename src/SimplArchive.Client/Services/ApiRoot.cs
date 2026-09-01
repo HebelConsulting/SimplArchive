@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using SimplArchive.Client.Hypermedia;
 
 namespace SimplArchive.Client.Services;
 
@@ -169,12 +170,5 @@ public sealed class ApiRoot
         // Only the "me" resource carries this; the API root leaves it null, which is exactly what a principal
         // with no personal account gets too (#464).
         public string? Email { get; set; }
-    }
-
-    private sealed record LinkResponse
-    {
-        public string Rel { get; set; } = string.Empty;
-
-        public string Href { get; set; } = string.Empty;
     }
 }

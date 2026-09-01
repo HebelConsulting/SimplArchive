@@ -228,7 +228,6 @@
         return string.IsNullOrEmpty(href) ? null : (href.StartsWith("http") ? href : href.TrimStart('/'));
     }
 
-    private record LinkResponse { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
     private record DocumentLinksResponse { public List<LinkResponse> Links { get; set; } = []; }
     private record WorkflowResponse
     {

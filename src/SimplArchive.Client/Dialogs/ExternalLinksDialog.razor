@@ -237,14 +237,11 @@
 
     private static string? RelativeHref(List<LinkResponse>? links, string rel)
     {
+        // Null still means "no such rel" -- ADR 0543's "not available to you, here, now", which is what the
+        // callers gate their affordances on. An href that is PRESENT but empty is not followable either, so it
+        // reads as absent rather than as a link to the base address.
         var href = links?.FirstOrDefault(l => l.Rel == rel)?.Href;
-        return href is null ? null : href.TrimStart('/');
-    }
-
-    private record LinkResponse
-    {
-        public string Rel { get; set; } = "";
-        public string? Href { get; set; }
+        return string.IsNullOrEmpty(href) ? null : href.TrimStart('/');
     }
 
     private record ExternalLinkListResponse
