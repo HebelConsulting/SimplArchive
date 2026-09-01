@@ -56,4 +56,42 @@ public static class DocumentTreeQueries
 
         return subtree;
     }
+
+    /// <summary>
+    /// The ACL scope that governs a node: the nearest ancestor that BREAKS inheritance, else the root. Asked by
+    /// both the ACL editor and the effective-access view, so it lives beside the other tree walks rather than
+    /// being copied into each (ADR 0571's rule for query composition).
+    /// </summary>
+    // The ACL scope a currently-inheriting document draws its grants from: the nearest ancestor that itself
+    // breaks inheritance, else the repository root (whose own grants are the ultimate fallback). Mirrors the
+    // resolution in EffectiveRightsCalculator (ADR "Document ACL inheritance resolution") — one query per
+    // ancestor level, walking up from the parent.
+    public static async Task<Guid?> ResolveGoverningScopeAsync(this SimplArchiveDbContext dbContext, Guid? parentId, CancellationToken cancellationToken)
+    {
+        var currentId = parentId;
+        Guid? rootId = null;
+
+        while (currentId is { } id)
+        {
+            var node = await dbContext.Documents
+                .Where(d => d.Id == id)
+                .Select(d => new { d.Id, d.ParentId, d.BreaksInheritance })
+                .SingleOrDefaultAsync(cancellationToken);
+
+            if (node is null)
+            {
+                break;
+            }
+
+            if (node.BreaksInheritance)
+            {
+                return node.Id;
+            }
+
+            rootId = node.Id;
+            currentId = node.ParentId;
+        }
+
+        return rootId;
+    }
 }

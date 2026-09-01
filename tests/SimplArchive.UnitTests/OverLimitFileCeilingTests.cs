@@ -266,16 +266,11 @@ public class OverLimitFileCeilingTests
         // Born over the limit (2026-08-17, #562 slice 3) with no exception on record.
         ["src/SimplArchive.Api/Imap/ImapWrites.cs"] = 1_022,
 
-        // 951 (#516, "Three controllers leave the 1000-line debt list") → 1,019. Re-crossed.
-        ["src/SimplArchive.Api/Controllers/UsersController.cs"] = 1_019,
-
-        // 947 at the #466 close → 1,007. Its GetCallerRightsAsync returns EffectiveRights? and so was NOT one of
-        // the eleven copies #911 deleted — it needs its own burn-down rather than inheriting that one's.
-        ["src/SimplArchive.Api/Controllers/AclEntriesController.cs"] = 1_007,
-
-        // 993 (#516) → 1,001. Re-crossed by eight lines. Like AclEntries it kept its caller-access methods
-        // through #911 — they already forwarded, so there was nothing there to delete.
-        ["src/SimplArchive.Api/Controllers/DocumentVersionsController.cs"] = 1_001,
+        // The three barely-over controllers are GONE from this list — UsersController 1,019 → 855,
+        // AclEntriesController 1,007 → 975, DocumentVersionsController 1,001 → 991 — and deleting their entries
+        // is safe because Every_authored_file_over_the_limit_has_an_entry now measures them anyway (ADR 0732).
+        // This is that check's first real use: before it, "under 1000" meant "unwatched", which is how
+        // UsersController and DocumentVersionsController came back after #516 burned them down.
 
         // tests/ and tools/ are authored too, and the general check below now measures them. Both entered at
         // their measured size on the owner's instruction (2026-09-01); neither has been looked at for a split.

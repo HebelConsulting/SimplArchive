@@ -141,7 +141,7 @@ public class DocumentVersionsController : ControllerBase
             return NotFound();
         }
 
-        if (!await CanEditContentAsync(documentId, cancellationToken))
+        if (!await _access.CanEditContentAsync(documentId, cancellationToken))
         {
             return Forbid();
         }
@@ -379,7 +379,7 @@ public class DocumentVersionsController : ControllerBase
             return NotFound();
         }
 
-        if (!await CanReadContentAsync(documentId, cancellationToken))
+        if (!await _access.CanReadContentAsync(documentId, cancellationToken))
         {
             return Forbid();
         }
@@ -657,7 +657,7 @@ public class DocumentVersionsController : ControllerBase
             return NotFound();
         }
 
-        if (!await CanEditContentAsync(documentId, cancellationToken))
+        if (!await _access.CanEditContentAsync(documentId, cancellationToken))
         {
             return Forbid();
         }
@@ -726,7 +726,7 @@ public class DocumentVersionsController : ControllerBase
             return NotFound(); // no such confirmed version of this document
         }
 
-        if (!await CanEditContentAsync(documentId, cancellationToken))
+        if (!await _access.CanEditContentAsync(documentId, cancellationToken))
         {
             return Forbid();
         }
@@ -955,16 +955,6 @@ public class DocumentVersionsController : ControllerBase
 
     private Task<EffectiveRights> GetCallerRightsAsync(Guid documentId, CancellationToken cancellationToken) =>
         _access.GetCallerRightsAsync(documentId, cancellationToken);
-
-    private async Task<bool> CanEditContentAsync(Guid documentId, CancellationToken cancellationToken)
-    {
-        return (await GetCallerRightsAsync(documentId, cancellationToken)).CanEditContent;
-    }
-
-    private async Task<bool> CanReadContentAsync(Guid documentId, CancellationToken cancellationToken)
-    {
-        return (await GetCallerRightsAsync(documentId, cancellationToken)).CanReadContent;
-    }
 
     // Content access for a specific version (ADR "Workflow status-gating"): requires CanReadContent, and — if
     // the version is "gated" (it entered a workflow and isn't yet Released) — also CanEditContent (editors /

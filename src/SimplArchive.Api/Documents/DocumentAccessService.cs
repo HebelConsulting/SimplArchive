@@ -76,6 +76,15 @@ public sealed class DocumentAccessService(
     public async Task<bool> CanEditIndexDataAsync(Guid documentId, CancellationToken cancellationToken) =>
         (await GetCallerRightsAsync(documentId, cancellationToken)).CanEditIndexData;
 
+    public async Task<bool> CanManagePermissionsAsync(Guid documentId, CancellationToken cancellationToken) =>
+        (await GetCallerRightsAsync(documentId, cancellationToken)).CanManagePermissions;
+
+    public async Task<bool> CanReadContentAsync(Guid documentId, CancellationToken cancellationToken) =>
+        (await GetCallerRightsAsync(documentId, cancellationToken)).CanReadContent;
+
+    public async Task<bool> CanEditContentAsync(Guid documentId, CancellationToken cancellationToken) =>
+        (await GetCallerRightsAsync(documentId, cancellationToken)).CanEditContent;
+
     /// <summary>
     /// Whichever principal actually made this request, for Document/DocumentVersion creator attribution
     /// (CreatedByUserId/CreatedByServiceAccountId, CHECK-constrained to exactly one).

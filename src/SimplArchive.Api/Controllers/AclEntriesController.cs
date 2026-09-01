@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Errors;
 using SimplArchive.Api.Errors.Exceptions.Authorization;
 using SimplArchive.Api.Errors.Exceptions.Acl;
+using SimplArchive.Api.Documents;
 using SimplArchive.Api.Hypermedia;
 using SimplArchive.Api.Pagination;
 using SimplArchive.Application.Abstractions;
@@ -549,7 +550,7 @@ public class AclEntriesController : ControllerBase
         if (request.BreaksInheritance)
         {
             // Copy the governing scope's own grants down so effective access is preserved, then break.
-            var governingScopeId = await ResolveGoverningScopeAsync(document.ParentId, cancellationToken);
+            var governingScopeId = await _dbContext.ResolveGoverningScopeAsync(document.ParentId, cancellationToken);
             if (governingScopeId is { } sourceId)
             {
                 var sourceEntries = await _dbContext.AclEntries.Where(a => a.DocumentId == sourceId).ToListAsync(cancellationToken);
@@ -624,7 +625,7 @@ public class AclEntriesController : ControllerBase
         // ancestor / root (whose grants it inherits).
         Guid? scopeId = document.BreaksInheritance
             ? document.Id
-            : await ResolveGoverningScopeAsync(document.ParentId, cancellationToken);
+            : await _dbContext.ResolveGoverningScopeAsync(document.ParentId, cancellationToken);
 
         var inheritedFrom = scopeId is { } sid && sid != documentId
             ? await BuildPathAsync(sid, cancellationToken)
@@ -827,39 +828,6 @@ public class AclEntriesController : ControllerBase
 
         names.Reverse();
         return string.Join(" / ", names);
-    }
-
-    // The ACL scope a currently-inheriting document draws its grants from: the nearest ancestor that itself
-    // breaks inheritance, else the repository root (whose own grants are the ultimate fallback). Mirrors the
-    // resolution in EffectiveRightsCalculator (ADR "Document ACL inheritance resolution") — one query per
-    // ancestor level, walking up from the parent.
-    private async Task<Guid?> ResolveGoverningScopeAsync(Guid? parentId, CancellationToken cancellationToken)
-    {
-        var currentId = parentId;
-        Guid? rootId = null;
-
-        while (currentId is { } id)
-        {
-            var node = await _dbContext.Documents
-                .Where(d => d.Id == id)
-                .Select(d => new { d.Id, d.ParentId, d.BreaksInheritance })
-                .SingleOrDefaultAsync(cancellationToken);
-
-            if (node is null)
-            {
-                break;
-            }
-
-            if (node.BreaksInheritance)
-            {
-                return node.Id;
-            }
-
-            rootId = node.Id;
-            currentId = node.ParentId;
-        }
-
-        return rootId;
     }
 
     private Task<string?> DocumentNameAsync(Guid documentId, CancellationToken cancellationToken) =>
