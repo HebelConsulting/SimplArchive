@@ -1135,69 +1135,6 @@
     private bool _dropRootWired;
     private bool _panesWired;
 
-    // Single-pane drill-down (ADR "Responsive phone drill-down"), reported by wbLayout.js: a phone, OR a tablet
-    // held upright (#684) — one pane is one pane, and the two share every rule. Needed at CLICK time for
-    // tap-to-navigate, which a media query cannot answer; the tree slides out as a drawer; a selected document
-    // opens a full-screen detail overlay with Preview/Details/Comments sub-tabs.
-    private bool _isSinglePane;
-
-    // A tablet held sideways: two panes of the three. The CSS decides WHICH two from the selection alone, so
-    // this exists for one thing the CSS cannot do — the top bar is conditionally RENDERED rather than hidden
-    // (its folder-name text would otherwise collide with the desktop tests' text locators), so the shell has to
-    // know when to emit it.
-    private bool _isTabletLandscape;
-    private bool _viewportWatched;
-    // A touch-only device (no hover, coarse pointer) — hides the annotation authoring tools (#349); captured once
-    // from wbLayout.js (a device capability). False on a hybrid with a mouse, so those keep full authoring.
-    private bool _isTouchOnly;
-    private bool _treeDrawerOpen;
-    private string _phoneDetailTab = "preview";
-
-    /// <summary>The viewport tier, as wbLayout.js reads it: phone / tablet-portrait / tablet-landscape / desktop.</summary>
-    [JSInvokable]
-    public Task OnViewportModeChanged(string mode)
-    {
-        var singlePane = mode is "phone" or "tablet-portrait";
-        var tabletLandscape = mode is "tablet-landscape";
-        if (_isSinglePane == singlePane && _isTabletLandscape == tabletLandscape)
-        {
-            return Task.CompletedTask;
-        }
-
-        _isSinglePane = singlePane;
-        _isTabletLandscape = tabletLandscape;
-
-        // The drawer is a touch-tier concept. Leaving BOTH tiers — rotating a tablet is not leaving — has to
-        // close it, or the desktop layout renders with a translated tree nothing can dismiss.
-        if (!singlePane && !tabletLandscape)
-        {
-            _treeDrawerOpen = false;
-        }
-
-        StateHasChanged();
-        return Task.CompletedTask;
-    }
-
-    /// <summary>What a wbLayout.js from before #684 calls. Kept so a stale cached module still works.</summary>
-    /// <remarks>
-    /// ADR 0500's lesson: the module is cached independently of the app, so a client can be running last
-    /// week's JS against today's Blazor. Renaming the only entry point would have made that combination fail
-    /// to deserialise instead of degrading — this way it keeps the phone behaviour it already had, and gains
-    /// the tablet tiers when its cache turns over.
-    /// </remarks>
-    [JSInvokable]
-    public Task OnViewportChanged(bool isPhone) => OnViewportModeChanged(isPhone ? "phone" : "desktop");
-
-    private void ToggleTreeDrawer() => _treeDrawerOpen = !_treeDrawerOpen;
-
-    private void SetPhoneTab(string tab) => _phoneDetailTab = tab;
-
-    // The detail overlay's back control — deselect the document to return to the folder's contents list.
-    private void PhoneBack()
-    {
-        _selectedItem = null;
-        _selectedNode = null;
-    }
     private bool _uploading;
 
     // Awaiting the cascading auth-state task forces Home to re-render once auth resolves. On a page reload,
@@ -2351,73 +2288,9 @@
         }
     }
 
-
-    // Common result handling for the move/reference mutations. Returns true on success.
-
-    // ---- Rename / delete / recycle bin ---------------------------------------------------------------
-
-
-
-
-    // Navigate the contents pane to a folder (from Go to / References / Search), optionally selecting an item.
-    // Slice simplification: the tree isn't re-synced/expanded to the folder, matching the desktop.
-    private async Task NavigateToFolderAsync(Guid folderId, Guid? selectItemId = null)
-    {
-        if (_activeTab != Tab.Repositories)
-        {
-            await SetTab(Tab.Repositories);
-        }
-
-        // ONE read, whose rels the node then carries (ADR 0557). This used to keep only the NAME, so the node
-        // arrived address-less: LoadContentsAsync re-fetched the same resource for `children`, and every
-        // rel-gated affordance read as unavailable on a folder reached by Go to or a search hit.
-        var doc = await FetchFolderAsync(folderId);
-        // The capabilities come from that SAME read (#858). Leaving them at their defaults here would repeat,
-        // for the gates, exactly the bug the comment above describes for the links: a folder reached by Go to or
-        // a search hit would show Rename / Move to / Delete as unavailable while the identical folder reached
-        // through the tree offered them.
-        await SelectFolderAsync(new BrowseNode(folderId, doc?.Name ?? "(folder)", true, false, false,
-            CanDelete: doc?.CanDelete ?? false, CanCreateChildren: doc?.CanCreateChildren ?? false,
-            CanEditIndexData: doc?.CanEditIndexData ?? false,
-            CanMove: Links.Href(doc?.Links, "move") is not null,
-            CanManagePermissions: doc?.CanManagePermissions ?? false,
-            Links: Links.RelMap(doc?.Links)));
-
-        // Prefer the item's real row; fall back to its reference (shortcut) row when the folder holds only a
-        // shortcut (a referencing folder) — selecting a reference loads the target document for viewing.
-        if (selectItemId is { } id
-            && (_folderContents.FirstOrDefault(n => n.Id == id && !n.IsReference)
-                ?? _folderContents.FirstOrDefault(n => n.Id == id)) is { } target)
-        {
-            await SelectRowAsync(target);
-        }
-
-        StateHasChanged();
-    }
-
-    // The resource behind a folder id, links and all: its name, its children address and which creates it admits
-    // all ride in the one response (ADR 0557).
-    private async Task<DocumentLinksResponse?> FetchFolderAsync(Guid id)
-    {
-        try
-        {
-            // Through the single sanctioned id-to-resource fetch (BrowseService), not a private copy of the
-            // same GET — two copies of the one address the client may build is how the exception multiplies.
-            return await Browse.FetchAsync(id);
-        }
-        catch (HttpRequestException)
-        {
-            return null;
-        }
-    }
-
-    // Takes the document's advertised address (its `self` rel), so the concurrency probe hits the same resource
-    // the mutation below will — rather than a path rebuilt from an id (ADR 0543, issue #416).
-
-    // Tag chip editor + catalog autocomplete (ADR "Document tags"). SearchFunc suggests not-yet-added catalog
-    // tags; Enter commits the box (a coerced free-form value or the highlighted suggestion).
-    // Tag entry forwards to the editor, which owns the working set: it suggests catalogue tags not already on
-    // the document, and Enter commits the box exactly as the explicit Add button does.
+    // ---- Tag chips on the detail pane -----------------------------------------------------------------
+    // Thin wiring: the catalog suggestions and the typed-tag commit belong to the detail editor, and a chip
+    // click states an intent the SHELL owns -- switch to the Search tab, which picks the tag up on activation.
     private Task<IEnumerable<string>> SearchTagCatalog(string value, CancellationToken ct) =>
         Task.FromResult(Editor.SuggestTags(value));
 
@@ -2438,25 +2311,6 @@
     }
 
     // The Legal holds tab's Go to (review finding) — the search jump, addressed by the item's ParentId.
-    private Task OpenHeldDocumentAsync(LegalHoldItemDto item) =>
-        item.ParentId is { } parentId ? NavigateToFolderAsync(parentId, item.DocumentId) : NavigateToFolderAsync(item.DocumentId);
-
-    private async Task OpenSearchResultAsync(SearchHit hit)
-    {
-        if (hit.IsFolder)
-        {
-            await NavigateToFolderAsync(hit.Id);
-        }
-        else if (hit.ParentId is { } parentId)
-        {
-            await NavigateToFolderAsync(parentId, hit.Id);
-        }
-        else
-        {
-            await NavigateToFolderAsync(hit.Id);
-        }
-    }
-
     public async ValueTask DisposeAsync()
     {
         AppNav.OpenDocumentRequested -= OpenDocumentFromNotificationAsync;

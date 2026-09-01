@@ -127,7 +127,15 @@ public class WorkbenchShellSizeTests
     // beneath one saying "Upload orchestration". Not shell coordination: the shell owns WHERE a drop lands,
     // which stays; creating the version, PUTting the bytes and finalizing against the advertised address is
     // the filing subject, and it has no markup of its own to bring (ADR 0733 — a partial, not a component).
-    private const int Ceiling = 2_510;
+    // 2,510 -> 2,360: a REDISTRIBUTION rather than an extraction, and the difference is the point. The heading
+    // "Rename / delete / recycle bin" contained no rename, no delete and no recycle bin -- it named three things
+    // and held none of them (#941), so its 117 lines were not a mislabelled subject but a grab-bag, and its
+    // members went to three different places: NavigateToFolderAsync/FetchFolderAsync and the two "Go to" entry
+    // points (a search hit, a legal-hold finding) to Home.Navigation, where navigation already lives; the tag
+    // chips stayed with an accurate heading; DisposeAsync stayed as shell lifecycle. The viewport tiers left the
+    // "Annotations" tombstone for Home.Responsive at the same time. A stale banner over a cohesive section is
+    // replaced by the extraction's own header; a section that is not a subject at all has to be dealt out.
+    private const int Ceiling = 2_360;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.JSInterop;
 using MudBlazor;
+using SimplArchive.Client.Hypermedia;
 using SimplArchive.Client.Models;
 using SimplArchive.Client.Services;
 using SimplArchive.Localization;
@@ -505,5 +506,88 @@ public partial class Home
         var text = System.Net.WebUtility.HtmlEncode($"{Detail.SensitivityName} · {_viewerName}");
         var svg = $"<svg xmlns='http://www.w3.org/2000/svg' width='360' height='200'><text x='10' y='150' fill='rgba(130,130,130,0.20)' font-size='20' font-family='sans-serif' transform='rotate(-28 10 150)'>{text}</text></svg>";
         return $"background-image:url(\"data:image/svg+xml,{Uri.EscapeDataString(svg)}\");";
+    }
+
+    // Navigate the contents pane to a folder (from Go to / References / Search), optionally selecting an item.
+    // Slice simplification: the tree isn't re-synced/expanded to the folder, matching the desktop.
+    private async Task NavigateToFolderAsync(Guid folderId, Guid? selectItemId = null)
+    {
+        if (_activeTab != Tab.Repositories)
+        {
+            await SetTab(Tab.Repositories);
+        }
+
+        // ONE read, whose rels the node then carries (ADR 0557). This used to keep only the NAME, so the node
+        // arrived address-less: LoadContentsAsync re-fetched the same resource for `children`, and every
+        // rel-gated affordance read as unavailable on a folder reached by Go to or a search hit.
+        var doc = await FetchFolderAsync(folderId);
+        // The capabilities come from that SAME read (#858). Leaving them at their defaults here would repeat,
+        // for the gates, exactly the bug the comment above describes for the links: a folder reached by Go to or
+        // a search hit would show Rename / Move to / Delete as unavailable while the identical folder reached
+        // through the tree offered them.
+        await SelectFolderAsync(new BrowseNode(folderId, doc?.Name ?? "(folder)", true, false, false,
+            CanDelete: doc?.CanDelete ?? false, CanCreateChildren: doc?.CanCreateChildren ?? false,
+            CanEditIndexData: doc?.CanEditIndexData ?? false,
+            CanMove: Links.Href(doc?.Links, "move") is not null,
+            CanManagePermissions: doc?.CanManagePermissions ?? false,
+            Links: Links.RelMap(doc?.Links)));
+
+        // Prefer the item's real row; fall back to its reference (shortcut) row when the folder holds only a
+        // shortcut (a referencing folder) — selecting a reference loads the target document for viewing.
+        if (selectItemId is { } id
+            && (_folderContents.FirstOrDefault(n => n.Id == id && !n.IsReference)
+                ?? _folderContents.FirstOrDefault(n => n.Id == id)) is { } target)
+        {
+            await SelectRowAsync(target);
+        }
+
+        StateHasChanged();
+    }
+
+    // The resource behind a folder id, links and all: its name, its children address and which creates it admits
+    // all ride in the one response (ADR 0557).
+    private async Task<DocumentLinksResponse?> FetchFolderAsync(Guid id)
+    {
+        try
+        {
+            // Through the single sanctioned id-to-resource fetch (BrowseService), not a private copy of the
+            // same GET — two copies of the one address the client may build is how the exception multiplies.
+            return await Browse.FetchAsync(id);
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+    }
+
+    // Takes the document's advertised address (its `self` rel), so the concurrency probe hits the same resource
+    // the mutation below will — rather than a path rebuilt from an id (ADR 0543, issue #416).
+
+    // Tag chip editor + catalog autocomplete (ADR "Document tags"). SearchFunc suggests not-yet-added catalog
+    // tags; Enter commits the box (a coerced free-form value or the highlighted suggestion).
+    // Tag entry forwards to the editor, which owns the working set: it suggests catalogue tags not already on
+    // the document, and Enter commits the box exactly as the explicit Add button does.
+
+    // Two tabs' "Go to": a search hit and a legal-hold review finding. Both are the same act -- turn a row the
+    // user is looking at on ANOTHER tab into a folder to open and an item to select -- so they are one line of
+    // reasoning each on top of NavigateToFolderAsync, and they belong beside it rather than beside the tabs
+    // that raise them.
+    private Task OpenHeldDocumentAsync(LegalHoldItemDto item) =>
+        item.ParentId is { } parentId ? NavigateToFolderAsync(parentId, item.DocumentId) : NavigateToFolderAsync(item.DocumentId);
+
+    private async Task OpenSearchResultAsync(SearchHit hit)
+    {
+        if (hit.IsFolder)
+        {
+            await NavigateToFolderAsync(hit.Id);
+        }
+        else if (hit.ParentId is { } parentId)
+        {
+            await NavigateToFolderAsync(parentId, hit.Id);
+        }
+        else
+        {
+            await NavigateToFolderAsync(hit.Id);
+        }
     }
 }
