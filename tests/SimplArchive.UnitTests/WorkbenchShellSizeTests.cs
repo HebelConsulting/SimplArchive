@@ -147,7 +147,15 @@ public class WorkbenchShellSizeTests
     // three lines, no members, immediately followed by the bulk heading that had absorbed them. A heading
     // outliving its contents is #941's usual shape; a heading whose contents migrated to the NEXT one, leaving
     // the original standing empty, is the same decay caught in the act. Two orphan comments went with it.
-    private const int Ceiling = 2_170;
+    // 2,170 -> 2,065: the detail pane's edit mode, to Home.DetailEdit.razor.cs -- named to MATCH the desktop's
+    // MainWindowViewModel.DetailEdit.cs, which holds the same subject. ADR 0511 asks that a web/desktop pair be
+    // reviewed as a single surface, and that is only possible when both halves can be found under one name.
+    //
+    // Its heading covered three further methods -- the versions dialog, compare-versions and a workflow
+    // transition -- which are pane ACTIONS rather than its edit mode. They stayed, under a heading that now
+    // says so, and a comment describing compare-versions moved to the method it names from forty lines above
+    // it, where it had been sitting over the versions dialog instead (#941).
+    private const int Ceiling = 2_065;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()
