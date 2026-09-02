@@ -16,5 +16,15 @@ spec:
     solvers:
       - http01:
           ingress:
-            class: {{ .Values.ingress.className | default "nginx" }}
+            # ingressClassName, NOT class. cert-manager's `class` emits the LEGACY
+            # `kubernetes.io/ingress.class` annotation, while `ingressClassName` sets `spec.ingressClassName`
+            # — and modern controllers only read the latter. Traefik (which is what k3s ships, so every
+            # single-machine install) ignored the solver Ingress completely: it showed CLASS <none>, the
+            # challenge URL fell through to the application's own Ingress and answered 404, and cert-manager
+            # sat at "Waiting for HTTP-01 challenge propagation: wrong status code '404', expected '200'"
+            # until the install's health gate gave up. No certificate, so no HTTPS at all.
+            #
+            # nginx still honours the legacy annotation, which is exactly why the kiosk never showed this and
+            # the chart everybody else installs did — the same shape as the proxy-header default.
+            ingressClassName: {{ .Values.ingress.className | default "nginx" }}
 {{- end }}
