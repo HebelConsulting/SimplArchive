@@ -29,3 +29,10 @@ spec:
     {{- end }}
   selector:
     {{- include "simplarchive.selectorLabels" . | nindent 4 }}
+    # A Service matches every pod carrying AT LEAST the labels listed, and each dependency's pods carry the
+    # chart's selector labels plus their own component. So without this line the selector matched Tika,
+    # Gotenberg, OCR, OpenSearch and OpenBao as well as the API, and the Ingress spread public traffic
+    # across all of them: scratch.simplarchive.dev answered as the Tika server, and the same route reached
+    # the SECRETS STORE from the internet. A health check still passed, because one backend in the rotation
+    # was the real API.
+    app.kubernetes.io/component: api

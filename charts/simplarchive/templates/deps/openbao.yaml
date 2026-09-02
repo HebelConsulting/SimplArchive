@@ -8,6 +8,8 @@ metadata:
   name: {{ include "simplarchive.fullname" . }}-openbao-config
   labels:
     {{- include "simplarchive.labels" . | nindent 4 }}
+  annotations:
+    {{- include "simplarchive.provisioningHook" "-20" | nindent 4 }}
 data:
   openbao.hcl: |
 {{ .Files.Get "files/openbao.hcl" | indent 4 }}
@@ -29,6 +31,8 @@ metadata:
   name: {{ include "simplarchive.fullname" . }}-openbao-approle
   labels:
     {{- include "simplarchive.labels" . | nindent 4 }}
+  annotations:
+    {{- include "simplarchive.provisioningHook" "-20" | nindent 4 }}
 type: Opaque
 data:
   # The app's AppRole SecretId (fixed for the kiosk; matches what the entrypoint provisions).
@@ -42,10 +46,11 @@ metadata:
   name: {{ include "simplarchive.fullname" . }}-openbao
   labels:
     {{- include "simplarchive.labels" . | nindent 4 }}
-  {{- with .Values.deps.openbao.serviceAccount.annotations }}
   annotations:
+    {{- include "simplarchive.provisioningHook" "-20" | nindent 4 }}
+    {{- with .Values.deps.openbao.serviceAccount.annotations }}
     {{- toYaml . | nindent 4 }}
-  {{- end }}
+    {{- end }}
 ---
 {{- end }}
 apiVersion: v1
@@ -55,6 +60,8 @@ metadata:
   labels:
     {{- include "simplarchive.labels" . | nindent 4 }}
     app.kubernetes.io/component: openbao
+  annotations:
+    {{- include "simplarchive.provisioningHook" "-20" | nindent 4 }}
 spec:
   selector:
     {{- include "simplarchive.selectorLabels" . | nindent 4 }}
@@ -71,6 +78,8 @@ metadata:
   labels:
     {{- include "simplarchive.labels" . | nindent 4 }}
     app.kubernetes.io/component: openbao
+  annotations:
+    {{- include "simplarchive.provisioningHook" "-20" | nindent 4 }}
 spec:
   serviceName: {{ include "simplarchive.fullname" . }}-openbao
   replicas: 1

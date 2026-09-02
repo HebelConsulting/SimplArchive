@@ -19,6 +19,10 @@ spec:
       {{- end }}
       labels:
         {{- include "simplarchive.selectorLabels" . | nindent 8 }}
+        # Names these pods as the API among the chart's workloads, so a Service can select THEM rather than
+        # everything the chart runs. Set on the pod template only: spec.selector.matchLabels below is
+        # immutable on an existing Deployment, and adding a label there would break every upgrade.
+        app.kubernetes.io/component: api
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:

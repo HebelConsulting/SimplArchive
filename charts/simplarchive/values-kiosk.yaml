@@ -75,10 +75,11 @@ config:
 migrationJob:
   enabled: false
 
-# The demo tenant/admin seed + reverse-proxy trust (the ingress terminates TLS, so the app must emit https URLs).
+# The demo tenant/admin seed. App__TrustProxyHeaders used to be set here too and no longer is: the chart now
+# derives it from ingress.enabled, which is true above. Repeating it would put the same variable in the
+# container twice, and this overlay is exactly where the missing default hid — the kiosk worked, so nobody
+# discovered that an ordinary install could not sign in at all.
 extraEnv:
-  - name: App__TrustProxyHeaders
-    value: "true"
   - name: App__ProxyBaseUrl
     value: "https://demo.simplarchive.dev"
   - name: Demo__Tenant__Name

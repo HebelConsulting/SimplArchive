@@ -10,4 +10,7 @@ spec:
   selector:
     matchLabels:
       {{- include "simplarchive.selectorLabels" . | nindent 6 }}
+      # Same over-broad match as the Service had: without the component this budget governed every pod the
+      # chart runs, so a drain would have weighed the dependencies against the API's allowance.
+      app.kubernetes.io/component: api
 {{- end }}

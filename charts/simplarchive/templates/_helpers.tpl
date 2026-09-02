@@ -78,8 +78,16 @@ config.* value (external/managed). This is what lets `deps.<x>.enabled: true` au
 {{- define "simplarchive.openBaoRoleId" -}}
 {{- if .Values.deps.openbao.enabled -}}{{ .Values.deps.openbao.roleId }}{{- else -}}{{ .Values.config.openBao.roleId }}{{- end -}}
 {{- end -}}
+{{/*
+Where the app reaches Postgres once OpenBao is issuing its credentials. OpenBao supplies the user and
+password; the HOST is ours to state, and it is not always the in-cluster service: enabling OpenBao says
+nothing about who runs the database. On the AWS installs it is RDS, and deps.openbao.externalDatabaseHost
+already carries that address for OpenBao's own database engine — so hardcoding the in-cluster name here sent
+the app to a Service that does not exist, and the migration failed with a bare "Name does not resolve" long
+after the OpenBao half had visibly worked.
+*/}}
 {{- define "simplarchive.openBaoDbTemplate" -}}
-{{- if .Values.deps.openbao.enabled -}}Host={{ include "simplarchive.fullname" . }}-postgres;Port=5432;Database={{ .Values.deps.postgres.database }}{{- else -}}{{ .Values.config.openBao.databaseConnectionTemplate }}{{- end -}}
+{{- if .Values.deps.openbao.enabled -}}Host={{ .Values.deps.openbao.externalDatabaseHost | default (printf "%s-postgres" (include "simplarchive.fullname" .)) }};Port=5432;Database={{ .Values.deps.postgres.database }}{{- else -}}{{ .Values.config.openBao.databaseConnectionTemplate }}{{- end -}}
 {{- end -}}
 
 {{/* Component name for a dep workload/Service, e.g. "<fullname>-tika". */}}
@@ -99,6 +107,25 @@ rolls the Deployment automatically (the pod template changes). Secrets come from
   value: "http://+:8080"
 - name: App__BaseUrl
   value: {{ .Values.config.app.baseUrl | quote }}
+{{- /*
+  Honour X-Forwarded-Proto/-Host, which is not optional behind an Ingress: TLS terminates at the ingress
+  controller and the pod is reached over plain HTTP, so without this the application believes it is serving
+  http://. OpenIddict keeps its transport-security requirement outside Development and refuses the
+  authorization request, and the browser shows a bare "There was an error trying to log you in: ' (400)'" —
+  LOGIN IS IMPOSSIBLE, on an install where every pod is ready and the health endpoint answers 200.
+
+  It defaulted to off, and only the kiosk overlay and the compose stack ever turned it on, so the two places
+  anyone actually logged in worked while the chart everybody else installs did not. Defaulting it to the
+  ingress's own setting is the honest default: enabling an Ingress IS the statement that a proxy sits in
+  front. Set config.app.trustProxyHeaders explicitly to override in either direction — needed when the
+  Service is published directly, or when a proxy sits in front without this chart's Ingress.
+*/}}
+{{- $trustProxy := .Values.ingress.enabled }}
+{{- if ne (typeOf .Values.config.app.trustProxyHeaders) "<nil>" }}
+{{- $trustProxy = .Values.config.app.trustProxyHeaders }}
+{{- end }}
+- name: App__TrustProxyHeaders
+  value: {{ $trustProxy | quote }}
 - name: App__ApplyMigrationsAtStartup
   value: {{ .Values.config.app.applyMigrationsAtStartup | quote }}
 {{- /* poolOverride lets the migration Job ask for a smaller pool than the serving pods (#750). */}}
@@ -182,4 +209,35 @@ rolls the Deployment automatically (the pod template changes). Secrets come from
   value: {{ .Values.config.bootstrap.name | quote }}
 - name: Bootstrap__PlatformAdministrator__ClientId
   value: {{ .Values.config.bootstrap.clientId | quote }}
+{{- end -}}
+
+{{/*
+Hook annotations for the resources the migration Job depends on.
+
+The migration Job is a pre-install hook, and Helm applies EVERY pre-install hook before it applies a single
+ordinary resource. So anything the migration needs must be in that same phase at a lower weight, or it does
+not exist yet when the migration runs. That is not a theoretical ordering: on a first install the chart used
+to be circular — migrate (pre-install) needed OpenBao for its credentials and needed the roles db-init
+creates, while both of those were applied after it. Upgrades hid it completely, because by then everything
+exists from the release before.
+
+The weights encode the real dependency chain, lowest first:
+
+  -30  postgres      the database itself, when it is in-cluster
+  -25  db-init       creates the simplarchive / _app / _vault roles the rest assume
+  -20  openbao       needs those roles for its database engine
+  -10  serviceaccount
+   -5  migrate
+
+Two consequences to know before using this. A hook resource is never part of the main release, so
+`helm uninstall` does not reap it — harmless for a ServiceAccount or ConfigMap, and the volumes outlive an
+uninstall anyway. And Helm's only delete policy for re-running a hook is before-hook-creation, so an upgrade
+deletes and recreates these: the StatefulSets restart, their PVCs and data survive (a StatefulSet delete does
+not touch its claims), and OpenBao unseals itself again through KMS. That restart is the price of having the
+chart installable in one shot, which is what we sell.
+*/}}
+{{- define "simplarchive.provisioningHook" -}}
+"helm.sh/hook": pre-install,pre-upgrade
+"helm.sh/hook-weight": {{ . | quote }}
+"helm.sh/hook-delete-policy": before-hook-creation
 {{- end -}}

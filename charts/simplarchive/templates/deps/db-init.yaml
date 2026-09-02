@@ -9,6 +9,8 @@ metadata:
   name: {{ include "simplarchive.fullname" . }}-db-init
   labels:
     {{- include "simplarchive.labels" . | nindent 4 }}
+  annotations:
+    {{- include "simplarchive.provisioningHook" "-25" | nindent 4 }}
 data:
   db-init.sql: |
 {{ .Files.Get "files/db-init.sql" | indent 4 }}
@@ -21,8 +23,8 @@ metadata:
     {{- include "simplarchive.labels" . | nindent 4 }}
     app.kubernetes.io/component: db-init
   annotations:
-    "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-25"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   backoffLimit: 20

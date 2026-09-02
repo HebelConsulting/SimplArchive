@@ -1,7 +1,12 @@
 -- Establishes the application-owning database roles (ADR 0358, "Dedicated migration owner role").
--- Idempotent + safe to re-run. Executed by the compose `db-init` one-shot as the postgres *bootstrap* superuser
--- — the only thing postgres is ever used for. After this runs, `postgres` owns nothing application-related and
--- is never used by the app, migrations, or OpenBao again.
+-- Idempotent + safe to re-run. Executed by the `db-init` one-shot as the bootstrap administrator — the only
+-- thing that account is ever used for. After this runs it owns nothing application-related and is never used
+-- by the app, migrations, or OpenBao again.
+--
+-- That administrator is NOT necessarily a superuser: on the compose stack it is `postgres` and is, but on a
+-- managed database (RDS, ADR 0677) the master account deliberately is not. Everything here must therefore work
+-- with CREATEROLE and ownership alone — see the note at the ALTER DEFAULT PRIVILEGES block, which is where the
+-- difference actually bites.
 --
 --   * simplarchive       (LOGIN)             — OWNS the database + schema + every object; runs DDL migrations.
 --                         Its password is OpenBao-managed + rotated (a database static role), so the literal
@@ -76,6 +81,14 @@ $$;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO simplarchive_app;
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO simplarchive_app;
+
+-- ALTER DEFAULT PRIVILEGES FOR ROLE x requires MEMBERSHIP of x, which is not the same thing as the admin
+-- option over it. A superuser has it implicitly, which is why this was invisible for as long as the only
+-- caller was the compose bootstrap; a MANAGED database never gives anyone superuser, so on RDS the master
+-- creates `simplarchive` (with admin option, via CREATEROLE) and is then refused by the two statements below
+-- with "permission denied to change default privileges". Granting the role to ourselves is what closes the
+-- gap, and it is a harmless no-op where the caller is already a superuser or already a member.
+GRANT simplarchive TO CURRENT_USER;
 
 ALTER DEFAULT PRIVILEGES FOR ROLE simplarchive IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO simplarchive_app;

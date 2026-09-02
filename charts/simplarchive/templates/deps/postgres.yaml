@@ -7,6 +7,8 @@ metadata:
   labels:
     {{- include "simplarchive.labels" . | nindent 4 }}
     app.kubernetes.io/component: postgres
+  annotations:
+    {{- include "simplarchive.provisioningHook" "-30" | nindent 4 }}
 spec:
   clusterIP: None
   selector:
@@ -24,6 +26,8 @@ metadata:
   labels:
     {{- include "simplarchive.labels" . | nindent 4 }}
     app.kubernetes.io/component: postgres
+  annotations:
+    {{- include "simplarchive.provisioningHook" "-30" | nindent 4 }}
 spec:
   serviceName: {{ include "simplarchive.fullname" . }}-postgres
   replicas: 1

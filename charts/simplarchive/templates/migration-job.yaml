@@ -28,6 +28,39 @@ spec:
       serviceAccountName: {{ include "simplarchive.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if .Values.deps.openbao.enabled }}
+      initContainers:
+        # Ordering this Job after OpenBao is necessary but NOT sufficient, and the difference is a Helm
+        # detail worth knowing: Helm waits for a hook to become ready only when the hook is a Job or a Pod.
+        # For every other kind it considers the hook ready the moment the object is created — so the
+        # StatefulSet at weight -20 is applied and then immediately left behind, and this Job starts while
+        # OpenBao is still initialising, unsealing and provisioning its AppRole. Observed exactly that:
+        # "Connection refused", from a pod the same age as the OpenBao pod beside it.
+        #
+        # Hence an explicit wait, which also states the dependency where a reader of this Job can see it.
+        # The app image is reused deliberately: it is already pulled on the node by the container below, so
+        # this costs nothing, and it keeps the chart from acquiring another image to track and scan.
+        - name: wait-for-openbao
+          image: {{ include "simplarchive.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              addr="{{ include "simplarchive.openBaoAddress" . }}"
+              # Unsealed AND active: the default health endpoint answers 200 only then, where standbyok
+              # would also accept a standby that cannot yet issue credentials.
+              i=0
+              until wget -q -O /dev/null "$addr/v1/sys/health" 2>/dev/null; do
+                i=$((i + 1))
+                if [ "$i" -ge {{ .Values.migrationJob.openBaoWaitAttempts }} ]; then
+                  echo "OpenBao at $addr never became ready; migrations cannot source their credentials" >&2
+                  exit 1
+                fi
+                sleep 5
+              done
+      {{- end }}
       containers:
         - name: migrate
           image: {{ include "simplarchive.image" . | quote }}

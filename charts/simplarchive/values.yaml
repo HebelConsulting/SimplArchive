@@ -19,6 +19,11 @@ config:
   aspnetCoreEnvironment: Production
   app:
     baseUrl: "https://simplarchive.example.com"
+    # Honour X-Forwarded-Proto/-Host from the proxy in front. Unset means "follow ingress.enabled", which is
+    # almost always right: TLS terminates at the ingress and the pod is reached over plain HTTP, and without
+    # this the sign-in fails with a bare 400 because OpenIddict sees an insecure transport. Set it explicitly
+    # only when the Service is published directly, or when a proxy fronts the app without this chart's Ingress.
+    trustProxyHeaders: null
     # Leave false in production and run migrations as a one-off step; with multiple replicas, startup migration
     # would race. See docs/deploy/README.md.
     applyMigrationsAtStartup: false
@@ -307,6 +312,10 @@ podDisruptionBudget:
 migrationJob:
   enabled: true
   backoffLimit: 1
+  # How many five-second attempts the init container gives OpenBao to come up before it gives up. Ten
+  # minutes: a first install has to initialise, unseal through KMS and provision, and failing early there
+  # would report a broken install for a dependency that was merely slow.
+  openBaoWaitAttempts: 120
 
 serviceAccount:
   create: true
