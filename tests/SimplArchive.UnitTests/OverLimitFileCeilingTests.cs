@@ -151,7 +151,15 @@ public class OverLimitFileCeilingTests
         // which is only possible if both halves can be found. Neither of these could be -- the web's Go-to sat
         // under "Rename / delete / recycle bin" and the desktop's filing under "Tag chip editor". A subject
         // that is hard to locate on one side is how the two clients drift apart unnoticed (#941).
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 4100,
+        // 4,100 -> 3,785: the detail pane's one edit mode (ADR "Single pane-level edit toggle on the detail
+        // pane") to MainWindowViewModel.DetailEdit.cs -- read-only until Edit, then name, document date, OCR
+        // languages, mask and index data all become editable at once; one Save persists what changed.
+        //
+        // Worth noting because it is the exception: the heading this arrived under was TRUE. It is the first of
+        // the five sections taken out of this view model that did not have to be dealt out into several homes
+        // first (#941), so this was a plain contiguous move -- and the previous four each looked exactly like
+        // this until their members were listed rather than their banners read.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 3785,
 
         // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
         // the one authenticated ApiCore. Four areas left it:
