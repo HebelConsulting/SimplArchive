@@ -288,4 +288,28 @@ public sealed partial class MainWindowViewModel
             Status = string.Format(Strings.Get("StErrMove"), e.Message);
         }
     }
+
+    // Granting this administrator full rights on one user's personal space (ADR 0672). It is here because
+    // the tree's context menu is the only thing that invokes it -- MainWindow.Tree.axaml.cs -- which is what
+    // this file holds. It had been sitting in the MIDDLE of the legal-holds section, between loading the
+    // matters and creating one, sharing nothing with either (#941).
+    /// <summary>Grants this administrator full rights on one user's personal space (ADR 0672).</summary>
+    public async Task TakeOverPersonalSpaceAsync(string spaceName, string takeOverHref)
+    {
+        if (_api is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _api.Admin.TakeOverPersonalSpaceAsync(takeOverHref);
+            Status = string.Format(Strings.Get("StTakenOver"), spaceName);
+            await RefreshCommand.ExecuteAsync(null);
+        }
+        catch (Exception)
+        {
+            Status = Strings.Get("StTakeOverFailed");
+        }
+    }
 }

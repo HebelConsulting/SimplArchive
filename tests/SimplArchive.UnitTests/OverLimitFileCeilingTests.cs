@@ -218,7 +218,20 @@ public class OverLimitFileCeilingTests
         //
         // The TAIL is where these headings decay: tenant settings had the same shape two tranches ago. Reading
         // a section to its END rather than its start is what finds them.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 2352,
+        // 2,352 -> 2,150: legal holds (ADR "Legal hold & retention enforcement") to their own partial.
+        //
+        // ReloadCurrentFolderAsync went WITH them: its only three callers are the place, release and remove
+        // paths, each refreshing the lock indicator. A helper whose entire caller set is one subject belongs
+        // with that subject rather than in the shell.
+        //
+        // TakeOverPersonalSpaceAsync did NOT. It sat in the MIDDLE of the section -- between loading the
+        // matters and creating one -- and is an admin granting themselves rights on a user's space (ADR 0672),
+        // invoked only from the tree's context menu, so it went to ItemActions where that menu lives.
+        //
+        // The decay here was MID-SECTION, not at the tail. The previous two headings drifted at their ends
+        // (#941); this one had a stray dropped into its middle, which reading only the first or last members
+        // would have missed either way.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 2150,
 
         // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
         // the one authenticated ApiCore. Four areas left it:
