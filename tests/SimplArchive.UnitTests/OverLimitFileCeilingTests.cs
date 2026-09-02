@@ -175,7 +175,15 @@ public class OverLimitFileCeilingTests
         //
         // The heading was ACCURATE, which is rare here: the second of six sections taken out of this file that
         // did not have to be dealt out into several homes first (#941).
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 3313,
+        // 3,313 -> 3,153: building the tree pane and keeping it current, to MainWindowViewModel.Tree.cs --
+        // the roots, a reload that preserves what the user had expanded, revealing a new child, and the lazy
+        // per-node loaders (ordinary folders, the personal space, the admin branch).
+        //
+        // Out of a heading reading "Login", true of its first hundred lines and of nothing for the hundred and
+        // sixty after them (#941). Removing _treeMemory from there REPAIRED a comment rather than breaking one:
+        // "Bootstraps an already-authenticated session ..." had been stranded above that field while describing
+        // the method two lines below it, so taking the field away put them back together.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 3153,
 
         // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
         // the one authenticated ApiCore. Four areas left it:
