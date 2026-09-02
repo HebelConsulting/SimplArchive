@@ -159,7 +159,15 @@ public class OverLimitFileCeilingTests
         // the five sections taken out of this view model that did not have to be dealt out into several homes
         // first (#941), so this was a plain contiguous move -- and the previous four each looked exactly like
         // this until their members were listed rather than their banners read.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 3785,
+        // 3,785 -> 3,585: opening a row, to MainWindowViewModel.Open.cs -- the native open (ADR 0568) and the
+        // one case where opening does not hand the file to the OS at all: a .zip, browsed in place with its
+        // entries read on demand (ADR "Zip file browsing"). One subject, not two: stepping into an archive is
+        // what opening a .zip DOES, so the branch belongs beside the open it is a branch of.
+        //
+        // Taken out of a heading reading "Folder detail pane: the open folder's persisted contents sort order",
+        // which covered SIX subjects across 322 lines -- sort order, the detail glyph, the breadcrumb, opening,
+        // the archive browser and folder creation. The remaining four are still to be dealt out (#941).
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 3585,
 
         // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
         // the one authenticated ApiCore. Four areas left it:
