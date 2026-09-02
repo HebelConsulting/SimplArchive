@@ -207,7 +207,18 @@ public class OverLimitFileCeilingTests
         // are the only things that write ProfilePhoto, and Decode is called from both photo loads, yet all
         // three were declared a hundred lines away in the shell. A field separated from its only writers is
         // the same split-brain the web's chat state had (#941).
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 2573,
+        // 2,573 -> 2,352: two subjects out of the "Bulk actions on the multi-selection" heading, which was
+        // true of its first 122 lines and described none of the 99 after them (#941).
+        //
+        //   MainWindowViewModel.BulkActions.cs (~122)  the multi-selection and what is done to all of it,
+        //                                              including the same operations reached by DROPPING a set
+        //   MainWindowViewModel.References.cs  (~99)   "Go to" on a reference, the references pane, promoting
+        //                                              a reference to primary -- and OpenFolderAsync, which is
+        //                                              here because these are its callers
+        //
+        // The TAIL is where these headings decay: tenant settings had the same shape two tranches ago. Reading
+        // a section to its END rather than its start is what finds them.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 2352,
 
         // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
         // the one authenticated ApiCore. Four areas left it:
