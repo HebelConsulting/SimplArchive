@@ -155,7 +155,17 @@ public class WorkbenchShellSizeTests
     // transition -- which are pane ACTIONS rather than its edit mode. They stayed, under a heading that now
     // says so, and a comment describing compare-versions moved to the method it names from forty lines above
     // it, where it had been sitting over the versions dialog instead (#941).
-    private const int Ceiling = 2_065;
+    // 2,065 -> 1,890: the comment thread, to Home.Chat.razor.cs -- loading it, replying, composing with an
+    // @-mention, posting. ONE subject that was living in three places: its state stranded in the shell's field
+    // block, its loading under a "Chat thread" heading, its composing under an "@-mentions" heading directly
+    // after it.
+    //
+    // Both headings were accurate, so this is a merge rather than a rescue: the split ran along the seam of two
+    // ISSUES (the thread, then #383's picker) rather than along a seam in the subject. Posting is the commit of
+    // a composed message and a composed message is where a mention comes from, so they answer to each other.
+    // Worth recording because #941's usual finding is a heading that lies; this is two that told the truth and
+    // still described one thing twice.
+    private const int Ceiling = 1_890;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()
