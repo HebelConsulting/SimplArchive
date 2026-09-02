@@ -184,6 +184,21 @@ public class WorkbenchShellSizeTests
     // It was the last extractable thing in the "Annotations" tombstone (#941). What remains there is genuine
     // shell work -- the selection, the auth cascade, the tab switch, and the caller's rights, which the markup
     // gates on -- so that heading now needs correcting rather than emptying.
+    // 1,730 is OWNER-ACCEPTED as of 2026-09-02, and the acceptance is recorded here rather than left implied.
+    // CLAUDE.md's size rule says an exception is not the author's to grant, so a file that stops shrinking
+    // needs someone to say it may -- otherwise "we ran out of technique" is indistinguishable from "this is
+    // fine", and a year later nobody can tell which it was.
+    //
+    // WHY IT STOPPED HERE, which is the part that decides what a future pass should do. Of these 1,730 lines,
+    // 970 are MARKUP and 760 are @code. The code block is decomposed: its largest section is 185 lines of
+    // shell state and lifecycle, which is the shell's own work, and the rest are 99, 76, 70, 45 and 40 -- each
+    // an ADR-backed subject sitting where it belongs. A PARTIAL cannot take markup, so the technique that
+    // removed 1,179 lines from this file has nothing left to remove.
+    //
+    // Going below roughly 1,000 therefore means extracting markup into CHILD COMPONENTS, which is ADR 0733's
+    // other branch and a genuinely different decision: a component takes its markup with it but needs the
+    // shell's state passed down, which is the callback-bag trade that ADR weighs. That is deferred, not
+    // forgotten -- and it is a design decision, so it is the owner's to make rather than a tranche to schedule.
     private const int Ceiling = 1_730;
 
     [Fact]
