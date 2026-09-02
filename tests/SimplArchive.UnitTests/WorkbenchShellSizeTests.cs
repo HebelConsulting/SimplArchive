@@ -152,7 +152,7 @@ public class WorkbenchShellSizeTests
     [Fact]
     public void The_workbench_shell_does_not_grow()
     {
-        var path = Path.Combine(RepoRoot(), ShellFile);
+        var path = Path.Combine(RepoPaths.Root(), ShellFile);
         Assert.True(File.Exists(path), $"{ShellFile} not found — if the shell moved, update ShellFile.");
 
         var lines = File.ReadAllLines(path).Length;
@@ -170,21 +170,11 @@ public class WorkbenchShellSizeTests
     [Fact]
     public void The_ceiling_still_describes_the_file()
     {
-        var lines = File.ReadAllLines(Path.Combine(RepoRoot(), ShellFile)).Length;
+        var lines = File.ReadAllLines(Path.Combine(RepoPaths.Root(), ShellFile)).Length;
 
         Assert.True(Ceiling - lines <= 400,
             $"{ShellFile} is {lines} lines but the ceiling is {Ceiling} — {Ceiling - lines} lines of slack, which "
             + "is room for a whole tranche of new code to land unnoticed. Lower Ceiling to the real figure.");
     }
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("Could not locate the repo root (SimplArchive.slnx).");
-    }
 }

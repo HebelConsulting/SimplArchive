@@ -33,7 +33,7 @@ public partial class DesktopGuidedTourTests
     [Fact]
     public void Every_anchor_the_desktop_track_names_is_defined_in_the_desktop_views()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         var tourPath = Path.Combine(root, "src", "SimplArchive.Client", "wwwroot", "tour", "tour.md");
         Assert.True(File.Exists(tourPath), $"The published tour is missing: {tourPath}");
 
@@ -71,7 +71,7 @@ public partial class DesktopGuidedTourTests
     [Fact]
     public void Every_desktop_anchor_is_named_by_the_tour()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         var tour = File.ReadAllText(Path.Combine(root, "src", "SimplArchive.Client", "wwwroot", "tour", "tour.md"));
 
         var named = StepLine().Matches(tour)
@@ -100,14 +100,4 @@ public partial class DesktopGuidedTourTests
         return line ?? "";
     }
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("Could not locate the repository root.");
-    }
 }

@@ -17,7 +17,7 @@ public class PreviewToolbarWrapsTests
     [Fact]
     public void The_desktop_preview_toolbar_is_a_wrap_panel()
     {
-        var axaml = File.ReadAllText(Path.Combine(RepoRoot(), "src", "SimplArchive.DesktopClient", "Views", "PreviewPane.axaml"));
+        var axaml = File.ReadAllText(Path.Combine(RepoPaths.Root(), "src", "SimplArchive.DesktopClient", "Views", "PreviewPane.axaml"));
 
         Assert.True(axaml.Contains("<WrapPanel", StringComparison.Ordinal),
             "The desktop preview toolbar is no longer a WrapPanel. Its control groups would then run off the pane "
@@ -27,7 +27,7 @@ public class PreviewToolbarWrapsTests
     [Fact]
     public void The_web_preview_toolbar_wraps()
     {
-        var home = File.ReadAllText(Path.Combine(RepoRoot(), "src", "SimplArchive.Client", "Pages", "Home.razor"));
+        var home = File.ReadAllText(Path.Combine(RepoPaths.Root(), "src", "SimplArchive.Client", "Pages", "Home.razor"));
         var rule = home.Split('\n').FirstOrDefault(l => l.TrimStart().StartsWith(".wb-pv-findbar {", StringComparison.Ordinal));
 
         Assert.NotNull(rule);
@@ -41,14 +41,4 @@ public class PreviewToolbarWrapsTests
             $"The web preview toolbar must declare min-width: 0 so it can shrink (issue #419). Found:{Environment.NewLine}{rule.Trim()}");
     }
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("repo root not found");
-    }
 }

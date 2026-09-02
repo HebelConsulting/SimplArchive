@@ -51,7 +51,7 @@ public class PublicMirrorBoundaryTests
     [Fact]
     public void No_published_file_names_the_commercial_dms()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         var offenders = new List<string>();
         var scanned = 0;
 
@@ -138,14 +138,4 @@ public class PublicMirrorBoundaryTests
         }
     }
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("Could not locate the repo root (SimplArchive.slnx).");
-    }
 }

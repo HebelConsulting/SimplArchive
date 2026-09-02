@@ -16,7 +16,7 @@ public class ThemeTokenTests
     [Fact]
     public void The_generated_theme_files_are_in_step_with_the_tokens()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
 
         foreach (var (path, expected) in ThemeOutputs.For(root))
         {
@@ -59,7 +59,7 @@ public class ThemeTokenTests
     [InlineData("development.json")]
     public void Each_shipped_preset_applies_and_passes_contrast(string file)
     {
-        var path = Path.Combine(RepoRoot(), "src", "SimplArchive.Theming", "presets", file);
+        var path = Path.Combine(RepoPaths.Root(), "src", "SimplArchive.Theming", "presets", file);
         Assert.True(File.Exists(path), $"{file} is missing — the desktop packages ship it as a rename-to-activate theme.");
 
         var load = ThemeTokensReader.Load(File.ReadAllText(path));
@@ -215,14 +215,4 @@ public class ThemeTokenTests
         Assert.True(Contrast.IsColour("#0F766E"));
     }
 
-    private static string RepoRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "SimplArchive.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        return directory?.FullName ?? throw new InvalidOperationException("Could not locate the repository root.");
-    }
 }

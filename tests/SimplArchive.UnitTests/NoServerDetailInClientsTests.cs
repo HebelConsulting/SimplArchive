@@ -27,7 +27,7 @@ public partial class NoServerDetailInClientsTests
     [Fact]
     public void No_client_surfaces_the_servers_problem_detail()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         var offenders = new List<string>();
 
         foreach (var file in ClientFiles(root))
@@ -86,14 +86,4 @@ public partial class NoServerDetailInClientsTests
         }
     }
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("repo root not found");
-    }
 }

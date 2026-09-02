@@ -32,7 +32,7 @@ public class LoadTestTimeoutCatchTests
         // explanation to be deleted to stay green.
         var source = string.Join(
             '\n',
-            File.ReadAllLines(Path.Combine(RepoRoot(), "tests", "SimplArchive.LoadTest", "BrowserUser.cs"))
+            File.ReadAllLines(Path.Combine(RepoPaths.Root(), "tests", "SimplArchive.LoadTest", "BrowserUser.cs"))
                 .Where(line => !line.TrimStart().StartsWith("//", StringComparison.Ordinal)));
 
         Assert.Contains("catch (TimeoutException", source, StringComparison.Ordinal);
@@ -42,14 +42,4 @@ public class LoadTestTimeoutCatchTests
             StringComparison.Ordinal);
     }
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("Could not locate the repo root (SimplArchive.slnx).");
-    }
 }

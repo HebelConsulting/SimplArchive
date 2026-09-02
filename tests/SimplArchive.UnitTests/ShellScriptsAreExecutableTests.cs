@@ -20,7 +20,7 @@ public class ShellScriptsAreExecutableTests
             return;
         }
 
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         var scripts = new[] { "scripts", "tools", "docs" }
             .Select(d => Path.Combine(root, d))
             .Where(Directory.Exists)
@@ -54,14 +54,4 @@ public class ShellScriptsAreExecutableTests
             + $"{Environment.NewLine}{Environment.NewLine}Fix with: git update-index --chmod=+x <path>");
     }
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("Could not locate the repo root (SimplArchive.slnx).");
-    }
 }

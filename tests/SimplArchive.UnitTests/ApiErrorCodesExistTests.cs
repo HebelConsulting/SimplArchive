@@ -39,7 +39,7 @@ public partial class ApiErrorCodesExistTests
     [Fact]
     public void Every_code_the_clients_map_is_one_the_api_emits()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         var mapText = File.ReadAllText(Path.Combine(root, "src", "SimplArchive.Localization", "ApiErrorText.cs"));
         var mapped = MappedCode().Matches(mapText).Select(m => m.Groups["code"].Value).ToList();
 
@@ -74,14 +74,4 @@ public partial class ApiErrorCodesExistTests
             + "class name.");
     }
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("repo root not found");
-    }
 }

@@ -64,18 +64,9 @@ public class DemoIdTests
     [InlineData("src/SimplArchive.Api/Provisioning/DemoArtistsSeeder.cs")]
     public void The_demo_seeders_mint_no_random_ids(string file)
     {
-        var path = Path.Combine(RepoRoot(), file);
+        var path = Path.Combine(RepoPaths.Root(), file);
         Assert.True(File.Exists(path), $"{file} not found — if the seeder moved, update this test.");
         Assert.DoesNotContain("Guid.NewGuid", File.ReadAllText(path), StringComparison.Ordinal);
     }
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent!;
-        }
-        return dir?.FullName ?? throw new InvalidOperationException("repo root not found");
-    }
 }

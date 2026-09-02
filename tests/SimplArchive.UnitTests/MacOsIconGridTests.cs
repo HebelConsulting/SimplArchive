@@ -32,7 +32,7 @@ public class MacOsIconGridTests
     [Fact]
     public void The_macos_icon_is_inset_on_apples_grid_with_the_shadow_below()
     {
-        var chunks = Chunks(File.ReadAllBytes(Path.Combine(RepoRoot(), Icns)));
+        var chunks = Chunks(File.ReadAllBytes(Path.Combine(RepoPaths.Root(), Icns)));
         var largest = chunks.OrderByDescending(c => c.Size).First();
         var (width, height, alpha) = DecodeAlpha(largest.Payload);
 
@@ -59,7 +59,7 @@ public class MacOsIconGridTests
     [Fact]
     public void No_chunk_type_renders_the_icon_as_noise()
     {
-        var chunks = Chunks(File.ReadAllBytes(Path.Combine(RepoRoot(), Icns)));
+        var chunks = Chunks(File.ReadAllBytes(Path.Combine(RepoPaths.Root(), Icns)));
 
         // `icp4`/`icp5` predate PNG-in-ICNS and overlap the raw-pixel formats, so readers draw their payload as
         // ARGB PIXELS. Our valid PNG bytes were rendered as random colour noise at 16px and 32px, at alpha 1.0
@@ -198,14 +198,4 @@ public class MacOsIconGridTests
         return (left, top, right, bottom);
     }
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("Could not locate the repo root (SimplArchive.slnx).");
-    }
 }

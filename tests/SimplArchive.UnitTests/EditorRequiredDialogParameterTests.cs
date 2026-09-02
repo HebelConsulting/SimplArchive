@@ -30,7 +30,7 @@ public class EditorRequiredDialogParameterTests
     [Fact]
     public void Every_caller_supplies_every_editor_required_dialog_parameter()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         var client = Path.Combine(root, "src", "SimplArchive.Client");
 
         var required = RequiredParametersByDialog(client);
@@ -72,7 +72,7 @@ public class EditorRequiredDialogParameterTests
     [Fact]
     public void The_versions_dialog_hands_the_compare_dialog_its_version_list_address()
     {
-        var versionsDialog = Path.Combine(RepoRoot(), "src", "SimplArchive.Client", "Dialogs", "VersionsDialog.razor");
+        var versionsDialog = Path.Combine(RepoPaths.Root(), "src", "SimplArchive.Client", "Dialogs", "VersionsDialog.razor");
         var text = File.ReadAllText(versionsDialog);
 
         Assert.Contains("ShowAsync<CompareVersionsDialog>", text, StringComparison.Ordinal);
@@ -107,14 +107,4 @@ public class EditorRequiredDialogParameterTests
             .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
                         && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"));
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("Could not locate the repo root (SimplArchive.slnx).");
-    }
 }

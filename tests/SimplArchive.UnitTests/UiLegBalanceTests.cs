@@ -54,7 +54,7 @@ public class UiLegBalanceTests
             .OrderBy(a => a)
             .ToList();
 
-        var ci = File.ReadAllText(Path.Combine(RepoRoot(), ".github", "workflows", "ci.yml"));
+        var ci = File.ReadAllText(Path.Combine(RepoPaths.Root(), ".github", "workflows", "ci.yml"));
         var run = Regex.Matches(ci, @"Area=(" + prefix + @"-\d)").Select(m => m.Groups[1].Value).Distinct().ToList();
 
         // A trait nobody runs is worse than no trait: those tests silently never execute.
@@ -74,7 +74,7 @@ public class UiLegBalanceTests
 
     private static IEnumerable<(string Name, string? Area)> TestClasses(string project, string prefix)
     {
-        var dir = Path.Combine(RepoRoot(), "tests", project);
+        var dir = Path.Combine(RepoPaths.Root(), "tests", project);
 
         // A partial class may be declared in several files with the trait on only one of them, and xUnit
         // is happy with that — so the unit is the class NAME, not the declaration.
@@ -116,14 +116,4 @@ public class UiLegBalanceTests
         return hasTests.Select(name => (name, areas.GetValueOrDefault(name)));
     }
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("Could not locate the repo root (SimplArchive.slnx).");
-    }
 }

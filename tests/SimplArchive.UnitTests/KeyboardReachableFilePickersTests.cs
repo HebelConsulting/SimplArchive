@@ -18,7 +18,7 @@ public class KeyboardReachableFilePickersTests
     [Fact]
     public void No_client_control_is_a_label_over_a_hidden_input()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         var clientDir = Path.Combine(root, "src", "SimplArchive.Client");
         var offenders = new List<string>();
 
@@ -53,14 +53,4 @@ public class KeyboardReachableFilePickersTests
             + "(issue #511):\n" + string.Join("\n", offenders));
     }
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("repo root not found");
-    }
 }

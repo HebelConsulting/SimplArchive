@@ -41,7 +41,7 @@ public class LocalizationKeyTests
     [Fact]
     public void Every_referenced_string_key_exists()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         var defined = KeysIn(Path.Combine(root, "src", "SimplArchive.Localization", "Strings.resx"));
 
         var missing = new List<string>();
@@ -75,7 +75,7 @@ public class LocalizationKeyTests
     [InlineData("es")]
     public void Every_translation_defines_every_key(string culture)
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         var english = KeysIn(Path.Combine(root, "src", "SimplArchive.Localization", "Strings.resx"));
         var translated = KeysIn(Path.Combine(root, "src", "SimplArchive.Localization", $"Strings.{culture}.resx"));
 
@@ -126,14 +126,4 @@ public class LocalizationKeyTests
         }
     }
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("Could not locate the repo root (SimplArchive.slnx).");
-    }
 }

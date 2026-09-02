@@ -39,7 +39,7 @@ public class DockerfileCoversEveryProjectTests
     [Fact]
     public void The_restore_layer_copies_every_project_the_image_builds()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         var dockerfile = File.ReadAllText(Path.Combine(root, "Dockerfile"));
 
         var missing = Directory.GetFiles(Path.Combine(root, "src"), "*.csproj", SearchOption.AllDirectories)
@@ -66,7 +66,7 @@ public class DockerfileCoversEveryProjectTests
     [Fact]
     public void The_restore_layer_copies_nothing_that_has_been_removed()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         var present = Directory.GetFiles(Path.Combine(root, "src"), "*.csproj", SearchOption.AllDirectories)
             .Select(Path.GetFileNameWithoutExtension)
             .OfType<string>()
@@ -85,14 +85,4 @@ public class DockerfileCoversEveryProjectTests
             "The Dockerfile copies project files that no longer exist: " + string.Join(", ", stale));
     }
 
-    private static string RepoRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "SimplArchive.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        return directory?.FullName ?? throw new InvalidOperationException("Could not locate the repository root.");
-    }
 }

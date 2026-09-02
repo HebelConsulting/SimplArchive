@@ -143,7 +143,7 @@ public partial class ClientHypermediaTests
     [Fact]
     public void Every_rel_the_clients_follow_is_advertised_by_the_api()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         var demanded = new SortedSet<string>(StringComparer.Ordinal);
 
         foreach (var file in ClientFiles(root))
@@ -316,7 +316,7 @@ public partial class ClientHypermediaTests
 
     private static Dictionary<string, int> CountByFile()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         var counts = new Dictionary<string, int>();
 
         foreach (var file in ClientFiles(root))
@@ -346,14 +346,4 @@ public partial class ClientHypermediaTests
         return counts;
     }
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("Could not locate the repo root (SimplArchive.slnx).");
-    }
 }

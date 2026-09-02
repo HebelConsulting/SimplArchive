@@ -39,7 +39,7 @@ public class WebDavPersonalSpaceNameTests
         var offenders = new List<string>();
         foreach (var dir in new[] { "SimplArchive.Client", "SimplArchive.DesktopClient" })
         {
-            var root = Path.Combine(RepoRoot(), "src", dir);
+            var root = Path.Combine(RepoPaths.Root(), "src", dir);
             foreach (var file in Directory.EnumerateFiles(root, "*.*", SearchOption.AllDirectories)
                          .Where(f => f.EndsWith(".razor", StringComparison.Ordinal)
                                      || f.EndsWith(".cs", StringComparison.Ordinal)
@@ -66,14 +66,4 @@ public class WebDavPersonalSpaceNameTests
             + string.Join("\n  ", offenders));
     }
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("Could not locate the repo root (SimplArchive.slnx).");
-    }
 }

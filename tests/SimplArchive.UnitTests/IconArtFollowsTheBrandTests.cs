@@ -26,7 +26,7 @@ public partial class IconArtFollowsTheBrandTests
     [Fact]
     public void The_icon_art_names_no_colour_of_its_own()
     {
-        var path = Path.Combine(RepoRoot(), "src", "SimplArchive.DesktopClient", "IconArt.cs");
+        var path = Path.Combine(RepoPaths.Root(), "src", "SimplArchive.DesktopClient", "IconArt.cs");
         Assert.True(File.Exists(path), "IconArt.cs not found — if it moved, update this guard.");
 
         var offenders = HexColour().Matches(File.ReadAllText(path)).Select(m => m.Value).Distinct().ToList();
@@ -50,20 +50,10 @@ public partial class IconArtFollowsTheBrandTests
     [InlineData("Assets/linux-icons/256.png")]
     public void Every_packaged_icon_is_present(string relative)
     {
-        var path = Path.Combine(RepoRoot(), "src", "SimplArchive.DesktopClient", relative.Replace('/', Path.DirectorySeparatorChar));
+        var path = Path.Combine(RepoPaths.Root(), "src", "SimplArchive.DesktopClient", relative.Replace('/', Path.DirectorySeparatorChar));
 
         Assert.True(File.Exists(path), $"{relative} is missing — run scripts/generate-icons.sh.");
         Assert.True(new FileInfo(path).Length > 0, $"{relative} is empty.");
     }
 
-    private static string RepoRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "SimplArchive.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        return directory?.FullName ?? throw new InvalidOperationException("Could not locate the repository root.");
-    }
 }

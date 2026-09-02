@@ -37,7 +37,7 @@ public partial class TestOnlyNativePackageTests
     [Fact]
     public void No_shipping_project_references_a_test_only_native()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         var offenders = new List<string>();
 
         foreach (var project in Directory.GetFiles(Path.Combine(root, "src"), "*.csproj", SearchOption.AllDirectories))
@@ -65,7 +65,7 @@ public partial class TestOnlyNativePackageTests
     [Fact]
     public void Every_test_only_native_is_both_ignored_and_used()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         var ignored = File.ReadAllText(Path.Combine(root, "build", "licenses", "ignored-packages.json"));
         var testProjects = Directory.GetFiles(Path.Combine(root, "tests"), "*.csproj", SearchOption.AllDirectories)
             .Select(File.ReadAllText)
@@ -85,14 +85,4 @@ public partial class TestOnlyNativePackageTests
         }
     }
 
-    private static string RepoRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "SimplArchive.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        return directory?.FullName ?? throw new InvalidOperationException("Could not locate the repository root.");
-    }
 }

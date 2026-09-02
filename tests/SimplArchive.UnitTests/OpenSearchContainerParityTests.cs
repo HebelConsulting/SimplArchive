@@ -34,7 +34,7 @@ public class OpenSearchContainerParityTests
     [Fact]
     public void Both_test_fixtures_pin_the_same_OpenSearch_version()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
 
         foreach (var file in FixtureFiles)
         {
@@ -64,7 +64,7 @@ public class OpenSearchContainerParityTests
         + "at t≈50-60s, long after /_cluster/health answers at t≈1s, so an index created in that window is refused")]
     public void Both_test_fixtures_close_each_route_to_a_create_index_block(string setting, string consequence)
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
 
         foreach (var file in FixtureFiles)
         {
@@ -84,7 +84,7 @@ public class OpenSearchContainerParityTests
     [Fact]
     public void The_shipped_stack_runs_the_version_the_tests_pin()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         string[] shipped =
         [
             "docker-compose.yaml",
@@ -120,14 +120,4 @@ public class OpenSearchContainerParityTests
         return File.ReadAllText(path);
     }
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("Could not locate the repo root (SimplArchive.slnx).");
-    }
 }

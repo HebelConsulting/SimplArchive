@@ -45,21 +45,11 @@ public class StringEmptyRatchetTests
 
     private static readonly Regex BareEmpty = new(@"=\s*""""(\s*[;,)\]}])", RegexOptions.Compiled);
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !Directory.Exists(Path.Combine(dir.FullName, "src")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("Could not locate the repository root.");
-    }
 
     [Fact]
     public void No_file_gains_a_bare_empty_string_literal()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         var actual = new Dictionary<string, int>();
         foreach (var path in Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories))
         {

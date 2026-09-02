@@ -417,7 +417,7 @@ public class OverLimitFileCeilingTests
     [Fact]
     public void Every_authored_file_over_the_limit_has_an_entry()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         var unlisted = new List<string>();
 
         foreach (var tree in AuthoredTrees)
@@ -469,7 +469,7 @@ public class OverLimitFileCeilingTests
     [MemberData(nameof(Files))]
     public void An_over_limit_file_does_not_grow(string file)
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         var tree = file.Split('/')[0];
         if (!Directory.Exists(Path.Combine(root, tree)))
         {
@@ -497,14 +497,4 @@ public class OverLimitFileCeilingTests
             + "tranche. Lower the Ceilings entry to the measured size so the next regression is caught.");
     }
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("repo root not found");
-    }
 }

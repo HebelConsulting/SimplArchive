@@ -140,7 +140,7 @@ public partial class LocalizationLiteralTests
     [Fact]
     public void No_client_carries_an_unkeyed_user_facing_literal()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         var actual = CountByFile(root);
         var problems = new List<string>();
 
@@ -172,7 +172,7 @@ public partial class LocalizationLiteralTests
     [Fact]
     public void The_total_is_still_zero()
     {
-        var total = CountByFile(RepoRoot()).Values.Sum();
+        var total = CountByFile(RepoPaths.Root()).Values.Sum();
         Assert.True(total <= Budget.Values.Sum(),
             $"Clients carry {total} unkeyed user-facing literals; the budget allows {Budget.Values.Sum()}.");
     }
@@ -254,14 +254,4 @@ public partial class LocalizationLiteralTests
         return counts;
     }
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("repo root not found");
-    }
 }

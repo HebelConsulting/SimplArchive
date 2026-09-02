@@ -29,17 +29,8 @@ public static class PrivateRepositoryGate
 {
     private const string PrivateRepo = "HebelConsulting/SimplArchivePrivate";
 
-    /// <summary>The repository root — the directory holding the solution file — or null if it cannot be found.</summary>
-    public static string? RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName;
-    }
+    /// <summary>The repository root, or null when it cannot be found — see <see cref="RepoPaths"/>.</summary>
+    public static string? RepoRoot() => RepoPaths.RootOrNull();
 
     /// <summary>True when this checkout's origin is the private repository, resolving worktrees.</summary>
     public static bool IsPrivateRepository(string root) =>

@@ -10,7 +10,7 @@ public class NoBareApiExceptionTests
     [Fact]
     public void No_source_file_constructs_a_bare_ApiException()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
 
         var offenders = Directory
             .EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories)
@@ -28,14 +28,4 @@ public class NoBareApiExceptionTests
             + string.Join("\n", offenders));
     }
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("Could not locate the repo root (SimplArchive.slnx).");
-    }
 }

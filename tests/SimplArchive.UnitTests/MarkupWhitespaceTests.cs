@@ -25,7 +25,7 @@ public class MarkupWhitespaceTests
     [Fact]
     public void No_markup_file_has_whitespace_dotnet_format_would_reject_in_a_cs_file()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         var problems = new List<string>();
 
         foreach (var tree in new[] { "src", "tests", "tools" })
@@ -97,7 +97,7 @@ public class MarkupWhitespaceTests
     [Fact]
     public void The_scan_actually_reaches_the_markup()
     {
-        var root = RepoRoot();
+        var root = RepoPaths.Root();
         var counted = Directory.EnumerateFiles(Path.Combine(root, "src"), "*", SearchOption.AllDirectories)
             .Where(p => Extensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase))
             .Count(p => !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
@@ -108,14 +108,4 @@ public class MarkupWhitespaceTests
             + "guard was written. Either the scan stopped matching, or the client moved; check before relaxing.");
     }
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("Repository root not found.");
-    }
 }

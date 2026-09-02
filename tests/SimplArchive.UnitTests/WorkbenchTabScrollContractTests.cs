@@ -21,7 +21,7 @@ public partial class WorkbenchTabScrollContractTests
         var offenders = new List<string>();
 
         foreach (var file in Directory.EnumerateFiles(
-                     Path.Combine(RepoRoot(), "src", "SimplArchive.Client", "Components", "Tabs"), "*.razor"))
+                     Path.Combine(RepoPaths.Root(), "src", "SimplArchive.Client", "Components", "Tabs"), "*.razor"))
         {
             var text = File.ReadAllText(file);
             foreach (Match m in ScrollingFlexChild().Matches(text))
@@ -46,14 +46,4 @@ public partial class WorkbenchTabScrollContractTests
     [GeneratedRegex(@"style=""[^""]*flex:\s*1\s+1\s+auto[^""]*overflow:\s*auto[^""]*""", RegexOptions.IgnoreCase)]
     private static partial Regex ScrollingFlexChild();
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName ?? throw new InvalidOperationException("Could not locate the repo root (SimplArchive.slnx).");
-    }
 }
