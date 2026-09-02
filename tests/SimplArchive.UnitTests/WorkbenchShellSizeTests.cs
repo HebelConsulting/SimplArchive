@@ -135,7 +135,19 @@ public class WorkbenchShellSizeTests
     // chips stayed with an accurate heading; DisposeAsync stayed as shell lifecycle. The viewport tiers left the
     // "Annotations" tombstone for Home.Responsive at the same time. A stale banner over a cohesive section is
     // replaced by the extraction's own header; a section that is not a subject at all has to be dealt out.
-    private const int Ceiling = 2_360;
+    // 2,360 -> 2,170: the single-row actions. Delete a row, show what references it, label it, copy a deep link
+    // to it, go to it, drop it on a folder as a move or a reference, promote a reference to be the primary
+    // location -- plus creating a repository, the same shape one level up. Home.RowActions.razor.cs.
+    //
+    // Deliberately not the BULK actions, which act on the multi-selection: four single-row actions had drifted
+    // under the heading "Bulk actions on the multi-selection", so it described eleven members of which seven
+    // were bulk. It now holds seven, all bulk.
+    //
+    // The heading these belong under already existed -- "Move / reference (row action menu)" -- and was EMPTY:
+    // three lines, no members, immediately followed by the bulk heading that had absorbed them. A heading
+    // outliving its contents is #941's usual shape; a heading whose contents migrated to the NEXT one, leaving
+    // the original standing empty, is the same decay caught in the act. Two orphan comments went with it.
+    private const int Ceiling = 2_170;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()
