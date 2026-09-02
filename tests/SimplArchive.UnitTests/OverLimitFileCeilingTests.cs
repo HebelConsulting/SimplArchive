@@ -231,7 +231,16 @@ public class OverLimitFileCeilingTests
         // The decay here was MID-SECTION, not at the tail. The previous two headings drifted at their ends
         // (#941); this one had a stray dropped into its middle, which reading only the first or last members
         // would have missed either way.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 2150,
+        // 2,150 -> 1,994 -- UNDER 2,000, from 5,305 when this burn-down started. Two subjects out of the
+        // "My work dashboard" heading, which covered 201 lines and described 56 of them:
+        //
+        //   MainWindowViewModel.MyWork.cs       the caller's due reminders and followed documents
+        //   MainWindowViewModel.DetailFields.cs the detail pane's always-shown system fields, and staging an
+        //                                       OCR-language change for its Save to persist
+        //
+        // DetailFields is separate from DetailEdit on purpose: this is what the pane SHOWS, that is what
+        // happens when you press Edit. Same tail-decay as tenant settings and bulk actions (#941).
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 1994,
 
         // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
         // the one authenticated ApiCore. Four areas left it:
