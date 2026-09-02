@@ -26,7 +26,9 @@ internal sealed record ImapSelectedMailbox(Guid FolderId, string Name, IReadOnly
 }
 
 /// <summary>One message of a selected mailbox: the document, its stable UID, and the current version's essentials.</summary>
-internal sealed record ImapMessageEntry(Guid DocumentId, int Uid, string Name, string Extension, string ObjectKey, long? SizeBytes, DateTimeOffset InternalDate);
+// Details is null for a real .eml (which is served byte-for-byte and needs none) and for any document whose
+// metadata could not be resolved; the synthetic builder simply omits the block in that case.
+internal sealed record ImapMessageEntry(Guid DocumentId, int Uid, string Name, string Extension, string ObjectKey, long? SizeBytes, DateTimeOffset InternalDate, ImapMessageDetails? Details = null);
 
 // The mailbox side of the IMAP endpoint (ADR "IMAP endpoint (read-only, first slice)"): the catalog (LIST),
 // STATUS, SELECT/EXAMINE and the lazy UID assignment. The tree is the WebDAV mount's minus what a mail client
@@ -520,6 +522,8 @@ internal static class ImapMailboxes
         var uids = await db.ImapMessageUids.Where(u => u.FolderId == entry.FolderId).ToDictionaryAsync(u => u.DocumentId, u => u.Uid);
 
         var messages = new List<ImapMessageEntry>();
+        var resolvedVersions = new Dictionary<Guid, DocumentVersion>();
+        var served = new List<Document>();
         foreach (var doc in docs)
         {
             var version = await CurrentVersion.ResolveAsync(db.DocumentVersions, doc.Id, doc.CurrentVersionId);
@@ -542,11 +546,19 @@ internal static class ImapMailboxes
                 uids[doc.Id] = uid;
             }
 
+            resolvedVersions[doc.Id] = version;
+            served.Add(doc);
             messages.Add(new ImapMessageEntry(doc.Id, uid, doc.Name, extension, version.ObjectKey, version.SizeBytes, version.CreatedAt));
         }
 
         await db.SaveChangesAsync();
-        return (mailbox, messages.OrderBy(m => m.Uid).ToList());
+
+        // The detail-pane metadata the synthetic message carries (#562). Loaded for the whole mailbox in one
+        // batch rather than per message: this runs every time a client opens a folder.
+        var details = await ImapMessageDetailsLoader.LoadAsync(db, served, resolvedVersions);
+        return (mailbox, messages
+            .Select(m => details.TryGetValue(m.DocumentId, out var d) ? m with { Details = d } : m)
+            .OrderBy(m => m.Uid).ToList());
     }
 
     /// <summary>The documents of <paramref name="messages"/> the CALLER has not seen (#562 slice 2).</summary>

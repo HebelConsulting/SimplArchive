@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using MimeKit;
 using MimeKit.Utils;
@@ -439,6 +440,13 @@ internal static class ImapFetch
         // Stable per document — clients dedupe by Message-ID, and a regenerated synthetic must be the SAME message.
         mime.MessageId = $"{message.DocumentId}@simplarchive";
 
+        // The same values the body renders, as headers a client can filter on. Header-safe by construction:
+        // MimeKit would fold or reject an embedded newline, so every value is flattened to one line.
+        foreach (var (name, value) in DetailHeaders(message.Details))
+        {
+            mime.Headers.Add(name, value);
+        }
+
         var body = new Multipart("mixed")
         {
             // A bare URL, deliberately (#783): plain text cannot carry a real link, and every mainstream
@@ -446,7 +454,7 @@ internal static class ImapFetch
             // a multipart/alternative HTML sibling — moves the attachment out of BODY[2], which is the exact
             // section-number defect class #766 was. Unconditional by decision: this is a showcase product's
             // signature, and gating it becomes a feature the day a customer asks.
-            new TextPart("plain") { Text = $"{message.Name}{message.Extension} — served from the SimplArchive archive: https://www.simplarchive.dev" },
+            new TextPart("plain") { Text = SyntheticText(message) },
             new MimePart
             {
                 Content = new MimeContent(new MemoryStream(content.ToArray())),
@@ -469,6 +477,141 @@ internal static class ImapFetch
         mime.WriteTo(options, output);
         return output.ToArray();
     }
+
+    /// <summary>The synthetic body: what the clients' detail pane shows, then the archive signature.</summary>
+    /// <remarks>
+    /// <para>
+    /// It goes in the EXISTING text part rather than an HTML sibling, because a multipart/alternative sibling
+    /// moves the attachment out of <c>BODY[2]</c> — the section-number defect class #766 was, and the reason
+    /// the bare URL below is a bare URL rather than a link.
+    /// </para>
+    /// <para>
+    /// FETCH and SEARCH share these bytes on purpose (see <c>MessageBytesAsync</c>), so everything written here
+    /// is also what a mail client's search matches — an author or an index value becomes findable, which is the
+    /// larger half of what this is for.
+    /// </para>
+    /// </remarks>
+    private static string SyntheticText(ImapMessageEntry message)
+    {
+        var text = new StringBuilder();
+        text.Append(message.Name).Append(message.Extension).Append('\n');
+
+        if (message.Details is { } d)
+        {
+            text.Append('\n');
+            foreach (var (label, value) in SystemRows(d))
+            {
+                text.Append(label.PadRight(16)).Append(value).Append('\n');
+            }
+
+            if (d.IndexFields.Count > 0)
+            {
+                text.Append('\n');
+                if (d.MaskName is { Length: > 0 } mask)
+                {
+                    text.Append(mask).Append('\n');
+                }
+
+                foreach (var field in d.IndexFields)
+                {
+                    text.Append(field.Name.PadRight(16)).Append(field.Value).Append('\n');
+                }
+            }
+        }
+
+        text.Append("\nServed from the SimplArchive archive:\nhttps://www.simplarchive.dev");
+        return text.ToString();
+    }
+
+    // One place both the body rows and the X- headers are derived from, so the two cannot come to disagree
+    // about what a document's metadata is.
+    private static List<(string Label, string Value)> SystemRows(ImapMessageDetails d)
+    {
+        var rows = new List<(string, string)>
+        {
+            ("Filed", d.Filed.ToString("dd MMM yyyy HH:mm", CultureInfo.InvariantCulture)),
+            ("Document date", d.DocumentDate.ToString("dd MMM yyyy", CultureInfo.InvariantCulture)),
+        };
+
+        if (d.CreatedBy is { Length: > 0 } author)
+        {
+            rows.Add(("Created by", author));
+        }
+
+        if (d.VersionNumber is { } number)
+        {
+            rows.Add(("Version", d.VersionCount > 0 ? $"{number} of {d.VersionCount}" : number.ToString(CultureInfo.InvariantCulture)));
+        }
+
+        if (d.SizeBytes is { } size)
+        {
+            rows.Add(("Size", HumanSize(size)));
+        }
+
+        if (d.SensitivityLabel is { Length: > 0 } label)
+        {
+            rows.Add(("Sensitivity", label));
+        }
+
+        if (d.OcrLanguages is { Length: > 0 } ocr)
+        {
+            rows.Add(("OCR languages", ocr));
+        }
+
+        return rows;
+    }
+
+    private static IEnumerable<(string Name, string Value)> DetailHeaders(ImapMessageDetails? details)
+    {
+        if (details is not { } d)
+        {
+            yield break;
+        }
+
+        foreach (var (label, value) in SystemRows(d))
+        {
+            yield return ($"X-SimplArchive-{label.Replace(" ", string.Empty, StringComparison.Ordinal)}", Flatten(value));
+        }
+
+        if (d.MaskName is { Length: > 0 } mask)
+        {
+            yield return ("X-SimplArchive-Mask", Flatten(mask));
+        }
+
+        foreach (var field in d.IndexFields)
+        {
+            yield return ($"X-SimplArchive-Field-{HeaderToken(field.Name)}", Flatten(field.Value));
+        }
+    }
+
+    // A header value is one line. A multi-line index value (a notes field) would otherwise be folded into
+    // something a client reads as a new header, so newlines collapse to spaces before it is ever written.
+    private static string Flatten(string value) =>
+        value.Replace("\r\n", " ", StringComparison.Ordinal)
+             .Replace('\n', ' ')
+             .Replace('\r', ' ')
+             .Trim();
+
+    // A field name is user-authored and may hold spaces or punctuation that is not legal in a header NAME.
+    private static string HeaderToken(string name)
+    {
+        var token = new StringBuilder(name.Length);
+        foreach (var c in name)
+        {
+            token.Append(char.IsLetterOrDigit(c) ? c : '-');
+        }
+
+        var cleaned = token.ToString().Trim('-');
+        return cleaned.Length == 0 ? "Field" : cleaned;
+    }
+
+    private static string HumanSize(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} bytes",
+        < 1024 * 1024 => $"{bytes / 1024.0:0.#} KB",
+        < 1024L * 1024 * 1024 => $"{bytes / (1024.0 * 1024):0.#} MB",
+        _ => $"{bytes / (1024.0 * 1024 * 1024):0.#} GB",
+    };
 
     // ---- ENVELOPE / BODYSTRUCTURE --------------------------------------------------------------------
 
