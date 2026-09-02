@@ -183,7 +183,16 @@ public class OverLimitFileCeilingTests
         // sixty after them (#941). Removing _treeMemory from there REPAIRED a comment rather than breaking one:
         // "Bootstraps an already-authenticated session ..." had been stranded above that field while describing
         // the method two lines below it, so taking the field away put them back together.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 3153,
+        // 3,153 -> 2,933: two subjects out of a heading reading "Author identity card", which was true of the
+        // three members before it and of none of the hundred and eighty after them (#941).
+        //
+        //   MainWindowViewModel.Chat.cs (145)          the comment thread AND the identity card opened from a
+        //                                              message in it -- ShowAuthorCardAsync takes a
+        //                                              ChatMessageViewModel, so the card answers a question
+        //                                              only the thread raises. Named to match the web's
+        //                                              Home.Chat.razor.cs (ADR 0511).
+        //   MainWindowViewModel.ExternalLinks.cs (111) share links on one document and the caller's own
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 2933,
 
         // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
         // the one authenticated ApiCore. Four areas left it:
