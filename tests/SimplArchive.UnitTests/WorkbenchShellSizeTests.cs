@@ -165,7 +165,17 @@ public class WorkbenchShellSizeTests
     // a composed message and a composed message is where a mention comes from, so they answer to each other.
     // Worth recording because #941's usual finding is a heading that lies; this is two that told the truth and
     // still described one thing twice.
-    private const int Ceiling = 1_890;
+    // 1,890 -> 1,785: wiring the workbench's JavaScript to the DOM, to Home.Interop.razor.cs -- importing
+    // dropUpload.js and wbLayout.js, attaching the drop root and the resizable panes, starting the viewport
+    // watch, scrolling the tree to a folder opened from elsewhere.
+    //
+    // It is one subject rather than incidental plumbing because two rules govern all of it: the DOM-dependent
+    // wiring must run in the ALWAYS-EXECUTED part of OnAfterRenderAsync (the markup is inside <Authorized>, so
+    // on a reload the elements do not exist yet at firstRender and wiring there silently never happens), and
+    // every wbLayout.js call is wrapped so a stale cached module degrades to the CSS default instead of
+    // throwing through the render loop (ADR 0500, #267). Both are easy to undo by accident once the code is
+    // spread through a 1,900-line file, and hard to undo when it is stated once at the top of its own.
+    private const int Ceiling = 1_785;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()
