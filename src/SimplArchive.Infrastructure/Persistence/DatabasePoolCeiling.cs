@@ -6,6 +6,12 @@ namespace SimplArchive.Infrastructure.Persistence;
 /// Caps the Npgsql connection pool so it cannot be larger than the database it connects to (issue #750).
 /// </summary>
 /// <remarks>
+/// What decides a PostgreSQL server's capacity in the first place — <c>max_connections</c>, the reserved
+/// slots, the per-role and per-database caps, and why the number is small — is written up in
+/// <c>docs/reference/postgres-connection-limits.md</c>, so the reasoning behind the arithmetic here lives
+/// somewhere an operator can read without opening the source.
+/// </remarks>
+/// <remarks>
 /// <para>
 /// <b>Why this exists.</b> Npgsql's default <c>Maximum Pool Size</c> is <b>100</b>, chosen with no knowledge of
 /// the server, while a PostgreSQL instance has a hard <c>max_connections</c> (100 on the kiosk, ~112 on a 1 GiB
