@@ -192,7 +192,14 @@ public class OverLimitFileCeilingTests
         //                                              only the thread raises. Named to match the web's
         //                                              Home.Chat.razor.cs (ADR 0511).
         //   MainWindowViewModel.ExternalLinks.cs (111) share links on one document and the caller's own
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 2933,
+        // 2,933 -> 2,814: check-out and impersonation, out of a heading reading "Intray" that contained NO
+        // INTRAY AT ALL -- six subjects across 249 lines: the user-context setup, the caller's system-rights
+        // flags, impersonation, check-out, the crash-guard reconnect, and the TIFF backfill.
+        //
+        // That is the second heading in this burn-down that names something it contains none of (#941); the
+        // first was the web's "Rename / delete / recycle bin". Both had to be DEALT OUT rather than extracted,
+        // and the four subjects left in this one still are.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 2814,
 
         // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
         // the one authenticated ApiCore. Four areas left it:
