@@ -42,7 +42,7 @@
 
     // The diff's address, followed from the check-out row's `compare` rel (issue #416).
     [Parameter] public string? CompareHref { get; set; }
-    [Parameter] public string DocumentName { get; set; } = "";
+    [Parameter] public string DocumentName { get; set; } = string.Empty;
 
     private bool _busy = true;
     private CompareResult? _result;
@@ -73,5 +73,5 @@
         }
     }
 
-    private record CompareResult { public bool Available { get; set; } public string FromText { get; set; } = ""; public string ToText { get; set; } = ""; }
+    private record CompareResult { public bool Available { get; set; } public string FromText { get; set; } = string.Empty; public string ToText { get; set; } = string.Empty; }
 }

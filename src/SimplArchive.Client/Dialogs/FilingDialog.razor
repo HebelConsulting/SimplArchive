@@ -77,7 +77,7 @@
     private bool ShowInFolder => FolderId is not null;
 
     private int _mode;                 // 0 = as-version, 1 = in-folder, 2 = pick
-    private string _comment = "";
+    private string _comment = string.Empty;
     private PickNode? _picked;
     private IReadOnlyCollection<TreeItemData<PickNode>> _roots = [];
     private bool _loading = true;
@@ -177,9 +177,9 @@
     // ChildrenHref is the row's own `children` rel — the tree walks by following it, so no level of this
     // picker composes /documents/{id}/children from an id (ADR 0543, issue #416).
     private record PickNode(Guid Id, string Name, bool HasSubfolders, string? ChildrenHref = null, bool Selectable = true);
-    private record Link { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
+    private record Link { public string Rel { get; set; } = string.Empty; public string Href { get; set; } = string.Empty; }
     private record ListResponse { public List<Repo> Repositories { get; set; } = []; public List<Link> Links { get; set; } = []; }
-    private record Repo { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasSubfolders { get; set; } public bool CanCreateChildren { get; set; } public List<Link> Links { get; set; } = []; }
+    private record Repo { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public bool HasSubfolders { get; set; } public bool CanCreateChildren { get; set; } public List<Link> Links { get; set; } = []; }
     private record ChildrenResponse { public List<Child> Children { get; set; } = []; public List<Link> Links { get; set; } = []; }
-    private record Child { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } public bool CanCreateChildren { get; set; } public List<Link> Links { get; set; } = []; }
+    private record Child { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } public bool CanCreateChildren { get; set; } public List<Link> Links { get; set; } = []; }
 }

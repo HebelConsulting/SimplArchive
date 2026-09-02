@@ -18,7 +18,7 @@
     [CascadingParameter]
     private IMudDialogInstance Dialog { get; set; } = null!;
 
-    [Parameter] public string DocumentName { get; set; } = "";
+    [Parameter] public string DocumentName { get; set; } = string.Empty;
 
     private DateTime? _until = DateTime.Today.AddYears(1);
 

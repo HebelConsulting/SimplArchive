@@ -35,7 +35,7 @@
 @code {
     [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
 
-    [Parameter] public string RootName { get; set; } = "";
+    [Parameter] public string RootName { get; set; } = string.Empty;
 
     private string _versions = "all";
     private DateTime? _documentDateFrom;

@@ -96,12 +96,12 @@
 
     [Parameter] public Guid DocumentId { get; set; }
 
-    [Parameter] public string DocumentName { get; set; } = "";
+    [Parameter] public string DocumentName { get; set; } = string.Empty;
 
     // The href of this document's links collection, as the SERVER advertised it via the "external-links" rel
     // (ADR 0543). REQUIRED: the client does not compose this URL, and the hypermedia ledger enforces that — the
     // first draft of this dialog carried a composed fallback and the guard failed the build for it.
-    [Parameter] public string LinksHref { get; set; } = "";
+    [Parameter] public string LinksHref { get; set; } = string.Empty;
 
     private readonly List<ExternalLinkResponse> _links = [];
     private bool _canCreate;
@@ -257,9 +257,9 @@
         public DateTimeOffset ExpiresAt { get; set; }
         public int? MaxAccesses { get; set; }
         public int AccessCount { get; set; }
-        public string CreatedByName { get; set; } = "";
+        public string CreatedByName { get; set; } = string.Empty;
         public bool CanExtend { get; set; }
-        public string Etag { get; set; } = "";
+        public string Etag { get; set; } = string.Empty;
         public List<LinkResponse> Links { get; set; } = [];
     }
 }

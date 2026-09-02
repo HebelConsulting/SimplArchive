@@ -58,11 +58,11 @@
     private IMudDialogInstance Dialog { get; set; } = null!;
 
     [Parameter] public Guid DocumentId { get; set; }
-    [Parameter] public string DocumentName { get; set; } = "";
+    [Parameter] public string DocumentName { get; set; } = string.Empty;
 
     private DateTime? _date = DateTime.Today.AddDays(1);
     private TimeSpan? _time = new(9, 0, 0);
-    private string _note = "";
+    private string _note = string.Empty;
     private int _recurrence;
     private Guid _target = Guid.Empty;
     private bool _busy;
@@ -127,7 +127,7 @@
             if (response.IsSuccessStatusCode)
             {
                 Snackbar.Add(Strings.Get("ReminderSetOk"), Severity.Success);
-                _note = "";
+                _note = string.Empty;
                 await LoadAsync();
             }
             else
@@ -161,10 +161,10 @@
     }
 
     private record TargetsResponse { public List<TargetDto> Targets { get; set; } = []; }
-    private record TargetDto { public Guid Id { get; set; } public string DisplayName { get; set; } = ""; }
+    private record TargetDto { public Guid Id { get; set; } public string DisplayName { get; set; } = string.Empty; }
     private record ReminderListResponse { public List<ReminderDto> Reminders { get; set; } = []; public List<LinkDto> Links { get; set; } = []; }
-    private record LinkDto { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
-    private record ReminderDto { public Guid Id { get; set; } public DateTimeOffset RemindAt { get; set; } public string? Note { get; set; } public int Recurrence { get; set; } public string RecurrenceName { get; set; } = ""; public string TargetName { get; set; } = ""; public List<LinkDto> Links { get; set; } = []; }
+    private record LinkDto { public string Rel { get; set; } = string.Empty; public string Href { get; set; } = string.Empty; }
+    private record ReminderDto { public Guid Id { get; set; } public DateTimeOffset RemindAt { get; set; } public string? Note { get; set; } public int Recurrence { get; set; } public string RecurrenceName { get; set; } = string.Empty; public string TargetName { get; set; } = string.Empty; public List<LinkDto> Links { get; set; } = []; }
 
     private static string? Rel(List<LinkDto>? links, string rel)
     {

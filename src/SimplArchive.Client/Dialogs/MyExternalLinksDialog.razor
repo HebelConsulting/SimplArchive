@@ -102,7 +102,7 @@
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
 
     // The collection's href, as the server advertised it (ADR 0543).
-    [Parameter] public string LinksHref { get; set; } = "";
+    [Parameter] public string LinksHref { get; set; } = string.Empty;
 
     // Supplied by the caller, which already loads them for other admin surfaces — this dialog does not fetch the
     // directory itself.
@@ -225,15 +225,15 @@
     {
         public Guid Id { get; set; }
         public Guid DocumentId { get; set; }
-        public string DocumentName { get; set; } = "";
+        public string DocumentName { get; set; } = string.Empty;
         public DateTimeOffset ExpiresAt { get; set; }
         public int? MaxAccesses { get; set; }
         public int AccessCount { get; set; }
-        public string CreatedByName { get; set; } = "";
+        public string CreatedByName { get; set; } = string.Empty;
         // The document's folder, so "Go to" can open it and select the row inside — data, not a URL to follow.
         public Guid? ParentId { get; set; }
         public bool CanExtend { get; set; }
-        public string Etag { get; set; } = "";
+        public string Etag { get; set; } = string.Empty;
         public List<LinkResponse> Links { get; set; } = [];
     }
 }

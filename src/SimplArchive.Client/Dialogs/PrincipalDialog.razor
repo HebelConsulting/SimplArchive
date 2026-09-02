@@ -26,11 +26,11 @@
     private IMudDialogInstance Dialog { get; set; } = null!;
 
     [Parameter] public bool IsGroup { get; set; }
-    [Parameter] public string InitialName { get; set; } = "";
-    [Parameter] public string InitialEmail { get; set; } = "";
+    [Parameter] public string InitialName { get; set; } = string.Empty;
+    [Parameter] public string InitialEmail { get; set; } = string.Empty;
 
-    private string _name = "";
-    private string _email = "";
+    private string _name = string.Empty;
+    private string _email = string.Empty;
 
     protected override void OnInitialized()
     {

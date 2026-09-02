@@ -85,7 +85,7 @@
     [Parameter, EditorRequired] public string? VersionsHref { get; set; }
 
     private string? _compareHref;
-    [Parameter] public string DocumentName { get; set; } = "";
+    [Parameter] public string DocumentName { get; set; } = string.Empty;
 
     private List<VersionInfo> _versions = [];
     private Guid _fromId;
@@ -169,8 +169,8 @@
     // Restore was moved out of the compare dialog (issue #265) — "Make current" lives on the Versions dialog.
 
     private record VersionInfo(Guid Id, int VersionNumber);
-    private record LinkDto { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
+    private record LinkDto { public string Rel { get; set; } = string.Empty; public string Href { get; set; } = string.Empty; }
     private record VersionListResponse { public List<VersionResponse> Versions { get; set; } = []; public List<LinkDto> Links { get; set; } = []; }
-    private record VersionResponse { public Guid Id { get; set; } public int? VersionNumber { get; set; } public string Status { get; set; } = ""; }
-    private record CompareResult { public bool Available { get; set; } public string FromText { get; set; } = ""; public string ToText { get; set; } = ""; }
+    private record VersionResponse { public Guid Id { get; set; } public int? VersionNumber { get; set; } public string Status { get; set; } = string.Empty; }
+    private record CompareResult { public bool Available { get; set; } public string FromText { get; set; } = string.Empty; public string ToText { get; set; } = string.Empty; }
 }

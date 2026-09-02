@@ -46,7 +46,7 @@
     [CascadingParameter]
     private IMudDialogInstance Dialog { get; set; } = null!;
 
-    [Parameter] public string ItemName { get; set; } = "";
+    [Parameter] public string ItemName { get; set; } = string.Empty;
 
     // Exactly one of the two is non-null — the controller rejects anything else (IntrayMoveTargetRequiredException).
     public record SendTarget(Guid? TargetGroupId, Guid? TargetUserId);

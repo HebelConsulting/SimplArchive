@@ -33,7 +33,7 @@
 @code {
     [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
 
-    [Parameter] public string FileName { get; set; } = "";
+    [Parameter] public string FileName { get; set; } = string.Empty;
     [Parameter] public List<(Guid Id, string Name, string Path)> Duplicates { get; set; } = [];
 
     private Guid _selectedId;

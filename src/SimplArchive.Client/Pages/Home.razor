@@ -1221,9 +1221,9 @@
     private bool _canManageIntrays;
     private Guid? _myUserId;
 
-    private record WhoAmIResponse { public bool IsTenantAdmin { get; set; } public bool CanManageUsers { get; set; } public bool CanManageServiceAccounts { get; set; } public bool CanViewAuditLog { get; set; } public bool CanResetMfa { get; set; } public bool CanLegalHold { get; set; } public bool CanManageClassification { get; set; } public bool CanOverrideCheckout { get; set; } public bool CanImpersonate { get; set; } public bool CanExport { get; set; } public bool CanImport { get; set; } public bool CanManageIntrays { get; set; } public bool CanManageMailRouting { get; set; } public Guid? UserId { get; set; } public string UserName { get; set; } = ""; }
+    private record WhoAmIResponse { public bool IsTenantAdmin { get; set; } public bool CanManageUsers { get; set; } public bool CanManageServiceAccounts { get; set; } public bool CanViewAuditLog { get; set; } public bool CanResetMfa { get; set; } public bool CanLegalHold { get; set; } public bool CanManageClassification { get; set; } public bool CanOverrideCheckout { get; set; } public bool CanImpersonate { get; set; } public bool CanExport { get; set; } public bool CanImport { get; set; } public bool CanManageIntrays { get; set; } public bool CanManageMailRouting { get; set; } public Guid? UserId { get; set; } public string UserName { get; set; } = string.Empty; }
     // The logged-in user's display name — used in the sensitivity watermark (ADR "Document watermarking").
-    private string _viewerName = "";
+    private string _viewerName = string.Empty;
     private record BackfillResponse { public int Count { get; set; } }
 
     // Tenant-admin ribbon action (ADR 0274): convert every existing "current TIFF" document to a searchable
@@ -1764,8 +1764,8 @@
 
 
     private record ArchiveEntriesResponse { public List<ArchiveEntryDto> Entries { get; set; } = []; }
-    private record ArchiveEntryDto { public string Name { get; set; } = ""; public string Path { get; set; } = ""; public long Size { get; set; } public List<LinkResponse> Links { get; set; } = []; }
-    private record CreateVersionResponse { public Guid Id { get; set; } public string UploadUrl { get; set; } = ""; public List<LinkResponse> Links { get; set; } = []; }
+    private record ArchiveEntryDto { public string Name { get; set; } = string.Empty; public string Path { get; set; } = string.Empty; public long Size { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+    private record CreateVersionResponse { public Guid Id { get; set; } public string UploadUrl { get; set; } = string.Empty; public List<LinkResponse> Links { get; set; } = []; }
 
 
 

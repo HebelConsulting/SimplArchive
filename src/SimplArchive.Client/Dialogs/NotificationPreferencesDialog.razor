@@ -98,5 +98,5 @@
     };
 
     private record PrefsResponse { public List<Pref> Preferences { get; set; } = []; }
-    private class Pref { public int Type { get; set; } public string TypeName { get; set; } = ""; public bool EmailEnabled { get; set; } }
+    private class Pref { public int Type { get; set; } public string TypeName { get; set; } = string.Empty; public bool EmailEnabled { get; set; } }
 }

@@ -132,9 +132,9 @@
         return href is null ? null : (href.StartsWith("http") ? href : href.TrimStart('/'));
     }
 
-    private record Link { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
+    private record Link { public string Rel { get; set; } = string.Empty; public string Href { get; set; } = string.Empty; }
     private record ListResponse { public List<Repo> Repositories { get; set; } = []; public List<Link> Links { get; set; } = []; }
-    private record Repo { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasSubfolders { get; set; } public bool CanCreateChildren { get; set; } public List<Link> Links { get; set; } = []; }
+    private record Repo { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public bool HasSubfolders { get; set; } public bool CanCreateChildren { get; set; } public List<Link> Links { get; set; } = []; }
     private record ChildrenResponse { public List<Child> Children { get; set; } = []; public List<Link> Links { get; set; } = []; }
-    private record Child { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } public bool CanCreateChildren { get; set; } public List<Link> Links { get; set; } = []; }
+    private record Child { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } public bool CanCreateChildren { get; set; } public List<Link> Links { get; set; } = []; }
 }

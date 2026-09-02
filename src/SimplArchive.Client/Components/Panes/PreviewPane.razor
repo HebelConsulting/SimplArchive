@@ -107,7 +107,7 @@
 
     /// <summary>What to say when there is nothing to show — each tab words this differently.</summary>
     [Parameter]
-    public string EmptyText { get; set; } = "";
+    public string EmptyText { get; set; } = string.Empty;
 
     /// <summary>Tooltip for the converted-rendition badge.</summary>
     [Parameter]
@@ -147,7 +147,7 @@
     private DotNetObjectReference<PreviewPane>? _selfRef;
     private bool _fullscreen;                  // in-app maximize of the preview pane (ADR 0295)
 
-    private record PvResult { public string Kind { get; set; } = ""; public string Text { get; set; } = ""; }
+    private record PvResult { public string Kind { get; set; } = string.Empty; public string Text { get; set; } = string.Empty; }
 
     /// <summary>
     /// Renders a preview (image/pdf/text) with its hit-overlay into the JS host. <paramref name="previewUrl"/>
@@ -156,7 +156,7 @@
     /// </summary>
     public async Task RenderAsync(string? previewUrl, string? textLayoutUrl, bool converted = false, string? seedQuery = null)
     {
-        State.Kind = "";
+        State.Kind = string.Empty;
         State.Text = null;
         State.Count = 0;
         State.Index = 0;

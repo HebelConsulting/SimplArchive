@@ -112,7 +112,7 @@
     private string? _workflowHref;
     private List<UserOption> _reviewers = [];
     private Guid? _reviewerId;
-    private string _rejectReason = "";
+    private string _rejectReason = string.Empty;
     private bool _loading = true;
     private bool _busy;
     private bool _changed;
@@ -190,7 +190,7 @@
             {
                 _changed = true;
                 _reviewerId = null;
-                _rejectReason = "";
+                _rejectReason = string.Empty;
                 if (_workflowHref is not null) await LoadWorkflowAsync(_workflowHref);
                 Snackbar.Add(string.Format(Strings.Get("StWorkflowStatus"), _workflow?.StatusName), Severity.Success);
             }
@@ -232,7 +232,7 @@
     private record WorkflowResponse
     {
         public int Status { get; set; }
-        public string StatusName { get; set; } = "";
+        public string StatusName { get; set; } = string.Empty;
         public string? AssignedToName { get; set; }
         public DateTimeOffset? DueAt { get; set; }
         public bool IsOverdue { get; set; }
@@ -241,15 +241,15 @@
     }
     private record WorkflowTransitionItem
     {
-        public string ToStatusName { get; set; } = "";
+        public string ToStatusName { get; set; } = string.Empty;
         public string? AssignedToName { get; set; }
         public string? PerformedByName { get; set; }
         public string? RejectionReason { get; set; }
     }
     private record VersionListResponse { public List<VersionSummary> Versions { get; set; } = []; }
-    private record VersionSummary { public string Status { get; set; } = ""; public int? VersionNumber { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+    private record VersionSummary { public string Status { get; set; } = string.Empty; public int? VersionNumber { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record AssignableReviewersResponse { public List<UserOption> Reviewers { get; set; } = []; }
-    private record UserOption { public Guid Id { get; set; } public string DisplayName { get; set; } = ""; }
+    private record UserOption { public Guid Id { get; set; } public string DisplayName { get; set; } = string.Empty; }
     // `errorCode`, not `detail`: the code is the stable, language-neutral contract (ADR 0543); the detail
     // is English prose for developers.
     private record ProblemResponse { public string? ErrorCode { get; set; } }

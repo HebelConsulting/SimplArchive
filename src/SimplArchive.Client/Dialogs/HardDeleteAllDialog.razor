@@ -18,7 +18,7 @@
     [CascadingParameter]
     private IMudDialogInstance Dialog { get; set; } = null!;
 
-    private string _text = "";
+    private string _text = string.Empty;
 
     private void Ok() => Dialog.Close(DialogResult.Ok(true));
 

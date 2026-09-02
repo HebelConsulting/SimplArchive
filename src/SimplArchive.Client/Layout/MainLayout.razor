@@ -563,8 +563,8 @@
     private record NotificationDto
     {
         public Guid Id { get; set; }
-        public string Title { get; set; } = "";
-        public string Body { get; set; } = "";
+        public string Title { get; set; } = string.Empty;
+        public string Body { get; set; } = string.Empty;
         public int EventCount { get; set; } = 1;
         public Guid? DocumentId { get; set; }
         public Guid? DocumentParentId { get; set; }

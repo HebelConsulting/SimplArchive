@@ -25,9 +25,9 @@
     [CascadingParameter]
     private IMudDialogInstance Dialog { get; set; } = null!;
 
-    private string _title = "";
+    private string _title = string.Empty;
 
-    private string _body = "";
+    private string _body = string.Empty;
 
     private void Save() => Dialog.Close(DialogResult.Ok(new NewNote(_title.Trim(), _body)));
 

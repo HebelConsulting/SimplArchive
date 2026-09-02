@@ -84,7 +84,7 @@
 
     // The version list's address as the row advertised it (`versions` rel, issue #416) — not rebuilt from the id.
     [Parameter] public string? VersionsHref { get; set; }
-    [Parameter] public string DocumentName { get; set; } = "";
+    [Parameter] public string DocumentName { get; set; } = string.Empty;
 
     private List<Row> _versions = [];
     private Guid? _selectedId;
@@ -238,7 +238,7 @@
     {
         public Guid Id { get; set; }
         public int? VersionNumber { get; set; }
-        public string Status { get; set; } = "";
+        public string Status { get; set; } = string.Empty;
         public DateTimeOffset CreatedAt { get; set; }
         public string? CreatedByName { get; set; }
         public string? DocumentDate { get; set; }

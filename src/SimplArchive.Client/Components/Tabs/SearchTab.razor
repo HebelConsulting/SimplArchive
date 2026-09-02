@@ -314,7 +314,7 @@
             return;
         }
 
-        S.Query = "";
+        S.Query = string.Empty;
         S.ClearFacetSelections();
         S.FacetTags.Add(tag);
         await RunSearchAsync();
@@ -539,7 +539,7 @@
         row.FieldName = fieldName;
         row.DataType = S.AvailableFields.FirstOrDefault(f => f.Name == fieldName)?.DataType ?? 0;
         row.Operator = OperatorsFor(row.DataType)[0].Value;
-        row.Value = "";
+        row.Value = string.Empty;
         row.DateValue = null;
     }
 
@@ -691,7 +691,7 @@
         {
             S.Results = [];
             S.Facets = null;
-            S.Status = "";
+            S.Status = string.Empty;
             return;
         }
 

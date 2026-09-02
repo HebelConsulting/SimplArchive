@@ -61,15 +61,15 @@
     private IMudDialogInstance Dialog { get; set; } = null!;
 
     private List<LabelDto> _labels = [];
-    private string _newName = "";
-    private string _newColor = "";
+    private string _newName = string.Empty;
+    private string _newColor = string.Empty;
     private int _newRank = 1;
     private bool _newWatermark;
 
-    private sealed class LinkDto { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
+    private sealed class LinkDto { public string Rel { get; set; } = string.Empty; public string Href { get; set; } = string.Empty; }
     private sealed class LabelDto
     {
-        public Guid Id { get; set; } public string Name { get; set; } = ""; public int Rank { get; set; }
+        public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public int Rank { get; set; }
         public string? Color { get; set; } public bool Watermark { get; set; } public bool Retired { get; set; }
         public List<LinkDto> Links { get; set; } = [];
 
@@ -92,7 +92,7 @@
     {
         if (string.IsNullOrWhiteSpace(_newName)) return;
         var resp = await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("sensitivityLabels"), new { name = _newName.Trim(), rank = _newRank, color = string.IsNullOrWhiteSpace(_newColor) ? null : _newColor.Trim(), watermark = _newWatermark });
-        if (resp.IsSuccessStatusCode) { _newName = ""; _newColor = ""; _newWatermark = false; await LoadAsync(); }
+        if (resp.IsSuccessStatusCode) { _newName = string.Empty; _newColor = string.Empty; _newWatermark = false; await LoadAsync(); }
         else { Snackbar.Add(Strings.Get(resp.StatusCode == System.Net.HttpStatusCode.Conflict ? "StLabelNameExists" : "StErrAddLabel"), Severity.Warning); }
     }
 

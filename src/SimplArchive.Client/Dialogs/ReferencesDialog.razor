@@ -67,7 +67,7 @@
 
     // Where this item is referenced from, as the row advertised it (`referencing-folders` rel, issue #416).
     [Parameter] public string? ReferencingFoldersHref { get; set; }
-    [Parameter] public string ItemName { get; set; } = "";
+    [Parameter] public string ItemName { get; set; } = string.Empty;
 
     private List<Folder> _folders = [];
     private Folder? _primary;
@@ -124,7 +124,7 @@
         return href is null ? null : (href.StartsWith("http") ? href : href.TrimStart('/'));
     }
 
-    private record Link { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
+    private record Link { public string Rel { get; set; } = string.Empty; public string Href { get; set; } = string.Empty; }
     private record Resp { public Folder? PrimaryLocation { get; set; } public List<Folder> Folders { get; set; } = []; public List<Link> Links { get; set; } = []; }
-    private record Folder { public Guid Id { get; set; } public string Name { get; set; } = ""; public string Path { get; set; } = ""; }
+    private record Folder { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string Path { get; set; } = string.Empty; }
 }

@@ -34,7 +34,7 @@
     [CascadingParameter]
     private IMudDialogInstance Dialog { get; set; } = null!;
 
-    [Parameter] public string Name { get; set; } = "";
+    [Parameter] public string Name { get; set; } = string.Empty;
     [Parameter] public int InitialScope { get; set; }
     [Parameter] public List<TargetOption> Targets { get; set; } = [];
     [Parameter] public IEnumerable<string> InitialSelected { get; set; } = [];

@@ -55,17 +55,17 @@
     [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
 
     /// <summary>The dropped file's name, as the user sees it (stem + extension).</summary>
-    [Parameter] public string FileName { get; set; } = "";
+    [Parameter] public string FileName { get; set; } = string.Empty;
 
     /// <summary>A free name in the target folder, offered as the starting point for the second choice.</summary>
-    [Parameter] public string SuggestedName { get; set; } = "";
+    [Parameter] public string SuggestedName { get; set; } = string.Empty;
 
     /// <summary>False when the name is held by a FOLDER — then renaming is the only thing that can happen.</summary>
     [Parameter] public bool CanFileAsVersion { get; set; } = true;
 
     private string _action = "version";
-    private string _newName = "";
-    private string _comment = "";
+    private string _newName = string.Empty;
+    private string _comment = string.Empty;
 
     protected override void OnInitialized()
     {

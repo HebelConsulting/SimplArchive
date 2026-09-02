@@ -52,7 +52,7 @@
     [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
 
     private List<PasskeyDto>? _passkeys;
-    private string _newName = "";
+    private string _newName = string.Empty;
     private bool _busy;
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
@@ -83,7 +83,7 @@
             if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("PasskeyRegisterError"), Severity.Error); return; }
 
             Snackbar.Add(string.Format(Strings.Get("StPasskeyAdded"), _newName.Trim()), Severity.Success);
-            _newName = "";
+            _newName = string.Empty;
             await LoadAsync();
         }
         catch (JSException)
@@ -111,7 +111,7 @@
     private void Close() => Dialog.Close();
 
     private record PasskeyListResponse { public List<PasskeyDto> Passkeys { get; set; } = []; }
-    private record LinkDto { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
-    private record PasskeyDto { public Guid Id { get; set; } public string Name { get; set; } = ""; public DateTimeOffset CreatedAt { get; set; } public DateTimeOffset? LastUsedAt { get; set; } public List<LinkDto> Links { get; set; } = []; }
-    private record RegisterOptionsResponse { public string Options { get; set; } = ""; public string Token { get; set; } = ""; }
+    private record LinkDto { public string Rel { get; set; } = string.Empty; public string Href { get; set; } = string.Empty; }
+    private record PasskeyDto { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public DateTimeOffset CreatedAt { get; set; } public DateTimeOffset? LastUsedAt { get; set; } public List<LinkDto> Links { get; set; } = []; }
+    private record RegisterOptionsResponse { public string Options { get; set; } = string.Empty; public string Token { get; set; } = string.Empty; }
 }

@@ -61,8 +61,8 @@
     private IMudDialogInstance Dialog { get; set; } = null!;
 
     private bool _enabled;
-    private string _username = "";
-    private string _url = "";
+    private string _username = string.Empty;
+    private string _url = string.Empty;
     private string? _generatedPassword;
     private bool _busy;
 
@@ -153,5 +153,5 @@
 
     private void Close() => Dialog.Close();
 
-    private record StatusDto { public bool Enabled { get; set; } public string Username { get; set; } = ""; public string Url { get; set; } = ""; public string? Password { get; set; } }
+    private record StatusDto { public bool Enabled { get; set; } public string Username { get; set; } = string.Empty; public string Url { get; set; } = string.Empty; public string? Password { get; set; } }
 }

@@ -394,7 +394,7 @@
     }
 
     private List<IntrayItem> _intrayItems = [];
-    private string _intrayStatus = "";
+    private string _intrayStatus = string.Empty;
     private bool _intrayBusy;
 
     // Passed down to IntrayPageOperations. They stay HERE rather than moving with the buttons because this
@@ -609,7 +609,7 @@
 
     private bool _intrayIsEmail;
     private bool _intrayStgBusy;
-    private string _intrayStgName = "";
+    private string _intrayStgName = string.Empty;
     private DateTime? _intrayStgDate;
     private Guid? _intrayStgMaskId;
     private readonly List<EditField> _intrayStgFields = [];
@@ -952,10 +952,10 @@
 
 
     private record IntrayResponse { public List<IntrayItemDto> Items { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
-    private record IntrayItemDto { public string Name { get; set; } = ""; public long Size { get; set; } public bool HasMask { get; set; } public bool Signed { get; set; } public Guid? GroupId { get; set; } public string? GroupName { get; set; } public Guid? UserId { get; set; } public string? UserName { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+    private record IntrayItemDto { public string Name { get; set; } = string.Empty; public long Size { get; set; } public bool HasMask { get; set; } public bool Signed { get; set; } public Guid? GroupId { get; set; } public string? GroupName { get; set; } public Guid? UserId { get; set; } public string? UserName { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record IntrayMaskDraft { public string? Name { get; set; } public string? DocumentDate { get; set; } public Guid? MaskId { get; set; } public List<IntrayDraftField> Fields { get; set; } = []; public List<string>? OcrLanguages { get; set; } }
     private record IntrayPreviewResponse { public string? PreviewUrl { get; set; } public bool PreviewConverted { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record IntrayDraftField { public Guid FieldDefinitionId { get; set; } public List<string> Values { get; set; } = []; }
-    private record UploadIntrayResponse { public string Name { get; set; } = ""; public string UploadUrl { get; set; } = ""; }
+    private record UploadIntrayResponse { public string Name { get; set; } = string.Empty; public string UploadUrl { get; set; } = string.Empty; }
     private record IntrayUsersResponse { public List<IntrayUserOption> Users { get; set; } = []; }
 }

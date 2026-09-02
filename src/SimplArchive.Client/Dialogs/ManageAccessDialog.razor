@@ -179,7 +179,7 @@
     private IMudDialogInstance Dialog { get; set; } = null!;
 
     [Parameter] public Guid DocumentId { get; set; }
-    [Parameter] public string DocumentName { get; set; } = "";
+    [Parameter] public string DocumentName { get; set; } = string.Empty;
 
     private bool _loading = true;
     private bool _forbidden;
@@ -198,7 +198,7 @@
     private bool _effectiveExpanded;
     private bool _effectiveLoading;
     private bool _effectiveLoadedOnce;
-    private string _effectiveInheritedFrom = "";
+    private string _effectiveInheritedFrom = string.Empty;
     private List<EffEntryDto> _effective = [];
 
     protected override Task OnInitializedAsync() => LoadAsync();
@@ -570,10 +570,10 @@
     private sealed class EditState
     {
         public bool IsNew { get; set; }
-        public string PrincipalType { get; set; } = "";
+        public string PrincipalType { get; set; } = string.Empty;
         public Guid PrincipalId { get; set; }
-        public string PrincipalName { get; set; } = "";
-        public string PrincipalKey { get; set; } = "";
+        public string PrincipalName { get; set; } = string.Empty;
+        public string PrincipalKey { get; set; } = string.Empty;
         public RightsModel Rights { get; set; } = new();
     }
 
@@ -611,7 +611,7 @@
     private sealed class AclEntryDto
     {
         public Guid Id { get; set; }
-        public string PrincipalType { get; set; } = "";
+        public string PrincipalType { get; set; } = string.Empty;
         public Guid PrincipalId { get; set; }
         public bool CanSee { get; set; }
         public bool CanReadContent { get; set; }
@@ -629,9 +629,9 @@
 
     private sealed class PrincipalDto
     {
-        public string Type { get; set; } = "";
+        public string Type { get; set; } = string.Empty;
         public Guid Id { get; set; }
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
         public List<LinkDto>? Links { get; set; }
     }
 
@@ -644,9 +644,9 @@
 
     private sealed class LinkDto
     {
-        public string Rel { get; set; } = "";
+        public string Rel { get; set; } = string.Empty;
 
-        public string Href { get; set; } = "";
+        public string Href { get; set; } = string.Empty;
     }
 
     // `errorCode`, not `detail` — see ApiErrorText (issue #424).
@@ -660,10 +660,10 @@
 
     private sealed class EffEntryDto
     {
-        public string Type { get; set; } = "";
+        public string Type { get; set; } = string.Empty;
         public Guid Id { get; set; }
-        public string Name { get; set; } = "";
-        public string Access { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
+        public string Access { get; set; } = string.Empty;
         public string? ViaGroup { get; set; }
         public bool CanSee { get; set; }
         public bool CanReadContent { get; set; }

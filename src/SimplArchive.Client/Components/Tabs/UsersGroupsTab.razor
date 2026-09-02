@@ -454,7 +454,7 @@
     }
 
     private record MembersResponse { public List<MemberDto> Members { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
-    private record MemberDto { public Guid Id { get; set; } public string DisplayName { get; set; } = ""; public List<LinkResponse> Links { get; set; } = []; }
+    private record MemberDto { public Guid Id { get; set; } public string DisplayName { get; set; } = string.Empty; public List<LinkResponse> Links { get; set; } = []; }
 
     // The photo endpoint is bearer-protected, so fetch the bytes with the authenticated client and render a
     // data URL (a raw <img src> sends no token) — ADR "User profile photo". 404 → no photo.
@@ -561,7 +561,7 @@
         }
     }
 
-    private record ResetPasswordResult { public string Password { get; set; } = ""; }
+    private record ResetPasswordResult { public string Password { get; set; } = string.Empty; }
 
     // Admin MFA reset (ADR "MFA (interactive login, TOTP)") — disables a locked-out user's two-factor so they
     // can sign in with just their password and re-enroll.
@@ -846,7 +846,7 @@
     {
         public bool IsGroup { get; set; }
         public Guid Id { get; set; }
-        public string Name { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
         public bool IsActive { get; set; } = true;
         public bool MfaEnabled { get; set; }
         public bool ImapShowAllDocuments { get; set; }
@@ -886,8 +886,8 @@
         public int ClearanceRank { get; set; }
     }
 
-    private record UserAdminDto { public Guid Id { get; set; } public string Email { get; set; } = ""; public string DisplayName { get; set; } = ""; public bool IsActive { get; set; } public bool MfaEnabled { get; set; } public bool ImapShowAllDocuments { get; set; } public SystemRightsDto? Rights { get; set; } public List<LinkResponse> Links { get; set; } = []; }
-    private record GroupAdminDto { public Guid Id { get; set; } public string Name { get; set; } = ""; public SystemRightsDto? Rights { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+    private record UserAdminDto { public Guid Id { get; set; } public string Email { get; set; } = string.Empty; public string DisplayName { get; set; } = string.Empty; public bool IsActive { get; set; } public bool MfaEnabled { get; set; } public bool ImapShowAllDocuments { get; set; } public SystemRightsDto? Rights { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+    private record GroupAdminDto { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public SystemRightsDto? Rights { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record UsersAdminResponse { public List<UserAdminDto> Users { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
     private record GroupsAdminResponse { public List<GroupAdminDto> Groups { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
 

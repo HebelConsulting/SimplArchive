@@ -40,7 +40,7 @@
     [CascadingParameter]
     private IMudDialogInstance Dialog { get; set; } = null!;
 
-    [Parameter] public string Text { get; set; } = "";
+    [Parameter] public string Text { get; set; } = string.Empty;
     [Parameter] public string NoteColor { get; set; } = "#FFEB3B";
     [Parameter] public string? AuthorName { get; set; }
     [Parameter] public bool CanEdit { get; set; } = true;
@@ -52,7 +52,7 @@
     // A small fixed palette (hex, matches the server's #RRGGBB validation).
     private static readonly string[] Palette = ["#FFEB3B", "#8BC34A", "#4FC3F7", "#FF8A80", "#FFB74D", "#CE93D8"];
 
-    private string _text = "";
+    private string _text = string.Empty;
     private string _color = "#FFEB3B";
 
     protected override void OnInitialized()

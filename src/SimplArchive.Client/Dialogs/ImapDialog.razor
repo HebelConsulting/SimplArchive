@@ -58,8 +58,8 @@
     private bool _available;
     private bool _enabled;
     private bool _showAll;
-    private string _username = "";
-    private string _server = "";
+    private string _username = string.Empty;
+    private string _server = string.Empty;
     private string? _generatedPassword;
     private string? _settingsHref;
     private bool _busy;
@@ -160,15 +160,15 @@
 
     private void Close() => Dialog.Close();
 
-    private record LinkDto { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
+    private record LinkDto { public string Rel { get; set; } = string.Empty; public string Href { get; set; } = string.Empty; }
 
     private record StatusDto
     {
         public bool Available { get; set; }
         public bool Enabled { get; set; }
         public bool ShowAllDocuments { get; set; }
-        public string Username { get; set; } = "";
-        public string Host { get; set; } = "";
+        public string Username { get; set; } = string.Empty;
+        public string Host { get; set; } = string.Empty;
         public int? Port { get; set; }
         public int? TlsPort { get; set; }
         public string? Password { get; set; }

@@ -59,7 +59,7 @@
 
     private EnrollResponse? _enroll;
     private List<string>? _recoveryCodes;
-    private string _code = "";
+    private string _code = string.Empty;
     private bool _busy;
 
     protected override async Task OnInitializedAsync()
@@ -111,9 +111,9 @@
 
     private record EnrollResponse
     {
-        public string Secret { get; set; } = "";
-        public string OtpauthUri { get; set; } = "";
-        public string QrDataUrl { get; set; } = "";
+        public string Secret { get; set; } = string.Empty;
+        public string OtpauthUri { get; set; } = string.Empty;
+        public string QrDataUrl { get; set; } = string.Empty;
     }
 
     private record RecoveryCodesResponse

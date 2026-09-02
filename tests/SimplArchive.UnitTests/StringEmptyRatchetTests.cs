@@ -51,7 +51,17 @@ public class StringEmptyRatchetTests
     {
         var root = RepoPaths.Root();
         var actual = new Dictionary<string, int>();
-        foreach (var path in Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories))
+        // .cs AND .razor. The .razor half was the blind spot: a @code block is C# that this guard could not
+        // see, so 152 bare literals across 49 components sat outside it while 1,300 .cs files were policed.
+        // It surfaced three times in one day as a "new" violation the moment a partial moved code out of a
+        // .razor into a .cs -- the same characters, newly visible (#935's sibling).
+        //
+        // Markup cannot produce a false positive here: BareEmpty requires the literal to be followed by one of
+        // ; , ) ] } , and an attribute is followed by whitespace or />. That was verified rather than assumed --
+        // scanning every .razor found 152 matches inside @code blocks and ZERO in markup.
+        var sources = Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories)
+            .Concat(Directory.EnumerateFiles(Path.Combine(root, "src"), "*.razor", SearchOption.AllDirectories));
+        foreach (var path in sources)
         {
             var rel = Path.GetRelativePath(root, path).Replace('\\', '/');
             if (rel.Contains("/obj/", StringComparison.Ordinal) || rel.Contains("/bin/", StringComparison.Ordinal))

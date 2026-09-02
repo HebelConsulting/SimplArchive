@@ -25,7 +25,7 @@
     [CascadingParameter]
     private IMudDialogInstance Dialog { get; set; } = null!;
 
-    [Parameter] public string UserName { get; set; } = "";
+    [Parameter] public string UserName { get; set; } = string.Empty;
     [Parameter] public List<ReviewerCandidate> Candidates { get; set; } = [];
 
     private Guid? _reviewerId;

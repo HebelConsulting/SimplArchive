@@ -19,8 +19,8 @@
     [CascadingParameter]
     private IMudDialogInstance Dialog { get; set; } = null!;
 
-    private string _name = "";
-    private string _color = "";
+    private string _name = string.Empty;
+    private string _color = string.Empty;
 
     private void Ok() => Dialog.Close(DialogResult.Ok(new NewTagResult(_name.Trim(), string.IsNullOrWhiteSpace(_color) ? null : _color.Trim())));
 

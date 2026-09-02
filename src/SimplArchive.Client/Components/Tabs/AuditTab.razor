@@ -174,7 +174,7 @@
 
     // ---- Audit log viewer (ADR "Audit trail (first slice)") ------------------------------------------
     private readonly List<AuditEventDto> _auditEvents = new();
-    private string _auditActionFilter = "";
+    private string _auditActionFilter = string.Empty;
     private DateTime? _auditFrom;
     private DateTime? _auditTo;
     private string? _auditNextCursor;
@@ -381,7 +381,7 @@
 
     private async Task ClearAuditFiltersAsync()
     {
-        _auditActionFilter = "";
+        _auditActionFilter = string.Empty;
         _auditFrom = null;
         _auditTo = null;
         await RunAuditSearchAsync();
@@ -499,9 +499,9 @@
     private record AuditEventDto
     {
         public DateTimeOffset Timestamp { get; set; }
-        public string ActorType { get; set; } = "";
-        public string ActorName { get; set; } = "";
-        public string Action { get; set; } = "";
+        public string ActorType { get; set; } = string.Empty;
+        public string ActorName { get; set; } = string.Empty;
+        public string Action { get; set; } = string.Empty;
         public string? TargetType { get; set; }
         public string? TargetName { get; set; }
         public string? Details { get; set; }

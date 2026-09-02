@@ -115,8 +115,8 @@
         OpenRequested.InvokeAsync((documentId, parentId));
 
     private record DashReminderResponse { public List<DashReminder> Reminders { get; set; } = []; }
-    private record DashReminder { public Guid DocumentId { get; set; } public Guid? ParentId { get; set; } public string DocumentName { get; set; } = ""; public DateTimeOffset RemindAt { get; set; } public string? Note { get; set; } public int Recurrence { get; set; } public string RecurrenceName { get; set; } = ""; public bool Overdue { get; set; } }
+    private record DashReminder { public Guid DocumentId { get; set; } public Guid? ParentId { get; set; } public string DocumentName { get; set; } = string.Empty; public DateTimeOffset RemindAt { get; set; } public string? Note { get; set; } public int Recurrence { get; set; } public string RecurrenceName { get; set; } = string.Empty; public bool Overdue { get; set; } }
     private record DashFollowedResponse { public List<DashFollowed> Followed { get; set; } = []; }
-    private record DashFollowed { public Guid DocumentId { get; set; } public Guid? ParentId { get; set; } public string DocumentName { get; set; } = ""; }
+    private record DashFollowed { public Guid DocumentId { get; set; } public Guid? ParentId { get; set; } public string DocumentName { get; set; } = string.Empty; }
 
 }

@@ -210,9 +210,9 @@
         public string? Href(string rel) => Links.FirstOrDefault(l => l.Rel == rel)?.Href.TrimStart('/');
 
         public Guid DocumentId { get; set; }
-        public string DocumentName { get; set; } = "";
+        public string DocumentName { get; set; } = string.Empty;
         public int RetentionYears { get; set; }
-        public string DispositionDate { get; set; } = "";
+        public string DispositionDate { get; set; } = string.Empty;
         public bool Overdue { get; set; }
         public bool SuspendedByHold { get; set; }
         public string? RetentionOverrideUntil { get; set; }
