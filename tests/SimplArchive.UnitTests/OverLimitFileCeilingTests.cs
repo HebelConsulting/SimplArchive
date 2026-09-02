@@ -199,7 +199,15 @@ public class OverLimitFileCeilingTests
         // That is the second heading in this burn-down that names something it contains none of (#941); the
         // first was the web's "Rename / delete / recycle bin". Both had to be DEALT OUT rather than extracted,
         // and the four subjects left in this one still are.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 2814,
+        // 2,814 -> 2,573: the tenant-admin settings tab to MainWindowViewModel.TenantSettings.cs, plus a
+        // split-brain repaired. The heading was ACCURATE for 223 of its 263 lines -- the fourth honest one in
+        // this burn-down -- but had picked up CreateRepositoryAsync and the CALLER'S OWN PROFILE at the end.
+        //
+        // The profile went to Principals, where its readers already were: LoadMyPhotoAsync and SetMyPhotoAsync
+        // are the only things that write ProfilePhoto, and Decode is called from both photo loads, yet all
+        // three were declared a hundred lines away in the shell. A field separated from its only writers is
+        // the same split-brain the web's chat state had (#941).
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 2573,
 
         // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
         // the one authenticated ApiCore. Four areas left it:

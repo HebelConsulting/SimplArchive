@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SimplArchive.DesktopClient.Services;
 using SimplArchive.Localization;
+using SimplArchive.Presentation;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -607,5 +608,28 @@ public sealed partial class MainWindowViewModel
         {
             Status = Strings.Get("StErrReassign");
         }
+    }
+
+    // The CALLER's own profile -- photo, initials, id -- and the decode both it and the selected principal's
+    // photo use. These were declared in the shell while every write to them was here: LoadMyPhotoAsync and
+    // SetMyPhotoAsync are the only things that set ProfilePhoto, and Decode is called from both photo loads.
+    // A field a hundred lines from its only writers is the split-brain #941 keeps turning up.
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasProfilePhoto))]
+    private Bitmap? _profilePhoto;
+
+    public bool HasProfilePhoto => ProfilePhoto is not null;
+
+    public string UserInitials => Initials(UserDisplayName);
+
+    private Guid? _currentUserId;
+
+    private static string Initials(string? name) => ContactInitials.From(name);
+
+    private static Bitmap Decode(byte[] bytes)
+    {
+        using var ms = new MemoryStream(bytes);
+        return new Bitmap(ms);
     }
 }
