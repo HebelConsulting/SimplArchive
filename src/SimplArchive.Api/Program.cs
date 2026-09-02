@@ -275,6 +275,7 @@ builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentPurger>();
 // The caller-facing access questions every Document-scope controller asks (issue #466) — one implementation
 // where each controller used to carry its own copy of GetCallerRightsAsync.
 builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentAccessService>();
+builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentResourceLinks>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.MailboxAddressClaims>();
 // Restore of recycle-bin documents — shared by DocumentsController (per-item) and RecycleBinController (bulk).
 // See ADR "Bulk restore from the recycle bin".
