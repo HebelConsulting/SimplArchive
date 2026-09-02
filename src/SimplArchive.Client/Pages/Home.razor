@@ -1096,10 +1096,16 @@
     }
 
 
-    // --- Annotations -------------------------------------------------------------------------------------
-    // The whole lifecycle — the authoring mode, the selection, the clipboard and every write — belongs to
-    // AnnotationEditor (ADR 0558). What stays here is the wiring: pointing the editor at the pane it draws on,
-    // and handing it the version's annotations collection when the subject changes.
+    // ---- Shell state and lifecycle -------------------------------------------------------------------
+    // What the page itself owns: the selection and its epoch, the auth cascade, the caller's rights as whoami
+    // reported them, the tab switch, and clearing the preview pane.
+    //
+    // This said "Annotations" until now -- a tombstone since ADR 0558 moved annotation authoring to
+    // AnnotationEditor. Unrelated members then accumulated beneath it for months, reaching 482 lines of which
+    // none were annotations (#941); filing, the viewport tiers, the row actions, the chat thread, the JS
+    // wiring and the PDF backfill have each been taken out from under it since. What is left is the shell's
+    // own work, so it is corrected rather than deleted. It also wrote its rule with THREE dashes where the
+    // rest of the file uses four, which is why sweeps over these banners kept missing it.
 
     // Drops what the Repositories/Intray previews show. Each pane clears its own display + full-screen, and the
     // annotation editor clears its own markers, selection, clipboard and authoring mode.
@@ -1224,59 +1230,6 @@
     private record WhoAmIResponse { public bool IsTenantAdmin { get; set; } public bool CanManageUsers { get; set; } public bool CanManageServiceAccounts { get; set; } public bool CanViewAuditLog { get; set; } public bool CanResetMfa { get; set; } public bool CanLegalHold { get; set; } public bool CanManageClassification { get; set; } public bool CanOverrideCheckout { get; set; } public bool CanImpersonate { get; set; } public bool CanExport { get; set; } public bool CanImport { get; set; } public bool CanManageIntrays { get; set; } public bool CanManageMailRouting { get; set; } public Guid? UserId { get; set; } public string UserName { get; set; } = string.Empty; }
     // The logged-in user's display name — used in the sensitivity watermark (ADR "Document watermarking").
     private string _viewerName = string.Empty;
-    private record BackfillResponse { public int Count { get; set; } }
-
-    // Tenant-admin ribbon action (ADR 0274): convert every existing "current TIFF" document to a searchable
-    // PDF — shows the pending count, confirms, then enqueues.
-    private async Task RunTiffBackfillAsync()
-    {
-        int pending;
-        try
-        {
-            pending = (await Http.GetFromJsonAsync<BackfillResponse>(await ApiRoot.RequireAsync("searchablePdfBackfill")))?.Count ?? 0;
-        }
-        catch (Exception)
-        {
-            Snackbar.Add(Strings.Get("StErrCheckConversions"), Severity.Error);
-            return;
-        }
-
-        if (pending == 0)
-        {
-            Snackbar.Add(Strings.Get("StNoConversionNeeded"), Severity.Info);
-            return;
-        }
-
-        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
-        {
-            Title = "Convert scanned documents",
-            Message = $"Queue {pending} scanned document(s) (TIFFs + scanned PDFs) for searchable-PDF conversion?",
-            YesText = "Convert",
-            CancelText = "Cancel",
-        });
-        if (confirmed != true)
-        {
-            return;
-        }
-
-        try
-        {
-            var resp = await Http.PostAsync(await ApiRoot.RequireAsync("searchablePdfBackfill"), null);
-            if (resp.IsSuccessStatusCode)
-            {
-                var count = (await resp.Content.ReadFromJsonAsync<BackfillResponse>())?.Count ?? 0;
-                Snackbar.Add(string.Format(Strings.Get("StQueuedConversion"), count), Severity.Success);
-            }
-            else
-            {
-                Snackbar.Add(Strings.Get(resp.StatusCode == HttpStatusCode.Forbidden ? "NoPermission" : "StErrStartConversionPlain"), Severity.Warning);
-            }
-        }
-        catch (Exception)
-        {
-            Snackbar.Add(Strings.Get("StErrConversionStart"), Severity.Error);
-        }
-    }
 
     protected override async Task OnParametersSetAsync()
     {

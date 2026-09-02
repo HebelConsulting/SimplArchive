@@ -175,7 +175,16 @@ public class WorkbenchShellSizeTests
     // every wbLayout.js call is wrapped so a stale cached module degrades to the CSS default instead of
     // throwing through the render loop (ADR 0500, #267). Both are easy to undo by accident once the code is
     // spread through a 1,900-line file, and hard to undo when it is stated once at the top of its own.
-    private const int Ceiling = 1_785;
+    // 1,785 -> 1,730: the tenant-admin searchable-PDF backfill (ADR 0274), to Home.TiffBackfill.razor.cs.
+    //
+    // Not shell coordination at all: a one-off MAINTENANCE action that happens to be reachable from the ribbon.
+    // It touches no selection, no tree and no pane -- it asks the API a question, shows a number, and enqueues
+    // work. The lifecycle members it used to sit beside share none of that.
+    //
+    // It was the last extractable thing in the "Annotations" tombstone (#941). What remains there is genuine
+    // shell work -- the selection, the auth cascade, the tab switch, and the caller's rights, which the markup
+    // gates on -- so that heading now needs correcting rather than emptying.
+    private const int Ceiling = 1_730;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()
