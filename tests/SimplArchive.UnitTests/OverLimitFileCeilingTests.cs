@@ -167,7 +167,15 @@ public class OverLimitFileCeilingTests
         // Taken out of a heading reading "Folder detail pane: the open folder's persisted contents sort order",
         // which covered SIX subjects across 322 lines -- sort order, the detail glyph, the breadcrumb, opening,
         // the archive browser and folder creation. The remaining four are still to be dealt out (#941).
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 3585,
+        // 3,585 -> 3,313: mutating an item from a CONTEXT MENU, to MainWindowViewModel.ItemActions.cs --
+        // create a subfolder/section/note/structured child under it, rename, move, place a reference, delete,
+        // follow or unfollow. What distinguishes them is the TARGET: a node the user right-clicked, addressed
+        // by the href that node already carries (ADR 0555), rather than the open folder or the selection --
+        // which is why CreateFolderAsync stayed behind, since it creates in the open folder.
+        //
+        // The heading was ACCURATE, which is rare here: the second of six sections taken out of this file that
+        // did not have to be dealt out into several homes first (#941).
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 3313,
 
         // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
         // the one authenticated ApiCore. Four areas left it:
