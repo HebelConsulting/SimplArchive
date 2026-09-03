@@ -221,52 +221,11 @@ public class DocumentVersionsController : ControllerBase
         });
     }
 
-    public class DocumentVersionResource : HypermediaResource
-    {
-        public Guid Id { get; set; }
-
-        public int? VersionNumber { get; set; }
-
-        public string ObjectKey { get; set; } = string.Empty;
-
-        public string? Sha256Hash { get; set; }
-
-        public string Status { get; set; } = string.Empty;
-
-        /// <summary>The version's approval-workflow status (Draft/InReview/Approved/Rejected/Released), or
-        /// null when none was ever started — what lets a client label its workflow affordance by state
-        /// ("Start" vs "Manage" vs "View") without following the workflow rel first (review round, ADR 0557).</summary>
-        public string? WorkflowStatus { get; set; }
-
-        // True when the `preview` link points at a server-generated rendition rather than the original file
-        // shown as-is — the client badges it so the user knows it isn't the original (ADR "Converted-preview
-        // overlay badge").
-        public bool PreviewConverted { get; set; }
-
-        public DateTimeOffset CreatedAt { get; set; }
-
-        // The creator's display name (User.DisplayName / ServiceAccount.Name) — a read-only system field.
-        public string CreatedByName { get; set; } = string.Empty;
-
-        // The issuing date ("yyyy-MM-dd") — a string on the wire (XmlSerializer doesn't support DateOnly).
-        public string DocumentDate { get; set; } = string.Empty;
-
-        // The version's OCR-language override (Tesseract "+"-joined; null = inherit the tenant default) — the
-        // system-field picker on a TIFF version (ADR "Per-tenant / per-version OCR languages").
-        public string? OcrLanguages { get; set; }
-
-        // The file extension (e.g. ".tif"), derived from the object key — a read-only system field now that
-        // Document.Name no longer carries it (ADR "Extension off Document.Name, derived from the object key").
-        public string FileExtension { get; set; } = string.Empty;
-
-        // The optional per-version comment (ADR 0528) — the "why this revision" note, shown in the versions dialog.
-        public string? Comment { get; set; }
-    }
-
     private record VersionRow(
         Guid Id, Guid DocumentId, DocumentVersionStatus Status, int? VersionNumber, string ObjectKey,
         string? Sha256Hash, DateTimeOffset CreatedAt, DateOnly DocumentDate,
-        Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, string? OcrLanguages, string? Comment);
+        Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, string? OcrLanguages, string? Comment,
+        OcrVerdict? OcrVerdict = null, bool? IsSigned = null);
 
     public class DocumentVersionListResource : HypermediaResource
     {
@@ -335,7 +294,7 @@ public class DocumentVersionsController : ControllerBase
         var fetched = await query
             .OrderBy(v => v.CreatedAt).ThenBy(v => v.Id)
             .Take(pageSize + 1)
-            .Select(v => new VersionRow(v.Id, v.DocumentId, v.Status, v.VersionNumber, v.ObjectKey, v.Sha256Hash, v.CreatedAt, v.DocumentDate, v.CreatedByUserId, v.CreatedByServiceAccountId, v.OcrLanguages, v.Comment))
+            .Select(v => new VersionRow(v.Id, v.DocumentId, v.Status, v.VersionNumber, v.ObjectKey, v.Sha256Hash, v.CreatedAt, v.DocumentDate, v.CreatedByUserId, v.CreatedByServiceAccountId, v.OcrLanguages, v.Comment, v.OcrVerdict, v.IsSigned))
             .ToListAsync(cancellationToken);
 
         var (page, hasMore) = Cursor.Split(fetched, pageSize);
@@ -690,7 +649,7 @@ public class DocumentVersionsController : ControllerBase
         var wasPending = version.Status == DocumentVersionStatus.Pending;
         await _finalizer.FinalizeAsync(version, cancellationToken);
 
-        var row = new VersionRow(versionId, documentId, version.Status, version.VersionNumber, version.ObjectKey, version.Sha256Hash, version.CreatedAt, version.DocumentDate, version.CreatedByUserId, version.CreatedByServiceAccountId, version.OcrLanguages, version.Comment);
+        var row = new VersionRow(versionId, documentId, version.Status, version.VersionNumber, version.ObjectKey, version.Sha256Hash, version.CreatedAt, version.DocumentDate, version.CreatedByUserId, version.CreatedByServiceAccountId, version.OcrLanguages, version.Comment, version.OcrVerdict, version.IsSigned);
 
         var documentName = await LoadDocumentNameAsync(documentId, cancellationToken);
 
@@ -757,7 +716,7 @@ public class DocumentVersionsController : ControllerBase
         }
 
         var name = await LoadDocumentNameAsync(documentId, cancellationToken);
-        var row = new VersionRow(source.Id, documentId, source.Status, source.VersionNumber, source.ObjectKey, source.Sha256Hash, source.CreatedAt, source.DocumentDate, source.CreatedByUserId, source.CreatedByServiceAccountId, source.OcrLanguages, source.Comment);
+        var row = new VersionRow(source.Id, documentId, source.Status, source.VersionNumber, source.ObjectKey, source.Sha256Hash, source.CreatedAt, source.DocumentDate, source.CreatedByUserId, source.CreatedByServiceAccountId, source.OcrLanguages, source.Comment, source.OcrVerdict, source.IsSigned);
         return Ok(await BuildResourceAsync(row, name, cancellationToken));
     }
 
@@ -797,7 +756,7 @@ public class DocumentVersionsController : ControllerBase
         await _queue.EnqueueAsync(documentId, cancellationToken);
         await _wormLock.ReconcileAsync(documentId, cancellationToken); // the retention anchor (document date) moved
 
-        var row = new VersionRow(versionId, documentId, version.Status, version.VersionNumber, version.ObjectKey, version.Sha256Hash, version.CreatedAt, version.DocumentDate, version.CreatedByUserId, version.CreatedByServiceAccountId, version.OcrLanguages, version.Comment);
+        var row = new VersionRow(versionId, documentId, version.Status, version.VersionNumber, version.ObjectKey, version.Sha256Hash, version.CreatedAt, version.DocumentDate, version.CreatedByUserId, version.CreatedByServiceAccountId, version.OcrLanguages, version.Comment, version.OcrVerdict, version.IsSigned);
         var documentName = await LoadDocumentNameAsync(documentId, cancellationToken);
         await _audit.RecordAsync(AuditActions.DocumentDateChanged, "Document", documentId, documentName, $"Document date set to {date:yyyy-MM-dd} (version {version.VersionNumber})", cancellationToken: cancellationToken);
         return Ok(await BuildResourceAsync(row, documentName, cancellationToken));
@@ -818,7 +777,7 @@ public class DocumentVersionsController : ControllerBase
 
         var version = await _dbContext.DocumentVersions
             .Where(v => v.Id == versionId && v.DocumentId == documentId)
-            .Select(v => new { v.Status, v.VersionNumber, v.ObjectKey, v.Sha256Hash, v.CreatedAt, v.DocumentDate, v.CreatedByUserId, v.CreatedByServiceAccountId, v.OcrLanguages, v.Comment })
+            .Select(v => new { v.Status, v.VersionNumber, v.ObjectKey, v.Sha256Hash, v.CreatedAt, v.DocumentDate, v.CreatedByUserId, v.CreatedByServiceAccountId, v.OcrLanguages, v.Comment, v.OcrVerdict, v.IsSigned })
             .SingleOrDefaultAsync(cancellationToken);
 
         if (version is null)
@@ -826,7 +785,7 @@ public class DocumentVersionsController : ControllerBase
             return null;
         }
 
-        return new VersionRow(versionId, documentId, version.Status, version.VersionNumber, version.ObjectKey, version.Sha256Hash, version.CreatedAt, version.DocumentDate, version.CreatedByUserId, version.CreatedByServiceAccountId, version.OcrLanguages, version.Comment);
+        return new VersionRow(versionId, documentId, version.Status, version.VersionNumber, version.ObjectKey, version.Sha256Hash, version.CreatedAt, version.DocumentDate, version.CreatedByUserId, version.CreatedByServiceAccountId, version.OcrLanguages, version.Comment, version.OcrVerdict, version.IsSigned);
     }
 
     // The document's Name — used as the download filename (never the opaque object key). Loaded once per
@@ -913,6 +872,15 @@ public class DocumentVersionsController : ControllerBase
             // enforces CanEditIndexData plus the frozen/checked-out guards, and resolving all of that per row
             // would put a rights + legal-hold + checkout lookup on every version in the list.
             links.Add(new Link("document-date", $"/api/documents/{version.DocumentId}/versions/{version.Id}/document-date", "PUT"));
+
+            // Force a searchable-PDF successor from this version (#999's Make searchable): the user may
+            // overrule the detector — a detector-blind scan, or a re-run with changed languages. CONDITIONAL
+            // on what the enforcer refuses (ADR 0543): an OCR-candidate extension, and not signed (OCR would
+            // break the signature). DocumentSearchableController is the enforcer of the same predicate.
+            if (DocumentSearchableController.IsOcrCandidate(version.ObjectKey) && version.IsSigned != true)
+            {
+                links.Add(new Link("make-searchable", $"/api/documents/{version.DocumentId}/versions/{version.Id}/searchable", "POST"));
+            }
         }
 
         return new DocumentVersionResource
@@ -933,6 +901,8 @@ public class DocumentVersionsController : ControllerBase
             OcrLanguages = version.OcrLanguages,
             FileExtension = Path.GetExtension(version.ObjectKey),
             Comment = version.Comment,
+            OcrVerdict = version.OcrVerdict?.ToString(),
+            IsSigned = version.IsSigned == true,
             Links = links,
         };
     }

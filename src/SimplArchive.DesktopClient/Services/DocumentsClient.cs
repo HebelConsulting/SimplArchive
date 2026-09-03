@@ -768,18 +768,6 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
 
     public sealed record MaskInfo(Guid? MaskId, string? Name, int? VersionNumber, string? DefinitionHref = null); // DefinitionHref: this mask's field definitions, which the catalogue never carries for a typed folder (#729, ADR 0688)
 
-    // System-field values shown always (separate from the mask, ADR "System fields + OCR-language mask
-    // field"). Created/CreatedBy/DocumentDate are the currently-shown version's; the OCR-language override +
-    // TIFF-source come from the latest TIFF version.
-    // DocumentDateHref is the current version's own `document-date` address — the detail pane's Save follows it
-    // instead of rebuilding a path out of the two ids beside it (ADR 0543, issue #416).
-    public sealed record SystemFields(
-        Guid CurrentVersionId, int CurrentVersionNumber, DateTimeOffset CreatedAt, string CreatedByName, string DocumentDate,
-        bool HasTiffVersion, string? OcrLanguages, string FileExtension, string? DocumentDateHref = null, string? WorkflowStatus = null);
-
-
-
-
     public async Task<MaskInfo> GetMaskAsync(string maskHref, CancellationToken cancellationToken = default)
     {
         var mask = await _core.Http.GetFromJsonAsync<JsonElement>(maskHref, cancellationToken);
@@ -789,68 +777,6 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
             mask.TryGetProperty("versionNumber", out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : null, ApiCore.RelHref(mask, "definition"));
     }
 
-    public async Task<SystemFields?> GetSystemFieldsAsync(string versionsHref, CancellationToken cancellationToken = default)
-    {
-        var response = await _core.Http.GetFromJsonAsync<JsonElement>(versionsHref, cancellationToken);
-        if (VersionsClient.PickCurrentVersionElement(response) is not { } picked)
-        {
-            return null;
-        }
-
-        var cur = picked.Version;
-        var currentNumber = picked.Number;
-
-        // The latest TIFF version — the OCR source, a separate concept from "current".
-        JsonElement? tiff = null;
-        var tiffNumber = -1;
-        if (response.TryGetProperty("versions", out var versions))
-        {
-            foreach (var v in versions.EnumerateArray())
-            {
-                if (v.GetProperty("status").GetString() != "Confirmed")
-                {
-                    continue;
-                }
-
-                var number = v.TryGetProperty("versionNumber", out var vn) && vn.ValueKind == JsonValueKind.Number ? vn.GetInt32() : 0;
-                var objectKey = v.TryGetProperty("objectKey", out var ok) ? ok.GetString() ?? "" : "";
-                if ((objectKey.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) || objectKey.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase)) && number >= tiffNumber)
-                {
-                    tiffNumber = number;
-                    tiff = v;
-                }
-            }
-        }
-
-        static string Str(JsonElement e, string name) => e.TryGetProperty(name, out var p) ? p.GetString() ?? "" : "";
-
-        string? ocr = null;
-        if (tiff is { } t && t.TryGetProperty("ocrLanguages", out var o) && o.ValueKind == JsonValueKind.String)
-        {
-            ocr = o.GetString();
-        }
-
-        return new SystemFields(
-            cur.GetProperty("id").GetGuid(),
-            currentNumber,
-            cur.TryGetProperty("createdAt", out var ca) ? ca.GetDateTimeOffset() : default,
-            Str(cur, "createdByName"),
-            Str(cur, "documentDate"),
-            tiff is not null,
-            ocr,
-            Str(cur, "fileExtension"),
-            ApiCore.RelHref(cur, "document-date"), SimplArchiveApiClient.StrOrNull(cur, "workflowStatus"));
-    }
-
-    // Sets the document's OCR-language override (ordered codes) and re-runs the searchable-PDF conversion.
-    public async Task SetOcrLanguagesAsync(string ocrLanguagesHref, IReadOnlyList<string> codes, CancellationToken cancellationToken = default)
-    {
-        var response = await _core.Http.PutAsJsonAsync(ocrLanguagesHref, new { languages = codes }, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new ApiActionException($"Could not set OCR languages ({(int)response.StatusCode}).");
-        }
-    }
 
 
     public async Task<BulkResult> BulkReferenceAsync(IEnumerable<Guid> ids, Guid parentId, CancellationToken cancellationToken = default) =>

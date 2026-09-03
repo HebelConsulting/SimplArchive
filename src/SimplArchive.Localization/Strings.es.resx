@@ -4797,4 +4797,22 @@
   <data name="BookStatusCancelled" xml:space="preserve">
     <value>cancelado</value>
   </data>
+  <data name="SysOcrStatus" xml:space="preserve">
+    <value>OCR</value>
+  </data>
+  <data name="OcrVerdictConvertibleScan" xml:space="preserve">
+    <value>Escaneo solo de imagen: convertido automáticamente</value>
+  </data>
+  <data name="OcrVerdictNotAScan" xml:space="preserve">
+    <value>No es un escaneo (tiene capa de texto o ninguna imagen)</value>
+  </data>
+  <data name="OcrVerdictUnreadable" xml:space="preserve">
+    <value>Ilegible (cifrado o dañado)</value>
+  </data>
+  <data name="MakeSearchable" xml:space="preserve">
+    <value>Hacer que se pueda buscar</value>
+  </data>
+  <data name="MakeSearchableQueued" xml:space="preserve">
+    <value>Conversión en cola: la versión con búsqueda aparecerá en breve.</value>
+  </data>
 </root>

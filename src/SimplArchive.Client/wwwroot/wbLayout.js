@@ -30,7 +30,10 @@ const INDEX_CAP = 210;
 // Raised for that tier ONLY. Raising it everywhere would spend ~90px of desktop preview height, which is the
 // trade ADR 0550 deliberately made the other way; the desktop's own answer to the same squeeze was to move a
 // button out of the pane (#664), not to give the pane more room.
-const INDEX_CAP_TABLET_LANDSCAPE = 320;
+// 320 → 352 with #999: an unsigned PDF became an OCR candidate, so an ordinary offer document gained the
+// OCR-languages row and the verdict/Make-searchable row — ~32px the old cap hid behind a scrollbar the
+// user has no reason to look for (the tablet test asserts the OVERFLOW, so this is the knob it points at).
+const INDEX_CAP_TABLET_LANDSCAPE = 352;
 
 function indexCap() {
     return viewportMode() === 'tablet-landscape' ? INDEX_CAP_TABLET_LANDSCAPE : INDEX_CAP;

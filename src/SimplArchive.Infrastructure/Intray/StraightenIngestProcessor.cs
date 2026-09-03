@@ -94,7 +94,7 @@ public sealed class StraightenIngestProcessor(
             OcrLanguagesFor(),
             deskew: deskew,
             rotate: rotate,
-            cancellationToken);
+            cancellationToken: cancellationToken);
 
         return straightened is null ? null : new IntrayProcessed(straightened, ".pdf", "application/pdf");
     }

@@ -440,7 +440,9 @@ public partial class Home
         Detail.SysDocumentDate = null;
         Detail.SysCreated = string.Empty;
         Detail.SysCreatedBy = string.Empty;
-        Detail.SysHasTiff = false;
+        Detail.SysOcrCandidate = false;
+        Detail.SysOcrVerdict = null;
+        Detail.MakeSearchableHref = null; // an address must not outlive its subject (ADR 0559)
         Detail.SysOcrCodes = [];
         Detail.Retention = null;
         Detail.Subscribed = false;
@@ -467,6 +469,33 @@ public partial class Home
     // SHELL renders from: whether the ribbon draws the my-links button, and whether the chat header's bell is lit.
     private string? _myExternalLinksHref;
     private bool _folderSubscribed;
+
+    // #999's Make searchable: post the version's advertised rel; the successor arrives via the worker, so
+    // the feedback is "queued" — the versions list the pane already shows is where it lands.
+    private async Task MakeSearchableAsync()
+    {
+        if (Detail.MakeSearchableHref is not { } href)
+        {
+            return;
+        }
+
+        var response = await Http.PostAsync(href.TrimStart('/'), null);
+        if (response.IsSuccessStatusCode)
+        {
+            Snackbar.Add(Strings.Get("MakeSearchableQueued"), Severity.Success);
+        }
+        else
+        {
+            string? code = null;
+            try
+            {
+                var problem = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                code = problem.TryGetProperty("errorCode", out var c) ? c.GetString() : null;
+            }
+            catch (System.Text.Json.JsonException) { }
+            Snackbar.Add(SimplArchive.Localization.ApiErrorText.For(code), Severity.Error);
+        }
+    }
 
     private Task OpenBookingsDialogAsync() =>
         Detail.Links is { } links && links.TryGetValue("bookings", out var href)

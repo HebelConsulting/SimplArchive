@@ -87,6 +87,7 @@ async def ocr(
     kind: str = Query("tiff"),
     deskew: bool = Query(False),
     rotate: bool = Query(False),
+    force: bool = Query(False),
 ):
     data = await file.read()
     is_pdf = kind == "pdf"
@@ -101,7 +102,10 @@ async def ocr(
         # and --skip-text would skip the correction on every page that already carries a text layer — the
         # same skip that broke rotation — so the scan is re-rendered like a TIFF.
         # --image-dpi 300: fallback resolution when the source carries none.
-        mode = "--skip-text" if is_pdf and not deskew else "--force-ocr"
+        # force (#999's Make searchable): the user overruled the detector, so re-render like a TIFF —
+        # --skip-text would skip exactly the pages they want redone (a bad text layer), and a
+        # detector-blind scan converts under either mode.
+        mode = "--skip-text" if is_pdf and not deskew and not force else "--force-ocr"
         args = ["ocrmypdf", mode, "--language", lang, "--output-type", "pdf", "--image-dpi", "300"]
 
         # Straightening (#491) is TWO corrections, and they are asked for separately because they cost

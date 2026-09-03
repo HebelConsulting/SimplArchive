@@ -756,7 +756,7 @@
                            that a property of the transition — while the actions themselves stay the shell's. *@
                         <IndexDataPane Save="SaveDetailAsync" Cancel="@(() => Editor.Cancel())" OpenWorkflow="@(() => OpenWorkflowAsync(_selectedItem!))" WorkflowTransition="DoWorkflowTransitionAsync"
                                        KeyDown="OnDetailKeyDown" EditMaskChanged="@((Guid? m) => Editor.ChangeMaskAsync(m))"
-                                       ToggleOcrCode="@((string c) => Editor.ToggleOcr(c))" SearchByTag="SearchByTagAsync" GenericAction="ExecuteGenericActionAsync" OpenBookings="OpenBookingsDialogAsync">
+                                       ToggleOcrCode="@((string c) => Editor.ToggleOcr(c))" SearchByTag="SearchByTagAsync" GenericAction="ExecuteGenericActionAsync" OpenBookings="OpenBookingsDialogAsync" MakeSearchable="MakeSearchableAsync">
                             <ReadActions>
                                 @* The per-document action row, extracted to its own component (ADR 0664). The shell
                                    still decides the row exists and owns what each action DOES; only the markup moved.

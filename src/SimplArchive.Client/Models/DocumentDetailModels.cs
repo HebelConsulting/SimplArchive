@@ -61,6 +61,13 @@ public record VersionResponse
     public string? OcrLanguages { get; set; }
     public string? FileExtension { get; set; }
     public string? ObjectKey { get; set; }
+
+    /// <summary>The persisted scanned-PDF verdict (#999): ConvertibleScan/NotAScan/Unreadable, null while
+    /// unjudged — what the detail pane's verdict line renders.</summary>
+    public string? OcrVerdict { get; set; }
+
+    public bool IsSigned { get; set; }
+
     public List<LinkResponse> Links { get; set; } = [];
 }
 

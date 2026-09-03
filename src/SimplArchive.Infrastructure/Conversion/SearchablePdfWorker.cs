@@ -121,9 +121,26 @@ public sealed class SearchablePdfWorker : BackgroundService
             sourceBytes = buffer.ToArray();
         }
 
+        if (kind == SearchablePdfSourceKind.Tiff && source.OcrVerdict != OcrVerdict.ConvertibleScan)
+        {
+            // A TIFF is trivially convertible; persist that so the clients' verdict line has an answer for
+            // TIFFs that predate the column (#999) — the finalize path stamps new ones.
+            source.OcrVerdict = OcrVerdict.ConvertibleScan;
+        }
+
         if (kind == SearchablePdfSourceKind.Pdf)
         {
             var verdict = ScannedPdfDetector.Detect(sourceBytes);
+
+            // The verdict is PERSISTED rather than discarded (#999): it is what gates the clients' OCR
+            // affordances and what their verdict line says — the fact this worker used to compute and
+            // throw away, which is why a never-OCR'd PDF was inexplicable from the UI.
+            source.OcrVerdict = verdict switch
+            {
+                ScannedPdfDetector.ScanVerdict.ConvertibleScan => OcrVerdict.ConvertibleScan,
+                ScannedPdfDetector.ScanVerdict.Unreadable => OcrVerdict.Unreadable,
+                _ => OcrVerdict.NotAScan,
+            };
 
             // UNREADABLE is not the same outcome as "not a scan", even though both end here. An encrypted or
             // corrupt PDF is one we WANTED to OCR and could not read at all, so the document silently never
@@ -137,9 +154,11 @@ public sealed class SearchablePdfWorker : BackgroundService
                     row.SourceVersionId, row.TenantId);
             }
 
-            if (verdict != ScannedPdfDetector.ScanVerdict.ConvertibleScan)
+            if (verdict != ScannedPdfDetector.ScanVerdict.ConvertibleScan && !row.Force)
             {
                 // Not a scan we should OCR (has a text layer, no bitmap, signed) or unreadable — no successor.
+                // Unless the user overruled the detector (#999's Make searchable): a detector-blind scan or a
+                // bad text layer converts anyway, under --force-ocr.
                 dbContext.SearchablePdfOutbox.Remove(row);
                 await dbContext.SaveChangesAsync(cancellationToken);
                 return true;
@@ -157,7 +176,7 @@ public sealed class SearchablePdfWorker : BackgroundService
                 .SingleOrDefaultAsync(cancellationToken) ?? Domain.Documents.OcrLanguages.Default;
         }
 
-        var pdfBytes = await converter.ConvertToSearchablePdfAsync(sourceBytes, kind.Value, languages, cancellationToken: cancellationToken);
+        var pdfBytes = await converter.ConvertToSearchablePdfAsync(sourceBytes, kind.Value, languages, force: row.Force, cancellationToken: cancellationToken);
         if (pdfBytes is null)
         {
             row.Attempts++;

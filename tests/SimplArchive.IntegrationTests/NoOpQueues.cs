@@ -17,7 +17,7 @@ internal sealed class NoOpDocumentIndexQueue : IDocumentIndexQueue
 internal sealed class NoOpSearchablePdfQueue : ISearchablePdfQueue
 {
     public static readonly NoOpSearchablePdfQueue Instance = new();
-    public Task EnqueueAsync(Guid documentId, Guid sourceVersionId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task EnqueueAsync(Guid documentId, Guid sourceVersionId, bool force = false, CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task<int> EnqueueManyAsync(IReadOnlyCollection<SearchablePdfJob> jobs, CancellationToken cancellationToken = default) => Task.FromResult(0);
 }
 

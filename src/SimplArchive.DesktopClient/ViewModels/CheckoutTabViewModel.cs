@@ -27,6 +27,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
     public void SetApi(SimplArchiveApiClient api)
     {
         _api = api;
+        _ocrCatalog = new OcrLanguageCatalog(api);
     }
 
     // ---- Detail panes (ADR "The Check-out tab shows what you are about to check in") -------------------
@@ -132,10 +133,88 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
 
     partial void OnSelectedRowChanged(CheckoutRowViewModel? value) => _ = LoadDetailAsync(value);
 
+    private OcrLanguageCatalog? _ocrCatalog;
+    private string? _ocrLanguagesHref;
+    private string? _makeSearchableHref;
+    private IReadOnlyList<string> _ocrCodes = [];
+
+    /// <summary>The OCR affordance line (#999): languages + verdict, shown for an OCR-candidate document.</summary>
+    [ObservableProperty] private string _ocrLineText = string.Empty;
+
+    public bool HasOcrLine => OcrLineText.Length > 0;
+
+    public bool CanMakeSearchable => _makeSearchableHref is not null;
+
+    public bool CanEditOcr => _ocrLanguagesHref is not null;
+
+    /// <summary>The picker dialog's inputs — the view opens it (the OnEditOcrLanguages pattern).</summary>
+    public (IReadOnlyList<SimplArchiveApiClient.OcrLanguageOption> Catalog, IReadOnlyList<string> Selected) OcrPickerState() =>
+        (_ocrCatalog?.Options ?? [], _ocrCodes);
+
+    /// <summary>Commits picked languages immediately — this pane has no edit mode (its idiom: read-only
+    /// context with direct actions), so the picker's OK IS the save, and the row reloads from the truth.</summary>
+    public async Task SetOcrLanguagesAsync(List<string> codes)
+    {
+        if (_api is null || _ocrLanguagesHref is not { } href)
+        {
+            return;
+        }
+
+        try
+        {
+            await _api.Documents.SetOcrLanguagesAsync(href, codes);
+            await LoadDetailAsync(SelectedRow);
+        }
+        catch (ApiActionException e)
+        {
+            Report(e.Message);
+        }
+    }
+
+    [RelayCommand]
+    private async Task MakeSearchable()
+    {
+        if (_api is null || _makeSearchableHref is not { } href)
+        {
+            return;
+        }
+
+        try
+        {
+            await _api.Documents.MakeSearchableAsync(href);
+            Report(Strings.Get("MakeSearchableQueued"));
+        }
+        catch (ApiActionException e)
+        {
+            Report(e.Message);
+        }
+    }
+
+    private void SetOcrLine(DocumentsClient.SystemFields? fields)
+    {
+        _makeSearchableHref = fields?.MakeSearchableHref;
+        _ocrCodes = string.IsNullOrWhiteSpace(fields?.OcrLanguages) ? [] : fields!.OcrLanguages!.Split('+', StringSplitOptions.RemoveEmptyEntries);
+        var verdict = fields?.OcrVerdict switch
+        {
+            "ConvertibleScan" => Strings.Get("OcrVerdictConvertibleScan"),
+            "NotAScan" => Strings.Get("OcrVerdictNotAScan"),
+            "Unreadable" => Strings.Get("OcrVerdictUnreadable"),
+            _ => null,
+        };
+        OcrLineText = fields?.IsOcrCandidate == true
+            ? string.Join(" · ", new[] { _ocrCodes.Count > 0 ? string.Join("+", _ocrCodes) : null, verdict }.Where(s => s is not null))
+            : string.Empty;
+        OnPropertyChanged(nameof(HasOcrLine));
+        OnPropertyChanged(nameof(CanMakeSearchable));
+        OnPropertyChanged(nameof(CanEditOcr));
+    }
+
     private async Task LoadDetailAsync(CheckoutRowViewModel? row)
     {
         IndexFields.Clear();
         Pages = null; // an affordance must not outlive its subject (ADR 0559)
+        _ocrLanguagesHref = null;
+        SetOcrLine(null);
         if (_api is null || row?.Item is not { } item)
         {
             DetailTitle = string.Empty;
@@ -163,14 +242,31 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
         // is the document resource; its index-data address comes from following that once (ADR 0559).
         try
         {
-            foreach (var field in await _api.Documents.GetIndexDataAsync(await _api.Documents.RelViaSelfAsync(
-                item.Href("self") ?? throw new InvalidOperationException("The check-out row advertised no 'self' rel (ADR 0543)."), "index-data")))
+            // ONE read of the document resource serves index-data AND the OCR affordance's inputs (#999) —
+            // per-rel fetching is what ADR 0557 forbids, and this pane used to pay it for index-data alone.
+            var selfHref = item.Href("self") ?? throw new InvalidOperationException("The check-out row advertised no 'self' rel (ADR 0543).");
+            var detail = await _api.Documents.GetDocumentDetailAsync(selfHref);
+            _ocrLanguagesHref = detail.Links?.GetValueOrDefault("ocr-languages");
+
+            if (detail.Links?.GetValueOrDefault("index-data") is { } indexHref)
             {
-                IndexFields.Add(new IndexFieldViewModel
+                foreach (var field in await _api.Documents.GetIndexDataAsync(indexHref))
                 {
-                    FieldName = field.FieldName,
-                    Values = string.Join(", ", field.Values),
-                });
+                    IndexFields.Add(new IndexFieldViewModel
+                    {
+                        FieldName = field.FieldName,
+                        Values = string.Join(", ", field.Values),
+                    });
+                }
+            }
+
+            if (detail.Links?.GetValueOrDefault("versions") is { } versionsHref)
+            {
+                SetOcrLine(await _api.Documents.GetSystemFieldsAsync(versionsHref));
+                if (CanEditOcr && _ocrCatalog is not null)
+                {
+                    await _ocrCatalog.EnsureLoadedAsync();
+                }
             }
         }
         catch (Exception)

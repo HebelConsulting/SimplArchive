@@ -118,7 +118,7 @@ public sealed class DetailEditor(HttpClient http, DetailState detail, DetailCata
             // mask and index fields rather than hiding behind an Edit button of its own.
             detail.EditSortOrder = detail.SortOrder;
 
-            await catalogs.EnsureForEditAsync(needsOcr: detail.SysHasTiff);
+            await catalogs.EnsureForEditAsync(needsOcr: detail.SysOcrCandidate);
             await LoadFieldsAsync(detail.EditMaskId, useCurrentValues: true);
             detail.IsEditing = true;
         }
@@ -247,7 +247,7 @@ public sealed class DetailEditor(HttpClient http, DetailState detail, DetailCata
                 if (resp.IsSuccessStatusCode) { detail.SysDocumentDate = detail.OrigDocumentDate = dd; } else { failures.Add(DetailSaveFailure.DocumentDate); }
             }
 
-            if (detail.SysHasTiff && !detail.EditOcrCodes.SequenceEqual(detail.OrigOcrCodes))
+            if (detail.SysOcrCandidate && !detail.EditOcrCodes.SequenceEqual(detail.OrigOcrCodes))
             {
                 var resp = await http.PutAsJsonAsync(Href("ocr-languages"), new { languages = detail.EditOcrCodes });
                 if (resp.IsSuccessStatusCode) { detail.SysOcrCodes = [.. detail.EditOcrCodes]; detail.OrigOcrCodes = [.. detail.EditOcrCodes]; }

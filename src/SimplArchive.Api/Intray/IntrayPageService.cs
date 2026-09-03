@@ -231,7 +231,7 @@ public sealed class IntrayPageService(
             OcrLanguages,
             deskew: sourceKind == SearchablePdfSourceKind.Tiff || ScannedPdfDetector.IsConvertibleScan(bytes),
             rotate: true,
-            cancellationToken);
+            cancellationToken: cancellationToken);
 
         if (straightened is null)
         {

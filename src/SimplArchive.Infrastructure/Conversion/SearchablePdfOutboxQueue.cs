@@ -17,7 +17,7 @@ public sealed class SearchablePdfOutboxQueue : ISearchablePdfQueue
         _tenantAccessor = tenantAccessor;
     }
 
-    public async Task EnqueueAsync(Guid documentId, Guid sourceVersionId, CancellationToken cancellationToken = default)
+    public async Task EnqueueAsync(Guid documentId, Guid sourceVersionId, bool force = false, CancellationToken cancellationToken = default)
     {
         _dbContext.SearchablePdfOutbox.Add(new SearchablePdfOutbox
         {
@@ -27,6 +27,7 @@ public sealed class SearchablePdfOutboxQueue : ISearchablePdfQueue
             SourceVersionId = sourceVersionId,
             CreatedAt = DateTimeOffset.UtcNow,
             Attempts = 0,
+            Force = force,
         });
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -61,7 +62,7 @@ public sealed class SearchablePdfOutboxQueue : ISearchablePdfQueue
 // Registered when Ocr:Url isn't configured — nothing consumes the queue, so enqueueing is a no-op.
 public sealed class NullSearchablePdfQueue : ISearchablePdfQueue
 {
-    public Task EnqueueAsync(Guid documentId, Guid sourceVersionId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task EnqueueAsync(Guid documentId, Guid sourceVersionId, bool force = false, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
     public Task<int> EnqueueManyAsync(IReadOnlyCollection<SearchablePdfJob> jobs, CancellationToken cancellationToken = default) => Task.FromResult(0);
 }

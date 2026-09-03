@@ -342,23 +342,28 @@ public class DocumentMetadataController : ControllerBase
             throw UnknownOcrLanguageException.Unsupported(unknown);
         }
 
-        // The conversion source: the latest confirmed TIFF version.
-        var tiffVersion = await _dbContext.DocumentVersions
-            .Where(v => v.DocumentId == documentId && v.Status == DocumentVersionStatus.Confirmed)
+        // The conversion source: the latest confirmed OCR-candidate version — TIFF or PDF since #999 (the
+        // TIFF-only gate predated scanned-PDF support and was exactly why an image-only PDF could never get
+        // its languages set). Signed versions are excluded: OCR would break the signature, so the affordance
+        // is absent for them and this enforcer matches (ADR 0543).
+        var sourceVersion = await _dbContext.DocumentVersions
+            .Where(v => v.DocumentId == documentId && v.Status == DocumentVersionStatus.Confirmed && v.IsSigned != true)
             .OrderByDescending(v => v.VersionNumber)
-            .FirstOrDefaultAsync(v => v.ObjectKey.ToLower().EndsWith(".tif") || v.ObjectKey.ToLower().EndsWith(".tiff"), cancellationToken);
+            .FirstOrDefaultAsync(v => v.ObjectKey.ToLower().EndsWith(".tif") || v.ObjectKey.ToLower().EndsWith(".tiff")
+                || v.ObjectKey.ToLower().EndsWith(".pdf"), cancellationToken);
 
-        if (tiffVersion is null)
+        if (sourceVersion is null)
         {
-            throw new NoTiffVersionException();
+            throw new NoOcrSourceVersionException();
         }
 
-        tiffVersion.OcrLanguages = codes.Count == 0 ? null : string.Join('+', codes);
+        sourceVersion.OcrLanguages = codes.Count == 0 ? null : string.Join('+', codes);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         // Re-run the conversion with the new languages → a new searchable-PDF version (no-op when the OCR
-        // sidecar isn't configured).
-        await _searchablePdfQueue.EnqueueAsync(documentId, tiffVersion.Id, cancellationToken);
+        // sidecar isn't configured; a PDF the detector calls NotAScan stays unconverted here — the forced
+        // path is the make-searchable rel, a deliberate act).
+        await _searchablePdfQueue.EnqueueAsync(documentId, sourceVersion.Id, cancellationToken: cancellationToken);
         await _audit.RecordAsync(AuditActions.DocumentOcrLanguagesChanged, "Document", documentId, documentName,
             codes.Count == 0 ? "OCR languages reset to tenant default" : $"OCR languages set to {string.Join('+', codes)}", cancellationToken: cancellationToken);
 

@@ -53,7 +53,7 @@ public partial class MainWindowViewModel
         SysCreated = "2026-07-15 09:12";
         SysCreatedBy = "Demo Admin";
         SysDocumentDate = new DateTime(2026, 6, 28);
-        SysHasTiff = false;
+        SysOcrCandidate = false;
         SysOcrLanguages = "German, French";
         MaskLine = "Mask: Basic Entry · version 1";
         CanEditDetail = true;

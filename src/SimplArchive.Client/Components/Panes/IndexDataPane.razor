@@ -101,7 +101,7 @@
                         }
                     </td>
                 </tr>
-                @if (Detail.SysHasTiff)
+                @if (Detail.SysOcrCandidate)
                 {
                     <tr>
                         <td>@Strings.Get("SysOcrLanguages")</td>
@@ -124,6 +124,27 @@
                             }
                         </td>
                     </tr>
+                    @* The persisted verdict + the user's override (#999): the quiet line says why the
+                       automatic OCR did or did not run — ADR 0626's principle in the pane, where the user
+                       who wonders why their scan is unsearchable is actually looking. The button follows
+                       the make-searchable rel the version advertised; absent rel, absent button (ADR 0543). *@
+                    @if (!IsEditing && (Detail.SysOcrVerdict is not null || Detail.MakeSearchableHref is not null))
+                    {
+                        <tr>
+                            <td>@Strings.Get("SysOcrStatus")</td>
+                            <td>
+                                @if (Detail.SysOcrVerdict is { } verdict)
+                                {
+                                    <span class="wb-sys-muted">@VerdictText(verdict)</span>
+                                }
+                                @if (Detail.MakeSearchableHref is not null)
+                                {
+                                    <MudButton Size="Size.Small" Variant="Variant.Text" Class="ml-1"
+                                               OnClick="@(() => MakeSearchable.InvokeAsync())">@Strings.Get("MakeSearchable")</MudButton>
+                                }
+                            </td>
+                        </tr>
+                    }
                 }
                 <tr><td>@Strings.Get("SysCreated")</td><td class="wb-sys-muted">@Detail.SysCreated</td></tr>
                 <tr><td>@Strings.Get("SysCreatedBy")</td><td class="wb-sys-muted">@Detail.SysCreatedBy</td></tr>
@@ -411,6 +432,20 @@
 
     /// <summary>The Bookings… button was clicked (ADR 0735) — the shell opens the dialog.</summary>
     [Parameter, EditorRequired] public EventCallback OpenBookings { get; set; }
+
+    /// <summary>Make searchable was clicked (#999) — the shell posts the version's make-searchable rel.</summary>
+    [Parameter, EditorRequired] public EventCallback MakeSearchable { get; set; }
+
+    private static string VerdictText(string verdict)
+    {
+        var key = verdict switch
+        {
+            "ConvertibleScan" => "OcrVerdictConvertibleScan",
+            "Unreadable" => "OcrVerdictUnreadable",
+            _ => "OcrVerdictNotAScan",
+        };
+        return Strings.Get(key);
+    }
 
     private string? TagColor(string name) => Catalogs.TagColor(name);
 

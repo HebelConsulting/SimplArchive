@@ -23,4 +23,8 @@ public sealed class SearchablePdfOutbox
     // Retry/backoff bookkeeping — the worker gives up (drops the row) after a cap so a permanently-bad file
     // doesn't retry forever.
     public int Attempts { get; set; }
+
+    // The user overruled the detector (#999's Make searchable): skip detection and convert regardless of
+    // verdict. The force has to TRAVEL through the queue — the worker is where conversion happens.
+    public bool Force { get; set; }
 }

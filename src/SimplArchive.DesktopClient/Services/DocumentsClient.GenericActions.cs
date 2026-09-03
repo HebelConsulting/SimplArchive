@@ -40,6 +40,17 @@ public sealed partial class DocumentsClient
         return actions;
     }
 
+    /// <summary>Forces a searchable-PDF successor (#999's Make searchable) — POST on the version's
+    /// advertised make-searchable rel; the successor arrives via the worker.</summary>
+    public async Task MakeSearchableAsync(string makeSearchableHref, CancellationToken cancellationToken = default)
+    {
+        var response = await _core.Http.PostAsync(makeSearchableHref, null, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new ApiActionException(SimplArchive.Localization.ApiErrorText.For(await ApiCore.ErrorCodeAsync(response, cancellationToken)));
+        }
+    }
+
     /// <summary>
     /// Executes a generic action: the labeled link's method against its advertised href, no payload —
     /// the parameterless-transition shape ADR 0743 scopes the surface to. A refusal surfaces the problem

@@ -96,6 +96,17 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+                        <!-- The OCR affordance (#999) — the issue's second pane: languages + verdict on one
+                             line, a pencil that opens the shared picker (its OK commits immediately — this
+                             pane has no edit mode), and Make searchable following the version's rel. -->
+                        <Grid ColumnDefinitions="180,*" IsVisible="{Binding HasOcrLine}" Margin="0,3">
+                            <TextBlock Grid.Column="0" Text="{loc:Tr SysOcrLanguages}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{Binding OcrLineText}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                <Button Click="OnEditOcrLanguages" Padding="4,2" ToolTip.Tip="{loc:Tr MwEditOcr}" IsVisible="{Binding CanEditOcr}"><i:Icon Value="mdi-pencil-outline" /></Button>
+                                <Button Content="{loc:Tr MakeSearchable}" FontSize="11" Padding="8,2" IsVisible="{Binding CanMakeSearchable}" Command="{Binding MakeSearchableCommand}" />
+                            </StackPanel>
+                        </Grid>
                     </StackPanel>
                 </ScrollViewer>
             </Border>

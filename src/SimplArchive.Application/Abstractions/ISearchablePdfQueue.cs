@@ -6,7 +6,9 @@ namespace SimplArchive.Application.Abstractions;
 public interface ISearchablePdfQueue
 {
     // Enqueue one job, taking the tenant from the current request context (the upload / set-languages paths).
-    Task EnqueueAsync(Guid documentId, Guid sourceVersionId, CancellationToken cancellationToken = default);
+    /// <param name="force">The user overruled the detector (#999's Make searchable): convert regardless of
+    /// verdict. Default false — the automatic path stays conservative.</param>
+    Task EnqueueAsync(Guid documentId, Guid sourceVersionId, bool force = false, CancellationToken cancellationToken = default);
 
     // Enqueue many jobs, each with an explicit tenant — the backfill (ADR "Backfill searchable PDFs for
     // existing TIFFs") runs for a PlatformAdministrator with no tenant context, so it can't read the tenant

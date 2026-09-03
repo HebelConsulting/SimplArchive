@@ -6,6 +6,7 @@
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 @inject SimplArchive.Client.Services.WebDavMountLink WebDavLink
+@inject SimplArchive.Client.Services.OcrLanguageCatalog OcrCatalogService
 
 @* The Check-out tab of the workbench (ADRs "Check-out working-copy stash + exit guard", "Web check-out"),
    extracted from Home.razor per ADR 0558: what this user holds locked, and what can be done with each —
@@ -185,6 +186,42 @@
                         {
                             <tr><td>@f.FieldName</td><td>@string.Join(", ", f.Values)</td></tr>
                         }
+                        @* The OCR affordance (#999) — the issue's second pane. This pane has no edit mode, so
+                           the chips commit IMMEDIATELY (its idiom: read-only context with direct actions); the
+                           verdict says what the automatic path decided, and Make searchable follows the rel
+                           the candidate version advertised (ADR 0543). One derivation with the Repositories
+                           pane (OcrCandidate.From) — two copies is how panes disagree about one document. *@
+                        @if (_ocr is not null)
+                        {
+                            <tr>
+                                <td>@Strings.Get("SysOcrLanguages")</td>
+                                <td>
+                                    <div class="wb-ocr-chips">
+                                        @foreach (var lang in _ocrCatalog)
+                                        {
+                                            var idx = _ocrCodes.IndexOf(lang.Code);
+                                            <button type="button" class="wb-ocr-chip @(idx >= 0 ? "wb-ocr-chip-on" : "")" disabled="@_ocrBusy" @onclick="() => ToggleOcrAsync(lang.Code)">
+                                                @(idx >= 0 ? $"{idx + 1}. " : "")@lang.DisplayName
+                                            </button>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>@Strings.Get("SysOcrStatus")</td>
+                                <td>
+                                    @if (_ocr.Verdict is { } verdict)
+                                    {
+                                        <span class="mud-text-secondary">@OcrVerdictText(verdict)</span>
+                                    }
+                                    @if (_ocr.MakeSearchableHref is not null)
+                                    {
+                                        <MudButton Size="Size.Small" Variant="Variant.Text" Class="ml-1" Disabled="@_ocrBusy"
+                                                   OnClick="MakeSearchableAsync">@Strings.Get("MakeSearchable")</MudButton>
+                                    }
+                                </td>
+                            </tr>
+                        }
                     </table>
                 </div>
                 @* The WORKING COPY, not the archived version — the question this tab answers is "what am I
@@ -268,6 +305,11 @@
     }
 
     private List<FieldGroup> _indexFields = [];
+    private OcrCandidate? _ocr;
+    private List<string> _ocrCodes = [];
+    private string? _ocrLanguagesHref;
+    private bool _ocrBusy;
+    private IReadOnlyList<OcrLanguageOption> _ocrCatalog = [];
     private PreviewPane? _preview;
     private (string? Url, bool Converted)? _pendingPreview;
 
@@ -289,12 +331,80 @@
 
     private sealed record ProblemResponse { public string? ErrorCode { get; set; } }
 
+    private static string OcrVerdictText(string verdict)
+    {
+        var key = verdict switch
+        {
+            "ConvertibleScan" => "OcrVerdictConvertibleScan",
+            "Unreadable" => "OcrVerdictUnreadable",
+            _ => "OcrVerdictNotAScan",
+        };
+        return Strings.Get(key);
+    }
+
+    // No edit mode in this pane, so a chip toggle COMMITS — refused, the chips reload from the truth.
+    private async Task ToggleOcrAsync(string code)
+    {
+        if (_ocrLanguagesHref is not { } href)
+        {
+            return;
+        }
+
+        var next = _ocrCodes.Contains(code) ? _ocrCodes.Where(x => x != code).ToList() : [.. _ocrCodes, code];
+        _ocrBusy = true;
+        try
+        {
+            var response = await Http.PutAsJsonAsync(href.TrimStart('/'), new { languages = next });
+            if (response.IsSuccessStatusCode)
+            {
+                _ocrCodes = next;
+            }
+            else
+            {
+                Snackbar.Add(ApiErrorText.For((await response.Content.ReadFromJsonAsync<ProblemResponse>())?.ErrorCode), Severity.Error);
+            }
+        }
+        finally
+        {
+            _ocrBusy = false;
+        }
+    }
+
+    private async Task MakeSearchableAsync()
+    {
+        if (_ocr?.MakeSearchableHref is not { } href)
+        {
+            return;
+        }
+
+        _ocrBusy = true;
+        try
+        {
+            var response = await Http.PostAsync(href.TrimStart('/'), null);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add(Strings.Get("MakeSearchableQueued"), Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(ApiErrorText.For((await response.Content.ReadFromJsonAsync<ProblemResponse>())?.ErrorCode), Severity.Error);
+            }
+        }
+        finally
+        {
+            _ocrBusy = false;
+        }
+    }
+
     // A row's own detail: index data from the DOCUMENT (identical either side of an edit — a working copy
     // carries no metadata of its own) and a preview of the WORKING COPY.
     private async Task SelectAsync(CheckoutDto c)
     {
         _selected = c;
         _indexFields = [];
+        _ocr = null; // an affordance must not outlive its subject (ADR 0559)
+        _ocrCodes = [];
+        _ocrLanguagesHref = null;
         _pages = null;
         await ShowPreviewAsync(null, false);
         if (Links.Href(c.Links, "pages") is { } pagesHref)
@@ -319,6 +429,20 @@
             {
                 var data = await Http.GetFromJsonAsync<IndexDataResponse>(indexHref);
                 _indexFields = data?.Fields ?? [];
+            }
+
+            // The OCR affordance's inputs (#999): the candidate from the versions the document advertises,
+            // the write address from its ocr-languages rel — one read, then rels (ADRs 0543/0557).
+            _ocrLanguagesHref = Links.Href(document?.Links, "ocr-languages");
+            if (Links.Href(document?.Links, "versions") is { } versionsHref)
+            {
+                var versions = await Http.GetFromJsonAsync<VersionListResponse>(versionsHref);
+                _ocr = OcrCandidate.From((versions?.Versions ?? []).Where(v => v.Status == "Confirmed"));
+                _ocrCodes = _ocr?.OcrCodes ?? [];
+                if (_ocr is not null && _ocrCatalog.Count == 0)
+                {
+                    _ocrCatalog = await OcrCatalogService.GetAsync();
+                }
             }
         }
         catch (Exception)

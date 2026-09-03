@@ -324,7 +324,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     [ObservableProperty] private string _sysCreated = string.Empty;
     [ObservableProperty] private string _sysCreatedBy = string.Empty;
     [ObservableProperty] private string _sysFileExtension = string.Empty;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(CanEditOcr))] private bool _sysHasTiff;
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(CanEditOcr))] private bool _sysOcrCandidate;
     [ObservableProperty] private string _sysOcrLanguages = string.Empty;
     // The document's current (latest confirmed) version number — the last line of the detail pane (ADR "Mask-pane
     // current-version line"). Empty for a folder / a document with no confirmed version.
@@ -1785,7 +1785,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         SysWorkflowStatus = null;
         WorkflowTransitions.Clear();
         SysFileExtension = string.Empty;
-        SysHasTiff = false;
+        SysOcrCandidate = false;
         SysOcrLanguages = string.Empty;
         SysCurrentVersion = string.Empty;
         _sysOcrCodes = [];

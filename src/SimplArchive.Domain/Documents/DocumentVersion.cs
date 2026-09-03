@@ -57,6 +57,14 @@ public class DocumentVersion : ITenantScoped
     // = inherit the tenant's DefaultOcrLanguages. Set later via a mask field.
     public string? OcrLanguages { get; set; }
 
+    /// <summary>
+    /// The scanned-PDF detector's persisted conclusion (#999): null = not yet judged. Written by the
+    /// searchable-PDF worker for PDFs (where the detector already runs, off the request path) and at
+    /// finalize for TIFFs (trivially convertible). What the clients' OCR verdict line renders, and the fact
+    /// that used to be computed and thrown away.
+    /// </summary>
+    public OcrVerdict? OcrVerdict { get; set; }
+
     // The confirmed blob's size in bytes (ADR "Per-tenant storage quota"), stamped at finalize. Feeds the
     // tenant's maintained StorageUsedBytes counter (added at confirm, subtracted at purge). Null for a pending
     // version or one written before the feature landed.

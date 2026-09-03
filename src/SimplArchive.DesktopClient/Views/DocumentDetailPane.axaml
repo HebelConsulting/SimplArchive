@@ -83,7 +83,7 @@
                      field"). Read-only until the pane enters edit mode (ADR "Single pane-level edit toggle on
                      the detail pane"); Name/Document date/OCR languages then become editable, File extension/
                      Created/Created by stay read-only. -->
-                <Grid ColumnDefinitions="110,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,8,0,0"
+                <Grid ColumnDefinitions="110,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,8,0,0"
                       IsVisible="{Binding SysCreated, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr Name}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
                     <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SysName}" VerticalAlignment="Center" Margin="0,2" IsVisible="{Binding !IsEditing}" />
@@ -96,25 +96,33 @@
                     <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SysDocumentDateText}" VerticalAlignment="Center" Margin="0,2" IsVisible="{Binding !IsEditing}" />
                     <CalendarDatePicker Grid.Row="2" Grid.Column="1" SelectedDate="{Binding SysDocumentDate}" HorizontalAlignment="Left" Margin="0,2" IsVisible="{Binding IsEditing}" Watermark="yyyy-MM-dd" />
 
-                    <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:Tr SysOcrLanguages}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" IsVisible="{Binding SysHasTiff}" />
-                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SysOcrLanguages}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,2" IsVisible="{Binding SysHasTiff}" />
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:Tr SysOcrLanguages}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" IsVisible="{Binding SysOcrCandidate}" />
+                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SysOcrLanguages}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,2" IsVisible="{Binding SysOcrCandidate}" />
+                    <!-- The persisted OCR verdict + the user's override (#999): the quiet line says why the
+                         automatic OCR did or did not run, and the button follows the make-searchable rel the
+                         version advertised — absent rel, absent button (ADR 0543). -->
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:Tr SysOcrStatus}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" IsVisible="{Binding HasOcrStatusLine}" />
+                    <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasOcrStatusLine}">
+                        <TextBlock Text="{Binding SysOcrVerdictText}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                        <Button Content="{loc:Tr MakeSearchable}" FontSize="11" Padding="8,2" IsVisible="{Binding CanMakeSearchable}" Command="{Binding MakeSearchableCommand}" />
+                    </StackPanel>
                     <Button Grid.Row="3" Grid.Column="2" Click="OnEditOcrLanguages" Margin="6,2,0,2" ToolTip.Tip="{loc:Tr MwEditOcr}" IsVisible="{Binding CanEditOcr}"><i:Icon Value="mdi-pencil-outline" /></Button>
 
-                    <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:Tr SysCreated}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
-                    <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SysCreated}" VerticalAlignment="Center" Margin="0,2" />
+                    <TextBlock Grid.Row="5" Grid.Column="0" Text="{loc:Tr SysCreated}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SysCreated}" VerticalAlignment="Center" Margin="0,2" />
 
-                    <TextBlock Grid.Row="5" Grid.Column="0" Text="{loc:Tr SysCreatedBy}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
-                    <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SysCreatedBy}" VerticalAlignment="Center" Margin="0,2" />
+                    <TextBlock Grid.Row="6" Grid.Column="0" Text="{loc:Tr SysCreatedBy}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SysCreatedBy}" VerticalAlignment="Center" Margin="0,2" />
 
                     <!-- The document's current (latest confirmed) version number, directly below Created by
                          (ADR "Mask-pane current-version line"). -->
-                    <TextBlock Grid.Row="6" Grid.Column="0" Text="{loc:Tr SysCurrentVersion}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
-                    <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SysCurrentVersion}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Margin="0,2" />
+                    <TextBlock Grid.Row="7" Grid.Column="0" Text="{loc:Tr SysCurrentVersion}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding SysCurrentVersion}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Margin="0,2" />
 
                     <!-- The workflow's state, and beside it the transitions the SERVER
                          advertises - one button each, or nothing (#691; ADR 0550/0543). -->
-                    <TextBlock Grid.Row="7" Grid.Column="0" Text="{loc:Tr WorkflowStatus}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
-                    <StackPanel Grid.Row="7" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                    <TextBlock Grid.Row="8" Grid.Column="0" Text="{loc:Tr WorkflowStatus}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                    <StackPanel Grid.Row="8" Grid.Column="1" Orientation="Horizontal" Spacing="8">
                         <TextBlock Text="{Binding WorkflowStateDisplay}" VerticalAlignment="Center" Margin="0,2" />
                         <ItemsControl ItemsSource="{Binding WorkflowTransitions}">
                             <ItemsControl.ItemsPanel>

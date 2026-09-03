@@ -40,7 +40,7 @@ public sealed partial class MainWindowViewModel
 
     // Seeds the staged contents order from the subject, so opening the edit does not silently change it.
     private void StageSortOrder() => EditSortOrder = _detailSortOrder;
-    public bool CanEditOcr => IsEditing && SysHasTiff;
+    public bool CanEditOcr => IsEditing && SysOcrCandidate;
 
     public ObservableCollection<MaskChoiceViewModel> AvailableMasks { get; } = [];
     public ObservableCollection<MaskFieldEditViewModel> MaskEditFields { get; } = [];
@@ -177,7 +177,7 @@ public sealed partial class MainWindowViewModel
         }
 
         // OCR languages (only if the ordered selection changed — this re-runs the searchable-PDF conversion).
-        if (SysHasTiff && !_stagedOcrCodes.SequenceEqual(_sysOcrCodes))
+        if (SysOcrCandidate && !_stagedOcrCodes.SequenceEqual(_sysOcrCodes))
         {
             try
             {

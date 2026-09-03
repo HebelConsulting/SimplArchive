@@ -170,10 +170,10 @@ public sealed class DetailLoader(
             return; // a folder or a document with no confirmed version yet
         }
 
-        static bool IsTiff(string? key) => key is not null
-            && (key.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) || key.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase));
-
-        var tiff = confirmed.Where(v => IsTiff(v.ObjectKey)).OrderByDescending(v => v.VersionNumber ?? 0).FirstOrDefault();
+        // The shared derivation (#999): any unsigned TIFF or PDF — the TIFF-only rule predated scanned-PDF
+        // support, and its client-side copies are exactly what kept the selector off the documents OCR
+        // exists for. One helper for every pane that asks (OcrCandidate.From), one predicate with the server.
+        var candidate = OcrCandidate.From(confirmed);
 
         detail.SysHasVersion = true;
         detail.SysWorkflowStatus = current.WorkflowStatus;
@@ -186,10 +186,10 @@ public sealed class DetailLoader(
         detail.SysDocumentDate = DateTime.TryParse(current.DocumentDate, out var d) ? d.Date : null;
         detail.SysCreated = current.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
         detail.SysCreatedBy = current.CreatedByName ?? "";
-        detail.SysHasTiff = tiff is not null;
-        detail.SysOcrCodes = string.IsNullOrWhiteSpace(tiff?.OcrLanguages)
-            ? []
-            : tiff!.OcrLanguages!.Split('+', StringSplitOptions.RemoveEmptyEntries).ToList();
+        detail.SysOcrCandidate = candidate is not null;
+        detail.SysOcrVerdict = candidate?.Verdict;
+        detail.MakeSearchableHref = candidate?.MakeSearchableHref;
+        detail.SysOcrCodes = candidate?.OcrCodes ?? [];
     }
 
     private string DetailHref(string rel) => Links.Required(detail.Links, rel);

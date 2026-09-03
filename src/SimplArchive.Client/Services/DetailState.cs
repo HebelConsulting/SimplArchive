@@ -130,7 +130,19 @@ public sealed class DetailState
     public string SysCreatedBy { get; set; } = string.Empty;
 
     /// <summary>Whether the current version is a TIFF, which is what offers the searchable-PDF conversion.</summary>
-    public bool SysHasTiff { get; set; }
+    /// <summary>
+    /// The document has an OCR-candidate source: a confirmed, unsigned TIFF or PDF version (#999 — the flag
+    /// was SysHasTiff when the gate was TIFF-only; renamed with the widening, per the issue's own warning
+    /// that a flag named for TIFFs that also means PDFs is the next reader's trap).
+    /// </summary>
+    public bool SysOcrCandidate { get; set; }
+
+    /// <summary>The candidate version's persisted verdict, null while unjudged — the quiet line that says
+    /// why the automatic OCR did or did not run (ADR 0626's principle, in the pane).</summary>
+    public string? SysOcrVerdict { get; set; }
+
+    /// <summary>The candidate version's make-searchable rel, when advertised (ADR 0543).</summary>
+    public string? MakeSearchableHref { get; set; }
 
     /// <summary>The per-version OCR languages (ADR 0272).</summary>
     public List<string> SysOcrCodes { get; set; } = [];

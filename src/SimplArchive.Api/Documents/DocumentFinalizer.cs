@@ -207,9 +207,18 @@ public class DocumentFinalizer
         // PDF detection"). Async: the worker does the detection + OCR off the request path. The original
         // version stays as its own version regardless. The worker-created successor is never re-enqueued (it
         // isn't finalized through here), and its text layer stops it being re-detected as a scan.
-        if (SearchablePdfSourceExtensions.Contains(Path.GetExtension(version.ObjectKey)))
+        var searchableSourceExtension = Path.GetExtension(version.ObjectKey);
+        if (SearchablePdfSourceExtensions.Contains(searchableSourceExtension))
         {
-            await _searchablePdfQueue.EnqueueAsync(version.DocumentId, version.Id, cancellationToken);
+            // A TIFF's verdict is known here without looking inside (#999): trivially convertible. A PDF
+            // stays null — judged, and persisted, by the worker where the detector already runs off the
+            // request path.
+            if (!searchableSourceExtension.Equals(".pdf", StringComparison.OrdinalIgnoreCase))
+            {
+                version.OcrVerdict = OcrVerdict.ConvertibleScan;
+            }
+
+            await _searchablePdfQueue.EnqueueAsync(version.DocumentId, version.Id, cancellationToken: cancellationToken);
         }
 
         // Apply WORM Object Lock to the now-confirmed blob per the document's retention/legal-hold state (ADR

@@ -31,7 +31,8 @@ public sealed partial class MainWindowViewModel
         SysWorkflowStatus = null;
         WorkflowTransitions.Clear();
         SysFileExtension = string.Empty;
-        SysHasTiff = false;
+        SysOcrCandidate = false;
+        SetOcrStatus(null, null); // an address must not outlive its subject (ADR 0559)
         SysOcrLanguages = string.Empty;
         SysCurrentVersion = string.Empty;
         _sysOcrCodes = [];
@@ -98,9 +99,10 @@ public sealed partial class MainWindowViewModel
         await LoadWorkflowTransitionsAsync(fields.WorkflowStatus, versionsHref);
         SysFileExtension = fields.FileExtension;
         SysDocumentDate = DateTime.TryParse(fields.DocumentDate, out var d) ? d.Date : null;
-        SysHasTiff = fields.HasTiffVersion;
+        SysOcrCandidate = fields.IsOcrCandidate;
+        SetOcrStatus(fields.OcrVerdict, fields.MakeSearchableHref);
 
-        if (SysHasTiff)
+        if (SysOcrCandidate)
         {
             await (_ocrLanguages?.EnsureLoadedAsync() ?? Task.CompletedTask);
 
