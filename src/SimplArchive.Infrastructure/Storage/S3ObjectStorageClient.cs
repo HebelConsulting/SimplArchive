@@ -34,6 +34,22 @@ public class S3ObjectStorageClient : IObjectStorageClient
         // prefix falls back to the legacy BucketName so existing config is unchanged.
         _bucketPrefix = string.IsNullOrWhiteSpace(value.BucketPrefix) ? value.BucketName : value.BucketPrefix;
 
+        // Fail fast on a prefix that cannot produce a valid bucket name, rather than per tenant at first
+        // write. S3 caps a bucket name at 63 characters and a per-tenant name is `{prefix}-{tenantId:D}`,
+        // where the GUID's :D form is always 36 — so the prefix has 63 - 1 - 36 = 26 to spend. A longer one
+        // (the AWS installer once derived a 33-char "{name}-{account}" prefix) is accepted by SeaweedFS but
+        // rejected by S3 with "The specified bucket is not valid", once per tenant, at provisioning time.
+        // Turning that into a startup error that names the limit is the difference between a five-minute fix
+        // and a stack that deploys green and fails only when someone creates their first repository.
+        const int maxBucketPrefixLength = 63 - 1 - 36;
+        if (_bucketPrefix.Length > maxBucketPrefixLength)
+        {
+            throw new InvalidOperationException(
+                $"ObjectStorage bucket prefix '{_bucketPrefix}' is {_bucketPrefix.Length} characters; it must "
+                + $"be at most {maxBucketPrefixLength} so a per-tenant bucket name stays within S3's "
+                + "63-character limit.");
+        }
+
         var publicServiceUrl = string.IsNullOrWhiteSpace(value.PublicServiceUrl) ? value.ServiceUrl : value.PublicServiceUrl;
         _presignUseHttp = publicServiceUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
 
