@@ -19,4 +19,7 @@ public sealed class EtagMismatchException : ConcurrencyException
 
     public static EtagMismatchException ForExternalLink() =>
         new("The external link has been modified since it was last read.");
+
+    public static EtagMismatchException ForBooking() =>
+        new("The booking has been modified since it was last read.");
 }

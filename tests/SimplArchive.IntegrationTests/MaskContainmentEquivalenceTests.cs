@@ -139,7 +139,13 @@ public class MaskContainmentEquivalenceTests
             WellKnownMaskIds.AlsoAdmitPlainFolders.Any(m => m.FolderMaskId == parentMaskId)
             && childMaskId == WellKnownMaskIds.Folder;
 
-        if (!alsoTakesPlainFolders
+        // The generalised one-directional admission (a meeting room's Schedule calendar) — same fold-in as
+        // the plain-folder case above, and for the same reason: it widens the parent without confining the
+        // child (ADR 0735 endpoints tranche).
+        var alsoAdmitted =
+            WellKnownMaskIds.AlsoAdmit.Any(m => m.FolderMaskId == parentMaskId && m.ChildMaskId == childMaskId);
+
+        if (!alsoTakesPlainFolders && !alsoAdmitted
             && WellKnownMaskIds.TypedFolderRules.FirstOrDefault(r => r.FolderMaskId == parentMaskId) is { } parentRule
             && !parentRule.Admits.Any(a => a.MaskId == childMaskId))
         {

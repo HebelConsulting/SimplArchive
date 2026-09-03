@@ -75,6 +75,24 @@ public class Mask : ITenantScoped
     /// </remarks>
     public bool AdmitsNoSubfolders { get; set; }
 
+    /// <summary>Whether documents wearing this mask are bookable resources (ADR 0735).</summary>
+    /// <remarks>
+    /// <para>
+    /// The booking primitive's declaration point: a meeting room, a company car, an aircraft is a document,
+    /// and <i>bookable</i> is a capability its mask contributes — everything a document already has (ACL,
+    /// tree placement, index fields, audit) applies to the resource for free. A <see cref="Booking.ResourceBooking"/>
+    /// may only claim a slot on a document whose mask says so.
+    /// </para>
+    /// <para>
+    /// On the identity rather than <see cref="MaskVersion"/>, for the reason <see cref="IsFolderMask"/> gives:
+    /// whether a mask's documents can be booked does not change when a field is added, and a v2 that
+    /// contradicts v1 would leave "is this room bookable" unanswerable while documents wear both. It also
+    /// survives a module's deactivation with the mask (ADR 0740): bookability rides the MASK, so booking
+    /// keeps working when the module's behaviour is gone.
+    /// </para>
+    /// </remarks>
+    public bool IsBookable { get; set; }
+
     /// <summary>What a client should DRAW for a document wearing this mask — a token, not a glyph name.</summary>
     /// <remarks>
     /// <para>

@@ -178,6 +178,19 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         // item out of the way first is what stops the heal colliding with itself on every existing tenant.
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.Calendar, "Calendar", [ColourField], cancellationToken);
 
+        // The booking primitive's thin core proof (ADRs 0735/0743): a room is a document with a location
+        // and a capacity; a room booking carries a purpose. Deliberately this thin, and staying so.
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.MeetingRoom, "Meeting room",
+        [
+            new FieldSpec("Location", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Capacity", FieldDataType.Number, IsRequired: false),
+        ], cancellationToken);
+
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.RoomBooking, "Room booking",
+        [
+            new FieldSpec("Purpose", FieldDataType.Text, IsRequired: false),
+        ], cancellationToken);
+
         // After every mask exists, because containment is a relation BETWEEN masks: a Notebook's allowed parent
         // is the Mailbox, which is seeded eight lines below it, so doing this per-mask inside the loop above
         // would write a foreign key to a row that does not exist yet.
@@ -288,6 +301,15 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         if (mask.UserCreatable != userCreatable)
         {
             mask.UserCreatable = userCreatable;
+        }
+
+        // Healed unconditionally like the icon and creatability facts above, and for the same reason:
+        // bookability is app-owned classification for the shipped masks, and a tenant that predates the
+        // column would otherwise read "not bookable" forever (the #664 trap).
+        var isBookable = WellKnownMaskIds.BookableMasks.Contains(maskId);
+        if (mask.IsBookable != isBookable)
+        {
+            mask.IsBookable = isBookable;
         }
 
         var wanted = WellKnownMaskIds.FileExtensions.TryGetValue(maskId, out var extensions)

@@ -104,6 +104,20 @@ public sealed class DocumentResourceLinks
             links.Add(new Link("external-links", $"/api/documents/{documentId}/external-links", "GET"));
         }
 
+        // The resource's bookings (ADR 0735; endpoints interview 2026-09-03). CONDITIONAL on the mask's
+        // IsBookable — a missing rel means "not available" (ADR 0543), so a non-bookable document simply has
+        // no bookings surface, and the endpoint 404s to match. One rel: GET lists, POST books (ADR 0719);
+        // both are gated by CanSee, which the caller holding this resource already passed.
+        var isBookable = await _dbContext.Documents
+            .Where(d => d.Id == documentId && d.MaskVersionId != null)
+            .Join(_dbContext.MaskVersions, d => d.MaskVersionId, v => (Guid?)v.Id, (d, v) => v)
+            .Join(_dbContext.Masks, v => new { v.TenantId, Id = v.MaskId }, m => new { m.TenantId, m.Id }, (v, m) => m.IsBookable)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (isBookable)
+        {
+            links.Add(new Link("bookings", $"/api/documents/{documentId}/bookings", "GET"));
+        }
+
         // Break/restore ACL inheritance (issue #426). CONDITIONAL for the same reason as external-links above: a
         // repository ROOT has no parent to inherit from, so the server always refuses there — and an affordance
         // whose only outcome is a refusal is exactly what ADR 0543 rules out. Both clients used to draw the

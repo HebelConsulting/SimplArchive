@@ -52,7 +52,8 @@ public class DesktopAdmitsMenuTests
 
         // Three since #678: creatability became data, and Addressbook and Calendar are creatable and admitted
         // anywhere. The plain folder stays FIRST — it is what "New subfolder" has always meant.
-        Assert.Equal(["Folder", "Addressbook", "Calendar"], documents.Admits.Select(a => a.Name).ToList());
+        // Four with Meeting room (ADR 0735): a user-creatable folder mask with unconstrained placement.
+        Assert.Equal(["Folder", "Addressbook", "Calendar", "Meeting room"], documents.Admits.Select(a => a.Name).ToList());
 
         var entry = documents.Admits[0];
         Assert.Equal("Folder", entry.Name);
@@ -210,7 +211,7 @@ public class DesktopAdmitsMenuTests
         var (vm, _) = await OpenAsync();
         var children = await PersonalChildrenAsync(vm);
 
-        Assert.Equal(["Folder", "Addressbook", "Calendar"], children["My Documents"].Admits.Select(a => a.Name).ToList());
+        Assert.Equal(["Folder", "Addressbook", "Calendar", "Meeting room"], children["My Documents"].Admits.Select(a => a.Name).ToList());
         Assert.Equal(["Contact"], children["My Addressbook"].Admits.Select(a => a.Name).ToList());
         Assert.Equal(["Appointment"], children["My Calendar"].Admits.Select(a => a.Name).ToList());
     }

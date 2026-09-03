@@ -125,8 +125,9 @@ public class WellKnownMaskFieldHealTests
             // repositories are moved onto it by the seeder's backfill. 12 → 13 with Mailbox (ADR 0628),
             // 13 → 14 with IMAP Special (#596) — the mask that marks a mailbox's standing folders ephemeral.
             // 15 → 16 with IMAP Folder (#802) — the user-created mail folder inside the staging tier.
+            // 16 → 18 with Meeting room + Room booking (ADR 0735) — the booking primitive's thin core proof.
             var maskCount = await db.Masks.IgnoreQueryFilters().CountAsync(m => m.TenantId == _tenantId);
-            Assert.Equal(16, maskCount); // + IMAP Folder (#802)
+            Assert.Equal(18, maskCount); // + Meeting room, Room booking (ADR 0735)
             Assert.Equal(maskCount, await db.MaskVersions.IgnoreQueryFilters().CountAsync(v => v.TenantId == _tenantId));
         }
     }

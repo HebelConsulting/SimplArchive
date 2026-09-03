@@ -127,6 +127,17 @@ public static class WellKnownMaskIds
     /// </remarks>
     public static readonly Guid MyDocuments = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E40");
 
+    /// <summary>A bookable meeting room (ADR 0735) — the core's own thin proof of the booking primitive.</summary>
+    /// <remarks>
+    /// Deliberately thin (ADR 0743's guard-rail): a room is a document with a location and a capacity, and
+    /// stays a demonstration of the primitive, not the seed of facilities management. Bookability rides the
+    /// mask (<see cref="Mask.IsBookable"/>), so it survives everything a mask survives.
+    /// </remarks>
+    public static readonly Guid MeetingRoom = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E42");
+
+    /// <summary>The booking document a meeting-room reservation files (ADR 0735: a booking is a document).</summary>
+    public static readonly Guid RoomBooking = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E43");
+
     /// <summary>A section INSIDE a notebook: a folder that holds notes and further sections (#564).</summary>
     /// <remarks>
     /// Fieldless, like the Notebook it lives in — it types the folder, and the fields live on the notes.
@@ -156,6 +167,13 @@ public static class WellKnownMaskIds
         new(NotebookSection, "Section", [(NotebookSection, "Section"), (Note, "Note")]),
         new(Addressbook, "Addressbook", [(Contact, "Contact")]),
         new(Calendar, "Calendar", [(Appointment, "Appointment")]),
+        // A meeting room is a folder OF its bookings (booking-endpoints interview, 2026-09-03): the booking
+        // document's parent IS the resource, so rights flow down the normal way — see the room, see its
+        // schedule. RoomBooking, through AdmittingFolders, may exist nowhere else — a booking without its
+        // room is a claim without a subject. The room's Schedule calendar is deliberately NOT in this row:
+        // the table is two-directional, and listing Calendar here would confine every calendar in the
+        // archive to meeting rooms (the AlsoAdmitPlainFolders trap) — it rides AlsoAdmit below instead.
+        new(MeetingRoom, "Meeting room", [(RoomBooking, "Room booking")]),
     ];
 
     /// <summary>How MANY children wearing a given mask a folder admits — a capacity rule, not an admission one.</summary>
@@ -186,6 +204,7 @@ public static class WellKnownMaskIds
         // second notebook is not a placement error, it is one too many. IMAP projects it as `NOTES`, and a
         // client that discovers two of them has no way to choose.
         new(Mailbox, "Mailbox", Notebook, "Notebook", 1),
+
     ];
 
     /// <summary>
@@ -204,7 +223,7 @@ public static class WellKnownMaskIds
     /// </para>
     /// </remarks>
     public static readonly IReadOnlySet<Guid> FolderMasks =
-        new HashSet<Guid> { Folder, Repository, UserFolder, MyDocuments, Mailbox, ImapSpecial, ImapFolder, Notebook, NotebookSection, Addressbook, Calendar };
+        new HashSet<Guid> { Folder, Repository, UserFolder, MyDocuments, Mailbox, ImapSpecial, ImapFolder, Notebook, NotebookSection, Addressbook, Calendar, MeetingRoom };
 
     /// <summary>
     /// The file extensions that make a well-known mask the automatic choice for an upload (#671).
@@ -301,12 +320,12 @@ public static class WellKnownMaskIds
     public static readonly IReadOnlySet<Guid> NotUserCreatable =
         // Mailbox LEFT this set with #703 PR 4: a department mailbox is created by a person, in a plain
         // folder — placement and capacity say where and how many, creatability no longer says never.
-        new HashSet<Guid> { Repository, UserFolder, MyDocuments, ImapSpecial, Notebook };
+        new HashSet<Guid> { Repository, UserFolder, MyDocuments, ImapSpecial, Notebook, RoomBooking };
 
     /// <summary>The well-known masks an ITEM wears — the complement of <see cref="FolderMasks"/>.</summary>
     /// <remarks>Stated rather than derived, so the partition guard has two sides to compare instead of one.</remarks>
     public static readonly IReadOnlySet<Guid> ItemMasks =
-        new HashSet<Guid> { BasicEntry, EMail, Note, Contact, Appointment };
+        new HashSet<Guid> { BasicEntry, EMail, Note, Contact, Appointment, RoomBooking };
 
     /// <summary>
     /// Typed folders that ALSO admit a plain <see cref="Folder"/>, so a user can make folders of their own
@@ -386,12 +405,29 @@ public static class WellKnownMaskIds
     /// to mailboxes. The "also" was never a property of the row — it was a consequence of the two directions
     /// living in one table.
     /// </remarks>
+    /// <summary>
+    /// One-directional admissions beyond the plain folder: this folder ALSO admits that child, saying
+    /// nothing about where else the child may live (the <see cref="AlsoAdmitPlainFolders"/> shape,
+    /// generalised for a child that is not <see cref="Folder"/>).
+    /// </summary>
+    /// <remarks>
+    /// A meeting room holds its Schedule calendar (booking-endpoints interview, 2026-09-03) — and a
+    /// Calendar must stay free to live anywhere, so the two-directional table cannot say this. Cardinality
+    /// is deliberately NOT constrained: a cardinality child derives into
+    /// <see cref="ImmutableStructuralMasks"/>, and the decided boundary (ImmutableStructuralMaskTests) is
+    /// that re-typing a Calendar costs only subscribability — so the booking flow instead files into the
+    /// OLDEST calendar child, deterministically, and a second calendar is a user's own harmless clutter.
+    /// </remarks>
+    public static readonly IReadOnlyList<(Guid FolderMaskId, Guid ChildMaskId)> AlsoAdmit =
+        [(MeetingRoom, Calendar)];
+
     public static readonly IReadOnlyDictionary<Guid, IReadOnlySet<Guid>> AdmittedChildMasks =
         TypedFolderRules
             .Select(rule => (
                 rule.FolderMaskId,
                 Admits: rule.Admits.Select(a => a.MaskId)
-                    .Concat(AlsoAdmitPlainFolders.Any(m => m.FolderMaskId == rule.FolderMaskId) ? [Folder] : [])))
+                    .Concat(AlsoAdmitPlainFolders.Any(m => m.FolderMaskId == rule.FolderMaskId) ? [Folder] : [])
+                    .Concat(AlsoAdmit.Where(m => m.FolderMaskId == rule.FolderMaskId).Select(m => m.ChildMaskId))))
             .ToDictionary(x => x.FolderMaskId, x => (IReadOnlySet<Guid>)x.Admits.ToHashSet());
 
     /// <summary>Mask → the folder masks it may live directly inside. Absent means anywhere.</summary>
@@ -485,6 +521,15 @@ public static class WellKnownMaskIds
     /// wore a DUPLICATE mask with a different id, and every <c>WellKnownMaskIds.Note</c> check (typed-folder
     /// containment, the IMAP projection, the clients' type column) stopped recognising them.
     /// </para>
+    /// <summary>The well-known masks whose documents are bookable resources (ADR 0735).</summary>
+    /// <remarks>
+    /// The seed for <see cref="Mask.IsBookable"/>, healed unconditionally like the icon and creatability
+    /// facts — a shipped mask cannot drift from what this release says it is. A tenant-authored mask sets
+    /// the column directly; this set only describes what the application ships.
+    /// </remarks>
+    public static readonly IReadOnlySet<Guid> BookableMasks =
+        new HashSet<Guid> { MeetingRoom };
+
     /// <para>
     /// A list derived from the fields cannot fall behind the fields. Adding a mask id above adds it here.
     /// </para>

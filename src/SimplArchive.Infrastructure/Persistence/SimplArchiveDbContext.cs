@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Abstractions;
 using SimplArchive.Domain.Acl;
+using SimplArchive.Domain.Booking;
 using SimplArchive.Domain.Documents;
 using SimplArchive.Domain.Groups;
 using SimplArchive.Domain.Masks;
@@ -136,6 +137,9 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<DocumentReference> DocumentReferences => Set<DocumentReference>();
 
+    // The inventory-booking primitive's claims (ADR 0735).
+    public DbSet<ResourceBooking> ResourceBookings => Set<ResourceBooking>();
+
     // Shares of a document with people who have no account (ADR 0546).
     public DbSet<ExternalLink> ExternalLinks => Set<ExternalLink>();
 
@@ -244,6 +248,7 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
         ValidateDocumentsAsync(CancellationToken.None).GetAwaiter().GetResult();
         ValidateFieldValuesAsync(CancellationToken.None).GetAwaiter().GetResult();
         ValidateRequiredFieldsAsync(CancellationToken.None).GetAwaiter().GetResult();
+        ValidateResourceBookingsAsync(CancellationToken.None).GetAwaiter().GetResult();
         PrepareMaskVersionsAsync(CancellationToken.None).GetAwaiter().GetResult();
         DavChangeRecorder.RecordAsync(this, CancellationToken.None).GetAwaiter().GetResult();
         RegenerateConcurrencyTokens();
@@ -257,6 +262,7 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
         await ValidateDocumentsAsync(cancellationToken);
         await ValidateFieldValuesAsync(cancellationToken);
         await ValidateRequiredFieldsAsync(cancellationToken);
+        await ValidateResourceBookingsAsync(cancellationToken);
         await PrepareMaskVersionsAsync(cancellationToken);
 
         // DAV collection changes, recorded at the one door every write path uses (#806, DavChangeRecorder).
@@ -271,6 +277,89 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
         await RealtimeChangePusher.PushAsync(_realtimeNotifier, pushes, cancellationToken);
         await DavChangeRecorder.NotifyAsync(_davChangeNotifier, davChanges, cancellationToken);
         return saved;
+    }
+
+    // The booking primitive's invariants (ADR 0735), at the one door every write path uses: a booking's
+    // resource must wear a bookable mask, its slot must have extent, and no two Active bookings of one
+    // resource may overlap. The overlap rule lives HERE rather than as a database constraint because a
+    // range-exclusion constraint is Postgres-only and the model must run on SQLite too (provider parity);
+    // rather than in a service because appointments/bookings are writable from more than one path and a
+    // rule enforced at one entrance is not a rule.
+    private async Task ValidateResourceBookingsAsync(CancellationToken cancellationToken)
+    {
+        var changed = ChangeTracker.Entries<ResourceBooking>()
+            .Where(e => e.State is EntityState.Added or EntityState.Modified)
+            .Select(e => e.Entity)
+            .Where(b => b.Status == BookingStatus.Active)
+            .ToList();
+        if (changed.Count == 0)
+        {
+            return;
+        }
+
+        // Everything Active already tracked this save (two bookings added together must conflict with each
+        // other, not just with stored rows). ChangeTracker enumeration bypasses query filters, same as the
+        // MaskVersion auto-numbering (ADR 0198), so the tenant scoping below is explicit.
+        var pendingActive = ChangeTracker.Entries<ResourceBooking>()
+            .Where(e => e.State is not EntityState.Deleted)
+            .Select(e => e.Entity)
+            .Where(b => b.Status == BookingStatus.Active)
+            .ToList();
+
+        foreach (var booking in changed)
+        {
+            if (booking.StartsAtUtc >= booking.EndsAtUtc)
+            {
+                throw BookingInvariantException.SlotWithoutExtent(booking.StartsAtUtc, booking.EndsAtUtc);
+            }
+
+            // The resource's mask must declare bookability. A document points at a MaskVersion; the
+            // capability lives on the Mask identity (it does not change when a version is cut), so the walk
+            // is document -> version -> mask. IgnoreQueryFilters because this must also hold for writers
+            // with no ambient tenant (seeders, workers) whose filter predicate would silently match nothing.
+            var isBookable = await Documents.IgnoreQueryFilters()
+                .Where(d => d.TenantId == booking.TenantId && d.Id == booking.ResourceDocumentId)
+                .Join(MaskVersions.IgnoreQueryFilters(),
+                    d => new { d.TenantId, Id = d.MaskVersionId ?? Guid.Empty },
+                    v => new { v.TenantId, v.Id },
+                    (d, v) => v)
+                .Join(Masks.IgnoreQueryFilters(),
+                    v => new { v.TenantId, Id = v.MaskId },
+                    m => new { m.TenantId, m.Id },
+                    (v, m) => m.IsBookable)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (!isBookable)
+            {
+                throw BookingInvariantException.NotBookable(booking.ResourceDocumentId);
+            }
+
+            // Overlap against Active rows of the same resource ([start, end) semantics: touching slots are
+            // fine), excluding self; anything already tracked is judged from its tracked state. The time
+            // comparison runs IN MEMORY: the SQLite provider cannot translate DateTimeOffset range
+            // predicates, and the candidate set — one resource's active bookings — is small by nature,
+            // reached through the (TenantId, ResourceDocumentId, StartsAtUtc) index.
+            var trackedIds = pendingActive.Select(b => b.Id).ToList();
+            var stored = await ResourceBookings.IgnoreQueryFilters()
+                .Where(b => b.TenantId == booking.TenantId
+                    && b.ResourceDocumentId == booking.ResourceDocumentId
+                    && b.Status == BookingStatus.Active
+                    && b.Id != booking.Id
+                    && !trackedIds.Contains(b.Id))
+                .ToListAsync(cancellationToken);
+            var clash = stored
+                .Concat(pendingActive.Where(b =>
+                    b.Id != booking.Id
+                    && b.TenantId == booking.TenantId
+                    && b.ResourceDocumentId == booking.ResourceDocumentId))
+                .Where(b => b.StartsAtUtc < booking.EndsAtUtc && booking.StartsAtUtc < b.EndsAtUtc)
+                .OrderBy(b => b.StartsAtUtc)
+                .FirstOrDefault();
+            if (clash is not null)
+            {
+                throw BookingInvariantException.SlotTaken(
+                    booking.StartsAtUtc, booking.EndsAtUtc, clash.StartsAtUtc, clash.EndsAtUtc);
+            }
+        }
     }
 
     // Regenerates ConcurrencyToken to a fresh value for every Added/Modified IConcurrencyTracked entity —
