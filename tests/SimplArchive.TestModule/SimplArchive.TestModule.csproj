@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The loader tests' fixture module: a REAL module assembly, referencing only the ABI — exactly what a
+       third party ships (ADR 0741). Lives under tests/ because it is test infrastructure, but it is also
+       the standing proof that the ABI suffices to write a module at all. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SimplArchive.ModuleAbi\SimplArchive.ModuleAbi.csproj" />
+  </ItemGroup>
+
+</Project>

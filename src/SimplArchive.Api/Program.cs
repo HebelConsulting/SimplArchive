@@ -373,6 +373,25 @@ builder.Services.AddApiVersioning(options =>
     options.ReportApiVersions = true;
 }).AddMvc();
 
+// Industry modules (ADRs 0740/0741): loaded from Modules/ — each in its own isolated context, ABI types
+// shared — and given their one registration call. Loading makes a module AVAILABLE; per-tenant activation
+// (the licensing act, a later slice) is what switches its behaviour on. The loaded list is a singleton so
+// diagnostics and the coming activation surface can enumerate what this host carries.
+var modules = SimplArchive.Infrastructure.Modules.ModuleLoader.LoadAll(
+    builder.Configuration["Modules:Directory"] ?? Path.Combine(AppContext.BaseDirectory, "Modules"),
+    LoggerFactory.Create(logging => logging.AddSerilog()).CreateLogger("ModuleLoader"));
+var machineCatalog = new SimplArchive.Infrastructure.Modules.StateMachineCatalog();
+foreach (var loaded in modules)
+{
+    loaded.Module.ConfigureServices(builder.Services);
+    // The enumerable definitions (ADR 0742) — declared once, held for the process's life; the scoped
+    // engine evaluates against them per request.
+    loaded.Module.DefineStateMachines(machineCatalog);
+}
+
+builder.Services.AddSingleton(machineCatalog);
+builder.Services.AddSingleton<IReadOnlyList<SimplArchive.Infrastructure.Modules.ModuleLoader.LoadedModule>>(modules);
+
 var app = builder.Build();
 
 // Applies migrations through the dedicated owner connection when one is provisioned (ADR "Dedicated migration

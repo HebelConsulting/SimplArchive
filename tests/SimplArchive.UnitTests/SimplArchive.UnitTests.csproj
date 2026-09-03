@@ -47,6 +47,7 @@
     <ProjectReference Include="..\..\src\SimplArchive.Presentation\SimplArchive.Presentation.csproj" />
     <!-- Referenced so the architecture tests can inspect these assemblies (layer + convention rules). -->
     <ProjectReference Include="..\..\src\SimplArchive.Infrastructure\SimplArchive.Infrastructure.csproj" />
+    <ProjectReference Include="..\SimplArchive.TestModule\SimplArchive.TestModule.csproj" />
     <ProjectReference Include="..\..\src\SimplArchive.Auth\SimplArchive.Auth.csproj" />
     <ProjectReference Include="..\..\src\SimplArchive.Api\SimplArchive.Api.csproj" />
   </ItemGroup>

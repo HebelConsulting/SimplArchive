@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SimplArchive.Application\SimplArchive.Application.csproj" />
+    <ProjectReference Include="..\SimplArchive.ModuleAbi\SimplArchive.ModuleAbi.csproj" />
   </ItemGroup>
 
   <ItemGroup>

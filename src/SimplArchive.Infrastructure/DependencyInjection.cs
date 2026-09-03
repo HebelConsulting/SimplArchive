@@ -118,6 +118,11 @@ public static class DependencyInjection
         services.AddScoped<IEffectiveRightsCalculator, EffectiveRightsCalculator>();
         services.AddScoped<IUserSystemRightsResolver, UserSystemRightsResolver>();
         services.AddScoped<IClearanceResolver, ClearanceResolver>();
+
+        // The module seam's host side (ADR 0741): what a module's registered services may reach.
+        services.AddScoped<ModuleAbi.IModuleArchiveFacade, Modules.ModuleArchiveFacade>();
+        services.AddScoped<Modules.ModuleMaskSeeder>();
+        services.AddScoped<Modules.StateMachineEngine>();
         services.AddScoped<IStorageQuotaService, Storage.StorageQuotaService>();
         services.AddScoped<ILegalHoldService, LegalHolds.LegalHoldService>();
         services.AddScoped<IRetentionService, Retention.RetentionService>();

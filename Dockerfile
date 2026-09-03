@@ -16,6 +16,7 @@ ARG VERSION=0.0.0-dev
 # Copy all project files first (preserving relative paths, needed since Api's project references must resolve
 # during restore) so the restore layer is cached independently of source-code changes.
 COPY ["src/SimplArchive.Localization/SimplArchive.Localization.csproj", "src/SimplArchive.Localization/"]
+COPY ["src/SimplArchive.ModuleAbi/SimplArchive.ModuleAbi.csproj", "src/SimplArchive.ModuleAbi/"]
 COPY ["src/SimplArchive.Presentation/SimplArchive.Presentation.csproj", "src/SimplArchive.Presentation/"]
 COPY ["src/SimplArchive.Theming/SimplArchive.Theming.csproj", "src/SimplArchive.Theming/"]
 COPY ["src/SimplArchive.Domain/SimplArchive.Domain.csproj", "src/SimplArchive.Domain/"]

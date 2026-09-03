@@ -36,6 +36,7 @@
     <ProjectReference Include="..\SimplArchive.SelfHosting\SimplArchive.SelfHosting.csproj" />
     <ProjectReference Include="..\..\src\SimplArchive.Api\SimplArchive.Api.csproj" />
     <ProjectReference Include="..\..\src\SimplArchive.Infrastructure\SimplArchive.Infrastructure.csproj" />
+    <ProjectReference Include="..\SimplArchive.TestModule\SimplArchive.TestModule.csproj" />
   </ItemGroup>
 
 </Project>
