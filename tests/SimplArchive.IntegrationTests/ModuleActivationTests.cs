@@ -2,9 +2,12 @@ using System.Security.Cryptography;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using SimplArchive.Domain.Documents;
+using SimplArchive.Domain.Masks;
 using SimplArchive.Domain.Modules;
 using SimplArchive.Domain.Tenants;
 using SimplArchive.Domain.Users;
+using SimplArchive.Infrastructure.Masks;
 using SimplArchive.Infrastructure.Modules;
 using SimplArchive.Infrastructure.Persistence;
 using SimplArchive.ModuleAbi;
@@ -16,6 +19,21 @@ namespace SimplArchive.IntegrationTests;
 // license writes nothing at all.
 public class ModuleActivationTests
 {
+    private sealed class TestUserAccessor : SimplArchive.Application.Abstractions.ICurrentUserAccessor
+    {
+        public Guid? UserId { get; set; }
+    }
+
+    private sealed class TestServiceAccountAccessor : SimplArchive.Application.Abstractions.ICurrentServiceAccountAccessor
+    {
+        public Guid? ServiceAccountId { get; set; }
+    }
+
+    private static ModuleActivationService CreateService(SimplArchiveDbContext context, Guid userId) =>
+        new(context,
+            new ModuleMaskSeeder(context, NullLogger<ModuleMaskSeeder>.Instance),
+            new ModuleArchiveFacade(context, new TestUserAccessor { UserId = userId }, new TestServiceAccountAccessor()));
+
     private static SimplArchiveDbContext CreateContext(SqliteConnection connection, Guid? tenantId = null)
     {
         var options = new DbContextOptionsBuilder<SimplArchiveDbContext>()
@@ -40,6 +58,22 @@ public class ModuleActivationTests
         return (tenantId, userId);
     }
 
+    private static async Task<Guid> FileDocumentAsync(SimplArchiveDbContext context, Guid tenantId, Guid userId, string name, Guid? maskVersionId = null)
+    {
+        var document = new Document
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            Name = name,
+            MaskVersionId = maskVersionId,
+            CreatedByUserId = userId,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        context.Documents.Add(document);
+        await context.SaveChangesAsync();
+        return document.Id;
+    }
+
     private static string LicenseJson(ECDsa key, Guid tenantId, DateOnly end)
     {
         var license = new ModuleLicense("test-module", tenantId, end, ModuleAbiVersion.Major, string.Empty).Sign(key);
@@ -56,10 +90,12 @@ public class ModuleActivationTests
         TestModule.TestModule.VerifyKeyPem = vendorKey.ExportSubjectPublicKeyInfoPem();
         var testModule = new TestModule.TestModule();
 
-        var licenseDocumentId = Guid.NewGuid();
+        Guid licenseDocumentId;
         using (var context = CreateContext(connection, tenantId))
         {
-            var service = new ModuleActivationService(context, new ModuleMaskSeeder(context, NullLogger<ModuleMaskSeeder>.Instance));
+            await new WellKnownMaskSeeder(context, NullLogger<WellKnownMaskSeeder>.Instance).EnsureWellKnownMasksAsync(tenantId);
+            licenseDocumentId = await FileDocumentAsync(context, tenantId, userId, "flight-school-2027.json");
+            var service = CreateService(context, userId);
             var activation = await service.ActivateAsync(
                 testModule, LicenseJson(vendorKey, tenantId, new DateOnly(2027, 3, 1)), licenseDocumentId, tenantId, userId);
 
@@ -72,6 +108,45 @@ public class ModuleActivationTests
         Assert.Single(await check.ModuleActivations.ToListAsync());
         // The seeder ran: the module's masks are planted (activated in name only would be a lie).
         Assert.NotNull(await check.Masks.SingleOrDefaultAsync(m => m.Id == TestModule.TestModule.CertificateMaskId));
+
+        // The maskless artefact was dressed in the Module-license mask and stamped with the VERIFIED
+        // claims — the projection that lets a listing self-describe (the JSON stays the only truth).
+        var stamped = await check.Documents.SingleAsync(d => d.Id == licenseDocumentId);
+        Assert.True(await check.MaskVersions.AnyAsync(v => v.Id == stamped.MaskVersionId && v.MaskId == WellKnownMaskIds.ModuleLicense));
+        var values = await check.FieldValues
+            .Where(v => v.DocumentId == licenseDocumentId)
+            .Join(check.FieldDefinitions, v => v.FieldDefinitionId, f => f.Id, (v, f) => new { f.Name, v.Value })
+            .ToListAsync();
+        Assert.Equal("test-module", values.Single(v => v.Name == "Module").Value);
+        Assert.Equal("2027-03-01", values.Single(v => v.Name == "Valid until").Value);
+    }
+
+    [Fact]
+    public async Task A_license_document_wearing_another_mask_is_not_redressed()
+    {
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var (tenantId, userId) = await SeedTenantAsync(connection);
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        TestModule.TestModule.VerifyKeyPem = vendorKey.ExportSubjectPublicKeyInfoPem();
+        var testModule = new TestModule.TestModule();
+
+        using var context = CreateContext(connection, tenantId);
+        await new WellKnownMaskSeeder(context, NullLogger<WellKnownMaskSeeder>.Instance).EnsureWellKnownMasksAsync(tenantId);
+        var basicVersionId = (await context.MaskVersions
+            .SingleAsync(v => v.MaskId == WellKnownMaskIds.BasicEntry && v.IsCurrent)).Id;
+        var documentId = await FileDocumentAsync(context, tenantId, userId, "license-as-basic-entry.json", basicVersionId);
+
+        var service = CreateService(context, userId);
+        await service.ActivateAsync(
+            testModule, LicenseJson(vendorKey, tenantId, new DateOnly(2027, 3, 1)), documentId, tenantId, userId);
+
+        // The administrator's own typing choice stands: the mask is untouched and nothing was stamped —
+        // but the ACTIVATION itself succeeded regardless, because the projection is best-effort.
+        var document = await context.Documents.SingleAsync(d => d.Id == documentId);
+        Assert.Equal(basicVersionId, document.MaskVersionId);
+        Assert.Empty(await context.FieldValues.Where(v => v.DocumentId == documentId).ToListAsync());
+        Assert.Single(await context.ModuleActivations.ToListAsync());
     }
 
     [Fact]
@@ -85,10 +160,11 @@ public class ModuleActivationTests
         var testModule = new TestModule.TestModule();
 
         using var context = CreateContext(connection, tenantId);
-        var service = new ModuleActivationService(context, new ModuleMaskSeeder(context, NullLogger<ModuleMaskSeeder>.Instance));
-        await service.ActivateAsync(testModule, LicenseJson(vendorKey, tenantId, new DateOnly(2026, 12, 31)), Guid.NewGuid(), tenantId, userId);
+        var service = CreateService(context, userId);
+        var firstDocumentId = await FileDocumentAsync(context, tenantId, userId, "license-2026.json");
+        await service.ActivateAsync(testModule, LicenseJson(vendorKey, tenantId, new DateOnly(2026, 12, 31)), firstDocumentId, tenantId, userId);
 
-        var renewalDocumentId = Guid.NewGuid();
+        var renewalDocumentId = await FileDocumentAsync(context, tenantId, userId, "license-2027.json");
         var renewed = await service.ActivateAsync(
             testModule, LicenseJson(vendorKey, tenantId, new DateOnly(2027, 12, 31)), renewalDocumentId, tenantId, userId);
 
@@ -108,11 +184,12 @@ public class ModuleActivationTests
         var testModule = new TestModule.TestModule();
 
         using var context = CreateContext(connection, tenantId);
-        var service = new ModuleActivationService(context, new ModuleMaskSeeder(context, NullLogger<ModuleMaskSeeder>.Instance));
+        var service = CreateService(context, userId);
 
         // Bound to a DIFFERENT tenant — the per-tenant binding is the whole point of v0 (ADR 0743).
+        var documentId = await FileDocumentAsync(context, tenantId, userId, "wrong-tenant.json");
         await Assert.ThrowsAsync<ModuleLicenseException>(() => service.ActivateAsync(
-            testModule, LicenseJson(vendorKey, Guid.NewGuid(), new DateOnly(2027, 3, 1)), Guid.NewGuid(), tenantId, userId));
+            testModule, LicenseJson(vendorKey, Guid.NewGuid(), new DateOnly(2027, 3, 1)), documentId, tenantId, userId));
 
         Assert.Empty(await context.ModuleActivations.ToListAsync());
         Assert.Null(await context.Masks.SingleOrDefaultAsync(m => m.Id == TestModule.TestModule.CertificateMaskId));

@@ -138,6 +138,15 @@ public static class WellKnownMaskIds
     /// <summary>The booking document a meeting-room reservation files (ADR 0735: a booking is a document).</summary>
     public static readonly Guid RoomBooking = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E43");
 
+    /// <summary>A filed module-license artefact (ADRs 0740/0743) — the signed JSON a vendor issues.</summary>
+    /// <remarks>
+    /// A CORE mask, deliberately not module-seeded: it must exist before any module is activated, since
+    /// activation is the act of referencing a document wearing it. Its fields (Module, Valid until) are a
+    /// PROJECTION the server stamps from the VERIFIED claims after activation — the signed JSON inside the
+    /// document stays the only truth, and an unverified license simply shows empty fields.
+    /// </remarks>
+    public static readonly Guid ModuleLicense = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E44");
+
     /// <summary>A section INSIDE a notebook: a folder that holds notes and further sections (#564).</summary>
     /// <remarks>
     /// Fieldless, like the Notebook it lives in — it types the folder, and the fields live on the notes.
@@ -325,7 +334,7 @@ public static class WellKnownMaskIds
     /// <summary>The well-known masks an ITEM wears — the complement of <see cref="FolderMasks"/>.</summary>
     /// <remarks>Stated rather than derived, so the partition guard has two sides to compare instead of one.</remarks>
     public static readonly IReadOnlySet<Guid> ItemMasks =
-        new HashSet<Guid> { BasicEntry, EMail, Note, Contact, Appointment, RoomBooking };
+        new HashSet<Guid> { BasicEntry, EMail, Note, Contact, Appointment, RoomBooking, ModuleLicense };
 
     /// <summary>
     /// Typed folders that ALSO admit a plain <see cref="Folder"/>, so a user can make folders of their own

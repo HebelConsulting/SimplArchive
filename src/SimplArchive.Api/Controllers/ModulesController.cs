@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Errors.Exceptions.Modules;
 using SimplArchive.Api.Hypermedia;
 using SimplArchive.Application.Abstractions;
+using SimplArchive.Domain.Masks;
 using SimplArchive.Domain.Modules;
 using SimplArchive.Infrastructure.Modules;
 using SimplArchive.Infrastructure.Persistence;
@@ -90,6 +91,25 @@ public class ModulesController : ControllerBase
         public List<ModuleResource> Items { get; set; } = [];
     }
 
+    public class LicenseDocumentResource : HypermediaResource
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public DateTimeOffset CreatedAt { get; set; }
+
+        /// <summary>The stamped Module field — the VERIFIED claim's projection; empty until a license
+        /// has been through a successful activation (the JSON inside stays the only truth).</summary>
+        public string? Module { get; set; }
+
+        /// <summary>The stamped "Valid until" field (yyyy-MM-dd), same projection.</summary>
+        public string? ValidUntil { get; set; }
+    }
+
+    public class LicenseDocumentListResource : HypermediaResource
+    {
+        public List<LicenseDocumentResource> Items { get; set; } = [];
+    }
+
     public class ActivateModuleRequest
     {
         /// <summary>The filed license document (ADR 0743: the artefact is an ordinary document, filed
@@ -107,6 +127,19 @@ public class ModulesController : ControllerBase
 
     [HttpHead]
     public async Task<IActionResult> Head(CancellationToken cancellationToken) =>
+        await IsTenantAdminAsync(cancellationToken) ? NoContent() : Forbid();
+
+    /// <summary>The filed license artefacts: documents wearing the well-known Module-license mask, newest
+    /// first — what the Activate/Renew dialog offers. Capped, not cursor-paginated: a tenant holds a few
+    /// licenses, and the newest fifty is already forty-eight more than the realistic case.</summary>
+    [HttpGet("license-documents")]
+    public async Task<IActionResult> ListLicenseDocuments(CancellationToken cancellationToken) =>
+        await IsTenantAdminAsync(cancellationToken)
+            ? Ok(await BuildLicenseDocumentListAsync(cancellationToken))
+            : Forbid();
+
+    [HttpHead("license-documents")]
+    public async Task<IActionResult> HeadLicenseDocuments(CancellationToken cancellationToken) =>
         await IsTenantAdminAsync(cancellationToken) ? NoContent() : Forbid();
 
     /// <summary>The activation act (ADRs 0740/0743): verify the filed license, seed the module's masks,
@@ -157,6 +190,41 @@ public class ModulesController : ControllerBase
         return Ok(ToResource(module.ModuleId, module.DisplayName, module.AbiMajorVersion, installed: true, activation));
     }
 
+    private async Task<LicenseDocumentListResource> BuildLicenseDocumentListAsync(CancellationToken cancellationToken)
+    {
+        // Filter and order on the ENTITY before projecting (the EF-translation gotcha): documents whose
+        // worn mask version belongs to the well-known Module-license mask.
+        var documents = await _dbContext.Documents
+            .Where(d => d.MaskVersionId != null && _dbContext.MaskVersions
+                .Any(v => v.Id == d.MaskVersionId && v.MaskId == WellKnownMaskIds.ModuleLicense))
+            .OrderByDescending(d => d.CreatedAt).ThenByDescending(d => d.Id)
+            .Take(50)
+            .Select(d => new { d.Id, d.Name, d.CreatedAt })
+            .ToListAsync(cancellationToken);
+
+        var ids = documents.Select(d => d.Id).ToList();
+        var fields = await _dbContext.FieldValues
+            .Where(v => ids.Contains(v.DocumentId))
+            .Join(_dbContext.FieldDefinitions, v => v.FieldDefinitionId, f => f.Id,
+                (v, f) => new { v.DocumentId, f.Name, v.Value })
+            .Where(x => x.Name == "Module" || x.Name == "Valid until")
+            .ToListAsync(cancellationToken);
+        var byDocument = fields.ToLookup(f => f.DocumentId);
+
+        return new LicenseDocumentListResource
+        {
+            Items = documents.Select(d => new LicenseDocumentResource
+            {
+                Id = d.Id,
+                Name = d.Name,
+                CreatedAt = d.CreatedAt,
+                Module = byDocument[d.Id].FirstOrDefault(f => f.Name == "Module")?.Value,
+                ValidUntil = byDocument[d.Id].FirstOrDefault(f => f.Name == "Valid until")?.Value,
+            }).ToList(),
+            Links = [new Link("self", "/api/modules/license-documents", "GET")],
+        };
+    }
+
     private async Task<ModuleListResource> BuildListAsync(CancellationToken cancellationToken)
     {
         var activations = await _dbContext.ModuleActivations
@@ -180,7 +248,13 @@ public class ModulesController : ControllerBase
         return new ModuleListResource
         {
             Items = items.OrderBy(i => i.ModuleId, StringComparer.Ordinal).ToList(),
-            Links = [new Link("self", "/api/modules", "GET")],
+            Links =
+            [
+                new Link("self", "/api/modules", "GET"),
+                // What the Activate/Renew dialog lists (ADR 0557: the collection's own affordances are
+                // captured where the collection is read).
+                new Link("license-documents", "/api/modules/license-documents", "GET"),
+            ],
         };
     }
 

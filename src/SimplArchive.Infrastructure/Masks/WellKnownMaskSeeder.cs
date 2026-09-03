@@ -191,6 +191,15 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             new FieldSpec("Purpose", FieldDataType.Text, IsRequired: false),
         ], cancellationToken);
 
+        // The module-license artefact (ADRs 0740/0743). Both fields are a server-stamped projection of the
+        // VERIFIED claims — optional, so an admin can file the raw .json with nothing to type, and a license
+        // that never verified simply shows them empty.
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.ModuleLicense, "Module license",
+        [
+            new FieldSpec("Module", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Valid until", FieldDataType.Date, IsRequired: false),
+        ], cancellationToken);
+
         // After every mask exists, because containment is a relation BETWEEN masks: a Notebook's allowed parent
         // is the Mailbox, which is seeded eight lines below it, so doing this per-mask inside the loop above
         // would write a foreign key to a row that does not exist yet.
