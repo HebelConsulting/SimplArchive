@@ -177,6 +177,25 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                    <!-- The meeting-room booking surface (ADR 0735): present exactly when the resource
+                         advertised the bookings rel — the rel's presence is the affordance (ADR 0543). -->
+                    <Button Content="{loc:Tr BookingsButton}" Margin="0,8,0,0" Padding="10,4"
+                            IsVisible="{Binding CanOpenBookings}" Command="{Binding OpenBookingsCommand}" />
+                    <!-- The generic action surface (ADR 0743): server-labeled links render as buttons with
+                         no client knowledge of the rel — a module's actions arrive here without a build.
+                         Real-looking buttons, not ribbon ghosts: this is a form-side surface (ADR 0491's
+                         boundary), and the label is the server's, already localized. -->
+                    <ItemsControl IsVisible="{Binding HasDetailGenericActions}" ItemsSource="{Binding DetailGenericActions}" Margin="0,8,0,0">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:CompileBindings="False">
+                                <Button Margin="0,0,6,4" Padding="10,4"
+                                        Content="{Binding Label}"
+                                        CommandParameter="{Binding}"
+                                        Command="{Binding DataContext.ExecuteGenericActionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
 
                 <!-- Mask edit mode: choose the mask + type-aware field editors. -->

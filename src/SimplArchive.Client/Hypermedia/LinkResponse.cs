@@ -13,4 +13,13 @@ public record LinkResponse
     public string Rel { get; set; } = string.Empty;
 
     public string Href { get; set; } = string.Empty;
+
+    public string Method { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The server-rendered, localized caption of a GENERIC ACTION (ADR 0743) — present only on a link the
+    /// server wants rendered as a button with no client knowledge of the rel. Null on the navigation
+    /// machinery this record has always carried.
+    /// </summary>
+    public string? Label { get; set; }
 }

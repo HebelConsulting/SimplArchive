@@ -67,6 +67,11 @@ public static class ApiErrorText
         "INTRAY_NO_PATCH_CODES_FOUND" => Strings.Get("ApiErrIntrayNoPatchCodes"),
         // The raw-item disclosure's two refusals (#648, ADR 0643). Both name the line to fix, which is the
         // whole value of surfacing them in an editor whose premise is that the user can see what they edit.
+        // The inventory-booking primitive (ADR 0735). The slot conflict is the one users will actually
+        // meet; the other two are backstops a conforming client never triggers (the rel gates them).
+        "BOOKING_SLOT_CONFLICT" => Strings.Get("ApiErrBookingSlotConflict"),
+        "RESOURCE_NOT_BOOKABLE" => Strings.Get("ApiErrResourceNotBookable"),
+        "BOOKING_SLOT_INVALID" => Strings.Get("ApiErrBookingSlotInvalid"),
         "UNPARSABLE_ITEM_SOURCE" => Strings.Get("ApiErrUnparsableItemSource"),
         "ITEM_SOURCE_UID_CHANGED" => Strings.Get("ApiErrItemSourceUidChanged"),
         _ => Strings.Get("ApiErrGeneric"),

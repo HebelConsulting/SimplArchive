@@ -367,6 +367,50 @@ public partial class Home
         await LoadCommentsAsync(item);
     }
 
+    // The generic action surface's executor (ADR 0743): the labeled link's method against its advertised
+    // href, no payload — the parameterless-transition shape the surface is scoped to. A refusal surfaces
+    // the problem document's detail (since ADR 0742, the explanation a user can act on); success re-reads
+    // the resource, because the action changed the subject's state and its rels — this surface included —
+    // are stale (ADR 0550: a transition's NEW actions must appear).
+    private async Task ExecuteGenericActionAsync(LinkResponse action)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(new HttpMethod(action.Method), action.Href.TrimStart('/'));
+            var response = await Http.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                // The errorCode, mapped through ApiErrorText — never the English `detail` (issue #424); an
+                // unmapped module code falls back to its generic localized sentence until ADR 0742's engine
+                // ships server-localized explanations as their own field.
+                string? code = null;
+                try
+                {
+                    var problem = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                    code = problem.TryGetProperty("errorCode", out var c) ? c.GetString() : null;
+                }
+                catch (System.Text.Json.JsonException) { }
+                Snackbar.Add(SimplArchive.Localization.ApiErrorText.For(code), Severity.Error);
+                return;
+            }
+
+            Snackbar.Add(action.Label ?? action.Rel, Severity.Success);
+            if (Detail.Links is { } links && links.TryGetValue("self", out var selfHref))
+            {
+                var document = await Http.GetFromJsonAsync<DocumentLinksResponse>(selfHref.TrimStart('/'));
+                Detail.GenericActions = document?.Links?
+                    .Where(l => !string.IsNullOrEmpty(l.Label)
+                        && !string.Equals(l.Method, "GET", StringComparison.OrdinalIgnoreCase))
+                    .ToList() ?? [];
+                StateHasChanged();
+            }
+        }
+        catch (HttpRequestException e)
+        {
+            Snackbar.Add(e.Message, Severity.Error);
+        }
+    }
+
     private void ClearDetail()
     {
         _selectedItem = null;
@@ -375,6 +419,7 @@ public partial class Home
         Detail.VersionNumber = null;
         Detail.IndexData = null;
         Detail.Tags = null;
+        Detail.GenericActions = []; // an action must not outlive its subject (ADR 0559)
         _downloadUrl = null;
         ClearPreviewPane();
         _selectedNode = null;
@@ -422,6 +467,11 @@ public partial class Home
     // SHELL renders from: whether the ribbon draws the my-links button, and whether the chat header's bell is lit.
     private string? _myExternalLinksHref;
     private bool _folderSubscribed;
+
+    private Task OpenBookingsDialogAsync() =>
+        Detail.Links is { } links && links.TryGetValue("bookings", out var href)
+            ? Actions.OpenBookingsAsync(Detail.SysName, href)
+            : Task.CompletedTask;
 
     private Task OpenExternalLinksDialogAsync() =>
         _selectedItem is { } item && Detail.ExternalLinksHref is { } href

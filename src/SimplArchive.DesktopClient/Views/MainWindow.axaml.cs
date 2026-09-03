@@ -62,6 +62,7 @@ public partial class MainWindow : Window
                     new ConfirmDialog(question, Strings.Get("DupClaimConfirm")).ShowDialog<bool>(this);
                 vm.NameConflictDialog = req => new NameConflictDialog(req).ShowDialog<Services.UploadConflictResolver.NameConflictChoice?>(this);
                 vm.ShowReminderDialog = rvm => new ReminderDialog(rvm).ShowDialog(this);
+                vm.ShowBookingDialog = bvm => new BookingDialog(bvm).ShowDialog(this);
                 vm.ShowExternalLinksDialog = evm =>
                 {
                     var window = new ExternalLinksDialog(evm);

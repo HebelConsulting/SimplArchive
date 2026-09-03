@@ -4761,4 +4761,40 @@
   <data name="BulkExportFailed" xml:space="preserve">
     <value>La selección no se pudo exportar como un solo archivo.</value>
   </data>
+  <data name="ApiErrBookingSlotConflict" xml:space="preserve">
+    <value>Esta franja se solapa con una reserva existente del mismo recurso.</value>
+  </data>
+  <data name="ApiErrResourceNotBookable" xml:space="preserve">
+    <value>Este documento no es un recurso reservable.</value>
+  </data>
+  <data name="ApiErrBookingSlotInvalid" xml:space="preserve">
+    <value>El inicio de la franja debe preceder a su fin.</value>
+  </data>
+  <data name="BookTitle" xml:space="preserve">
+    <value>Reservas de la sala</value>
+  </data>
+  <data name="BookDate" xml:space="preserve">
+    <value>Fecha</value>
+  </data>
+  <data name="BookFrom" xml:space="preserve">
+    <value>Desde</value>
+  </data>
+  <data name="BookUntil" xml:space="preserve">
+    <value>Hasta</value>
+  </data>
+  <data name="BookPurpose" xml:space="preserve">
+    <value>Motivo</value>
+  </data>
+  <data name="BookAction" xml:space="preserve">
+    <value>Reservar</value>
+  </data>
+  <data name="BookingsButton" xml:space="preserve">
+    <value>Reservas…</value>
+  </data>
+  <data name="BookStatusActive" xml:space="preserve">
+    <value>reservado</value>
+  </data>
+  <data name="BookStatusCancelled" xml:space="preserve">
+    <value>cancelado</value>
+  </data>
 </root>

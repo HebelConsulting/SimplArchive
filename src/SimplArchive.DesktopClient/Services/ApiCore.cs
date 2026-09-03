@@ -225,6 +225,24 @@ public sealed class ApiCore
     // The href a resource advertises for a rel, or null when it doesn't offer one. A missing rel is meaningful —
     // it means "not available here" — so callers branch on null rather than composing a URL (ADR 0543).
     // internal: IntrayApi follows rels too, since the intray calls moved there (#443 direction).
+    /// <summary>
+    /// The problem document's errorCode, or null when the body is not a problem (a proxy error page).
+    /// The contract the clients localize from (issue #424) — never the English `detail`. Parsed once,
+    /// branched from the parse (the read-the-problem-body-once lesson).
+    /// </summary>
+    public static async Task<string?> ErrorCodeAsync(HttpResponseMessage response, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var problem = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+            return problem.TryGetProperty("errorCode", out var code) ? code.GetString() : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     public static string? RelHref(JsonElement resource, string rel)
     {
         if (!resource.TryGetProperty("links", out var links) || links.ValueKind != JsonValueKind.Array)

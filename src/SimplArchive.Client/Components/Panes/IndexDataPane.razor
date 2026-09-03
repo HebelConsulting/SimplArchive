@@ -284,6 +284,26 @@
                     }
                 </div>
             }
+            @* The meeting-room booking surface (ADR 0735): present exactly when the resource advertised
+               the bookings rel — the rel's presence is the affordance (ADR 0543). *@
+            @if (Detail.Links?.ContainsKey("bookings") == true)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Class="mt-3"
+                           OnClick="@(() => OpenBookings.InvokeAsync())">@Strings.Get("BookingsButton")</MudButton>
+            }
+            @* The generic action surface (ADR 0743): server-labeled links render as buttons with no client
+               knowledge of the rel — a module's actions arrive here without a build. Real buttons, not ribbon
+               chips: a form-side surface (the ADR 0491 boundary), and the label is the server's, localized. *@
+            @if (Detail.GenericActions is { Count: > 0 })
+            {
+                <div style="display:flex; flex-wrap:wrap; gap:6px;" class="mt-3">
+                    @foreach (var action in Detail.GenericActions)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Disabled="@Detail.Busy"
+                                   OnClick="@(() => GenericAction.InvokeAsync(action))">@action.Label</MudButton>
+                    }
+                </div>
+            }
         }
 
         @* Nothing lives down here any more. Save/Cancel went to the header row with the pencil that starts
@@ -384,6 +404,13 @@
 
     /// <summary>Clicking a tag chip searches for it, which is a workbench-level navigation.</summary>
     [Parameter, EditorRequired] public EventCallback<string> SearchByTag { get; set; }
+
+    /// <summary>A generic action's button was clicked (ADR 0743) — the shell executes it (ADR 0730's rule:
+    /// what the shell supplies is a parameter, and the pane only renders).</summary>
+    [Parameter, EditorRequired] public EventCallback<Hypermedia.LinkResponse> GenericAction { get; set; }
+
+    /// <summary>The Bookings… button was clicked (ADR 0735) — the shell opens the dialog.</summary>
+    [Parameter, EditorRequired] public EventCallback OpenBookings { get; set; }
 
     private string? TagColor(string name) => Catalogs.TagColor(name);
 

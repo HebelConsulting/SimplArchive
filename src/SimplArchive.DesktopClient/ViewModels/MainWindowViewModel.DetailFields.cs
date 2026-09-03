@@ -20,6 +20,11 @@ public sealed partial class MainWindowViewModel
     private async Task LoadSystemFieldsAsync(string documentSelfHref, string? versionsHref, string name)
     {
         SysName = name;
+        // Cleared with everything else on subject change (ADR 0559): an inherited action would execute
+        // against the wrong document.
+        SetDetailGenericActions(null);
+        _detailLinks = null;
+        OnPropertyChanged(nameof(CanOpenBookings)); // the affordance must not outlive its subject (ADR 0559)
         SysDocumentDate = null;
         SysCreated = string.Empty;
         SysCreatedBy = string.Empty;
@@ -52,6 +57,8 @@ public sealed partial class MainWindowViewModel
             // The rels this resource advertised, so the calls below follow addresses instead of composing
             // them from the id (ADR 0543, issue #416). Captured here because `detail` is scoped to this try.
             _detailLinks = detail.Links;
+            SetDetailGenericActions(detail.GenericActions);
+            OnPropertyChanged(nameof(CanOpenBookings));
             _detailDocumentName = detail.Name;
             CanShareDocument = detail.ExternalLinksHref is not null;
             // Folder-only, and read from the resource because a child folder's order is never fetched by the

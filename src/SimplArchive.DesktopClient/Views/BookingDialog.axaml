@@ -1,0 +1,59 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+        x:Class="SimplArchive.DesktopClient.Views.BookingDialog"
+        x:DataType="vm:BookingDialogViewModel"
+        Title="{loc:Tr BookTitle}" Width="460" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="10">
+        <TextBlock Text="{Binding ResourceName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+
+        <!-- The resource's bookings, each cancellable where the row says so (canCancel — the booker, or a
+             room admin). Empty → nothing renders, like the reminder rows this dialog is modeled on. -->
+        <ItemsControl ItemsSource="{Binding Bookings}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:BookingDialogViewModel+BookingRowView">
+                    <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                        <StackPanel Grid.Column="0">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="{Binding TimeText}" FontSize="12" />
+                                <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="Gray" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding Row.BookedBy}" FontSize="11" Foreground="Gray" />
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="{loc:Tr Cancel}" FontSize="11"
+                                IsVisible="{Binding Row.CanCancel}"
+                                Command="{Binding $parent[Window].((vm:BookingDialogViewModel)DataContext).CancelBookingCommand}"
+                                CommandParameter="{Binding}" />
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="8"
+              IsVisible="{Binding CanBook}">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr BookDate}" VerticalAlignment="Center" />
+            <CalendarDatePicker Grid.Row="0" Grid.Column="1" SelectedDate="{Binding BookingDate}" HorizontalAlignment="Stretch" Watermark="yyyy-MM-dd" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr BookFrom}" VerticalAlignment="Center" />
+            <TimePicker Grid.Row="1" Grid.Column="1" SelectedTime="{Binding StartTime}" ClockIdentifier="24HourClock" HorizontalAlignment="Left" />
+
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr BookUntil}" VerticalAlignment="Center" />
+            <TimePicker Grid.Row="2" Grid.Column="1" SelectedTime="{Binding EndTime}" ClockIdentifier="24HourClock" HorizontalAlignment="Left" />
+
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:Tr BookPurpose}" VerticalAlignment="Center" />
+            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding Purpose}" Watermark="{loc:Tr OptionalPlaceholder}" />
+        </Grid>
+
+        <!-- The refusal's home: the localized slot-conflict sentence lands HERE, beside the form that caused
+             it (ADR 0550 — the state's message next to the control that started the transition). -->
+        <TextBlock Text="{Binding Status}" Foreground="{DynamicResource SystemErrorTextColor}" FontSize="12"
+                   TextWrapping="Wrap" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Content="{loc:Tr BookAction}" Command="{Binding BookCommand}" IsVisible="{Binding CanBook}" />
+            <Button Content="{loc:Tr Close}" Click="OnClose" />
+        </StackPanel>
+    </StackPanel>
+</Window>

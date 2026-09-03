@@ -4761,4 +4761,40 @@
   <data name="BulkExportFailed" xml:space="preserve">
     <value>La selezione non può essere esportata come un unico file.</value>
   </data>
+  <data name="ApiErrBookingSlotConflict" xml:space="preserve">
+    <value>Questa fascia oraria si sovrappone a una prenotazione esistente della stessa risorsa.</value>
+  </data>
+  <data name="ApiErrResourceNotBookable" xml:space="preserve">
+    <value>Questo documento non è una risorsa prenotabile.</value>
+  </data>
+  <data name="ApiErrBookingSlotInvalid" xml:space="preserve">
+    <value>L'inizio della fascia oraria deve precedere la fine.</value>
+  </data>
+  <data name="BookTitle" xml:space="preserve">
+    <value>Prenotazioni della sala</value>
+  </data>
+  <data name="BookDate" xml:space="preserve">
+    <value>Data</value>
+  </data>
+  <data name="BookFrom" xml:space="preserve">
+    <value>Dalle</value>
+  </data>
+  <data name="BookUntil" xml:space="preserve">
+    <value>Alle</value>
+  </data>
+  <data name="BookPurpose" xml:space="preserve">
+    <value>Scopo</value>
+  </data>
+  <data name="BookAction" xml:space="preserve">
+    <value>Prenota</value>
+  </data>
+  <data name="BookingsButton" xml:space="preserve">
+    <value>Prenotazioni…</value>
+  </data>
+  <data name="BookStatusActive" xml:space="preserve">
+    <value>prenotato</value>
+  </data>
+  <data name="BookStatusCancelled" xml:space="preserve">
+    <value>annullato</value>
+  </data>
 </root>

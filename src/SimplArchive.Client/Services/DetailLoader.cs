@@ -70,6 +70,12 @@ public sealed class DetailLoader(
             }
 
             detail.Links = Links.RelMap(document?.Links);
+            // The generic action surface (ADR 0743): a labeled non-GET link is an action; the label being
+            // the signal spares this client a known-rel list that would drift the moment a module ships.
+            detail.GenericActions = document?.Links?
+                .Where(l => !string.IsNullOrEmpty(l.Label)
+                    && !string.Equals(l.Method, "GET", StringComparison.OrdinalIgnoreCase))
+                .ToList() ?? [];
             detail.MaskId = null;
 
             // mask + index-data come from the ROW's own rels — the listing advertises them, so no second fetch.

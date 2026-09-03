@@ -1,0 +1,168 @@
+@inject HttpClient Http
+
+@* A bookable resource's bookings (ADR 0735; the meeting-room half of ADR 0743's slice-1 scope): list, book
+   a slot, cancel one. The web mirror of the desktop's BookingDialog (ADR 0511 — the desktop is canonical):
+   rows above, the create form below, the refusal's localized sentence beside the form that caused it
+   (ADR 0550). Interactive — does its own API calls; every address is followed from a rel. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 480px;">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">@ResourceName</MudText>
+
+            @foreach (var row in _rows)
+            {
+                <div style="display:flex; align-items:center; gap:8px;" class="mb-1">
+                    <div style="flex:1 1 auto; min-width:0;">
+                        <div>
+                            @row.StartsAt.ToLocalTime().ToString("g") – @row.EndsAt.ToLocalTime().ToString("t")
+                            <span class="mud-text-secondary" style="font-size:.85em;">@StatusText(row)</span>
+                        </div>
+                        <div class="mud-text-secondary" style="font-size:.8em;">@row.BookedBy@(row.Purpose is { Length: > 0 } p ? $" · {p}" : "")</div>
+                    </div>
+                    @if (row.CanCancel)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => CancelAsync(row))">@Strings.Get("Cancel")</MudButton>
+                    }
+                </div>
+            }
+
+            @if (_canBook)
+            {
+                <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;" class="mt-3">
+                    <MudDatePicker Date="_date" DateChanged="@((DateTime? d) => _date = d)" Label="@Strings.Get("BookDate")" Style="width:150px" />
+                    <MudTimePicker Time="_start" TimeChanged="@((TimeSpan? t) => _start = t)" Label="@Strings.Get("BookFrom")" Style="width:110px" />
+                    <MudTimePicker Time="_end" TimeChanged="@((TimeSpan? t) => _end = t)" Label="@Strings.Get("BookUntil")" Style="width:110px" />
+                    <MudTextField @bind-Value="_purpose" Label="@Strings.Get("BookPurpose")" Style="min-width:160px" />
+                </div>
+            }
+
+            @if (_error is { Length: > 0 })
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2">@_error</MudAlert>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        @if (_canBook)
+        {
+            <MudButton Color="Color.Primary" OnClick="BookAsync">@Strings.Get("BookAction")</MudButton>
+        }
+        <MudButton OnClick="@(() => Dialog.Close())">@Strings.Get("Close")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
+
+    /// <summary>The `bookings` rel's href, followed from the resource — never composed (ADR 0543).</summary>
+    [Parameter, EditorRequired] public string BookingsHref { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string ResourceName { get; set; } = string.Empty;
+
+    private sealed class BookingRow
+    {
+        public Guid Id { get; set; }
+        public DateTimeOffset StartsAt { get; set; }
+        public DateTimeOffset EndsAt { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public string BookedBy { get; set; } = string.Empty;
+        public string? Purpose { get; set; }
+        public bool CanCancel { get; set; }
+        public string Etag { get; set; } = string.Empty;
+        public List<Hypermedia.LinkResponse>? Links { get; set; }
+    }
+
+    private sealed class BookingList
+    {
+        public List<BookingRow> Bookings { get; set; } = [];
+        public bool CanBook { get; set; }
+    }
+
+    private List<BookingRow> _rows = [];
+    private bool _canBook;
+    private DateTime? _date = DateTime.Today.AddDays(1);
+    private TimeSpan? _start = new(9, 0, 0);
+    private TimeSpan? _end = new(10, 0, 0);
+    private string _purpose = string.Empty;
+    private string? _error;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        var list = await Http.GetFromJsonAsync<BookingList>(BookingsHref.TrimStart('/'));
+        _rows = list?.Bookings ?? [];
+        _canBook = list?.CanBook ?? false;
+    }
+
+    private async Task BookAsync()
+    {
+        if (_date is not { } date || _start is not { } start || _end is not { } end)
+        {
+            return;
+        }
+
+        // Local wall-clock in, real instants out — the offset is this machine's, the server compares
+        // instants (ADR 0735's [start, end) semantics).
+        var offset = TimeZoneInfo.Local.GetUtcOffset(date);
+        var response = await Http.PostAsJsonAsync(BookingsHref.TrimStart('/'), new
+        {
+            startsAt = new DateTimeOffset(DateOnly.FromDateTime(date), TimeOnly.FromTimeSpan(start), offset),
+            endsAt = new DateTimeOffset(DateOnly.FromDateTime(date), TimeOnly.FromTimeSpan(end), offset),
+            purpose = string.IsNullOrWhiteSpace(_purpose) ? null : _purpose.Trim(),
+        });
+
+        if (!response.IsSuccessStatusCode)
+        {
+            // The errorCode through ApiErrorText — never the English detail (issue #424); the slot-conflict
+            // sentence is the one users will meet.
+            _error = ApiErrorText.For(await ErrorCodeAsync(response));
+            return;
+        }
+
+        _error = null;
+        await LoadAsync();
+    }
+
+    private async Task CancelAsync(BookingRow row)
+    {
+        // The row's own `cancel` rel + row-borne etag (the ExternalLinks precedent): the token travels with
+        // the row, or every cancel costs a fetch (ADR 0557).
+        var href = row.Links?.FirstOrDefault(l => l.Rel == "cancel")?.Href;
+        if (href is null)
+        {
+            return; // no rel means "not available to you, here, now" (ADR 0543).
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Delete, href.TrimStart('/'));
+        request.Headers.TryAddWithoutValidation("If-Match", $"\"{row.Etag}\"");
+        var response = await Http.SendAsync(request);
+        if (!response.IsSuccessStatusCode)
+        {
+            _error = ApiErrorText.For(await ErrorCodeAsync(response));
+            return;
+        }
+
+        _error = null;
+        await LoadAsync();
+    }
+
+    private static string StatusText(BookingRow row)
+    {
+        var key = row.Status == "Cancelled" ? "BookStatusCancelled" : "BookStatusActive";
+        return Strings.Get(key);
+    }
+
+    private static async Task<string?> ErrorCodeAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            var problem = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+            return problem.TryGetProperty("errorCode", out var code) ? code.GetString() : null;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+}

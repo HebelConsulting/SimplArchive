@@ -157,7 +157,7 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
     // instead of composing a path (ADR 0543, issue #416). ExternalLinksHref predates this and stays: its ABSENCE
     // is meaningful (tenant switch off, or a folder), which is a different question from "what is its address".
     public sealed record DocumentDetailInfo(string Name, DocumentSensitivityInfo Sensitivity, string? ExternalLinksHref, int ContentsSortOrder,
-        IReadOnlyDictionary<string, string>? Links = null)
+        IReadOnlyDictionary<string, string>? Links = null, IReadOnlyList<GenericActionInfo>? GenericActions = null)
     {
         /// <summary>The advertised href for <paramref name="rel"/>; throws rather than composing one.</summary>
         public string Href(string rel) =>
@@ -184,7 +184,8 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
             // A FOLDER never carries it: sharing one is refused, so the icon must not appear either.
             ApiCore.RelHref(json, "external-links"),
             json.TryGetProperty("contentsSortOrder", out var so) && so.ValueKind == JsonValueKind.Number ? so.GetInt32() : 0,
-            ApiCore.ParseLinks(json));
+            ApiCore.ParseLinks(json),
+            ParseGenericActions(json));
     }
 
     public async Task SetSensitivityAsync(string sensitivityHref, Guid? labelId, CancellationToken cancellationToken = default)

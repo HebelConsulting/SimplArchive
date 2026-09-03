@@ -60,6 +60,7 @@ public sealed class SimplArchiveApiClient
     private WorkflowClient? _workflow;
     private NotificationsClient? _notifications;
     private RemindersClient? _reminders;
+    private BookingsClient? _bookings;
     private AnnotationsClient? _annotations;
     private AuditClient? _audit;
     private VersionsClient? _versions;
@@ -106,6 +107,8 @@ public sealed class SimplArchiveApiClient
 
     /// <summary>The reminders & subscriptions area (#443 tranche 5).</summary>
     public RemindersClient Reminders => _reminders ??= new RemindersClient(Core);
+
+    public BookingsClient Bookings => _bookings ??= new BookingsClient(Core);
 
     /// <summary>The annotations area (#443 tranche 5).</summary>
     public AnnotationsClient Annotations => _annotations ??= new AnnotationsClient(Core);

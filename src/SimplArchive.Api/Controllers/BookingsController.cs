@@ -81,6 +81,11 @@ public class BookingsController : ControllerBase
 
         /// <summary>False when the caller may see but not cancel — the client disables the affordance.</summary>
         public bool CanCancel { get; set; }
+
+        /// <summary>The row's concurrency token, for the cancel's If-Match — the ExternalLinks precedent:
+        /// a row-level mutation needs the token to travel WITH the row, or every cancel costs a fetch
+        /// (ADR 0557).</summary>
+        public string Etag { get; set; } = string.Empty;
     }
 
     public class BookingListResource : HypermediaResource
@@ -456,6 +461,7 @@ public class BookingsController : ControllerBase
             BookedBy = bookedBy ?? string.Empty,
             Purpose = purpose,
             CanCancel = row.Status == BookingStatus.Active && (isBooker || canCancelAny),
+            Etag = row.ConcurrencyToken.ToString(),
             Links =
             {
                 // The booking's own document — its address came with this row, so following it costs

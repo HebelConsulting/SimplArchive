@@ -36,6 +36,14 @@ public sealed class DetailState
     /// <summary>The rels the open document's resource advertised, followed rather than composed (ADR 0543).</summary>
     public IReadOnlyDictionary<string, string>? Links { get; set; }
 
+    /// <summary>
+    /// The generic action surface (ADR 0743): the subject's server-labeled non-GET links, rendered as
+    /// buttons with no client knowledge of their rels — how a module's actions reach this client without a
+    /// build. Cleared with the subject (ADR 0559): an inherited action would execute against the wrong
+    /// document.
+    /// </summary>
+    public IReadOnlyList<Hypermedia.LinkResponse> GenericActions { get; set; } = [];
+
     /// <summary>True while a load or save is in flight, which disables the pane's commit controls.</summary>
     public bool Busy { get; set; }
 

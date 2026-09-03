@@ -714,6 +714,14 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
     /// Shares this document with someone who has no account (ADR 0546). The href is the document's own rel, so
     /// its absence means the document cannot be shared and the affordance is simply not offered.
     /// </summary>
+    /// <summary>The meeting-room bookings dialog (ADR 0735) — the address is the `bookings` rel's.</summary>
+    public Task OpenBookingsAsync(string name, string bookingsHref) =>
+        dialogs.ShowAsync<BookingsDialog>(Strings.Get("BookTitle"), new DialogParameters
+        {
+            ["ResourceName"] = name,
+            ["BookingsHref"] = bookingsHref,
+        });
+
     public Task OpenExternalLinksAsync(Guid documentId, string name, string linksHref) =>
         dialogs.ShowAsync<ExternalLinksDialog>(Strings.Get("ExtLinkTitle"), new DialogParameters
         {
