@@ -4815,4 +4815,49 @@
   <data name="MakeSearchableQueued" xml:space="preserve">
     <value>Conversión en cola: la versión con búsqueda aparecerá en breve.</value>
   </data>
+  <data name="TenantGroupModules" xml:space="preserve">
+    <value>Módulos</value>
+  </data>
+  <data name="ModNoneInstalled" xml:space="preserve">
+    <value>No hay módulos instalados en este servidor.</value>
+  </data>
+  <data name="ModActiveUntil" xml:space="preserve">
+    <value>Activo — contrato de soporte hasta el {0}</value>
+  </data>
+  <data name="ModInGrace" xml:space="preserve">
+    <value>Renovación pendiente — período de gracia hasta el {0}</value>
+  </data>
+  <data name="ModDeactivated" xml:space="preserve">
+    <value>Desactivado — el contrato de soporte ha finalizado</value>
+  </data>
+  <data name="ModNotActivated" xml:space="preserve">
+    <value>No activado</value>
+  </data>
+  <data name="ModNotInstalled" xml:space="preserve">
+    <value>No instalado en este servidor (los documentos y las máscaras permanecen)</value>
+  </data>
+  <data name="ModActivate" xml:space="preserve">
+    <value>Activar…</value>
+  </data>
+  <data name="ModRenew" xml:space="preserve">
+    <value>Renovar…</value>
+  </data>
+  <data name="ModDialogTitle" xml:space="preserve">
+    <value>Activar módulo</value>
+  </data>
+  <data name="ModDialogPick" xml:space="preserve">
+    <value>Documento de licencia</value>
+  </data>
+  <data name="ModDialogNone" xml:space="preserve">
+    <value>No se encontraron documentos de licencia. Archive el archivo de licencia del proveedor y asígnele la máscara “Licencia de módulo”.</value>
+  </data>
+  <data name="StModuleActivated" xml:space="preserve">
+    <value>Módulo activado.</value>
+  </data>
+  <data name="ApiErrModuleLicenseRejected" xml:space="preserve">
+    <value>La licencia fue rechazada — compruebe que nombra este módulo y este inquilino y que el archivo no fue modificado.</value>
+  </data>
+  <data name="ApiErrModuleNotInstalled" xml:space="preserve">
+    <value>Este módulo no está instalado en el servidor.</value>
+  </data>
 </root>

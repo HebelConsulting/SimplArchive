@@ -67,6 +67,21 @@ public class WebTenantSettingsTests
 
     // Per-group editability: a group's pencil enables ITS fields and nobody else's — the point of the split.
     [Fact]
+    public async Task Modules_section_renders_with_the_empty_state()
+    {
+        var page = await Ui.LoginAsync(_app);
+
+        await page.Locator(".wb-tab[aria-label=\"Tenant\"]").First.ClickAsync();
+        var view = page.Locator(".wb-tenant");
+
+        // The Modules section (ADRs 0740/0743) renders after the settings groups — a plain header without a
+        // pencil (rows, not fields), and with no module assemblies staged the empty state says so rather
+        // than showing nothing (an absent section would read as "feature missing", not "nothing installed").
+        await Expect(view.Locator(".wb-tenant-group-head").Filter(new() { HasText = "Modules" })).ToBeVisibleAsync();
+        await Expect(view.GetByText("No modules are installed on this server.")).ToBeVisibleAsync();
+    }
+
+    [Fact]
     public async Task Fields_are_disabled_until_their_groups_edit()
     {
         var page = await Ui.LoginAsync(_app);

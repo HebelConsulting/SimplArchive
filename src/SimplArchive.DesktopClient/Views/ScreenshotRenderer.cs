@@ -173,6 +173,15 @@ internal static class ScreenshotRenderer
         }
 
         var window = new MainWindow { DataContext = viewModel };
+
+        // `--tall`: double the window height, for panes whose newest content lives below the default fold
+        // (the Tenant tab's Modules section was the first) — a scrolling pane's bottom is otherwise
+        // invisible to every capture, and an unlooked-at render is where defects live (the --menu lesson).
+        if (Environment.GetCommandLineArgs().Contains("--tall"))
+        {
+            window.Height = 2100;
+        }
+
         window.Show();
         Dispatcher.UIThread.RunJobs();
 

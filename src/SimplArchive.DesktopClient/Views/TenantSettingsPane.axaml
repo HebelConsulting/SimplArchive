@@ -212,6 +212,28 @@
                     <Button Content="{loc:Tr TenantSendTest}" Command="{Binding TestWebhookCommand}" Padding="8,2" Margin="0,6,0,0"
                             IsVisible="{Binding TenantWebhookConfigured}"
                             ToolTip.Tip="{loc:Tr MwTestWebhookTip}" />
+
+                    <!-- ==== Modules (ADRs 0740/0743) ============================================= -->
+                    <!-- Not a settings group: rows, not fields — so a plain header (no pencil), and the
+                         activation act lives on each row where its state line is (ADR 0550). -->
+                    <TextBlock Text="{loc:Tr TenantGroupModules}" FontWeight="SemiBold" Margin="0,14,0,2"
+                               IsVisible="{Binding TenantModulesLoaded}" />
+                    <TextBlock Text="{loc:Tr ModNoneInstalled}" Foreground="{DynamicResource WbMuted}"
+                               IsVisible="{Binding TenantModulesEmpty}" />
+                    <ItemsControl ItemsSource="{Binding TenantModules}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ModuleRowViewModel">
+                                <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="{Binding DisplayName}" />
+                                        <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="{Binding StatusBrush}" />
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Content="{Binding ActivateLabel}" FontSize="11" VerticalAlignment="Center"
+                                            IsVisible="{Binding CanActivate}" Click="OnActivateModule" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>

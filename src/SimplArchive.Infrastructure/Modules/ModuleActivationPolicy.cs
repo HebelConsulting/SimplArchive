@@ -34,4 +34,17 @@ public static class ModuleActivationPolicy
     /// the window in which escalation says "renew now" rather than "renew soon".</summary>
     public static bool IsInGrace(ModuleActivation activation, DateTimeOffset now) =>
         now >= ExpiresAt(activation) && now < DeactivatesAt(activation);
+
+    /// <summary>How far ahead of the contract's end the first warning fires — symmetric with the grace:
+    /// one month's warning, then one month's grace, before the behaviour stops (owner-decided).</summary>
+    public static readonly TimeSpan WarnWindow = TimeSpan.FromDays(30);
+
+    /// <summary>The escalation step the activation is at RIGHT NOW (0 calm · 1 expiring soon · 2 in grace ·
+    /// 3 deactivated) — derived like everything else here; the stored level only remembers what was
+    /// already announced.</summary>
+    public static int EscalationLevelFor(ModuleActivation activation, DateTimeOffset now) =>
+        !IsActive(activation, now) ? 3
+        : IsInGrace(activation, now) ? 2
+        : now >= ExpiresAt(activation) - WarnWindow ? 1
+        : 0;
 }

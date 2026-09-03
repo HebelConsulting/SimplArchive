@@ -39,5 +39,12 @@ public class ModuleActivation : ITenantScoped, IConcurrencyTracked
     /// <summary>The tenant administrator who filed the (latest) license; null when a platform actor did.</summary>
     public Guid? ActivatedByUserId { get; set; }
 
+    /// <summary>
+    /// The highest escalation step already announced (0 calm · 1 expiring soon · 2 in grace ·
+    /// 3 deactivated) — the storage-warning-level shape: the sweep notifies the tenant's admins on an
+    /// upward cross and a renewal recomputes it downward silently, so each step is announced exactly once.
+    /// </summary>
+    public int EscalationLevel { get; set; }
+
     public Guid ConcurrencyToken { get; set; }
 }

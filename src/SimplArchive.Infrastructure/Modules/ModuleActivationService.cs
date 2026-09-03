@@ -62,6 +62,9 @@ public sealed class ModuleActivationService
         activation.LicenseDocumentId = licenseDocumentId;
         activation.ActivatedByUserId = actorUserId;
         activation.ActivatedAt = DateTimeOffset.UtcNow;
+        // Re-arm the escalation ladder from the new end date (usually to 0) — a renewal is answered by
+        // silence, not by a fresh announcement (the storage-warning re-arm shape).
+        activation.EscalationLevel = ModuleActivationPolicy.EscalationLevelFor(activation, activation.ActivatedAt);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         await StampLicenseDocumentAsync(licenseDocumentId, license, cancellationToken);

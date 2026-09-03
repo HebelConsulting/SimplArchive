@@ -1,0 +1,121 @@
+@using System.Net.Http.Json
+@using SimplArchive.Localization
+@inject HttpClient Http
+
+@* The Activate/Renew module dialog (ADRs 0740/0743), mirroring the desktop's (ADR 0511): a dropdown of the
+   filed license documents — the `license-documents` listing, documents wearing the Module-license mask,
+   newest first — and the act itself, PUT against the module row's advertised `license` rel. The refusal
+   lands beside the form as the localized sentence for the server's precise error code (ADR 0550). *@
+
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 380px;">
+            <MudText Typo="Typo.subtitle2" Class="mb-3">@ModuleName</MudText>
+
+            @if (_loaded && _documents.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("ModDialogNone")</MudText>
+            }
+            else
+            {
+                <MudSelect T="Guid?" Label="@Strings.Get("ModDialogPick")" @bind-Value="_selectedId"
+                           Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var d in _documents)
+                    {
+                        <MudSelectItem T="Guid?" Value="@((Guid?)d.Id)">@d.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+
+            @if (_error is not null)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Error" Class="mt-2">@_error</MudText>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => Dialog.Cancel()">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Disabled="@(_selectedId is null || _busy)" OnClick="ActivateAsync">
+            @ConfirmLabel
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
+
+    /// <summary>The module row's advertised `license` rel — the activation act's address (ADR 0543).</summary>
+    [Parameter] public string LicenseHref { get; set; } = string.Empty;
+
+    /// <summary>The modules list's `license-documents` rel, captured where the collection was read (ADR 0557).</summary>
+    [Parameter] public string? LicenseDocumentsHref { get; set; }
+
+    [Parameter] public string ModuleName { get; set; } = string.Empty;
+
+    /// <summary>Renewal wears its own verb — the act is the same PUT either way.</summary>
+    [Parameter] public bool IsRenewal { get; set; }
+
+    private string ConfirmLabel => Strings.Get(IsRenewal ? "ModRenew" : "ModActivate").TrimEnd('…');
+
+    private readonly List<LicenseDocumentDto> _documents = [];
+    private Guid? _selectedId;
+    private bool _loaded;
+    private bool _busy;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (LicenseDocumentsHref is not null)
+        {
+            try
+            {
+                var list = await Http.GetFromJsonAsync<LicenseDocumentListDto>(LicenseDocumentsHref);
+                _documents.AddRange(list?.Items ?? []);
+                _selectedId = _documents.FirstOrDefault()?.Id;
+            }
+            catch (Exception)
+            {
+                _error = ApiErrorText.For(null);
+            }
+        }
+
+        _loaded = true;
+    }
+
+    private async Task ActivateAsync()
+    {
+        if (_selectedId is not { } licenseDocumentId)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+        try
+        {
+            var response = await Http.PutAsJsonAsync(LicenseHref, new { licenseDocumentId });
+            if (!response.IsSuccessStatusCode)
+            {
+                // The machine code, never the server's English detail (issue #424).
+                _error = ApiErrorText.For((await response.Content.ReadFromJsonAsync<ProblemResponse>())?.ErrorCode);
+                return;
+            }
+
+            Dialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception)
+        {
+            _error = ApiErrorText.For(null);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed record ProblemResponse { public string? ErrorCode { get; set; } }
+
+    private record LicenseDocumentDto(Guid Id, string Name, DateTimeOffset CreatedAt, string? Module, string? ValidUntil);
+
+    private record LicenseDocumentListDto(List<LicenseDocumentDto> Items);
+}

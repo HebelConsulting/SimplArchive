@@ -124,6 +124,8 @@ public static class DependencyInjection
         services.AddScoped<Modules.ModuleMaskSeeder>();
         services.AddScoped<Modules.StateMachineEngine>();
         services.AddScoped<Modules.ModuleActivationService>();
+        services.AddScoped<Modules.ModuleEscalationService>();
+        services.AddHostedService<Modules.ModuleEscalationWorker>();
         services.AddScoped<IStorageQuotaService, Storage.StorageQuotaService>();
         services.AddScoped<ILegalHoldService, LegalHolds.LegalHoldService>();
         services.AddScoped<IRetentionService, Retention.RetentionService>();

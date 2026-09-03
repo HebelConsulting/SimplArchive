@@ -4815,4 +4815,49 @@
   <data name="MakeSearchableQueued" xml:space="preserve">
     <value>Conversion queued — the searchable version appears shortly.</value>
   </data>
+  <data name="TenantGroupModules" xml:space="preserve">
+    <value>Modules</value>
+  </data>
+  <data name="ModNoneInstalled" xml:space="preserve">
+    <value>No modules are installed on this server.</value>
+  </data>
+  <data name="ModActiveUntil" xml:space="preserve">
+    <value>Active — support contract through {0}</value>
+  </data>
+  <data name="ModInGrace" xml:space="preserve">
+    <value>Renewal due — runs in grace until {0}</value>
+  </data>
+  <data name="ModDeactivated" xml:space="preserve">
+    <value>Deactivated — the support contract has ended</value>
+  </data>
+  <data name="ModNotActivated" xml:space="preserve">
+    <value>Not activated</value>
+  </data>
+  <data name="ModNotInstalled" xml:space="preserve">
+    <value>Not installed on this server (documents and masks remain)</value>
+  </data>
+  <data name="ModActivate" xml:space="preserve">
+    <value>Activate…</value>
+  </data>
+  <data name="ModRenew" xml:space="preserve">
+    <value>Renew…</value>
+  </data>
+  <data name="ModDialogTitle" xml:space="preserve">
+    <value>Activate module</value>
+  </data>
+  <data name="ModDialogPick" xml:space="preserve">
+    <value>License document</value>
+  </data>
+  <data name="ModDialogNone" xml:space="preserve">
+    <value>No license documents found. File the vendor's license file and assign it the “Module license” mask.</value>
+  </data>
+  <data name="StModuleActivated" xml:space="preserve">
+    <value>Module activated.</value>
+  </data>
+  <data name="ApiErrModuleLicenseRejected" xml:space="preserve">
+    <value>The license was rejected — check that it names this module and this tenant, and that the file is unmodified.</value>
+  </data>
+  <data name="ApiErrModuleNotInstalled" xml:space="preserve">
+    <value>This module is not installed on the server.</value>
+  </data>
 </root>

@@ -40,6 +40,10 @@ public static class NotificationTypePolicy
             // announcement is one the owner can switch off and then never learn of — which would leave the
             // audit log as the only record, readable by the very people it records.
             NotificationType.PersonalSpaceTakenOver => false,
+
+            // A deadline/compliance escalation like the checkout and storage ones: the whole point of ADR
+            // 0740's ladder is that nobody discovers the deactivation from a missing button.
+            NotificationType.ModuleLicenseEscalation => false,
         };
 #pragma warning restore CS8524
 

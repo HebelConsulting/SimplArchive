@@ -1,0 +1,38 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+        x:Class="SimplArchive.DesktopClient.Views.ActivateModuleDialog"
+        x:DataType="vm:ActivateModuleDialogViewModel"
+        Title="{loc:Tr ModDialogTitle}" Width="440" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="10">
+        <TextBlock Text="{Binding ModuleName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+
+        <!-- The dropdown of filed license artefacts (documents wearing the Module-license mask, newest
+             first). The empty state names the remedy, not just the absence (ADR 0550). -->
+        <StackPanel Spacing="4" IsVisible="{Binding !NoDocuments}">
+            <TextBlock Text="{loc:Tr ModDialogPick}" FontSize="12" />
+            <ComboBox ItemsSource="{Binding LicenseDocuments}" SelectedItem="{Binding SelectedDocument}"
+                      HorizontalAlignment="Stretch">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Name}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+        </StackPanel>
+        <TextBlock Text="{loc:Tr ModDialogNone}" FontSize="12" TextWrapping="Wrap"
+                   Foreground="{DynamicResource WbMuted}" IsVisible="{Binding NoDocuments}" />
+
+        <!-- The refusal's home: the server's precise rejection, localized, beside the form (ADR 0550). -->
+        <TextBlock Text="{Binding Status}" Foreground="{DynamicResource SystemErrorTextColor}" FontSize="12"
+                   TextWrapping="Wrap" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Content="{Binding ConfirmLabel}" Command="{Binding ActivateCommand}"
+                    IsEnabled="{Binding SelectedDocument, Converter={x:Static ObjectConverters.IsNotNull}}" />
+            <Button Content="{loc:Tr Cancel}" Click="OnClose" />
+        </StackPanel>
+    </StackPanel>
+</Window>

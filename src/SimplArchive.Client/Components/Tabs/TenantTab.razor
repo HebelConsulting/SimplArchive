@@ -234,6 +234,37 @@
                 </div>
             }
         }
+        @* ---- Modules (ADRs 0740/0743) ------------------------------------------------------------- *@
+        @* Not a settings group: rows, not fields — a plain header without a pencil, and the activation act
+           lives on each row beside its state line (ADR 0550). Rendered only when the settings resource
+           advertised the modules rel (ADR 0543). *@
+        @if (_modules is not null)
+        {
+            <div class="wb-tenant-group-head" style="display:flex; align-items:center; gap:8px; margin:10px 0 6px;">
+                <MudText Typo="Typo.subtitle2">@Strings.Get("TenantGroupModules")</MudText>
+            </div>
+            @if (_modules.Items.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@Strings.Get("ModNoneInstalled")</MudText>
+            }
+            @foreach (var m in _modules.Items)
+            {
+                var licenseHref = Links.Href(m.Links, "license");
+                <div class="wb-setting-row mb-2" style="align-items:center; gap:8px;">
+                    <div class="flex-grow-1">
+                        <MudText Typo="Typo.body2">@m.DisplayName</MudText>
+                        <MudText Typo="Typo.caption" Color="@ModuleStatusColor(m)">@ModuleStatusText(m)</MudText>
+                    </div>
+                    @if (licenseHref is not null)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Text"
+                                   OnClick="() => ActivateModuleAsync(m, licenseHref)">
+                            @Strings.Get(m.Activated ? "ModRenew" : "ModActivate")
+                        </MudButton>
+                    }
+                </div>
+            }
+        }
     }
     </div>
 </div>
@@ -336,6 +367,7 @@
                 _ocrCatalog = (await Http.GetFromJsonAsync<OcrCatalogResponse>(await ApiRoot.RequireAsync("ocrLanguages")))?.Languages ?? [];
             }
             SyncTenantEditFromTenant(); // the read-only fields bind to _tenantEdit too, so keep it in sync
+            await LoadModulesAsync(); // the Modules section rides the settings resource's rel (ADR 0543)
         }
         catch (Exception)
         {
@@ -419,6 +451,77 @@
         _tenantLinks = Links.RelMap(_tenant?.Links);
         if (_editingGroup is null) SyncTenantEditFromTenant();
         Snackbar.Add(Strings.Get("StStorageRecomputed"), Severity.Success);
+    }
+
+    // ---- Modules (ADRs 0740/0743) — the admin surface behind the settings resource's `modules` rel. ----
+
+    private ModuleListDto? _modules;
+    private string? _licenseDocumentsHref;
+
+    private async Task LoadModulesAsync()
+    {
+        _modules = null;
+        if (_tenantLinks?.GetValueOrDefault("modules") is not { } href) { return; }
+        try
+        {
+            _modules = await Http.GetFromJsonAsync<ModuleListDto>(href);
+            _licenseDocumentsHref = Links.Href(_modules?.Links, "license-documents");
+        }
+        catch (Exception) { _modules = null; }
+    }
+
+    private static string ModuleStatusText(ModuleDto m) => m switch
+    {
+        { Installed: false } => Strings.Get("ModNotInstalled"),
+        { Activated: false } => Strings.Get("ModNotActivated"),
+        { Active: true, InGrace: true, DeactivatesAt: { } grace } => string.Format(Strings.Get("ModInGrace"), grace.ToLocalTime().ToString("yyyy-MM-dd")),
+        { Active: true, SupportContractEndDate: { } end } => string.Format(Strings.Get("ModActiveUntil"), end.ToLocalTime().ToString("yyyy-MM-dd")),
+        _ => Strings.Get("ModDeactivated"),
+    };
+
+    private static Color ModuleStatusColor(ModuleDto m) => m switch
+    {
+        { Installed: false } or { Activated: false } => Color.Default,
+        { Active: true, InGrace: true } => Color.Warning,
+        { Active: true } => Color.Success,
+        _ => Color.Warning, // deactivated: the state an administrator must act on, same channel as in-grace
+    };
+
+    private async Task ActivateModuleAsync(ModuleDto m, string licenseHref)
+    {
+        var parameters = new DialogParameters
+        {
+            [nameof(SimplArchive.Client.Dialogs.ActivateModuleDialog.LicenseHref)] = licenseHref,
+            [nameof(SimplArchive.Client.Dialogs.ActivateModuleDialog.LicenseDocumentsHref)] = _licenseDocumentsHref,
+            [nameof(SimplArchive.Client.Dialogs.ActivateModuleDialog.ModuleName)] = m.DisplayName,
+            [nameof(SimplArchive.Client.Dialogs.ActivateModuleDialog.IsRenewal)] = m.Activated,
+        };
+        var result = await (await DialogService.ShowAsync<SimplArchive.Client.Dialogs.ActivateModuleDialog>(
+            Strings.Get("ModDialogTitle"), parameters)).Result;
+        if (result?.Canceled == false)
+        {
+            Snackbar.Add(Strings.Get("StModuleActivated"), Severity.Success);
+            await LoadModulesAsync();
+        }
+    }
+
+    private record ModuleDto
+    {
+        public List<LinkResponse> Links { get; set; } = [];
+        public string ModuleId { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public bool Installed { get; set; }
+        public bool Activated { get; set; }
+        public bool Active { get; set; }
+        public bool InGrace { get; set; }
+        public DateTimeOffset? SupportContractEndDate { get; set; }
+        public DateTimeOffset? DeactivatesAt { get; set; }
+    }
+
+    private record ModuleListDto
+    {
+        public List<LinkResponse> Links { get; set; } = [];
+        public List<ModuleDto> Items { get; set; } = [];
     }
 
     private record TenantSettingsDto

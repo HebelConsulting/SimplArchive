@@ -728,5 +728,19 @@ public partial class MainWindowViewModel
         TenantStatus = "Active";
         TenantCreated = ScreenshotClock.AddMonths(-8).LocalDateTime.ToString("yyyy-MM-dd HH:mm");
         TenantSettingsLoaded = true;
+        // The Modules section (ADRs 0740/0743) — synthetic rows covering the three states the ladder can
+        // show (active / in grace / not activated), so the render is verifiable headlessly; the demo host
+        // stages no module assemblies, so live data cannot show them.
+        TenantModules.Clear();
+        TenantModules.Add(new ModuleRowViewModel(new Services.AdminClient.ModuleInfo(
+            "flight-school", "Flight School", Installed: true, Activated: true, Active: true, InGrace: false,
+            ScreenshotClock.AddMonths(7), ScreenshotClock.AddMonths(8), "license")));
+        TenantModules.Add(new ModuleRowViewModel(new Services.AdminClient.ModuleInfo(
+            "vehicle-fleet", "Vehicle Fleet", Installed: true, Activated: true, Active: true, InGrace: true,
+            ScreenshotClock.AddDays(-10), ScreenshotClock.AddDays(20), "license")));
+        TenantModules.Add(new ModuleRowViewModel(new Services.AdminClient.ModuleInfo(
+            "hotel-desk", "Hotel Desk", Installed: true, Activated: false, Active: false, InGrace: false,
+            null, null, "license")));
+        TenantModulesLoaded = true;
     }
 }

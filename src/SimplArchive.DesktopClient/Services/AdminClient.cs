@@ -248,6 +248,83 @@ public sealed class AdminClient(ApiCore core)
         return ParseTenantSettings(j);
     }
 
+    // ---- Industry modules (ADRs 0740/0741/0743) ----------------------------------------------------
+
+    /// <summary>One module row: what the host carries × what this tenant activated. LicenseHref is the
+    /// activation act's address (the `license` rel) — absent on a row whose code is not installed.</summary>
+    public sealed record ModuleInfo(
+        string ModuleId, string DisplayName, bool Installed, bool Activated, bool Active, bool InGrace,
+        DateTimeOffset? SupportContractEndDate, DateTimeOffset? DeactivatesAt, string? LicenseHref);
+
+    /// <summary>A filed license artefact the Activate dialog offers — the stamped fields are the verified
+    /// claims' projection and stay empty until a license has been through a successful activation.</summary>
+    public sealed record LicenseDocumentInfo(Guid Id, string Name, DateTimeOffset CreatedAt, string? Module, string? ValidUntil);
+
+    public sealed record ModuleCatalog(IReadOnlyList<ModuleInfo> Items, string? LicenseDocumentsHref);
+
+    /// <summary>Reads the modules surface from the rel the tenant-settings resource advertised (ADR 0543);
+    /// null when the rel is absent — not available to this caller, here, now.</summary>
+    public async Task<ModuleCatalog?> GetModulesAsync(TenantSettingsInfo settings, CancellationToken cancellationToken = default)
+    {
+        if (settings.Links?.GetValueOrDefault("modules") is not { } href)
+        {
+            return null;
+        }
+
+        var json = await _core.Http.GetFromJsonAsync<JsonElement>(href, cancellationToken);
+        var items = new List<ModuleInfo>();
+        if (json.TryGetProperty("items", out var arr) && arr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var m in arr.EnumerateArray())
+            {
+                var links = ApiCore.ParseLinks(m) ?? new Dictionary<string, string>();
+                items.Add(new ModuleInfo(
+                    m.GetProperty("moduleId").GetString() ?? "",
+                    m.GetProperty("displayName").GetString() ?? "",
+                    m.GetProperty("installed").GetBoolean(),
+                    m.GetProperty("activated").GetBoolean(),
+                    m.GetProperty("active").GetBoolean(),
+                    m.GetProperty("inGrace").GetBoolean(),
+                    m.TryGetProperty("supportContractEndDate", out var end) && end.ValueKind == JsonValueKind.String ? end.GetDateTimeOffset() : null,
+                    m.TryGetProperty("deactivatesAt", out var de) && de.ValueKind == JsonValueKind.String ? de.GetDateTimeOffset() : null,
+                    links.GetValueOrDefault("license")));
+            }
+        }
+
+        var listLinks = ApiCore.ParseLinks(json);
+        return new ModuleCatalog(items, listLinks?.GetValueOrDefault("license-documents"));
+    }
+
+    public async Task<IReadOnlyList<LicenseDocumentInfo>> GetLicenseDocumentsAsync(string licenseDocumentsHref, CancellationToken cancellationToken = default)
+    {
+        var json = await _core.Http.GetFromJsonAsync<JsonElement>(licenseDocumentsHref, cancellationToken);
+        var items = new List<LicenseDocumentInfo>();
+        if (json.TryGetProperty("items", out var arr) && arr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var d in arr.EnumerateArray())
+            {
+                items.Add(new LicenseDocumentInfo(
+                    d.GetProperty("id").GetGuid(),
+                    d.GetProperty("name").GetString() ?? "",
+                    d.GetProperty("createdAt").GetDateTimeOffset(),
+                    d.TryGetProperty("module", out var mo) && mo.ValueKind == JsonValueKind.String ? mo.GetString() : null,
+                    d.TryGetProperty("validUntil", out var vu) && vu.ValueKind == JsonValueKind.String ? vu.GetString() : null));
+            }
+        }
+
+        return items;
+    }
+
+    /// <summary>The activation act: PUT the filed license document's id to the row's `license` rel.</summary>
+    public async Task ActivateModuleAsync(string licenseHref, Guid licenseDocumentId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _core.Http.PutAsJsonAsync(licenseHref, new { licenseDocumentId }, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new ApiActionException(await SimplArchiveApiClient.ErrorMessageAsync(response, Strings.Get("ApiErrGeneric")));
+        }
+    }
+
     // ---- Users & groups administration (ADR "Users & groups administration tab") --------------------
 
     public async Task<List<PrincipalInfo>> GetUsersAsync(CancellationToken cancellationToken = default) =>

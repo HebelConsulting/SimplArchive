@@ -31,6 +31,25 @@ internal static class TenantDialogs
         await new MailDomainsDialog(domains).ShowDialog(window);
     }
 
+    /// <summary>The Activate/Renew module dialog (ADRs 0740/0743) — reloads the modules list after a
+    /// successful act, so the row's state line reflects the new contract immediately.</summary>
+    public static async Task OpenActivateModuleAsync(MainWindow window, MainWindowViewModel? viewModel, ModuleRowViewModel row)
+    {
+        var (admin, licenseDocumentsHref) = viewModel?.TenantModuleActivationContext() ?? default;
+        if (viewModel is null || admin is null)
+        {
+            return;
+        }
+
+        var dialog = new ActivateModuleDialogViewModel(admin, row, licenseDocumentsHref);
+        await new ActivateModuleDialog(dialog).ShowDialog(window);
+        if (dialog.Activated)
+        {
+            viewModel.Status = SimplArchive.Localization.Strings.Get("StModuleActivated");
+            await viewModel.LoadTenantModulesAsync();
+        }
+    }
+
     public static async Task OpenSensitivityLabelsAsync(MainWindow window, MainWindowViewModel? viewModel)
     {
         if (viewModel?.CreateSensitivityLabelsViewModel() is not { } labels)

@@ -43,6 +43,11 @@ public enum NotificationType
     // An administrator took over this user's personal space (ADR 0672) — a full-rights grant was written on it
     // for someone else. Privacy here means no SILENT access, so the owner is told rather than merely audited.
     PersonalSpaceTakenOver = 14,
+
+    // An industry module's support contract nears its end, entered grace, or the module deactivated itself
+    // (ADR 0740's escalate → grace → self-deactivate ladder) — the tenant's admins are told at each step,
+    // because the deactivation is otherwise SILENT: derived at ask-time, there is no moment that fails loudly.
+    ModuleLicenseEscalation = 15,
 }
 
 // A per-User in-app notification (ADR "Notifications (in-app, first slice)"). Written by INotificationService

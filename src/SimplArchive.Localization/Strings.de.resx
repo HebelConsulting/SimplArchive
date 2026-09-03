@@ -4815,4 +4815,49 @@
   <data name="MakeSearchableQueued" xml:space="preserve">
     <value>Konvertierung eingereiht – die durchsuchbare Version erscheint in Kürze.</value>
   </data>
+  <data name="TenantGroupModules" xml:space="preserve">
+    <value>Module</value>
+  </data>
+  <data name="ModNoneInstalled" xml:space="preserve">
+    <value>Auf diesem Server sind keine Module installiert.</value>
+  </data>
+  <data name="ModActiveUntil" xml:space="preserve">
+    <value>Aktiv — Supportvertrag bis {0}</value>
+  </data>
+  <data name="ModInGrace" xml:space="preserve">
+    <value>Verlängerung fällig — Kulanzbetrieb bis {0}</value>
+  </data>
+  <data name="ModDeactivated" xml:space="preserve">
+    <value>Deaktiviert — der Supportvertrag ist abgelaufen</value>
+  </data>
+  <data name="ModNotActivated" xml:space="preserve">
+    <value>Nicht aktiviert</value>
+  </data>
+  <data name="ModNotInstalled" xml:space="preserve">
+    <value>Auf diesem Server nicht installiert (Dokumente und Masken bleiben)</value>
+  </data>
+  <data name="ModActivate" xml:space="preserve">
+    <value>Aktivieren…</value>
+  </data>
+  <data name="ModRenew" xml:space="preserve">
+    <value>Verlängern…</value>
+  </data>
+  <data name="ModDialogTitle" xml:space="preserve">
+    <value>Modul aktivieren</value>
+  </data>
+  <data name="ModDialogPick" xml:space="preserve">
+    <value>Lizenzdokument</value>
+  </data>
+  <data name="ModDialogNone" xml:space="preserve">
+    <value>Keine Lizenzdokumente gefunden. Legen Sie die Lizenzdatei des Anbieters ab und weisen Sie ihr die Maske „Modullizenz“ zu.</value>
+  </data>
+  <data name="StModuleActivated" xml:space="preserve">
+    <value>Modul aktiviert.</value>
+  </data>
+  <data name="ApiErrModuleLicenseRejected" xml:space="preserve">
+    <value>Die Lizenz wurde abgelehnt — prüfen Sie, ob sie dieses Modul und diesen Mandanten nennt und die Datei unverändert ist.</value>
+  </data>
+  <data name="ApiErrModuleNotInstalled" xml:space="preserve">
+    <value>Dieses Modul ist auf dem Server nicht installiert.</value>
+  </data>
 </root>

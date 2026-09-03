@@ -72,6 +72,10 @@ public static class ApiErrorText
         "BOOKING_SLOT_CONFLICT" => Strings.Get("ApiErrBookingSlotConflict"),
         "RESOURCE_NOT_BOOKABLE" => Strings.Get("ApiErrResourceNotBookable"),
         "BOOKING_SLOT_INVALID" => Strings.Get("ApiErrBookingSlotInvalid"),
+        // Industry-module activation (ADRs 0740/0743). The rejected one folds every precise server
+        // refusal (signature, wrong module/tenant, ABI) into one admin sentence naming what to check.
+        "MODULE_LICENSE_REJECTED" => Strings.Get("ApiErrModuleLicenseRejected"),
+        "MODULE_NOT_INSTALLED" => Strings.Get("ApiErrModuleNotInstalled"),
         "UNPARSABLE_ITEM_SOURCE" => Strings.Get("ApiErrUnparsableItemSource"),
         "ITEM_SOURCE_UID_CHANGED" => Strings.Get("ApiErrItemSourceUidChanged"),
         _ => Strings.Get("ApiErrGeneric"),
