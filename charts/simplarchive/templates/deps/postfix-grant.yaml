@@ -1,0 +1,77 @@
+{{- if .Values.postfix.enabled }}
+{{- /*
+  Grants the read-only mail role SELECT on TenantMailDomains — the accepted-domain list Postfix reads live
+  through a pgsql map (ADR 0630). This is a POST-install/upgrade hook, deliberately separate from db-init
+  (which creates the ROLE pre-install): the table does not exist until migrations run, and migrations are a
+  pre-install hook at a HEAVIER weight than db-init, so a grant in db-init would fail on "relation does not
+  exist" on a first install. This mirrors the compose stack's postfix-grant step, which runs once the API is
+  healthy for the same reason. Least privilege: SELECT on the one table, nothing else.
+*/}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "simplarchive.fullname" . }}-postfix-grant
+  labels:
+    {{- include "simplarchive.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postfix-grant
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 20
+  template:
+    metadata:
+      labels:
+        {{- include "simplarchive.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: postfix-grant
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: postfix-grant
+          image: {{ .Values.deps.postgres.image | quote }}
+          env:
+            {{- if .Values.dbInit.external.enabled }}
+            - name: PGSSLMODE
+              value: require
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.dbInit.external.adminSecret }}
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.dbInit.external.adminSecret }}
+                  key: password
+            {{- else }}
+            - name: PGUSER
+              value: postgres
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "simplarchive.statefulSecretName" . }}
+                  key: POSTGRES_PASSWORD
+            {{- end }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              {{- if .Values.dbInit.external.enabled }}
+              host="{{ .Values.dbInit.external.host }}"
+              db="{{ .Values.dbInit.external.database }}"
+              {{- else }}
+              host="{{ include "simplarchive.fullname" . }}-postgres"
+              db="{{ .Values.deps.postgres.database }}"
+              {{- end }}
+              # The table is created by migrations; on a first install this hook can win the race with the
+              # app's rollout, so wait for it rather than fail. backoffLimit is the outer safety net.
+              until psql -h "$host" -U "$PGUSER" -d "$db" -tAc \
+                "SELECT to_regclass('public.\"TenantMailDomains\"') IS NOT NULL" | grep -q t; do
+                echo "waiting for TenantMailDomains..."; sleep 3
+              done
+              psql -h "$host" -U "$PGUSER" -d "$db" -v ON_ERROR_STOP=1 \
+                -c 'GRANT USAGE ON SCHEMA public TO simplarchive_postfix;' \
+                -c 'GRANT SELECT ON public."TenantMailDomains" TO simplarchive_postfix;'
+              echo "postfix grant applied"
+{{- end }}

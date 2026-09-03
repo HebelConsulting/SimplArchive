@@ -61,6 +61,16 @@ spec:
                   name: {{ include "simplarchive.statefulSecretName" . }}
                   key: POSTGRES_PASSWORD
             {{- end }}
+            {{- if .Values.postfix.enabled }}
+            # The MTA's read-only DB login. Its ROLE is created here (pre-install), but its SELECT on
+            # TenantMailDomains is granted post-install by the postfix-grant hook — the table does not exist
+            # until migrations run, which is after this job.
+            - name: POSTFIX_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "postfix.database.existingSecret is required when postfix.enabled" .Values.postfix.database.existingSecret }}
+                  key: postfix-db-password
+            {{- end }}
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -77,6 +87,20 @@ spec:
               done
               psql -h "$host" -U "$PGUSER" -d "$db" -v ON_ERROR_STOP=1 -f /db-init.sql
               echo "db roles ready"
+              {{- if .Values.postfix.enabled }}
+              # The mail role: created here so it exists before the MTA starts. CREATE without ON_ERROR_STOP
+              # so a re-run's "already exists" is harmless; ALTER then sets the password from the secret every
+              # time, which is idempotent. No DO block, so no $$ for the shell to mistake for its own PID, and
+              # no heredoc whose terminator would have to survive YAML re-indentation.
+              echo "creating simplarchive_postfix role"
+              psql -h "$host" -U "$PGUSER" -d "$db" -c "CREATE ROLE simplarchive_postfix LOGIN;" || true
+              # The password is interpolated by the SHELL, not by a psql :'var' (which did not expand in a -c
+              # string and left a bare ':' — a syntax error). It is a hex token (ensure_secret / token_hex),
+              # so it carries no quote or backslash to break the surrounding single-quoted SQL literal.
+              psql -h "$host" -U "$PGUSER" -d "$db" -v ON_ERROR_STOP=1 \
+                -c "ALTER ROLE simplarchive_postfix PASSWORD '$POSTFIX_DB_PASSWORD';"
+              echo "simplarchive_postfix ready"
+              {{- end }}
           volumeMounts:
             - name: sql
               mountPath: /db-init.sql

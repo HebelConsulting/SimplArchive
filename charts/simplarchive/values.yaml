@@ -207,7 +207,24 @@ service:
 # never exposed here — the production-readiness gate refuses it outside Development.
 imap:
   enabled: false
+  # The port the listener BINDS inside the container. The container drops all capabilities and runs
+  # non-root, so it cannot bind a privileged (<1024) port — bind a high one and remap it below rather than
+  # granting NET_BIND_SERVICE. 993 is fine where the process may bind low ports (e.g. the compose stack).
   tlsPort: 993
+  # What clients are TOLD to dial, when it differs from the bound port (ImapOptions.PublicTlsPort). With the
+  # remap above — bind 9993, publish 993 — this is 993. Null advertises the bound port unchanged.
+  publicTlsPort: null
+  # What the IMAP dialog shows users as the server host (their mail client dials this). Set to the public
+  # hostname; empty falls back to whatever the app was told locally, which is wrong behind a proxy.
+  publicHost: ""
+  # The cert-manager secret whose tls.crt/tls.key the listener presents. Empty defaults to the release's own
+  # "<fullname>-tls" — the same secret the ingress terminates with — so a stack with one hostname needs no
+  # value. The listener has no plaintext fallback in production (the readiness gate refuses it).
+  tlsSecretName: ""
+  # Bind the TLS port on the NODE's own interface. IMAP is raw TCP and does not ride the ingress, so a
+  # single-node k3s box exposes it this way (with the instance's security group opening the port). Unset on
+  # multi-node clusters, which expose IMAP through a LoadBalancer Service instead. Null = no hostPort.
+  hostPort: null
   # Session hygiene (ADR 0618). idleTimeoutSeconds keeps RFC 3501's 30-minute autologout floor;
   # preAuthTimeoutSeconds is the short leash for sockets that never authenticate. maxConnectionsPerUser
   # defaults to 16 — 8 is the recommended value for small deployments (one desktop mail client can

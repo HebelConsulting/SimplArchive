@@ -42,7 +42,11 @@ spec:
               protocol: TCP
           env:
             - name: LMTP_TARGET
-              value: "{{ include "simplarchive.fullname" . }}:{{ .Values.lmtp.port }}"
+              # The FULLY-QUALIFIED service name, not the short one. Postfix resolves this through libc, and
+              # the short name relies on the pod's resolv.conf search list — which its lmtp client does not
+              # honour here, so a short name bounced every message with "Host or domain name not found". An
+              # FQDN needs no search-domain expansion and resolves regardless.
+              value: "{{ include "simplarchive.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.lmtp.port }}"
             - name: MYHOSTNAME
               value: {{ .Values.postfix.myHostname | quote }}
             - name: DB_HOST
@@ -57,7 +61,7 @@ spec:
                   name: {{ .Values.postfix.database.existingSecret }}
                   key: postfix-db-password
             - name: MAX_MESSAGE_BYTES
-              value: {{ .Values.lmtp.maxMessageBytes | quote }}
+              value: {{ .Values.lmtp.maxMessageBytes | int64 | quote }}
             {{- if .Values.postfix.tls.existingSecret }}
             - name: TLS_CERT_FILE
               value: /tls/tls.crt

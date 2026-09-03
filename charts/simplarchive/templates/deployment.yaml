@@ -8,6 +8,17 @@ spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
+  {{- if and .Values.imap.enabled .Values.imap.hostPort }}
+  {{- /*
+    A hostPort binds the port on the NODE, and only one pod per node can hold it. The default RollingUpdate
+    brings the new pod up before removing the old one, so on a single-node box the new pod can never schedule
+    — it waits forever for a free port while the old pod keeps it, and `helm upgrade --wait` hangs until it
+    times out. Recreate removes the old pod first. The brief downtime is the single-node shape's own trade
+    (one replica, one node); a multi-node cluster does not set hostPort and keeps the rolling update.
+  */}}
+  strategy:
+    type: Recreate
+  {{- end }}
   selector:
     matchLabels:
       {{- include "simplarchive.selectorLabels" . | nindent 6 }}
@@ -45,6 +56,17 @@ spec:
             - name: imaps
               containerPort: {{ .Values.imap.tlsPort }}
               protocol: TCP
+              {{- /*
+                IMAP is raw TCP, not HTTP, so it does not ride the ingress. On a single-node k3s box the
+                simplest reliable exposure is a hostPort: the pod binds the port on the node's own interface,
+                and the instance's security group opens it. It is gated on a value because it is a
+                single-node choice — one pod per node may claim a hostPort, which is exactly the small
+                shape's one replica. A multi-node cluster exposes IMAP through a LoadBalancer Service
+                instead, so it leaves this unset.
+              */}}
+              {{- with .Values.imap.hostPort }}
+              hostPort: {{ . }}
+              {{- end }}
             {{- end }}
             {{- if .Values.lmtp.enabled }}
             - name: lmtp
@@ -53,6 +75,27 @@ spec:
             {{- end }}
           env:
             {{- include "simplarchive.appConfigEnv" . | nindent 12 }}
+            {{- if and .Values.imap.enabled .Values.imap.tlsPort }}
+            {{- /*
+              The IMAP listener's TLS certificate, injected as PEM from the same cert-manager secret the
+              ingress terminates with (keys tls.crt / tls.key). Deliberately here on the Deployment and NOT
+              in appConfigEnv, because that shared block is also used by the pre-install migration Job — which
+              runs before cert-manager has issued anything, so a secretKeyRef to this not-yet-existing secret
+              would leave the migrate pod in CreateContainerConfigError and stall the install. The app pod can
+              tolerate a brief wait for the secret (the ACME challenge is solved by cert-manager's own solver,
+              not by the app, so there is no deadlock); the migration cannot.
+            */}}
+            - name: Imap__CertificatePem
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.imap.tlsSecretName | default (printf "%s-tls" (include "simplarchive.fullname" .)) }}
+                  key: tls.crt
+            - name: Imap__CertificateKeyPem
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.imap.tlsSecretName | default (printf "%s-tls" (include "simplarchive.fullname" .)) }}
+                  key: tls.key
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
