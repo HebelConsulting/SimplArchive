@@ -9,6 +9,7 @@ using SimplArchive.Domain.Booking;
 using SimplArchive.Domain.Documents;
 using SimplArchive.Domain.Groups;
 using SimplArchive.Domain.Masks;
+using SimplArchive.Domain.Modules;
 using SimplArchive.Domain.PlatformAdministrators;
 using SimplArchive.Domain.ServiceAccounts;
 using SimplArchive.Domain.Tenants;
@@ -139,6 +140,9 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
 
     // The inventory-booking primitive's claims (ADR 0735).
     public DbSet<ResourceBooking> ResourceBookings => Set<ResourceBooking>();
+
+    // Per-tenant industry-module activations (ADR 0740) — the row a verified license upserts.
+    public DbSet<ModuleActivation> ModuleActivations => Set<ModuleActivation>();
 
     // Shares of a document with people who have no account (ADR 0546).
     public DbSet<ExternalLink> ExternalLinks => Set<ExternalLink>();

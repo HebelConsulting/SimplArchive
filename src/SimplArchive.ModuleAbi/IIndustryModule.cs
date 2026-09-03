@@ -40,6 +40,13 @@ public interface IIndustryModule
     int AbiMajorVersion { get; }
 
     /// <summary>
+    /// The vendor's license verify key as a PEM <c>SubjectPublicKeyInfo</c> (ECDsa P-256). Ships inside
+    /// the module — no phone-home, air-gap-friendly (ADR 0743); the core verifies a tenant's
+    /// <see cref="ModuleLicense"/> against this at activation.
+    /// </summary>
+    string LicenseVerifyKeyPem { get; }
+
+    /// <summary>
     /// The masks this module contributes. Seeded into a tenant at activation, idempotently, and healed on
     /// upgrade the way the core's own well-known masks are. Permanent tenant data once seeded (ADR 0740).
     /// </summary>

@@ -123,6 +123,7 @@ public static class DependencyInjection
         services.AddScoped<ModuleAbi.IModuleArchiveFacade, Modules.ModuleArchiveFacade>();
         services.AddScoped<Modules.ModuleMaskSeeder>();
         services.AddScoped<Modules.StateMachineEngine>();
+        services.AddScoped<Modules.ModuleActivationService>();
         services.AddScoped<IStorageQuotaService, Storage.StorageQuotaService>();
         services.AddScoped<ILegalHoldService, LegalHolds.LegalHoldService>();
         services.AddScoped<IRetentionService, Retention.RetentionService>();

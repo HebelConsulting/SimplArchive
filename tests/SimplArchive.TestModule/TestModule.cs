@@ -19,6 +19,12 @@ public sealed class TestModule : IIndustryModule
 
     public int AbiMajorVersion => ModuleAbiVersion.Major;
 
+    /// <summary>Settable by tests (the <see cref="TestFactProvider.Landings"/> idiom): licensing tests
+    /// generate a key pair at runtime and plant the public half here — no key material in the repo.</summary>
+    public static string VerifyKeyPem { get; set; } = string.Empty;
+
+    public string LicenseVerifyKeyPem => VerifyKeyPem;
+
     public IReadOnlyList<ModuleMaskSeed> Masks { get; } =
     [
         new ModuleMaskSeed(DossierMaskId, "Test Dossier", IsFolderMask: true, IsBookable: false, []),

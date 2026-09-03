@@ -637,6 +637,9 @@ public class TenantSettingsController : ControllerBase
             new Link("settings-audit-streaming", "/api/tenant-settings/audit-streaming", "PUT"),
             // Maintenance actions on these settings, advertised where the client already is (issue #416):
             // recompute the storage figure shown here, and send a test delivery to the configured webhook.
+            // The industry-module surface (ADRs 0740/0743) — a sibling admin resource, advertised here
+            // because tenant-settings is where a tenant administrator already is.
+            new Link("modules", "/api/modules", "GET"),
             new Link("recompute-storage", "/api/tenant-settings/recompute-storage", "POST"),
             new Link("audit-webhook-test", "/api/tenant-settings/audit-webhook/test", "POST"),
         ],

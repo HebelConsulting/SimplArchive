@@ -174,6 +174,10 @@ public static class AuditActions
     public const string MailDomainVerified = "MailDomain.Verified";
     public const string MailDomainRemoved = "MailDomain.Removed";
 
+    // Industry-module activation (ADR 0740): the licensing act. There is deliberately no "Module.Deactivated"
+    // event — deactivation is derived from the license's end date at every ask, so no moment exists to record.
+    public const string ModuleActivated = "Module.Activated";
+
     public const string LoggedIn = "Auth.LoggedIn";
     // Impersonation token issued (ADR "User impersonation") — actor = the impersonating admin, target = the user.
     public const string ImpersonationStarted = "Auth.ImpersonationStarted";
