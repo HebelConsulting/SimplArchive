@@ -97,4 +97,85 @@ public partial class MainWindowViewModel
             VisibleTasks.Add(row);
         }
     }
+
+    // ---- The list itself: loading it, its badge, and opening a task -------------------------------------
+    //
+    // These were in TWO PLACES, separated by the entire notifications block: the collection and badge sat under
+    // a "Workflow + tasks" heading, while ReloadTasksAsync, LoadTasksAsync and OpenTask were a hundred lines
+    // away at the tail of the notifications section. Neither half was wrong about what it was -- they had
+    // drifted apart, and the heading between them hid it (#941). They join the filtering that was already here,
+    // which is what actually reads Tasks.
+    public ObservableCollection<TaskItemViewModel> Tasks { get; } = [];
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(HasTasks))] private int _taskCount;
+    public bool HasTasks => TaskCount > 0;
+
+    [RelayCommand]
+    private Task RefreshTasks() => LoadTasksAsync();
+
+    // Builds the view-model for the on-demand workflow window (ADR "Workflow start on demand"). Opened +
+    // loaded by the code-behind (which owns the Window); null when there's no api client or no document
+    // selected. The window drives Submit/Approve/Reject/Release against the selected document's latest
+    // confirmed version.
+    public WorkflowWindowViewModel? CreateWorkflowViewModel()
+    {
+        if (_api is null || SelectedItem is not { IsFolder: false, IsArchiveEntry: false, IsArchiveBack: false } item)
+        {
+            return null;
+        }
+
+        return new WorkflowWindowViewModel(_api, item.Href("versions"), item.DocumentSelfHref);
+    }
+
+    // Reloads the Tasks-tab list + badge — called after the workflow window closes, since a submit/approve/etc.
+    // changes the caller's (or the reviewer's) pending-task set.
+    public Task ReloadTasksAsync() => LoadTasksAsync();
+
+    private async Task LoadTasksAsync()
+    {
+        if (_api is null)
+        {
+            return;
+        }
+
+        try
+        {
+            Tasks.Clear();
+            foreach (var t in await _api.Workflow.GetTasksAsync())
+            {
+                Tasks.Add(new TaskItemViewModel
+                {
+                    DocumentId = t.DocumentId,
+                    ParentId = t.ParentId,
+                    Links = t.Links,
+                    DocumentName = t.DocumentName,
+                    VersionNumber = t.VersionNumber,
+                    AssignedAt = t.AssignedAt,
+                    DueAt = t.DueAt,
+                });
+            }
+
+            TaskCount = Tasks.Count;
+            RebuildVisibleTasks();
+        }
+        catch (Exception)
+        {
+            TaskCount = 0;
+        }
+    }
+
+    [RelayCommand]
+    private async Task OpenTask(TaskItemViewModel? task)
+    {
+        if (task is null)
+        {
+            return;
+        }
+
+        // Follow the row's `parent` and select the document there; a root document opens itself (#443).
+        if ((task.Links?.GetValueOrDefault("parent") ?? task.Links?.GetValueOrDefault("document")) is { } href)
+        {
+            SelectedTab = 0; // Repositories
+            await OpenFolderAsync(href, task.Links?.ContainsKey("parent") == true ? task.DocumentId : null);
+        }
+    }
 }

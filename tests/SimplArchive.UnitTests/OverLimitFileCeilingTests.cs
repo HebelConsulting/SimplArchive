@@ -240,7 +240,13 @@ public class OverLimitFileCeilingTests
         //
         // DetailFields is separate from DetailEdit on purpose: this is what the pane SHOWS, that is what
         // happens when you press Edit. Same tail-decay as tenant settings and bulk actions (#941).
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 1994,
+        // 1,994 -> 1,811: the notifications bell to its own partial, and the Tasks tab REUNITED.
+        //
+        // The task members were in two places, separated by the entire notifications block: the collection and
+        // badge under a "Workflow + tasks" heading, and ReloadTasksAsync/LoadTasksAsync/OpenTask a hundred
+        // lines away at the tail of the notifications section. They now join the sort/filter state that was
+        // already in MainWindowViewModel.Tasks.cs -- which is what actually reads Tasks (#941).
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 1811,
 
         // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
         // the one authenticated ApiCore. Four areas left it:
