@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Mvc.ApplicationModels;
 using Microsoft.AspNetCore.Mvc.Filters;
-using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Errors.Exceptions.Modules;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Infrastructure.Modules;
@@ -52,13 +51,10 @@ internal sealed class ModuleActivationGateFilter : IAsyncResourceFilter
             throw new ModuleNotActiveException(_moduleId);
         }
 
-        var dbContext = services.GetRequiredService<SimplArchiveDbContext>();
-
         // The tenant query filter scopes the row; the DERIVED active answer (ADR 0740) is the gate —
         // a lapsed license past grace reads exactly like no license at all.
-        var activation = await dbContext.ModuleActivations
-            .FirstOrDefaultAsync(a => a.ModuleId == _moduleId, context.HttpContext.RequestAborted);
-        if (activation is null || !ModuleActivationPolicy.IsActive(activation, DateTimeOffset.UtcNow))
+        var dbContext = services.GetRequiredService<SimplArchiveDbContext>();
+        if (!await ModuleActivationCheck.IsActiveAsync(dbContext, _moduleId, DateTimeOffset.UtcNow, context.HttpContext.RequestAborted))
         {
             throw new ModuleNotActiveException(_moduleId);
         }

@@ -39,17 +39,20 @@ public sealed class DocumentResourceLinks
     private readonly DocumentAccessService _access;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly IUserSystemRightsResolver _userSystemRights;
+    private readonly SimplArchive.Infrastructure.Modules.StateMachineCatalog _machines;
 
     public DocumentResourceLinks(
         SimplArchiveDbContext dbContext,
         DocumentAccessService access,
         ICurrentUserAccessor currentUserAccessor,
-        IUserSystemRightsResolver userSystemRights)
+        IUserSystemRightsResolver userSystemRights,
+        SimplArchive.Infrastructure.Modules.StateMachineCatalog machines)
     {
         _dbContext = dbContext;
         _access = access;
         _currentUserAccessor = currentUserAccessor;
         _userSystemRights = userSystemRights;
+        _machines = machines;
     }
 
     public async Task<(List<Link> Links, bool CanCreateChildren)> BuildAsync(
@@ -108,14 +111,44 @@ public sealed class DocumentResourceLinks
         // IsBookable — a missing rel means "not available" (ADR 0543), so a non-bookable document simply has
         // no bookings surface, and the endpoint 404s to match. One rel: GET lists, POST books (ADR 0719);
         // both are gated by CanSee, which the caller holding this resource already passed.
-        var isBookable = await _dbContext.Documents
+        var maskFacts = await _dbContext.Documents
             .Where(d => d.Id == documentId && d.MaskVersionId != null)
             .Join(_dbContext.MaskVersions, d => d.MaskVersionId, v => (Guid?)v.Id, (d, v) => v)
-            .Join(_dbContext.Masks, v => new { v.TenantId, Id = v.MaskId }, m => new { m.TenantId, m.Id }, (v, m) => m.IsBookable)
+            .Join(_dbContext.Masks, v => new { v.TenantId, Id = v.MaskId }, m => new { m.TenantId, m.Id }, (v, m) => new { m.IsBookable, MaskId = m.Id })
             .FirstOrDefaultAsync(cancellationToken);
-        if (isBookable)
+        if (maskFacts?.IsBookable == true)
         {
             links.Add(new Link("bookings", $"/api/documents/{documentId}/bookings", "GET"));
+        }
+
+        // The machine's labeled actions (ADRs 0737/0742/0743): every declared transition of a machine
+        // whose subject mask this document wears renders as a BUTTON through the generic action surface —
+        // RED guards included, deliberately (owner-decided 2026-09-04): clicking a refused act answers
+        // with the ADR 0742 diagnosis, which is the machine's explanation grammar as UI, where a hidden
+        // button would read as a missing feature. Emitted only where the caller could execute
+        // (CanEditContent, the same right the POST enforces) and where the declaring module is ACTIVE —
+        // for anyone else the machine does not exist (ADR 0543).
+        if (maskFacts is not null && rights.CanEditContent)
+        {
+            var now = DateTimeOffset.UtcNow;
+            foreach (var machine in _machines.Machines.Values.Where(m => m.SubjectMaskId == maskFacts.MaskId))
+            {
+                if (machine.ModuleId is { } declaringModule
+                    && !await SimplArchive.Infrastructure.Modules.ModuleActivationCheck
+                        .IsActiveAsync(_dbContext, declaringModule, now, cancellationToken))
+                {
+                    continue;
+                }
+
+                foreach (var (transitionName, transition) in machine.Transitions)
+                {
+                    links.Add(new Link(
+                        $"machine:{machine.MachineId}:{transitionName}",
+                        $"/api/documents/{documentId}/machine/{machine.MachineId}/transitions/{transitionName}",
+                        "POST",
+                        transition.Label));
+                }
+            }
         }
 
         // Break/restore ACL inheritance (issue #426). CONDITIONAL for the same reason as external-links above: a

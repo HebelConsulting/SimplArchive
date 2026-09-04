@@ -65,13 +65,22 @@ public sealed class TestModule : IIndustryModule
                     "test.certificate-void", "The certificate is temporarily void."),
                 StateCondition.FactAtLeast("testLandings", 3,
                     "test.recency", "{value} recent landings; 3 required."))
-            .Transition("log-entry",
+            .Transition("log-entry", "Log entry",
                 [
                     StateCondition.ChildField(CertificateMaskId, "Valid to", ConditionTest.DateNotPast, null,
                         "test.certificate-expired", "The certificate expired {value}."),
                 ],
                 async context => await context.Archive.CreateDocumentAsync(
-                    context.SubjectDocumentId, CertificateMaskId, $"Entry {Guid.NewGuid():N}"));
+                    context.SubjectDocumentId, CertificateMaskId, $"Entry {Guid.NewGuid():N}"))
+            // The rollback fixture (ADR 0737): a handler that WRITES and then throws — what it wrote must
+            // never be seen, because the engine owns the transaction and a throw rolls the act back.
+            .Transition("explode", "Explode", [],
+                async context =>
+                {
+                    await context.Archive.CreateDocumentAsync(
+                        context.SubjectDocumentId, CertificateMaskId, $"Never {Guid.NewGuid():N}");
+                    throw new InvalidOperationException("The handler failed after writing.");
+                });
 }
 
 /// <summary>Registered by <see cref="TestModule.ConfigureServices"/> so a test can see the call happened.</summary>

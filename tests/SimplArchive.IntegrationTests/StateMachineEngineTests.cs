@@ -204,4 +204,21 @@ public class StateMachineEngineTests
         Assert.True(executed.Satisfied);
         Assert.Equal(2, (await rig.Facade.GetChildrenAsync(rig.DossierId, TestModule.TestModule.CertificateMaskId)).Count);
     }
+
+    [Fact]
+    public async Task A_handler_that_throws_rolls_the_whole_act_back()
+    {
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var rig = await RigAsync(connection);
+
+        // The fixture's "explode" transition WRITES a child through the facade — its own SaveChanges,
+        // committed as far as the handler can tell — and then throws. The engine owns the transaction
+        // (ADR 0737): what the handler wrote must never be seen, or a half-performed act would be a state
+        // the next gate reads as real.
+        var before = (await rig.Facade.GetChildrenAsync(rig.DossierId, TestModule.TestModule.CertificateMaskId)).Count;
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            rig.Engine.ExecuteTransitionAsync("test-pilot", "explode", rig.DossierId, Now));
+        Assert.Equal(before, (await rig.Facade.GetChildrenAsync(rig.DossierId, TestModule.TestModule.CertificateMaskId)).Count);
+    }
 }

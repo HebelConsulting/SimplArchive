@@ -14,22 +14,41 @@ public sealed class StateMachineCatalog : IStateMachineDefinitions
 {
     private readonly Dictionary<string, MachineDefinition> _machines = new(StringComparer.Ordinal);
 
-    /// <summary>One declared machine: its subject mask, its ordered statuses, its transitions.</summary>
+    /// <summary>One transition: the button caption, the guard, the module's handler.</summary>
+    public sealed record TransitionDefinition(string Label, IReadOnlyList<StateCondition> Guard, Func<TransitionContext, Task> Handler);
+
+    /// <summary>One declared machine: whose it is, its subject mask, its statuses, its transitions.</summary>
+    /// <remarks><see cref="ModuleId"/> is what the wire surface gates activation on (ADR 0737): a
+    /// machine's transitions exist for a tenant exactly when its declaring module is active there. Null
+    /// only for machines declared straight on the catalog (tests) — nothing gates those.</remarks>
     public sealed record MachineDefinition(
         string MachineId,
+        string? ModuleId,
         Guid SubjectMaskId,
         Dictionary<string, IReadOnlyList<StateCondition>> Statuses,
-        Dictionary<string, (IReadOnlyList<StateCondition> Guard, Func<TransitionContext, Task> Handler)> Transitions);
+        Dictionary<string, TransitionDefinition> Transitions);
 
     public IReadOnlyDictionary<string, MachineDefinition> Machines => _machines;
 
-    public IStateMachineBuilder Machine(string machineId, Guid subjectMaskId)
+    public IStateMachineBuilder Machine(string machineId, Guid subjectMaskId) =>
+        Machine(machineId, subjectMaskId, moduleId: null);
+
+    /// <summary>The loader's entry: definitions declared through this carry the declaring module's id.</summary>
+    public IStateMachineDefinitions ForModule(string moduleId) => new ModuleScope(this, moduleId);
+
+    private IStateMachineBuilder Machine(string machineId, Guid subjectMaskId, string? moduleId)
     {
-        var definition = new MachineDefinition(machineId, subjectMaskId,
+        var definition = new MachineDefinition(machineId, moduleId, subjectMaskId,
             new Dictionary<string, IReadOnlyList<StateCondition>>(StringComparer.Ordinal),
-            new Dictionary<string, (IReadOnlyList<StateCondition>, Func<TransitionContext, Task>)>(StringComparer.Ordinal));
+            new Dictionary<string, TransitionDefinition>(StringComparer.Ordinal));
         _machines[machineId] = definition;
         return new Builder(definition);
+    }
+
+    private sealed class ModuleScope(StateMachineCatalog catalog, string moduleId) : IStateMachineDefinitions
+    {
+        public IStateMachineBuilder Machine(string machineId, Guid subjectMaskId) =>
+            catalog.Machine(machineId, subjectMaskId, moduleId);
     }
 
     private sealed class Builder(MachineDefinition definition) : IStateMachineBuilder
@@ -40,9 +59,9 @@ public sealed class StateMachineCatalog : IStateMachineDefinitions
             return this;
         }
 
-        public IStateMachineBuilder Transition(string name, IReadOnlyList<StateCondition> guard, Func<TransitionContext, Task> handler)
+        public IStateMachineBuilder Transition(string name, string label, IReadOnlyList<StateCondition> guard, Func<TransitionContext, Task> handler)
         {
-            definition.Transitions[name] = (guard, handler);
+            definition.Transitions[name] = new TransitionDefinition(label, guard, handler);
             return this;
         }
     }
@@ -82,6 +101,12 @@ public sealed class StateMachineEngine
     }
 
     /// <summary>Runs a transition: guard first, handler only on green. The refusal IS the explanation.</summary>
+    /// <remarks>
+    /// The ENGINE owns the transaction (ADR 0737): the handler's facade writes — each a SaveChanges of its
+    /// own — join one database transaction, committed only when the handler returns. A handler that throws
+    /// rolls the whole act back, so a half-performed transition is a state the archive cannot hold; the
+    /// exception itself propagates, refusal semantics for free.
+    /// </remarks>
     public async Task<StatusResult> ExecuteTransitionAsync(string machineId, string transitionName, Guid subjectDocumentId, DateTimeOffset asOf, CancellationToken cancellationToken = default)
     {
         var machine = Require(machineId);
@@ -96,7 +121,9 @@ public sealed class StateMachineEngine
             return verdict;
         }
 
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
         await transition.Handler(new TransitionContext(subjectDocumentId, _archive));
+        await transaction.CommitAsync(cancellationToken);
         return verdict;
     }
 

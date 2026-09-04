@@ -27,11 +27,15 @@ public interface IStateMachineBuilder
     IStateMachineBuilder Status(string name, params StateCondition[] conditions);
 
     /// <summary>
-    /// An act: guarded, handled, explained. The handler receives the facade and the subject and performs
-    /// the act's document writes; the engine runs it only when every guard condition holds, and a refusal
-    /// carries each failed condition's explanation (a diagnosis, not a verdict).
+    /// An act: guarded, handled, explained, LABELED. The handler receives the facade and the subject and
+    /// performs the act's document writes — inside one transaction the engine owns (ADR 0737): a handler
+    /// that throws rolls the whole act back. The engine runs it only when every guard condition holds, and
+    /// a refusal carries each failed condition's explanation (a diagnosis, not a verdict). The label is
+    /// the button both clients render on the subject through the generic action surface (ADR 0743) —
+    /// today one plain string; a per-culture factory is the recorded widening when the first real module
+    /// needs localized captions.
     /// </summary>
-    IStateMachineBuilder Transition(string name, IReadOnlyList<StateCondition> guard, Func<TransitionContext, Task> handler);
+    IStateMachineBuilder Transition(string name, string label, IReadOnlyList<StateCondition> guard, Func<TransitionContext, Task> handler);
 }
 
 /// <summary>What a transition's handler receives: the subject and the archive, under the acting identity.</summary>

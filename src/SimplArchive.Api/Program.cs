@@ -386,7 +386,9 @@ foreach (var loaded in modules)
     loaded.Module.ConfigureServices(builder.Services);
     // The enumerable definitions (ADR 0742) — declared once, held for the process's life; the scoped
     // engine evaluates against them per request.
-    loaded.Module.DefineStateMachines(machineCatalog);
+    // Through the module scope, so every machine carries its declaring module's id — what the wire
+    // surface gates activation on (ADR 0737).
+    loaded.Module.DefineStateMachines(machineCatalog.ForModule(loaded.Module.ModuleId));
 }
 
 builder.Services.AddSingleton(machineCatalog);

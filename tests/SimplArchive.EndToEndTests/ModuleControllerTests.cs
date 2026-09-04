@@ -60,6 +60,80 @@ public class ModuleControllerTests
         return docId;
     }
 
+    private async Task ActivateAsync(Rig rig, ECDsa vendorKey)
+    {
+        var licenseDocId = await FileLicenseAsync(rig, DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)), vendorKey);
+        await TestJson.Put(rig.Admin, "/api/modules/test-module/license", new { licenseDocumentId = licenseDocId });
+    }
+
+    [Fact]
+    public async Task A_transition_is_a_labeled_action_with_a_diagnosis_when_red_and_a_commit_when_green()
+    {
+        var rig = await RigAsync();
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", vendorKey.ExportSubjectPublicKeyInfoPem());
+        try
+        {
+            await ActivateAsync(rig, vendorKey);
+
+            // A subject document — a dossier wearing the machine's subject mask (seeded at activation).
+            var dossierId = (await TestJson.Post(rig.Owner, $"/api/documents/{rig.RepoId}/children",
+                new { name = $"Dossier {Guid.NewGuid():N}", maskId = SimplArchive.TestModule.TestModule.DossierMaskId }))
+                .GetProperty("id").GetGuid();
+
+            // The generic action surface (ADR 0743): the transition arrives as a LABELED POST link — the
+            // exact shape both clients' shipped parser turns into a button, rel unknown to either.
+            var document = await TestJson.Get(rig.Admin, $"/api/documents/{dossierId}");
+            var action = document.GetProperty("links").EnumerateArray()
+                .Single(l => l.GetProperty("rel").GetString() == "machine:test-pilot:log-entry");
+            Assert.Equal("Log entry", action.GetProperty("label").GetString());
+            Assert.Equal("POST", action.GetProperty("method").GetString());
+
+            // RED: no certificate filed — the refusal IS the diagnosis (ADR 0742), sentence in detail,
+            // machine-readable codes in the problem's extensions.
+            var refused = await rig.Admin.PostAsync(action.GetProperty("href").GetString(), null);
+            Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+            var problem = JsonSerializer.Deserialize<JsonElement>(await refused.Content.ReadAsStringAsync());
+            Assert.Equal("MACHINE_TRANSITION_REFUSED", problem.GetProperty("errorCode").GetString());
+            Assert.Contains(problem.GetProperty("refusals").EnumerateArray(),
+                r => r.GetProperty("code").GetString() == "test.certificate-expired");
+
+            // File a valid certificate, and the same click commits: the handler's write (a new child
+            // through the facade) lands inside the engine's transaction.
+            // An ITEM-masked child: created plain, then restamped — the children create-with-mask path
+            // makes folders only, and a certificate is a document.
+            var certificateId = (await TestJson.Post(rig.Owner, $"/api/documents/{dossierId}/children",
+                new { name = "Medical" })).GetProperty("id").GetGuid();
+            await TestJson.Put(rig.Admin, $"/api/documents/{certificateId}/mask",
+                new { maskId = SimplArchive.TestModule.TestModule.CertificateMaskId });
+            var validTo = (await TestJson.Get(rig.Admin, $"/api/masks/{SimplArchive.TestModule.TestModule.CertificateMaskId}"))
+                .GetProperty("fields").EnumerateArray()
+                .Single(f => f.GetProperty("name").GetString() == "Valid to").GetProperty("id").GetGuid();
+            await TestJson.Put(rig.Admin, $"/api/documents/{certificateId}/index-data",
+                new { fields = new[] { new { fieldDefinitionId = validTo, values = new[] { DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)).ToString("yyyy-MM-dd") } } } });
+
+            var beforeGreen = await ChildCountAsync(rig.Admin, dossierId);
+            Assert.Equal(HttpStatusCode.NoContent, (await rig.Admin.PostAsync(action.GetProperty("href").GetString(), null)).StatusCode);
+            var afterGreen = await ChildCountAsync(rig.Admin, dossierId);
+            Assert.Equal(beforeGreen + 1, afterGreen); // exactly the handler's one entry
+
+            // ROLLBACK over the wire: the fixture's exploding handler writes and then throws — the caller
+            // sees the failure, and what the handler wrote is never visible (ADR 0737's transaction).
+            var exploded = await rig.Admin.PostAsync($"/api/documents/{dossierId}/machine/test-pilot/transitions/explode", null);
+            Assert.Equal(HttpStatusCode.InternalServerError, exploded.StatusCode);
+            Assert.Equal(afterGreen, await ChildCountAsync(rig.Admin, dossierId));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", null);
+            rig.Admin.Dispose();
+            rig.Owner.Dispose();
+        }
+    }
+
+    private static async Task<int> ChildCountAsync(HttpClient client, Guid folderId) =>
+        (await TestJson.Get(client, $"/api/documents/{folderId}/children")).GetProperty("children").GetArrayLength();
+
     [Fact]
     public async Task The_activation_circle_switches_the_modules_surface_on_and_off()
     {
