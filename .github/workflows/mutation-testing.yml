@@ -21,6 +21,14 @@ permissions:
 # whose logic is genuinely unit/integration-tested (Domain + Infrastructure — entities/invariants + the
 # EffectiveRights/Clearance calculators + DbContext invariants + group expansion), run by UnitTests +
 # IntegrationTests (configured in stryker-config.json). Generated EF migrations are excluded there.
+#
+# SHARDED because the codebase outgrew the budget (found 2026-09-05): whole-project legs died for a month —
+# 6h GitHub ceiling before the 120-min cap, then the cap — and, being out-of-band, the corpse paged nobody.
+# Infrastructure now runs as four legs: three named shards and a COMPLEMENT shard that mutates everything the
+# named ones exclude, so a new namespace can never silently fall out of the sweep (a top-N shard list would be
+# a silent cap). CLI --mutate REPLACES the config's mutate list, so every sharded leg restates the Migrations
+# exclusion itself. The `report-death` job is the other half of the fix: a sweep that dies now files/updates a
+# tracking issue instead of dying quietly.
 jobs:
   # "Is this the public repo, and is it currently public?" — resolved via the API so it holds on every event type
   # (the inline visibility context is null on cron). Name-gated, so it's skipped outright on the private canonical,
@@ -41,15 +49,55 @@ jobs:
           echo "public=$([ "$vis" = public ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
   mutate:
-    timeout-minutes: 120
-    name: Stryker (${{ matrix.project }})
+    timeout-minutes: 180
+    name: Stryker (${{ matrix.name }})
     needs: gate
     if: ${{ needs.gate.outputs.public == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        project: [SimplArchive.Domain, SimplArchive.Infrastructure]
+        include:
+          # Domain fits in one leg (1h33 at last success, 2026-08-17); the config's Migrations exclusion applies.
+          - name: domain
+            project: SimplArchive.Domain
+            mutate: ""
+          - name: infra-persistence
+            project: SimplArchive.Infrastructure
+            mutate: >-
+              --mutate "**/Persistence/**"
+              --mutate "!**/Migrations/*.cs"
+          - name: infra-storage-io
+            project: SimplArchive.Infrastructure
+            mutate: >-
+              --mutate "**/Storage/**"
+              --mutate "**/Conversion/**"
+              --mutate "**/Mail/**"
+              --mutate "**/Http/**"
+              --mutate "**/Intray/**"
+          - name: infra-search-audit
+            project: SimplArchive.Infrastructure
+            mutate: >-
+              --mutate "**/Search/**"
+              --mutate "**/Audit/**"
+              --mutate "**/Notifications/**"
+          # The COMPLEMENT: everything the named infra shards exclude — Modules, Masks, Acl, Retention,
+          # Workflow, Checkout, and every namespace that arrives later. Exclusion-only on purpose: an
+          # include list here would be the silent cap this layout exists to avoid. Keep these exclusions
+          # in lockstep with the named shards above.
+          - name: infra-rest
+            project: SimplArchive.Infrastructure
+            mutate: >-
+              --mutate "!**/Persistence/**"
+              --mutate "!**/Storage/**"
+              --mutate "!**/Conversion/**"
+              --mutate "!**/Mail/**"
+              --mutate "!**/Http/**"
+              --mutate "!**/Intray/**"
+              --mutate "!**/Search/**"
+              --mutate "!**/Audit/**"
+              --mutate "!**/Notifications/**"
+              --mutate "!**/Migrations/*.cs"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -65,17 +113,44 @@ jobs:
         run: dotnet restore
       - name: Restore local tools
         run: dotnet tool restore
-      - name: Stryker ${{ matrix.project }}
+      - name: Stryker ${{ matrix.name }}
         run: >-
           dotnet stryker
           --config-file stryker-config.json
           --project ${{ matrix.project }}.csproj
-          --output stryker-out/${{ matrix.project }}
+          --output stryker-out/${{ matrix.name }}
           --reporter html --reporter progress
+          ${{ matrix.mutate }}
       - name: Upload mutation report
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: mutation-report-${{ matrix.project }}
-          path: stryker-out/${{ matrix.project }}/**/mutation-report.html
+          name: mutation-report-${{ matrix.name }}
+          path: stryker-out/${{ matrix.name }}/**/mutation-report.html
           if-no-files-found: ignore
+
+  # The loud death (2026-09-05): the sweep was dead for a month — timeouts, then the cap — and, being
+  # out-of-band by design (never a PR gate), the corpse paged nobody until a human asked why there were no
+  # reports. A run that ends any way but green now files a tracking issue on this (public) repo, or comments
+  # on the open one, so the next death is a notification instead of an absence.
+  report-death:
+    timeout-minutes: 10
+    needs: [gate, mutate]
+    if: ${{ always() && needs.gate.outputs.public == 'true' && needs.mutate.result != 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Mutation sweep died before reporting"
+          body="The scheduled mutation sweep ended '${{ needs.mutate.result }}' without producing its reports: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          A leg that hit its 180-minute timeout reports as cancelled; check whether the shard layout in .github/workflows/mutation-testing.yml still fits the codebase, and rebalance the shards rather than raising the timeout first."
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi
