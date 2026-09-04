@@ -172,6 +172,8 @@ public class ModulesController : ControllerBase
             return NotFound();
         }
 
+        // The rebuild derives from documents through the facade — module code, module eyes (ADR 0736).
+        HttpContext.RequestServices.GetRequiredService<ModuleIdentityAccessor>().ModuleId = moduleId;
         await rebuilder.RebuildAsync(projectionName, cancellationToken);
         return NoContent();
     }

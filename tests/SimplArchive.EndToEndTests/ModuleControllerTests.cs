@@ -30,7 +30,9 @@ public class ModuleControllerTests
 
         var email = $"modadmin-{Guid.NewGuid():N}@e2e.local";
         const string password = "modadmin-1234";
-        var adminId = await _factory.SeedUserAsync(tenantId, email, password, "Module Admin", isTenantAdmin: true);
+        // canManageServiceAccounts on top of tenant-admin: the consent act needs to FIND the module's
+        // principal in the service-accounts listing, whose gate is that specific system right.
+        var adminId = await _factory.SeedUserAsync(tenantId, email, password, "Module Admin", isTenantAdmin: true, canManageServiceAccounts: true);
         await TestJson.Put(owner, $"/api/documents/{repoId}/acl-entries/users/{adminId}",
             new { canSee = true, canReadContent = true, canCreateSubItems = true, canEditContent = true });
         var admin = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, password));
@@ -60,10 +62,26 @@ public class ModuleControllerTests
         return docId;
     }
 
-    private async Task ActivateAsync(Rig rig, ECDsa vendorKey)
+    private async Task ActivateAsync(Rig rig, ECDsa vendorKey, bool grantPrincipal = true)
     {
         var licenseDocId = await FileLicenseAsync(rig, DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)), vendorKey);
         await TestJson.Put(rig.Admin, "/api/modules/test-module/license", new { licenseDocumentId = licenseDocId });
+        if (grantPrincipal)
+        {
+            await GrantPrincipalAsync(rig);
+        }
+    }
+
+    /// <summary>The consent act (ADR 0736): an ordinary ACL grant to the module's own login-less
+    /// principal — created by the activation, listed like any service account.</summary>
+    private static async Task GrantPrincipalAsync(Rig rig)
+    {
+        var principalId = (await TestJson.Get(rig.Admin, "/api/service-accounts"))
+            .GetProperty("serviceAccounts").EnumerateArray()
+            .Single(sa => sa.GetProperty("name").GetString() == "Module: Test Module")
+            .GetProperty("id").GetGuid();
+        await TestJson.Put(rig.Admin, $"/api/documents/{rig.RepoId}/acl-entries/service-accounts/{principalId}",
+            new { canSee = true });
     }
 
     [Fact]
@@ -74,7 +92,7 @@ public class ModuleControllerTests
         Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", vendorKey.ExportSubjectPublicKeyInfoPem());
         try
         {
-            await ActivateAsync(rig, vendorKey);
+            await ActivateAsync(rig, vendorKey, grantPrincipal: false);
 
             // A subject document — a dossier wearing the machine's subject mask (seeded at activation).
             var dossierId = (await TestJson.Post(rig.Owner, $"/api/documents/{rig.RepoId}/children",
@@ -88,6 +106,11 @@ public class ModuleControllerTests
                 .Single(l => l.GetProperty("rel").GetString() == "machine:test-pilot:log-entry");
             Assert.Equal("Log entry", action.GetProperty("label").GetString());
             Assert.Equal("POST", action.GetProperty("method").GetString());
+
+            // CONSENT FIRST (ADR 0736): the module is active but UNGRANTED — its principal holds nothing,
+            // so the machine's own reads see no evidence and the gate honestly refuses even before any
+            // certificate question arises. The grant below is what changes the answer.
+            await GrantPrincipalAsync(rig);
 
             // RED: no certificate filed — the refusal IS the diagnosis (ADR 0742), sentence in detail,
             // machine-readable codes in the problem's extensions.

@@ -19,15 +19,61 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
     private readonly SimplArchiveDbContext _dbContext;
     private readonly ICurrentUserAccessor _currentUser;
     private readonly ICurrentServiceAccountAccessor _currentServiceAccount;
+    private readonly ModuleIdentityAccessor? _identity;
+    private readonly IEffectiveRightsCalculator? _rights;
+    private Guid? _principalId;
+    private bool _principalResolved;
 
     public ModuleArchiveFacade(
         SimplArchiveDbContext dbContext,
         ICurrentUserAccessor currentUser,
-        ICurrentServiceAccountAccessor currentServiceAccount)
+        ICurrentServiceAccountAccessor currentServiceAccount,
+        ModuleIdentityAccessor? identity = null,
+        IEffectiveRightsCalculator? rights = null)
     {
         _dbContext = dbContext;
         _currentUser = currentUser;
         _currentServiceAccount = currentServiceAccount;
+        _identity = identity;
+        _rights = rights;
+    }
+
+    /// <summary>
+    /// The reads' gate (ADR 0736): when MODULE code is running (the identity accessor names it — set at
+    /// the controller gate, the engine, the rebuild endpoint), a document is visible exactly when the
+    /// module's own principal holds CanSee on it. An ungranted module honestly reads NOTHING — the
+    /// licensing act is a consent act, and the grants are the consent. A null module id is core-internal
+    /// use (license stamping), which stays ungated: the core is not a tenant of its own consent machinery.
+    /// Writes deliberately keep the CALLER's attribution — a filed return is the pilot's record; the
+    /// module is only the how (owner-decided 2026-09-04).
+    /// </summary>
+    private async Task<IReadOnlyDictionary<Guid, EffectiveRights>?> ModuleVisibilityAsync(
+        IReadOnlyCollection<Guid> documentIds, CancellationToken cancellationToken)
+    {
+        if (_identity?.ModuleId is not { } moduleId || _rights is null)
+        {
+            return null; // core-internal: ungated
+        }
+
+        if (!_principalResolved)
+        {
+            _principalId = (await ModulePrincipal.FindAsync(_dbContext, moduleId, cancellationToken))?.Id;
+            _principalResolved = true;
+        }
+
+        if (_principalId is not { } principalId)
+        {
+            // No principal means never activated here — nothing was consented, nothing is visible.
+            return new Dictionary<Guid, EffectiveRights>();
+        }
+
+        return await _rights.GetEffectiveRightsForManyForServiceAccountAsync(principalId, documentIds, cancellationToken);
+    }
+
+    private async Task<bool> ModuleMaySeeAsync(Guid documentId, CancellationToken cancellationToken)
+    {
+        var visibility = await ModuleVisibilityAsync([documentId], cancellationToken);
+        return visibility is null || (visibility.TryGetValue(documentId, out var r) && r.CanSee);
     }
 
     public async Task<ModuleDocument?> GetDocumentAsync(Guid documentId, CancellationToken cancellationToken = default)
@@ -36,8 +82,9 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
             .Where(d => d.Id == documentId)
             .Select(d => new { d.Id, d.ParentId, d.Name, d.MaskVersionId })
             .SingleOrDefaultAsync(cancellationToken);
-        if (document is null)
+        if (document is null || !await ModuleMaySeeAsync(documentId, cancellationToken))
         {
+            // Ungranted reads exactly like nonexistent (ADR 0543's absence semantics, for module eyes).
             return null;
         }
 
@@ -64,9 +111,15 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
             .OrderBy(x => x.CreatedAt).ThenBy(x => x.Id)
             .ToList();
 
+        var visibility = await ModuleVisibilityAsync(rows.Select(r => r.Id).ToList(), cancellationToken);
         var children = new List<ModuleDocument>(rows.Count);
         foreach (var row in rows)
         {
+            if (visibility is not null && !(visibility.TryGetValue(row.Id, out var r) && r.CanSee))
+            {
+                continue;
+            }
+
             children.Add(new ModuleDocument(row.Id, row.ParentId, row.Name, maskId, await FieldsOfAsync(row.Id, cancellationToken)));
         }
 
@@ -86,9 +139,15 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
             .OrderBy(x => x.CreatedAt).ThenBy(x => x.Id)
             .ToList();
 
+        var visibility = await ModuleVisibilityAsync(rows.Select(r => r.Id).ToList(), cancellationToken);
         var documents = new List<ModuleDocument>(rows.Count);
         foreach (var row in rows)
         {
+            if (visibility is not null && !(visibility.TryGetValue(row.Id, out var r) && r.CanSee))
+            {
+                continue;
+            }
+
             documents.Add(new ModuleDocument(row.Id, row.ParentId, row.Name, maskId, await FieldsOfAsync(row.Id, cancellationToken)));
         }
 

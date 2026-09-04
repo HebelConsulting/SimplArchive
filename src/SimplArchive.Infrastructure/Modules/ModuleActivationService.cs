@@ -67,6 +67,13 @@ public sealed class ModuleActivationService
         activation.EscalationLevel = ModuleActivationPolicy.EscalationLevelFor(activation, activation.ActivatedAt);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        // The per-module service principal (ADR 0736): a real ServiceAccount, created with the FIRST
+        // activation and kept across lapses (owner-decided: deactivation removes behaviour, not the
+        // consented grants). Its client id has no OpenIddict app behind it — wire login is impossible —
+        // and the licensing act doubling as the consent act means an admin grants it rights like any
+        // other principal, in the same pickers.
+        await ModulePrincipal.EnsureAsync(_dbContext, module.ModuleId, module.DisplayName, tenantId, cancellationToken);
+
         await StampLicenseDocumentAsync(licenseDocumentId, license, cancellationToken);
         return activation;
     }

@@ -83,20 +83,34 @@ public sealed class StateMachineEngine
     private readonly IServiceProvider _services;
     private readonly ModuleReadModelCatalog _readModels;
 
+    private readonly ModuleIdentityAccessor? _identity;
+
     public StateMachineEngine(
         SimplArchiveDbContext dbContext, StateMachineCatalog catalog, IModuleArchiveFacade archive,
-        IServiceProvider services, ModuleReadModelCatalog? readModels = null)
+        IServiceProvider services, ModuleReadModelCatalog? readModels = null, ModuleIdentityAccessor? identity = null)
     {
         _dbContext = dbContext;
         _catalog = catalog;
         _archive = archive;
         _services = services;
         _readModels = readModels ?? ModuleReadModelCatalog.Empty;
+        _identity = identity;
+    }
+
+    /// <summary>The machine's module becomes the scope's acting module (ADR 0736): every facade read the
+    /// evaluation or a handler makes is gated by THAT module's principal — its consented grants.</summary>
+    private void ActAs(StateMachineCatalog.MachineDefinition machine)
+    {
+        if (_identity is not null)
+        {
+            _identity.ModuleId = machine.ModuleId;
+        }
     }
 
     public async Task<StatusResult> EvaluateStatusAsync(string machineId, string statusName, Guid subjectDocumentId, DateTimeOffset asOf, CancellationToken cancellationToken = default)
     {
         var machine = Require(machineId);
+        ActAs(machine);
         if (!machine.Statuses.TryGetValue(statusName, out var conditions))
         {
             throw new ArgumentException($"Machine '{machineId}' declares no status '{statusName}'.", nameof(statusName));
@@ -115,6 +129,7 @@ public sealed class StateMachineEngine
     public async Task<StatusResult> ExecuteTransitionAsync(string machineId, string transitionName, Guid subjectDocumentId, DateTimeOffset asOf, CancellationToken cancellationToken = default)
     {
         var machine = Require(machineId);
+        ActAs(machine);
         if (!machine.Transitions.TryGetValue(transitionName, out var transition))
         {
             throw new ArgumentException($"Machine '{machineId}' declares no transition '{transitionName}'.", nameof(transitionName));

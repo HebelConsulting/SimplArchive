@@ -59,6 +59,10 @@ internal sealed class ModuleActivationGateFilter : IAsyncResourceFilter
             throw new ModuleNotActiveException(_moduleId);
         }
 
+        // From here the scope runs AS the module (ADR 0736): its facade reads are gated by its own
+        // principal's consented grants, not by any implicit whole-tenant view.
+        services.GetRequiredService<ModuleIdentityAccessor>().ModuleId = _moduleId;
+
         await next();
     }
 }
