@@ -131,6 +131,79 @@ public class ModuleControllerTests
         }
     }
 
+    [Fact]
+    public async Task The_fact_gated_act_reads_the_modules_projection_and_rebuild_rederives_it()
+    {
+        var rig = await RigAsync();
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", vendorKey.ExportSubjectPublicKeyInfoPem());
+        try
+        {
+            await ActivateAsync(rig, vendorKey);
+            var dossierId = (await TestJson.Post(rig.Owner, $"/api/documents/{rig.RepoId}/children",
+                new { name = $"Dossier {Guid.NewGuid():N}", maskId = SimplArchive.TestModule.TestModule.DossierMaskId }))
+                .GetProperty("id").GetGuid();
+            await FileValidCertificateAsync(rig, dossierId);
+
+            // The fact-gated act (ADRs 0736/0738 over the wire): refused while the module's OWN counter —
+            // a real table the host migrated, not a computed aggregate — reads zero, with the value named.
+            var refused = await rig.Admin.PostAsync($"/api/documents/{dossierId}/machine/test-pilot/transitions/certify", null);
+            Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+            Assert.Contains("0 recent landings",
+                JsonSerializer.Deserialize<JsonElement>(await refused.Content.ReadAsStringAsync())
+                    .GetProperty("detail").GetString());
+
+            // Three logged entries — each handler incrementing the projection in ITS act's transaction —
+            // and the gate opens.
+            for (var i = 0; i < 3; i++)
+            {
+                Assert.Equal(HttpStatusCode.NoContent,
+                    (await rig.Admin.PostAsync($"/api/documents/{dossierId}/machine/test-pilot/transitions/log-entry", null)).StatusCode);
+            }
+
+            Assert.Equal(HttpStatusCode.NoContent,
+                (await rig.Admin.PostAsync($"/api/documents/{dossierId}/machine/test-pilot/transitions/certify", null)).StatusCode);
+
+            // Wipe the projection UNDER the module — the support-case scenario — and the gate honestly
+            // closes...
+            await using (var db = new Npgsql.NpgsqlConnection(Environment.GetEnvironmentVariable("ConnectionStrings__Default")))
+            {
+                await db.OpenAsync();
+                await using var wipe = new Npgsql.NpgsqlCommand("DELETE FROM tm_landing_counters", db);
+                await wipe.ExecuteNonQueryAsync();
+            }
+
+            Assert.Equal(HttpStatusCode.Conflict,
+                (await rig.Admin.PostAsync($"/api/documents/{dossierId}/machine/test-pilot/transitions/certify", null)).StatusCode);
+
+            // ...until the REBUILD re-derives it from the documents (ADR 0738's operator guarantee): the
+            // admin endpoint, then the same act passes again.
+            Assert.Equal(HttpStatusCode.NoContent,
+                (await rig.Admin.PostAsync("/api/modules/test-module/rebuild/landings", null)).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent,
+                (await rig.Admin.PostAsync($"/api/documents/{dossierId}/machine/test-pilot/transitions/certify", null)).StatusCode);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", null);
+            rig.Admin.Dispose();
+            rig.Owner.Dispose();
+        }
+    }
+
+    private async Task FileValidCertificateAsync(Rig rig, Guid dossierId)
+    {
+        var certificateId = (await TestJson.Post(rig.Owner, $"/api/documents/{dossierId}/children",
+            new { name = "Medical" })).GetProperty("id").GetGuid();
+        await TestJson.Put(rig.Admin, $"/api/documents/{certificateId}/mask",
+            new { maskId = SimplArchive.TestModule.TestModule.CertificateMaskId });
+        var validTo = (await TestJson.Get(rig.Admin, $"/api/masks/{SimplArchive.TestModule.TestModule.CertificateMaskId}"))
+            .GetProperty("fields").EnumerateArray()
+            .Single(f => f.GetProperty("name").GetString() == "Valid to").GetProperty("id").GetGuid();
+        await TestJson.Put(rig.Admin, $"/api/documents/{certificateId}/index-data",
+            new { fields = new[] { new { fieldDefinitionId = validTo, values = new[] { DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)).ToString("yyyy-MM-dd") } } } });
+    }
+
     private static async Task<int> ChildCountAsync(HttpClient client, Guid folderId) =>
         (await TestJson.Get(client, $"/api/documents/{folderId}/children")).GetProperty("children").GetArrayLength();
 

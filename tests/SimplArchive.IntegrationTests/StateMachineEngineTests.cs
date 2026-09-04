@@ -41,7 +41,7 @@ public class StateMachineEngineTests
         return new SimplArchiveDbContext(options, new CurrentTenantAccessor { TenantId = tenantId });
     }
 
-    private sealed record Rig(SimplArchiveDbContext Context, StateMachineEngine Engine, ModuleArchiveFacade Facade, Guid DossierId);
+    private sealed record Rig(SimplArchiveDbContext Context, StateMachineEngine Engine, ModuleArchiveFacade Facade, Guid DossierId, IServiceProvider Services);
 
     private static async Task<Rig> RigAsync(SqliteConnection connection)
     {
@@ -71,14 +71,48 @@ public class StateMachineEngineTests
         var catalog = new StateMachineCatalog();
         module.DefineStateMachines(catalog);
 
-        var services = new ServiceCollection();
-        module.ConfigureServices(services);
-        var provider = services.BuildServiceProvider();
-
         var context = CreateContext(connection, tenantId);
         var facade = new ModuleArchiveFacade(context, new TestUserAccessor { UserId = userId }, new TestServiceAccountAccessor());
+
+        // The module's OWN context, the way the host wires it (ADR 0738): the CORE connection, so the
+        // engine's transaction covers projection writes; CreateTables rather than EnsureCreated, which is
+        // all-or-nothing per database and silently does nothing beside the core's existing tables.
+        var services = new ServiceCollection();
+        module.ConfigureServices(services);
+        services.AddSingleton<IModuleArchiveFacade>(facade);
+        services.AddDbContext<TestReadModelContext>(options => options.UseSqlite(connection));
+        var provider = services.BuildServiceProvider();
+        try
+        {
+            Microsoft.EntityFrameworkCore.Infrastructure.AccessorExtensions
+                .GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalDatabaseCreator>(
+                    provider.GetRequiredService<TestReadModelContext>())
+                .CreateTables();
+        }
+        catch (Exception)
+        {
+            // already created on this connection
+        }
+
+        var readModels = new ModuleReadModelCatalog([typeof(TestReadModelContext)]);
         var dossierId = await facade.CreateDocumentAsync(rootId, TestModule.TestModule.DossierMaskId, "Dossier");
-        return new Rig(context, new StateMachineEngine(context, catalog, facade, provider), facade, dossierId);
+        return new Rig(context, new StateMachineEngine(context, catalog, facade, provider, readModels), facade, dossierId, provider);
+    }
+
+    // The fact is the module's read model now (ADR 0738): steering it means writing the projection the
+    // provider reads, exactly as the log-entry handler does.
+    private static async Task SetLandingsAsync(Rig rig, int count)
+    {
+        var db = rig.Services.GetRequiredService<TestReadModelContext>();
+        var row = await db.LandingCounters.FindAsync(rig.DossierId);
+        if (row is null)
+        {
+            row = new TestLandingCounter { DossierId = rig.DossierId };
+            db.LandingCounters.Add(row);
+        }
+
+        row.Count = count;
+        await db.SaveChangesAsync();
     }
 
     [Fact]
@@ -87,7 +121,7 @@ public class StateMachineEngineTests
         using var connection = new SqliteConnection("Filename=:memory:");
         await connection.OpenAsync();
         var rig = await RigAsync(connection);
-        TestFactProvider.Landings = 5;
+        await SetLandingsAsync(rig, 5);
         await rig.Facade.CreateDocumentAsync(rig.DossierId, TestModule.TestModule.CertificateMaskId, "Medical",
             new Dictionary<string, string> { ["Valid to"] = "2027-01-01" });
 
@@ -103,7 +137,7 @@ public class StateMachineEngineTests
         using var connection = new SqliteConnection("Filename=:memory:");
         await connection.OpenAsync();
         var rig = await RigAsync(connection);
-        TestFactProvider.Landings = 5;
+        await SetLandingsAsync(rig, 5);
         await rig.Facade.CreateDocumentAsync(rig.DossierId, TestModule.TestModule.CertificateMaskId, "Medical",
             new Dictionary<string, string> { ["Valid to"] = "2026-01-01" });
 
@@ -122,7 +156,7 @@ public class StateMachineEngineTests
         using var connection = new SqliteConnection("Filename=:memory:");
         await connection.OpenAsync();
         var rig = await RigAsync(connection);
-        TestFactProvider.Landings = 5;
+        await SetLandingsAsync(rig, 5);
 
         var result = await rig.Engine.EvaluateStatusAsync("test-pilot", "MayAct", rig.DossierId, Now);
 
@@ -136,7 +170,7 @@ public class StateMachineEngineTests
         using var connection = new SqliteConnection("Filename=:memory:");
         await connection.OpenAsync();
         var rig = await RigAsync(connection);
-        TestFactProvider.Landings = 5;
+        await SetLandingsAsync(rig, 5);
         // The epic's medical shape: dates read valid, the flag says otherwise — and the flag must win,
         // because it exists precisely for the case the dates cannot express (illness, medication).
         await rig.Facade.CreateDocumentAsync(rig.DossierId, TestModule.TestModule.CertificateMaskId, "Medical",
@@ -154,7 +188,7 @@ public class StateMachineEngineTests
         using var connection = new SqliteConnection("Filename=:memory:");
         await connection.OpenAsync();
         var rig = await RigAsync(connection);
-        TestFactProvider.Landings = 1;
+        await SetLandingsAsync(rig, 1);
         await rig.Facade.CreateDocumentAsync(rig.DossierId, TestModule.TestModule.CertificateMaskId, "Medical",
             new Dictionary<string, string> { ["Valid to"] = "2027-01-01" });
 
@@ -172,7 +206,7 @@ public class StateMachineEngineTests
         using var connection = new SqliteConnection("Filename=:memory:");
         await connection.OpenAsync();
         var rig = await RigAsync(connection);
-        TestFactProvider.Landings = 5;
+        await SetLandingsAsync(rig, 5);
 
         Assert.False((await rig.Engine.EvaluateStatusAsync("test-pilot", "MayAct", rig.DossierId, Now)).Satisfied);
 
@@ -190,7 +224,7 @@ public class StateMachineEngineTests
         using var connection = new SqliteConnection("Filename=:memory:");
         await connection.OpenAsync();
         var rig = await RigAsync(connection);
-        TestFactProvider.Landings = 5;
+        await SetLandingsAsync(rig, 5);
 
         // Red guard (no certificate): refused with the diagnosis, and the handler did NOT run.
         var refused = await rig.Engine.ExecuteTransitionAsync("test-pilot", "log-entry", rig.DossierId, Now);
@@ -202,7 +236,7 @@ public class StateMachineEngineTests
             new Dictionary<string, string> { ["Valid to"] = "2027-01-01" });
         var executed = await rig.Engine.ExecuteTransitionAsync("test-pilot", "log-entry", rig.DossierId, Now);
         Assert.True(executed.Satisfied);
-        Assert.Equal(2, (await rig.Facade.GetChildrenAsync(rig.DossierId, TestModule.TestModule.CertificateMaskId)).Count);
+        Assert.Single(await rig.Facade.GetChildrenAsync(rig.DossierId, TestModule.TestModule.EntryMaskId));
     }
 
     [Fact]
@@ -216,9 +250,14 @@ public class StateMachineEngineTests
         // committed as far as the handler can tell — and then throws. The engine owns the transaction
         // (ADR 0737): what the handler wrote must never be seen, or a half-performed act would be a state
         // the next gate reads as real.
-        var before = (await rig.Facade.GetChildrenAsync(rig.DossierId, TestModule.TestModule.CertificateMaskId)).Count;
+        var before = (await rig.Facade.GetChildrenAsync(rig.DossierId, TestModule.TestModule.EntryMaskId)).Count;
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             rig.Engine.ExecuteTransitionAsync("test-pilot", "explode", rig.DossierId, Now));
-        Assert.Equal(before, (await rig.Facade.GetChildrenAsync(rig.DossierId, TestModule.TestModule.CertificateMaskId)).Count);
+        Assert.Equal(before, (await rig.Facade.GetChildrenAsync(rig.DossierId, TestModule.TestModule.EntryMaskId)).Count);
+
+        // ...and the PROJECTION write rolled back with it (ADR 0738): the exploding handler incremented
+        // the module's counter before throwing, and one transaction means neither write survived.
+        var db = rig.Services.GetRequiredService<TestReadModelContext>();
+        Assert.Null(await db.LandingCounters.FindAsync(rig.DossierId));
     }
 }

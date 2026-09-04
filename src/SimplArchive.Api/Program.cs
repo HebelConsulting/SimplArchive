@@ -394,6 +394,11 @@ foreach (var loaded in modules)
 builder.Services.AddSingleton(machineCatalog);
 builder.Services.AddSingleton<IReadOnlyList<SimplArchive.Infrastructure.Modules.ModuleLoader.LoadedModule>>(modules);
 
+// Module-owned read models (ADR 0738): each declared context registered on the CORE context's own
+// connection — one connection, one transaction, one commit — with its own migrations history. Migration
+// happens beside the core's (below), through the same owner-connection discipline.
+SimplArchive.Infrastructure.Modules.ModuleReadModelWiring.AddModuleReadModels(builder.Services, modules);
+
 // Module CONTROLLERS (ADR 0737): each module assembly joins MVC as an application part — full native
 // controllers, same conventions, module-private routes — and the gate convention pins the per-tenant
 // activation check onto every one of them, so an inactive tenant's request answers 404 MODULE_NOT_ACTIVE
@@ -427,6 +432,10 @@ async Task ApplyMigrationsAsync(IServiceProvider services)
     {
         await services.GetRequiredService<SimplArchiveDbContext>().Database.MigrateAsync();
     }
+
+    // The modules' own schemas ride the same step and the same owner-connection discipline (ADR 0738):
+    // the core's history table never learns a module exists, and vice versa.
+    await SimplArchive.Infrastructure.Modules.ModuleReadModelWiring.MigrateAllAsync(services, modules, migrationConnection);
 }
 
 // Migrate-and-exit mode (ADR "Data-preserving migrations"): `--migrate` applies EF Core migrations then exits,

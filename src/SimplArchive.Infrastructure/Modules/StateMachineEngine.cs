@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using SimplArchive.Infrastructure.Persistence;
 using SimplArchive.ModuleAbi;
@@ -80,13 +81,17 @@ public sealed class StateMachineEngine
     private readonly StateMachineCatalog _catalog;
     private readonly IModuleArchiveFacade _archive;
     private readonly IServiceProvider _services;
+    private readonly ModuleReadModelCatalog _readModels;
 
-    public StateMachineEngine(SimplArchiveDbContext dbContext, StateMachineCatalog catalog, IModuleArchiveFacade archive, IServiceProvider services)
+    public StateMachineEngine(
+        SimplArchiveDbContext dbContext, StateMachineCatalog catalog, IModuleArchiveFacade archive,
+        IServiceProvider services, ModuleReadModelCatalog? readModels = null)
     {
         _dbContext = dbContext;
         _catalog = catalog;
         _archive = archive;
         _services = services;
+        _readModels = readModels ?? ModuleReadModelCatalog.Empty;
     }
 
     public async Task<StatusResult> EvaluateStatusAsync(string machineId, string statusName, Guid subjectDocumentId, DateTimeOffset asOf, CancellationToken cancellationToken = default)
@@ -121,9 +126,45 @@ public sealed class StateMachineEngine
             return verdict;
         }
 
+        // The act's one transaction (ADRs 0737/0738): every wired module read-model context shares the
+        // core connection, so ENLISTING them here is what makes a handler's document writes and its
+        // projection writes one commit — and one rollback, when the handler throws.
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-        await transition.Handler(new TransitionContext(subjectDocumentId, _archive));
-        await transaction.CommitAsync(cancellationToken);
+        var enlisted = new List<Microsoft.EntityFrameworkCore.DbContext>();
+        foreach (var contextType in _readModels.ContextTypes)
+        {
+            var readModelContext = (Microsoft.EntityFrameworkCore.DbContext)_services.GetRequiredService(contextType);
+            await readModelContext.Database.UseTransactionAsync(transaction.GetDbTransaction(), cancellationToken);
+            enlisted.Add(readModelContext);
+        }
+
+        try
+        {
+            await transition.Handler(new TransitionContext(subjectDocumentId, _archive, _services));
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            // The database rolls back on dispose — but the CHANGE TRACKERS would not: every context still
+            // holds the handler's writes as clean entities, so a FindAsync would serve a phantom row and a
+            // later save in this request could quietly resurrect rolled-back state. Found by the rollback
+            // test reading Count = 1 from a table that held nothing.
+            _dbContext.ChangeTracker.Clear();
+            foreach (var readModelContext in enlisted)
+            {
+                readModelContext.ChangeTracker.Clear();
+            }
+
+            throw;
+        }
+        finally
+        {
+            foreach (var readModelContext in enlisted)
+            {
+                await readModelContext.Database.UseTransactionAsync(null, CancellationToken.None);
+            }
+        }
+
         return verdict;
     }
 

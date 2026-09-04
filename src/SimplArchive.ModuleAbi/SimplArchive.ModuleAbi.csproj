@@ -20,7 +20,11 @@
        Versioned 0.x while the mechanism is proven (semver's own convention: everything may change);
        1.0 is cut when the first module ships commercially. Major locks, minor floats (ADR 0741). -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.9" />
+    <!-- Module-owned read models (ADR 0738): a module's projections live in its OWN DbContext, so the
+         base class and the model surface are ABI exports. EF Core itself, deliberately not a provider —
+         the HOST wires the provider and the connection; a module never sees either. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
   </ItemGroup>
 
 </Project>

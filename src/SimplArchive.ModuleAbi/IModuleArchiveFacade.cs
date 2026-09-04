@@ -27,6 +27,10 @@ public interface IModuleArchiveFacade
     /// certificates, a fleet's aircraft. Paged the core way; order is CreatedAt then Id.</summary>
     Task<IReadOnlyList<ModuleDocument>> GetChildrenAsync(Guid parentDocumentId, Guid maskId, CancellationToken cancellationToken = default);
 
+    /// <summary>Every document in the tenant wearing a given module mask — what a projection REBUILD
+    /// (ADR 0738) enumerates its subjects from. Order is CreatedAt then Id.</summary>
+    Task<IReadOnlyList<ModuleDocument>> GetByMaskAsync(Guid maskId, CancellationToken cancellationToken = default);
+
     /// <summary>Creates a document wearing a module mask, with initial field values. The core's invariants
     /// (sibling names, containment, required fields) apply exactly as they do to any other write.</summary>
     Task<Guid> CreateDocumentAsync(Guid parentDocumentId, Guid maskId, string name, IReadOnlyDictionary<string, string>? fields = null, CancellationToken cancellationToken = default);

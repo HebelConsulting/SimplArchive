@@ -13,6 +13,12 @@
     <ProjectReference Include="..\..\src\SimplArchive.ModuleAbi\SimplArchive.ModuleAbi.csproj" />
     <!-- Real controllers (ADR 0737) need the shared framework; still no reference to any core project. -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <!-- The module's OWN migrations (ADR 0738) are generated against the production provider — a real
+         module ships exactly this pair: EF design + the provider its migrations target. -->
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
   </ItemGroup>
 
 </Project>

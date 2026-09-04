@@ -38,11 +38,14 @@ public interface IStateMachineBuilder
     IStateMachineBuilder Transition(string name, string label, IReadOnlyList<StateCondition> guard, Func<TransitionContext, Task> handler);
 }
 
-/// <summary>What a transition's handler receives: the subject and the archive, under the acting identity.</summary>
+/// <summary>What a transition's handler receives: the subject, the archive, and the request's services.</summary>
 /// <param name="SubjectDocumentId">The document the machine was asked about.</param>
 /// <param name="Archive">The facade — the handler's writes go through the same five operations and the
 /// same invariants as everyone else's (ADR 0741).</param>
-public sealed record TransitionContext(Guid SubjectDocumentId, IModuleArchiveFacade Archive);
+/// <param name="Services">The request scope, for the module's OWN registrations — above all its
+/// read-model context (ADR 0738), whose writes here land in the same transaction as the document
+/// writes because the engine enlisted it before invoking the handler.</param>
+public sealed record TransitionContext(Guid SubjectDocumentId, IModuleArchiveFacade Archive, IServiceProvider Services);
 
 /// <summary>
 /// One enumerable condition — the two predicate families of ADR 0736 as data. Exactly one of

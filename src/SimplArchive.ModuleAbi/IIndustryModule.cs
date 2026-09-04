@@ -70,6 +70,12 @@ public interface IIndustryModule
     }
 
     /// <summary>
+    /// The read-model contexts this module owns (ADR 0738) — wired, migrated and transaction-enlisted by
+    /// the host. Default: none; a module of documents alone needs no projections.
+    /// </summary>
+    IReadOnlyList<ModuleReadModelSet> ReadModels => [];
+
+    /// <summary>
     /// The rels this module contributes to the API root — its entry into the hypermedia graph
     /// (ADR 0737). Emitted only for tenants where the module is ACTIVE; for everyone else the module's
     /// surface simply does not exist (ADR 0543's absence semantics, which the host also enforces at the

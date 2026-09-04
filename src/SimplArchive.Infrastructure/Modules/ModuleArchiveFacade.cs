@@ -73,6 +73,28 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         return children;
     }
 
+    public async Task<IReadOnlyList<ModuleDocument>> GetByMaskAsync(Guid maskId, CancellationToken cancellationToken = default)
+    {
+        // The rebuild's subject enumeration (ADR 0738) — same version → identity walk and same in-memory
+        // ordering as the children read, for the same provider-parity reason.
+        var rows = (await _dbContext.Documents
+            .Where(d => d.MaskVersionId != null)
+            .Join(_dbContext.MaskVersions, d => d.MaskVersionId, v => (Guid?)v.Id, (d, v) => new { d, v.MaskId })
+            .Where(x => x.MaskId == maskId)
+            .Select(x => new { x.d.Id, x.d.ParentId, x.d.Name, x.d.CreatedAt })
+            .ToListAsync(cancellationToken))
+            .OrderBy(x => x.CreatedAt).ThenBy(x => x.Id)
+            .ToList();
+
+        var documents = new List<ModuleDocument>(rows.Count);
+        foreach (var row in rows)
+        {
+            documents.Add(new ModuleDocument(row.Id, row.ParentId, row.Name, maskId, await FieldsOfAsync(row.Id, cancellationToken)));
+        }
+
+        return documents;
+    }
+
     public async Task<Guid> CreateDocumentAsync(Guid parentDocumentId, Guid maskId, string name, IReadOnlyDictionary<string, string>? fields = null, CancellationToken cancellationToken = default)
     {
         var parent = await _dbContext.Documents.SingleOrDefaultAsync(d => d.Id == parentDocumentId, cancellationToken)

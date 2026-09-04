@@ -142,6 +142,40 @@ public class ModulesController : ControllerBase
     public async Task<IActionResult> HeadLicenseDocuments(CancellationToken cancellationToken) =>
         await IsTenantAdminAsync(cancellationToken) ? NoContent() : Forbid();
 
+    /// <summary>
+    /// Rebuilds one of the module's projections from documents (ADR 0738) — the operator guarantee that a
+    /// read model is never the only copy of anything, as a button-press: the support case's first answer.
+    /// </summary>
+    /// <remarks>Tenant-admin, and only where the module is ACTIVE (the same absence semantics as its
+    /// routes); an unknown projection 404s — the rebuilder registry, not this controller, says what
+    /// exists. The rebuilders come from the module's own DI registrations, scoped to this request's
+    /// tenant like every other module service.</remarks>
+    [HttpPost("{moduleId}/rebuild/{projectionName}")]
+    public async Task<IActionResult> RebuildProjection(
+        string moduleId, string projectionName,
+        [FromServices] IEnumerable<SimplArchive.ModuleAbi.IModuleProjectionRebuilder> rebuilders,
+        CancellationToken cancellationToken)
+    {
+        if (!await IsTenantAdminAsync(cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (!await ModuleActivationCheck.IsActiveAsync(_dbContext, moduleId, DateTimeOffset.UtcNow, cancellationToken))
+        {
+            throw new ModuleNotActiveException(moduleId);
+        }
+
+        var rebuilder = rebuilders.FirstOrDefault(r => r.ProjectionNames.Contains(projectionName, StringComparer.Ordinal));
+        if (rebuilder is null)
+        {
+            return NotFound();
+        }
+
+        await rebuilder.RebuildAsync(projectionName, cancellationToken);
+        return NoContent();
+    }
+
     /// <summary>The activation act (ADRs 0740/0743): verify the filed license, seed the module's masks,
     /// upsert the activation row. Renewal is the same PUT with the newly filed license's id.</summary>
     [HttpPut("{moduleId}/license")]

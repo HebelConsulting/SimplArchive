@@ -36,9 +36,9 @@ public class ModuleLoaderTests
             // The mask seed arrives typed — IIndustryModule and the seed records are ONE type identity on
             // both sides of the boundary, which is the whole point of resolving the ABI from the default
             // context (a private copy would make this cast throw).
-            // Two masks since the fixture grew the engine's dossier shape; the certificate is the one
-            // whose typed fields prove the boundary.
-            Assert.Equal(2, module.Masks.Count);
+            // Three masks since the fixture's entries earned their own (ADR 0738's shadowing lesson);
+            // the certificate is the one whose typed fields prove the boundary.
+            Assert.Equal(3, module.Masks.Count);
             var mask = module.Masks.Single(m => m.Name == "Test Certificate");
             Assert.False(mask.IsBookable);
 

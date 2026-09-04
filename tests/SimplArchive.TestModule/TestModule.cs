@@ -12,6 +12,7 @@ public sealed class TestModule : IIndustryModule
 {
     public static readonly Guid DossierMaskId = Guid.Parse("7E57AB1E-0000-0000-0000-000000000000");
     public static readonly Guid CertificateMaskId = Guid.Parse("7E57AB1E-0000-0000-0000-000000000001");
+    public static readonly Guid EntryMaskId = Guid.Parse("7E57AB1E-0000-0000-0000-000000000002");
 
     public string ModuleId => "test-module";
 
@@ -40,6 +41,10 @@ public sealed class TestModule : IIndustryModule
             new ModuleFieldSeed("Valid to", "Date", IsRequired: false),
             new ModuleFieldSeed("Temporarily void", "Boolean", IsRequired: false),
         ]),
+        // Its own mask, learned the hard way: entries wearing the certificate mask became the NEWEST
+        // certificate, and the first logged entry shadowed the medical — every later act read "no Valid
+        // to" and refused. A log entry is not a certificate; the model must say so.
+        new ModuleMaskSeed(EntryMaskId, "Test Entry", IsFolderMask: false, IsBookable: false, []),
     ];
 
     public IReadOnlyList<ModuleRootLink> RootLinks { get; } =
@@ -48,10 +53,14 @@ public sealed class TestModule : IIndustryModule
         new ModuleRootLink("test-module:status", "/api/test-module/status", "GET"),
     ];
 
+    public IReadOnlyList<ModuleReadModelSet> ReadModels { get; } = [new ModuleReadModelSet(typeof(TestReadModelContext))];
+
     public void ConfigureServices(IServiceCollection services)
     {
         services.AddSingleton<TestModuleMarker>();
-        services.AddSingleton<IModuleFactProvider, TestFactProvider>();
+        // SCOPED, both: they read the module's read-model context, which lives per request (ADR 0738).
+        services.AddScoped<IModuleFactProvider, TestFactProvider>();
+        services.AddScoped<IModuleProjectionRebuilder, TestLandingRebuilder>();
     }
 
     public void DefineStateMachines(IStateMachineDefinitions machines) =>
@@ -70,30 +79,85 @@ public sealed class TestModule : IIndustryModule
                     StateCondition.ChildField(CertificateMaskId, "Valid to", ConditionTest.DateNotPast, null,
                         "test.certificate-expired", "The certificate expired {value}."),
                 ],
-                async context => await context.Archive.CreateDocumentAsync(
-                    context.SubjectDocumentId, CertificateMaskId, $"Entry {Guid.NewGuid():N}"))
+                async context =>
+                {
+                    // The document write AND the projection write, one act (ADRs 0737/0738): the engine's
+                    // transaction covers both, which is what the fact provider's answer rests on.
+                    await context.Archive.CreateDocumentAsync(
+                        context.SubjectDocumentId, EntryMaskId, $"Entry {Guid.NewGuid():N}");
+                    await IncrementAsync(context, 1);
+                })
+            // The fact-gated act (ADR 0736 over the wire): allowed only once the counter the module
+            // maintains crosses the threshold — the read model answering a gate.
+            .Transition("certify", "Certify",
+                [StateCondition.FactAtLeast("testLandings", 3, "test.recency", "{value} recent landings; 3 required.")],
+                _ => Task.CompletedTask)
             // The rollback fixture (ADR 0737): a handler that WRITES and then throws — what it wrote must
             // never be seen, because the engine owns the transaction and a throw rolls the act back.
             .Transition("explode", "Explode", [],
                 async context =>
                 {
                     await context.Archive.CreateDocumentAsync(
-                        context.SubjectDocumentId, CertificateMaskId, $"Never {Guid.NewGuid():N}");
+                        context.SubjectDocumentId, EntryMaskId, $"Never {Guid.NewGuid():N}");
+                    await IncrementAsync(context, 1); // the projection write must roll back with the document
                     throw new InvalidOperationException("The handler failed after writing.");
                 });
+
+    private static async Task IncrementAsync(TransitionContext context, int by)
+    {
+        var db = (TestReadModelContext)context.Services.GetService(typeof(TestReadModelContext))!;
+        var row = await db.LandingCounters.FindAsync(context.SubjectDocumentId);
+        if (row is null)
+        {
+            row = new TestLandingCounter { DossierId = context.SubjectDocumentId };
+            db.LandingCounters.Add(row);
+        }
+
+        row.Count += by;
+        await db.SaveChangesAsync();
+    }
 }
 
 /// <summary>Registered by <see cref="TestModule.ConfigureServices"/> so a test can see the call happened.</summary>
 public sealed class TestModuleMarker;
 
-/// <summary>The aggregate family's fixture: a settable fact, so tests steer the recency verdict.</summary>
-public sealed class TestFactProvider : IModuleFactProvider
+/// <summary>
+/// The aggregate family made REAL (ADR 0738): the fact is the module's own read model — the counter the
+/// log-entry transition maintains in its transaction — never a computed-per-ask aggregate over EAV rows.
+/// An absent row is zero: a dossier nobody logged against has no landings, and a wiped projection reads
+/// as zero until its rebuild re-derives it.
+/// </summary>
+public sealed class TestFactProvider(TestReadModelContext db) : IModuleFactProvider
 {
-    /// <summary>Settable by tests — a real provider computes from read models; this one is the dial.</summary>
-    public static int Landings { get; set; } = 5;
-
     public IReadOnlyList<string> FactNames { get; } = ["testLandings"];
 
-    public Task<FactValue> GetAsync(string factName, Guid subjectDocumentId, DateTimeOffset asOf, CancellationToken cancellationToken = default) =>
-        Task.FromResult(new FactValue(Landings.ToString(), $"{Landings} landings in the window"));
+    public async Task<FactValue> GetAsync(string factName, Guid subjectDocumentId, DateTimeOffset asOf, CancellationToken cancellationToken = default)
+    {
+        var count = (await db.LandingCounters.FindAsync([subjectDocumentId], cancellationToken))?.Count ?? 0;
+        return new FactValue(count.ToString(), $"{count} landings in the window");
+    }
+}
+
+/// <summary>The rebuild contract, honored (ADR 0738): the counter re-derived from the entry documents.</summary>
+public sealed class TestLandingRebuilder(TestReadModelContext db, IModuleArchiveFacade archive) : IModuleProjectionRebuilder
+{
+    public IReadOnlyList<string> ProjectionNames { get; } = ["landings"];
+
+    public async Task RebuildAsync(string projectionName, CancellationToken cancellationToken = default)
+    {
+        foreach (var dossier in await archive.GetByMaskAsync(TestModule.DossierMaskId, cancellationToken))
+        {
+            var entries = (await archive.GetChildrenAsync(dossier.Id, TestModule.EntryMaskId, cancellationToken)).Count;
+            var row = await db.LandingCounters.FindAsync([dossier.Id], cancellationToken);
+            if (row is null)
+            {
+                row = new TestLandingCounter { DossierId = dossier.Id };
+                db.LandingCounters.Add(row);
+            }
+
+            row.Count = entries;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
 }
