@@ -18,9 +18,15 @@ public class ApiExceptionHandler : IExceptionHandler
 
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        var (errorCode, statusCode, detail) = exception is ApiException apiException
-            ? (apiException.ErrorCode, apiException.StatusCode, apiException.Message)
-            : ("INTERNAL_ERROR", StatusCodes.Status500InternalServerError, "An unexpected error occurred.");
+        var (errorCode, statusCode, detail) = exception switch
+        {
+            ApiException apiException => (apiException.ErrorCode, apiException.StatusCode, apiException.Message),
+            // A module's refusal (ADR 0737): same wire shape as a core one — a module error must be
+            // indistinguishable from a native error, which is the whole point of real controllers.
+            SimplArchive.ModuleAbi.ModuleApiException moduleException =>
+                (moduleException.ErrorCode, moduleException.StatusCode, moduleException.Message),
+            _ => ("INTERNAL_ERROR", StatusCodes.Status500InternalServerError, "An unexpected error occurred."),
+        };
 
         if (statusCode >= StatusCodes.Status500InternalServerError)
         {

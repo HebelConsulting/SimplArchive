@@ -11,6 +11,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SimplArchive.ModuleAbi\SimplArchive.ModuleAbi.csproj" />
+    <!-- Real controllers (ADR 0737) need the shared framework; still no reference to any core project. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
 </Project>

@@ -68,4 +68,13 @@ public interface IIndustryModule
     void DefineStateMachines(IStateMachineDefinitions machines)
     {
     }
+
+    /// <summary>
+    /// The rels this module contributes to the API root — its entry into the hypermedia graph
+    /// (ADR 0737). Emitted only for tenants where the module is ACTIVE; for everyone else the module's
+    /// surface simply does not exist (ADR 0543's absence semantics, which the host also enforces at the
+    /// route: an inactive tenant's request to a module controller answers 404 <c>MODULE_NOT_ACTIVE</c>).
+    /// Default: none — a module may be reachable purely through its transitions and masks.
+    /// </summary>
+    IReadOnlyList<ModuleRootLink> RootLinks => [];
 }

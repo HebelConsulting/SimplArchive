@@ -392,6 +392,22 @@ foreach (var loaded in modules)
 builder.Services.AddSingleton(machineCatalog);
 builder.Services.AddSingleton<IReadOnlyList<SimplArchive.Infrastructure.Modules.ModuleLoader.LoadedModule>>(modules);
 
+// Module CONTROLLERS (ADR 0737): each module assembly joins MVC as an application part — full native
+// controllers, same conventions, module-private routes — and the gate convention pins the per-tenant
+// activation check onto every one of them, so an inactive tenant's request answers 404 MODULE_NOT_ACTIVE
+// without the module author writing (or being able to forget) the check. The seam adapters give module
+// code the same caller/rights answers core controllers get.
+SimplArchive.Api.Modules.ModuleApiServices.AddModuleApiSeams(builder.Services);
+if (modules.Count > 0)
+{
+    var moduleMvc = builder.Services.AddControllers(options =>
+        options.Conventions.Add(new SimplArchive.Api.Modules.ModuleControllerGateConvention(modules)));
+    foreach (var loaded in modules)
+    {
+        moduleMvc.AddApplicationPart(loaded.Module.GetType().Assembly);
+    }
+}
+
 var app = builder.Build();
 
 // Applies migrations through the dedicated owner connection when one is provisioned (ADR "Dedicated migration

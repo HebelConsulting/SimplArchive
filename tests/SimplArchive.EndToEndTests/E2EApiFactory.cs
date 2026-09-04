@@ -158,6 +158,17 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         Environment.SetEnvironmentVariable("OpenIddict__RefreshTokenReuseLeewaySeconds", "1");
         Environment.SetEnvironmentVariable("ObjectStorage__ServiceUrl", _storageUrl);
         Environment.SetEnvironmentVariable("ObjectStorage__PublicServiceUrl", _storageUrl);
+
+        // Stage the TestModule into a Modules directory so the REAL loader brings it up through the real
+        // seams (ADR 0737's activation circle, ModuleControllerTests). Deliberately present for EVERY E2E
+        // test, not just the module ones: an inactive module must be inert, and the whole suite running
+        // beside it is the standing proof. Only the module's own dll is copied — the ABI resolves from the
+        // default context, which is the deployment shape too.
+        var modulesRoot = Path.Combine(Path.GetTempPath(), $"simplarchive-e2e-modules-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(modulesRoot, "test-module"));
+        var testModuleDll = typeof(SimplArchive.TestModule.TestModule).Assembly.Location;
+        File.Copy(testModuleDll, Path.Combine(modulesRoot, "test-module", Path.GetFileName(testModuleDll)));
+        Environment.SetEnvironmentVariable("Modules__Directory", modulesRoot);
         Environment.SetEnvironmentVariable("ObjectStorage__Region", "us-east-1");
         Environment.SetEnvironmentVariable("ObjectStorage__BucketName", Bucket);
         Environment.SetEnvironmentVariable("ObjectStorage__AccessKey", StorageUser);

@@ -1,7 +1,11 @@
 using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Hypermedia;
+using SimplArchive.Application.Abstractions;
+using SimplArchive.Infrastructure.Modules;
+using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Api.Controllers;
 
@@ -25,9 +29,13 @@ public class RootController : ControllerBase
     }
 
     [HttpGet]
-    public IActionResult Get()
+    public async Task<IActionResult> Get(
+        [FromServices] IReadOnlyList<ModuleLoader.LoadedModule> modules,
+        [FromServices] ICurrentTenantAccessor tenantAccessor,
+        [FromServices] SimplArchiveDbContext dbContext,
+        CancellationToken cancellationToken)
     {
-        return Ok(new RootResource
+        var resource = new RootResource
         {
             ServerVersion = ServerBuildInfo.Version,
             Links =
@@ -110,7 +118,34 @@ public class RootController : ControllerBase
                 new Link("openIdConfiguration", "/.well-known/openid-configuration", "GET"),
                 new Link("openApi", "/openapi/v1.json", "GET"),
             ],
-        });
+        };
+
+        // Module entry rels (ADR 0737): a loaded module's RootLinks appear only for a tenant whose
+        // activation is ACTIVE — for everyone else (other tenants, anonymous callers, platform admins)
+        // the module's surface does not exist, which is exactly what the gate on its routes answers too.
+        if (modules.Count > 0 && tenantAccessor.TenantId is not null)
+        {
+            var withRootLinks = modules.Where(m => m.Module.RootLinks.Count > 0).ToList();
+            if (withRootLinks.Count > 0)
+            {
+                var ids = withRootLinks.Select(m => m.Module.ModuleId).ToList();
+                var activations = await dbContext.ModuleActivations
+                    .Where(a => ids.Contains(a.ModuleId))
+                    .ToListAsync(cancellationToken);
+                var now = DateTimeOffset.UtcNow;
+                foreach (var loaded in withRootLinks)
+                {
+                    var activation = activations.FirstOrDefault(a => a.ModuleId == loaded.Module.ModuleId);
+                    if (activation is not null && ModuleActivationPolicy.IsActive(activation, now))
+                    {
+                        resource.Links.AddRange(loaded.Module.RootLinks
+                            .Select(l => new Link(l.Rel, l.Path, l.Method)));
+                    }
+                }
+            }
+        }
+
+        return Ok(resource);
     }
 
     // Standing convention: every GET action gets a companion HEAD action — a separate action, not

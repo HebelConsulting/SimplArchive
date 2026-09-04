@@ -23,7 +23,14 @@ public sealed class TestModule : IIndustryModule
     /// generate a key pair at runtime and plant the public half here — no key material in the repo.</summary>
     public static string VerifyKeyPem { get; set; } = string.Empty;
 
-    public string LicenseVerifyKeyPem => VerifyKeyPem;
+    /// <summary>
+    /// The static works only when the test constructs the module in ITS OWN load context; a module the
+    /// LOADER brought in lives in an isolated context whose statics the test cannot reach (ADR 0741's
+    /// isolation working as designed). The E2E activation circle therefore plants the key in an
+    /// environment variable, which crosses contexts because there is only one process environment.
+    /// </summary>
+    public string LicenseVerifyKeyPem =>
+        Environment.GetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY") ?? VerifyKeyPem;
 
     public IReadOnlyList<ModuleMaskSeed> Masks { get; } =
     [
@@ -33,6 +40,12 @@ public sealed class TestModule : IIndustryModule
             new ModuleFieldSeed("Valid to", "Date", IsRequired: false),
             new ModuleFieldSeed("Temporarily void", "Boolean", IsRequired: false),
         ]),
+    ];
+
+    public IReadOnlyList<ModuleRootLink> RootLinks { get; } =
+    [
+        // The module's entry into the hypermedia graph (ADR 0737): module-prefixed rel, module-private path.
+        new ModuleRootLink("test-module:status", "/api/test-module/status", "GET"),
     ];
 
     public void ConfigureServices(IServiceCollection services)
