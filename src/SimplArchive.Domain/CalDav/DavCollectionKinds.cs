@@ -25,7 +25,11 @@ public static class DavCollectionKinds
     public static readonly DavCollectionKind Addressbook =
         new(WellKnownMaskIds.Addressbook, WellKnownMaskIds.Contact, ".vcf", "Contact UID");
 
-    public static readonly IReadOnlyList<DavCollectionKind> All = [Calendar, Addressbook];
+    /// <summary>A meeting room's Schedule (ADR 0744): calendar wire behaviour, Room-booking items.</summary>
+    public static readonly DavCollectionKind Schedule =
+        new(WellKnownMaskIds.Schedule, WellKnownMaskIds.RoomBooking, ".ics", "Event UID");
+
+    public static readonly IReadOnlyList<DavCollectionKind> All = [Calendar, Addressbook, Schedule];
 
     /// <summary>The kind for a folder mask, or null when the folder is not a synced collection.</summary>
     public static DavCollectionKind? ForFolderMask(Guid? folderMaskId) =>

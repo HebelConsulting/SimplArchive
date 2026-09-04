@@ -209,7 +209,7 @@ internal static class DavTree
     {
         var colorFieldIds = await db.FieldDefinitions
             .Where(f => f.Name == ColorFieldName
-                && db.MaskVersions.Any(v => v.Id == f.MaskVersionId && v.MaskId == protocol.FolderMaskId))
+                && db.MaskVersions.Any(v => v.Id == f.MaskVersionId && protocol.FolderMaskIds.Contains(v.MaskId)))
             .Select(f => f.Id)
             .ToListAsync(cancellationToken);
 
@@ -247,16 +247,16 @@ internal static class DavTree
 
     private static IQueryable<Document> FolderQuery(SimplArchiveDbContext db, DavProtocol protocol) =>
         db.Documents.Where(d => d.MaskVersionId != null
-            && db.MaskVersions.Any(v => v.Id == d.MaskVersionId && v.MaskId == protocol.FolderMaskId));
+            && db.MaskVersions.Any(v => v.Id == d.MaskVersionId && protocol.FolderMaskIds.Contains(v.MaskId)));
 
     private static IQueryable<Document> ItemQuery(SimplArchiveDbContext db, DavProtocol protocol, Guid folderId) =>
         db.Documents.Where(d => d.ParentId == folderId && d.MaskVersionId != null
-            && db.MaskVersions.Any(v => v.Id == d.MaskVersionId && v.MaskId == protocol.ItemMaskId));
+            && db.MaskVersions.Any(v => v.Id == d.MaskVersionId && protocol.ItemMaskIds.Contains(v.MaskId)));
 
     private static async Task<List<Guid>> UidFieldIdsAsync(SimplArchiveDbContext db, DavProtocol protocol, CancellationToken cancellationToken) =>
         await db.FieldDefinitions
             .Where(f => f.Name == protocol.UidFieldName
-                && db.MaskVersions.Any(v => v.Id == f.MaskVersionId && v.MaskId == protocol.ItemMaskId))
+                && db.MaskVersions.Any(v => v.Id == f.MaskVersionId && protocol.ItemMaskIds.Contains(v.MaskId)))
             .Select(f => f.Id)
             .ToListAsync(cancellationToken);
 

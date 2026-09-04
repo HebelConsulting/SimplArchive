@@ -11,7 +11,15 @@ public record FieldGroup
 {
     public string FieldName { get; set; } = string.Empty;
 
+    /// <summary>The field's declared type — what lets the read view render a DateTime value as a local
+    /// wall clock instead of the raw ISO-with-offset wire string.</summary>
+    public string DataType { get; set; } = "Text";
+
     public List<string> Values { get; set; } = [];
+
+    /// <summary>The values as the pane SHOWS them — type-aware, matching the desktop's rendering (ADR 0511).</summary>
+    public string Display => string.Join(", ", Values.Select(v =>
+        DataType == "DateTime" ? SimplArchive.Presentation.IndexInstant.Display(v) : v));
 }
 
 /// <summary>One message in a document's chat thread, with the addresses its row advertised (ADR 0543).</summary>

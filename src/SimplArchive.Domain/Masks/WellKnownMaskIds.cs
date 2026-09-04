@@ -135,8 +135,23 @@ public static class WellKnownMaskIds
     /// </remarks>
     public static readonly Guid MeetingRoom = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E42");
 
-    /// <summary>The booking document a meeting-room reservation files (ADR 0735: a booking is a document).</summary>
+    /// <summary>A meeting-room reservation — the <c>.ics</c> in the room's Schedule (ADR 0744).</summary>
+    /// <remarks>
+    /// The booking IS the calendar entry: one document carrying the appointment facts (Event UID, Start,
+    /// End, Location) and the domain payload (Purpose). The authoritative slot lives on the
+    /// <c>ResourceBooking</c> row; the fields here are its lockstep projection.
+    /// </remarks>
     public static readonly Guid RoomBooking = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E43");
+
+    /// <summary>A meeting room's booking calendar (ADR 0744) — a calendar KIND with its own containment.</summary>
+    /// <remarks>
+    /// Its own mask rather than a plain <see cref="Calendar"/> so that every rule about it stays
+    /// non-contextual: a Schedule exists only in a meeting room, holds only Room bookings, and serves them
+    /// over CalDAV through its own <c>DavCollectionKinds</c> row — while ordinary calendars everywhere keep
+    /// admitting ordinary appointments. A plain Appointment in a Schedule would be visible time the booking
+    /// conflict check cannot see, which is why the admission is exclusive in both directions.
+    /// </remarks>
+    public static readonly Guid Schedule = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E45");
 
     /// <summary>A filed module-license artefact (ADRs 0740/0743) — the signed JSON a vendor issues.</summary>
     /// <remarks>
@@ -176,13 +191,13 @@ public static class WellKnownMaskIds
         new(NotebookSection, "Section", [(NotebookSection, "Section"), (Note, "Note")]),
         new(Addressbook, "Addressbook", [(Contact, "Contact")]),
         new(Calendar, "Calendar", [(Appointment, "Appointment")]),
-        // A meeting room is a folder OF its bookings (booking-endpoints interview, 2026-09-03): the booking
-        // document's parent IS the resource, so rights flow down the normal way — see the room, see its
-        // schedule. RoomBooking, through AdmittingFolders, may exist nowhere else — a booking without its
-        // room is a claim without a subject. The room's Schedule calendar is deliberately NOT in this row:
-        // the table is two-directional, and listing Calendar here would confine every calendar in the
-        // archive to meeting rooms (the AlsoAdmitPlainFolders trap) — it rides AlsoAdmit below instead.
-        new(MeetingRoom, "Meeting room", [(RoomBooking, "Room booking")]),
+        // A meeting room holds exactly its Schedule, and the Schedule holds exactly its bookings
+        // (ADR 0744). Both rows are deliberately two-directional: a Schedule outside a room would be a
+        // booking calendar on nothing, a booking outside a Schedule a claim without a subject, and a plain
+        // Appointment inside a Schedule would be visible time the conflict check cannot see. Rights still
+        // flow from the room the normal way — see the room, see its schedule, see its bookings.
+        new(MeetingRoom, "Meeting room", [(Schedule, "Schedule")]),
+        new(Schedule, "Schedule", [(RoomBooking, "Room booking")]),
     ];
 
     /// <summary>How MANY children wearing a given mask a folder admits — a capacity rule, not an admission one.</summary>
@@ -214,6 +229,11 @@ public static class WellKnownMaskIds
         // client that discovers two of them has no way to choose.
         new(Mailbox, "Mailbox", Notebook, "Notebook", 1),
 
+        // One Schedule per room (ADR 0744) — the booking flow files into THE schedule, so "which one?"
+        // must have exactly one answer. This replaces the "oldest calendar wins" ordering the flow used
+        // while the schedule was a plain Calendar, whose cardinality the decided boundary left uncapped.
+        new(MeetingRoom, "Meeting room", Schedule, "Schedule", 1),
+
     ];
 
     /// <summary>
@@ -232,7 +252,7 @@ public static class WellKnownMaskIds
     /// </para>
     /// </remarks>
     public static readonly IReadOnlySet<Guid> FolderMasks =
-        new HashSet<Guid> { Folder, Repository, UserFolder, MyDocuments, Mailbox, ImapSpecial, ImapFolder, Notebook, NotebookSection, Addressbook, Calendar, MeetingRoom };
+        new HashSet<Guid> { Folder, Repository, UserFolder, MyDocuments, Mailbox, ImapSpecial, ImapFolder, Notebook, NotebookSection, Addressbook, Calendar, MeetingRoom, Schedule };
 
     /// <summary>
     /// The file extensions that make a well-known mask the automatic choice for an upload (#671).
@@ -297,6 +317,10 @@ public static class WellKnownMaskIds
             [NotebookSection] = "section",
             [Addressbook] = "addressbook",
             [Calendar] = "calendar",
+            // Its own token, not "calendar": a booking calendar and a personal one behave differently on
+            // every surface that admits something, and two masks drawn identically are two things the eye
+            // cannot separate (the ImapSpecial/ImapFolder rule, pinned by MaskIconVocabularyTests).
+            [Schedule] = "schedule",
             [EMail] = "email",
             [Note] = "note",
             [Contact] = "contact",
@@ -329,7 +353,11 @@ public static class WellKnownMaskIds
     public static readonly IReadOnlySet<Guid> NotUserCreatable =
         // Mailbox LEFT this set with #703 PR 4: a department mailbox is created by a person, in a plain
         // folder — placement and capacity say where and how many, creatability no longer says never.
-        new HashSet<Guid> { Repository, UserFolder, MyDocuments, ImapSpecial, Notebook, RoomBooking };
+        // Schedule joined with ADR 0744: the booking flow creates it, one per room, when the first booking
+        // is filed — a hand-made second one would break the cardinality that makes "the schedule" singular.
+        // RoomBooking stays here for the PLAIN create paths only — any .ics WRITE into a Schedule is the
+        // real creation path and is gated by rights on the Schedule, not by this set.
+        new HashSet<Guid> { Repository, UserFolder, MyDocuments, ImapSpecial, Notebook, RoomBooking, Schedule };
 
     /// <summary>The well-known masks an ITEM wears — the complement of <see cref="FolderMasks"/>.</summary>
     /// <remarks>Stated rather than derived, so the partition guard has two sides to compare instead of one.</remarks>
@@ -414,29 +442,16 @@ public static class WellKnownMaskIds
     /// to mailboxes. The "also" was never a property of the row — it was a consequence of the two directions
     /// living in one table.
     /// </remarks>
-    /// <summary>
-    /// One-directional admissions beyond the plain folder: this folder ALSO admits that child, saying
-    /// nothing about where else the child may live (the <see cref="AlsoAdmitPlainFolders"/> shape,
-    /// generalised for a child that is not <see cref="Folder"/>).
-    /// </summary>
-    /// <remarks>
-    /// A meeting room holds its Schedule calendar (booking-endpoints interview, 2026-09-03) — and a
-    /// Calendar must stay free to live anywhere, so the two-directional table cannot say this. Cardinality
-    /// is deliberately NOT constrained: a cardinality child derives into
-    /// <see cref="ImmutableStructuralMasks"/>, and the decided boundary (ImmutableStructuralMaskTests) is
-    /// that re-typing a Calendar costs only subscribability — so the booking flow instead files into the
-    /// OLDEST calendar child, deterministically, and a second calendar is a user's own harmless clutter.
-    /// </remarks>
-    public static readonly IReadOnlyList<(Guid FolderMaskId, Guid ChildMaskId)> AlsoAdmit =
-        [(MeetingRoom, Calendar)];
+    // The one-directional AlsoAdmit table (a MeetingRoom also admitting a plain Calendar) is GONE
+    // (ADR 0744): the room's calendar is now the Schedule mask, admitted through the two-directional
+    // table like every other typed child, and no second admission shape remains to need it.
 
     public static readonly IReadOnlyDictionary<Guid, IReadOnlySet<Guid>> AdmittedChildMasks =
         TypedFolderRules
             .Select(rule => (
                 rule.FolderMaskId,
                 Admits: rule.Admits.Select(a => a.MaskId)
-                    .Concat(AlsoAdmitPlainFolders.Any(m => m.FolderMaskId == rule.FolderMaskId) ? [Folder] : [])
-                    .Concat(AlsoAdmit.Where(m => m.FolderMaskId == rule.FolderMaskId).Select(m => m.ChildMaskId))))
+                    .Concat(AlsoAdmitPlainFolders.Any(m => m.FolderMaskId == rule.FolderMaskId) ? [Folder] : [])))
             .ToDictionary(x => x.FolderMaskId, x => (IReadOnlySet<Guid>)x.Admits.ToHashSet());
 
     /// <summary>Mask → the folder masks it may live directly inside. Absent means anywhere.</summary>
@@ -530,6 +545,32 @@ public static class WellKnownMaskIds
     /// wore a DUPLICATE mask with a different id, and every <c>WellKnownMaskIds.Note</c> check (typed-folder
     /// containment, the IMAP projection, the clients' type column) stopped recognising them.
     /// </para>
+    /// <summary>
+    /// Index fields the CLASSIFIER owns on a collection-kind item — the lockstep projection of the stored
+    /// bytes (ADRs 0743/0744), keyed by mask.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These are read-only on the metadata surface, in both clients AND at the PUT (one entrance is not a
+    /// rule): a pane edit would change only the projection, so the .ics/.vcf every synced client renders
+    /// would disagree with the pane until the next content write silently overwrote the edit — and for a
+    /// booking the claimed slot would not move at all. The UIDs are the DAV correlation keys on top: change
+    /// one and the next sync forks the item into a duplicate (the contact-UID lesson).
+    /// </para>
+    /// <para>
+    /// Deliberately NOT everything the classifier writes: Location and Purpose are secondary, genuinely
+    /// useful to edit in the pane, and their next-content-write overwrite is an acceptable trade
+    /// (owner-decided 2026-09-04). The real write path for times is the appointment editor / a rebooking.
+    /// </para>
+    /// </remarks>
+    public static readonly IReadOnlyDictionary<Guid, IReadOnlySet<string>> ClassifierOwnedFields =
+        new Dictionary<Guid, IReadOnlySet<string>>
+        {
+            [Appointment] = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Event UID", "Start", "End" },
+            [RoomBooking] = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Event UID", "Start", "End" },
+            [Contact] = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Contact UID" },
+        };
+
     /// <summary>The well-known masks whose documents are bookable resources (ADR 0735).</summary>
     /// <remarks>
     /// The seed for <see cref="Mask.IsBookable"/>, healed unconditionally like the icon and creatability

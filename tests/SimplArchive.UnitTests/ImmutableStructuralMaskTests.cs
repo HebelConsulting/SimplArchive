@@ -19,6 +19,10 @@ public class ImmutableStructuralMaskTests
             WellKnownMaskIds.ImapSpecial,
             WellKnownMaskIds.Notebook,
             WellKnownMaskIds.NotebookSection,
+            // ADR 0744: a room's Schedule is structural — re-type it and its bookings' claims are orphaned
+            // (the .ics inside stop being bookings), which is the "destroys the meaning of what is inside"
+            // half of the boundary, unlike the plain Calendar that stays deliberately re-typeable below.
+            WellKnownMaskIds.Schedule,
         ];
 
         Assert.Equal(

@@ -107,6 +107,13 @@ public class MasksController : ControllerBase
         /// #671 exists to forbid.</remarks>
         public bool RequiresMailRouting { get; set; }
 
+        /// <summary>Whether the CLASSIFIER owns this field's value (ADRs 0743/0744) — the lockstep
+        /// projection of the stored .ics/.vcf, read-only on the metadata surface.</summary>
+        /// <remarks>Server-sent for the same reason as the flag above: the PUT refuses a change here, so a
+        /// client must not offer the edit — and two clients deriving "which fields are the projection" from
+        /// mask ids is the #671 shape again.</remarks>
+        public bool ClassifierOwned { get; set; }
+
         public string? FormatPattern { get; set; }
 
         public int? MaxTextLength { get; set; }
@@ -324,6 +331,7 @@ public class MasksController : ControllerBase
                 IsRequired = f.IsRequired,
                 IsList = f.IsList,
                 RequiresMailRouting = maskId == WellKnownMaskIds.Mailbox && f.Name == WellKnownMaskSeeder.MailboxAddressesFieldName,
+                ClassifierOwned = WellKnownMaskIds.ClassifierOwnedFields.TryGetValue(maskId, out var owned) && owned.Contains(f.Name),
                 FormatPattern = f.FormatPattern,
                 MaxTextLength = f.MaxTextLength,
                 MinValue = f.MinValue,

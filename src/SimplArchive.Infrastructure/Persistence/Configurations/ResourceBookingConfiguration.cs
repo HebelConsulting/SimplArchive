@@ -46,15 +46,11 @@ public class ResourceBookingConfiguration : IEntityTypeConfiguration<ResourceBoo
             .HasForeignKey(b => b.ResourceDocumentId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // A hard-deleted booking document takes its claim with it (normal deletes are soft and translate
-        // to Status = Cancelled in the delete path, not here).
-        builder.HasOne<Document>()
-            .WithMany()
-            .HasForeignKey(b => b.BookingDocumentId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        // AppointmentDocumentId is deliberately a PLAIN COLUMN, not a FK — the Document.CurrentVersionId
-        // precedent (ADR 0503): a FK would entangle the appointment's delete cascade with the booking.
+        // BookingDocumentId is deliberately a PLAIN COLUMN, not a FK (ADR 0744) — the
+        // Document.CurrentVersionId precedent (ADR 0503). The booking document is the .ics itself now, and
+        // the row is the durable history: a purge of the document must leave the Cancelled row standing,
+        // which a cascade would erase. Deleting the document Cancels the row in SaveChanges instead.
+        builder.HasIndex(b => b.BookingDocumentId);
 
         builder.HasOne<User>()
             .WithMany()

@@ -47,6 +47,9 @@ public static class MaskIcon
         // tree is three things the eye cannot separate.
         ["addressbook"] = "mdi-book-account",
         ["calendar"] = "mdi-calendar",
+        // A room's booking calendar (ADR 0744): the check says "bookings", keeping it apart from the plain
+        // calendar beside it — the same one-glyph-per-thing rule as the mail trays above.
+        ["schedule"] = "mdi-calendar-check",
         ["email"] = "mdi-email",
         ["note"] = "mdi-note-text",
         ["contact"] = "mdi-card-account-details",

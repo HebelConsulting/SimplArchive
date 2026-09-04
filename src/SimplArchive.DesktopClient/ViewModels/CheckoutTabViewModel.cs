@@ -252,11 +252,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
             {
                 foreach (var field in await _api.Documents.GetIndexDataAsync(indexHref))
                 {
-                    IndexFields.Add(new IndexFieldViewModel
-                    {
-                        FieldName = field.FieldName,
-                        Values = string.Join(", ", field.Values),
-                    });
+                    IndexFields.Add(IndexFieldViewModel.From(field));
                 }
             }
 

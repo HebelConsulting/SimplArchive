@@ -416,7 +416,7 @@ public class DocumentChildrenController : ControllerBase
             links.Add(new Link("contacts", $"/api/documents/{d.Id}/contacts", "POST"));
         }
 
-        if (ChildCreationPolicy.AdmitsTypedItem(d.MaskId, WellKnownMaskIds.Appointment))
+        if (ChildCreationPolicy.AdmitsCalendarEntries(d.MaskId))
         {
             links.Add(new Link("appointments", $"/api/documents/{d.Id}/appointments", "POST"));
         }

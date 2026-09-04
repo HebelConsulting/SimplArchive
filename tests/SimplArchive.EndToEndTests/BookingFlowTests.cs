@@ -4,10 +4,10 @@ using System.Text.Json;
 
 namespace SimplArchive.EndToEndTests;
 
-// The inventory-booking primitive's HTTP edge (ADR 0735; endpoints interview 2026-09-03), driven over the
-// real Api: a Meeting-room folder is bookable, POST on its `bookings` rel claims a slot (creating the Room
-// booking document, the Schedule calendar and its appointment), an overlap answers 409 with its own error
-// code, and cancelling frees the slot while keeping the record.
+// The inventory-booking primitive's HTTP edge (ADRs 0735/0744), driven over the real Api: a Meeting-room
+// folder is bookable, POST on its `bookings` rel claims a slot — filing ONE .ics into the room's Schedule,
+// wearing the Room-booking mask, the booking and the calendar entry being the same document — an overlap
+// answers 409 with its own error code, and cancelling soft-deletes the .ics while the row keeps the record.
 [Collection(E2ECollection.Name)]
 [Trait("Area", "e2e-2")]
 public class BookingFlowTests
@@ -59,7 +59,7 @@ public class BookingFlowTests
     }
 
     [Fact]
-    public async Task Booking_creates_the_document_the_schedule_and_the_appointment()
+    public async Task Booking_files_one_ics_into_the_rooms_schedule()
     {
         var (api, _, roomId) = await RoomAsync();
 
@@ -76,14 +76,20 @@ public class BookingFlowTests
         Assert.Contains(booking.GetProperty("links").EnumerateArray(),
             l => l.GetProperty("rel").GetString() == "cancel");
 
-        // The room now holds the booking document AND the Schedule calendar; the calendar holds the
-        // appointment — the CalDAV projection (endpoints interview: per-room calendar).
+        // ONE document (ADR 0744): the room holds only its Schedule, the Schedule holds only the .ics —
+        // which IS the booking, as the `document` rel confirms by pointing straight at it. The Purpose
+        // asserted above came back through the classifier (DESCRIPTION -> indexed field), proving the
+        // round trip through the same pass a CalDAV PUT takes.
         var children = await ChildrenByNameAsync(api, roomId);
-        Assert.Contains("Schedule", children.Keys);
-        Assert.Contains(children.Keys, n => n.StartsWith("Booking 2027-03-10"));
+        Assert.Equal(["Schedule"], children.Keys);
 
         var scheduleChildren = await ChildrenByNameAsync(api, children["Schedule"]);
-        Assert.Single(scheduleChildren);
+        var entry = Assert.Single(scheduleChildren);
+        Assert.StartsWith("Booking 2027-03-10", entry.Key);
+
+        var documentHref = booking.GetProperty("links").EnumerateArray()
+            .Single(l => l.GetProperty("rel").GetString() == "document").GetProperty("href").GetString();
+        Assert.EndsWith(entry.Value.ToString(), documentHref);
 
         api.Dispose();
     }
@@ -141,11 +147,72 @@ public class BookingFlowTests
         Assert.Equal(HttpStatusCode.Created,
             (await api.PostAsJsonAsync($"/api/documents/{roomId}/bookings", Slot(14, 16))).StatusCode);
 
-        // ...and the first appointment left every subscribed calendar (soft-deleted), replaced by the
-        // rebooking's own.
+        // ...and the cancelled .ics left every subscribed calendar (soft-deleted, ADR 0744), replaced by
+        // the rebooking's own single entry.
         var children = await ChildrenByNameAsync(api, roomId);
         var scheduleChildren = await ChildrenByNameAsync(api, children["Schedule"]);
         Assert.Single(scheduleChildren);
+
+        api.Dispose();
+    }
+
+    [Fact]
+    public async Task The_projection_fields_are_read_only_on_the_metadata_surface()
+    {
+        var (api, _, roomId) = await RoomAsync();
+        Assert.Equal(HttpStatusCode.Created,
+            (await api.PostAsJsonAsync($"/api/documents/{roomId}/bookings", Slot(10, 12, "Standup"))).StatusCode);
+        var children = await ChildrenByNameAsync(api, roomId);
+        var bookingDocId = (await ChildrenByNameAsync(api, children["Schedule"])).Single().Value;
+
+        var indexData = await TestJson.Get(api, $"/api/documents/{bookingDocId}/index-data");
+        var groups = indexData.GetProperty("fields").EnumerateArray()
+            .Select(f => new
+            {
+                fieldDefinitionId = f.GetProperty("fieldDefinitionId").GetGuid(),
+                name = f.GetProperty("fieldName").GetString()!,
+                values = f.GetProperty("values").EnumerateArray().Select(v => v.GetString()!).ToList(),
+            })
+            .ToList();
+
+        // Moving Start through the pane's PUT is refused with its own code (ADR 0744: the .ics owns the
+        // slot — the pane edit would change only the projection, and the claimed slot not at all).
+        var tampered = groups.Select(g => new
+        {
+            g.fieldDefinitionId,
+            values = g.name == "Start" ? ["2027-03-11T10:00:00+00:00"] : g.values,
+        }).ToList();
+        var refused = await api.PutAsJsonAsync($"/api/documents/{bookingDocId}/index-data", new { fields = tampered });
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Equal("INDEX_FIELD_CLASSIFIER_OWNED",
+            JsonSerializer.Deserialize<JsonElement>(await refused.Content.ReadAsStringAsync())
+                .GetProperty("errorCode").GetString());
+
+        // Echoing the owned values back while editing a SECONDARY field passes — the PUT is a full
+        // replacement, so a locked row is resubmitted verbatim, and Purpose stays a pane edit.
+        var edited = groups.Select(g => new
+        {
+            g.fieldDefinitionId,
+            values = g.name == "Purpose" ? ["Retro"] : g.values,
+        }).ToList();
+        var accepted = await api.PutAsJsonAsync($"/api/documents/{bookingDocId}/index-data", new { fields = edited });
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+
+        var listing = await TestJson.Get(api, $"/api/documents/{roomId}/bookings");
+        Assert.Equal("Retro", listing.GetProperty("bookings").EnumerateArray().Single().GetProperty("purpose").GetString());
+
+        // The masks listing marks the owned fields, so both clients LOCK the editors instead of offering
+        // an edit this PUT refuses (the RequiresMailRouting shape, #703).
+        var masks = (await TestJson.Get(api, "/api/masks")).GetProperty("masks").EnumerateArray()
+            .First(m => m.GetProperty("name").GetString() == "Room booking");
+        var fields = (await TestJson.Get(api, masks.GetProperty("links").EnumerateArray()
+                .First(l => l.GetProperty("rel").GetString() == "self").GetProperty("href").GetString()!))
+            .GetProperty("fields").EnumerateArray()
+            .ToDictionary(f => f.GetProperty("name").GetString()!, f => f.GetProperty("classifierOwned").GetBoolean());
+        Assert.True(fields["Start"]);
+        Assert.True(fields["End"]);
+        Assert.True(fields["Event UID"]);
+        Assert.False(fields["Purpose"]);
 
         api.Dispose();
     }

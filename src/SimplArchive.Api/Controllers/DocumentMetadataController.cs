@@ -421,6 +421,10 @@ public class DocumentMetadataController : ControllerBase
 
         public string FieldName { get; set; } = string.Empty;
 
+        /// <summary>The field's declared type — what lets a READ view render a DateTime value as a local
+        /// wall clock instead of the raw ISO-with-offset wire string (the ADR 0744-era pane fix).</summary>
+        public string DataType { get; set; } = string.Empty;
+
         public List<string> Values { get; set; } = [];
     }
 
@@ -538,6 +542,38 @@ public class DocumentMetadataController : ControllerBase
         await _mailboxAddressClaims.EnforceAsync(documentId, document.Name, fieldDefinitions, request.Fields, request.ConfirmDuplicateClaims, cancellationToken);
 
         var existingValues = await _dbContext.FieldValues.Where(v => v.DocumentId == documentId).ToListAsync(cancellationToken);
+
+        // The classifier-owned projection fields (ADRs 0743/0744) are read-only HERE, at the one entrance
+        // index data is written through — the clients also hide the edit, but a rule enforced only there is
+        // not a rule. This PUT is a full replacement, so both directions are guarded: a CHANGED owned value
+        // and an OMITTED one (which the replacement would silently erase) are refused alike; echoing the
+        // current values back — what an honest client does with a read-only row — passes untouched.
+        var documentMask = await _dbContext.Documents
+            .Where(d => d.Id == documentId)
+            .Join(_dbContext.MaskVersions, d => d.MaskVersionId, v => (Guid?)v.Id, (d, v) => new { v.MaskId, MaskVersionId = v.Id })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (documentMask is not null && WellKnownMaskIds.ClassifierOwnedFields.TryGetValue(documentMask.MaskId, out var ownedFields))
+        {
+            // Scoped to the document's OWN mask version — "Start" on some other mask is somebody else's field.
+            var ownedDefinitionIds = await _dbContext.FieldDefinitions
+                .Where(f => f.MaskVersionId == documentMask.MaskVersionId && ownedFields.Contains(f.Name))
+                .Select(f => new { f.Id, f.Name })
+                .ToListAsync(cancellationToken);
+            foreach (var owned in ownedDefinitionIds)
+            {
+                var stored = existingValues
+                    .Where(v => v.FieldDefinitionId == owned.Id)
+                    .OrderBy(v => v.Ordinal).ThenBy(v => v.Id)
+                    .Select(v => v.Value)
+                    .ToList();
+                var submitted = request.Fields.FirstOrDefault(f => f.FieldDefinitionId == owned.Id)?.Values ?? [];
+                if (!stored.SequenceEqual(submitted))
+                {
+                    throw new ClassifierOwnedFieldException(owned.Name);
+                }
+            }
+        }
+
         _dbContext.FieldValues.RemoveRange(existingValues);
 
         foreach (var field in request.Fields)
@@ -583,16 +619,17 @@ public class DocumentMetadataController : ControllerBase
         // written before ordinals existed, which all share 0 — arbitrary, but no longer different each read.
         var rows = await _dbContext.FieldValues
             .Where(v => v.DocumentId == documentId)
-            .Join(_dbContext.FieldDefinitions, v => v.FieldDefinitionId, f => f.Id, (v, f) => new { f.Id, f.Name, v.Value, v.Ordinal, ValueId = v.Id })
+            .Join(_dbContext.FieldDefinitions, v => v.FieldDefinitionId, f => f.Id, (v, f) => new { f.Id, f.Name, f.DataType, v.Value, v.Ordinal, ValueId = v.Id })
             .OrderBy(r => r.Ordinal).ThenBy(r => r.ValueId)
             .ToListAsync(cancellationToken);
 
         var fields = rows
-            .GroupBy(r => new { r.Id, r.Name })
+            .GroupBy(r => new { r.Id, r.Name, r.DataType })
             .Select(g => new FieldValueGroup
             {
                 FieldDefinitionId = g.Key.Id,
                 FieldName = g.Key.Name,
+                DataType = g.Key.DataType.ToString(),
                 Values = g.Select(r => r.Value).ToList(),
             })
             .ToList();

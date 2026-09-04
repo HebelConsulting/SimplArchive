@@ -4767,6 +4767,9 @@
   <data name="ApiErrResourceNotBookable" xml:space="preserve">
     <value>Dieses Dokument ist keine buchbare Ressource.</value>
   </data>
+  <data name="ApiErrBookingRecurrence" xml:space="preserve">
+    <value>Eine Buchung kann sich nicht wiederholen — legen Sie jeden Termin als eigene Buchung an.</value>
+  </data>
   <data name="ApiErrBookingSlotInvalid" xml:space="preserve">
     <value>Der Beginn des Zeitraums muss vor dessen Ende liegen.</value>
   </data>

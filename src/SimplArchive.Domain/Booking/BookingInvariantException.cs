@@ -11,10 +11,16 @@ namespace SimplArchive.Domain.Booking;
 /// </remarks>
 public sealed class BookingInvariantException : InvalidOperationException
 {
-    private BookingInvariantException(string message)
+    private BookingInvariantException(BookingInvariantKind kind, string message)
         : base(message)
     {
+        Kind = kind;
     }
+
+    /// <summary>Which invariant refused — so a boundary translates by FACT, not by matching message text
+    /// (a message-substring dispatch is a carve-out that verifies prose; ADR 0744 added a second caller
+    /// and made the fragility load-bearing).</summary>
+    public BookingInvariantKind Kind { get; }
 
     /// <summary>The slot is taken: an Active booking of the same resource overlaps the requested range.</summary>
     /// <remarks>
@@ -25,15 +31,23 @@ public sealed class BookingInvariantException : InvalidOperationException
     /// </remarks>
     public static BookingInvariantException SlotTaken(
         DateTimeOffset requestedStart, DateTimeOffset requestedEnd, DateTimeOffset takenStart, DateTimeOffset takenEnd) =>
-        new($"The requested slot {requestedStart:u}–{requestedEnd:u} overlaps an existing booking "
+        new(BookingInvariantKind.SlotTaken, $"The requested slot {requestedStart:u}–{requestedEnd:u} overlaps an existing booking "
             + $"{takenStart:u}–{takenEnd:u} of the same resource (ADR 0735; stand-by queuing is a later slice).");
 
     /// <summary>The target document's mask does not declare it bookable.</summary>
     public static BookingInvariantException NotBookable(Guid resourceDocumentId) =>
-        new($"Document {resourceDocumentId} is not a bookable resource — its mask does not declare "
+        new(BookingInvariantKind.NotBookable, $"Document {resourceDocumentId} is not a bookable resource — its mask does not declare "
             + "IsBookable (ADR 0735).");
 
     /// <summary>The slot has no extent: start must precede end.</summary>
     public static BookingInvariantException SlotWithoutExtent(DateTimeOffset start, DateTimeOffset end) =>
-        new($"A booking's slot must have extent: start {start:u} does not precede end {end:u}.");
+        new(BookingInvariantKind.SlotWithoutExtent, $"A booking's slot must have extent: start {start:u} does not precede end {end:u}.");
+}
+
+/// <summary>The booking invariants a save can refuse on (one per factory above).</summary>
+public enum BookingInvariantKind
+{
+    SlotTaken,
+    NotBookable,
+    SlotWithoutExtent,
 }

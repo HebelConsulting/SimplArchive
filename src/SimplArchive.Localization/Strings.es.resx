@@ -4767,6 +4767,9 @@
   <data name="ApiErrResourceNotBookable" xml:space="preserve">
     <value>Este documento no es un recurso reservable.</value>
   </data>
+  <data name="ApiErrBookingRecurrence" xml:space="preserve">
+    <value>Una reserva no puede repetirse — registre cada cita como una reserva independiente.</value>
+  </data>
   <data name="ApiErrBookingSlotInvalid" xml:space="preserve">
     <value>El inicio de la franja debe preceder a su fin.</value>
   </data>

@@ -184,7 +184,7 @@
                     <table class="wb-sysfields">
                         @foreach (var f in _indexFields)
                         {
-                            <tr><td>@f.FieldName</td><td>@string.Join(", ", f.Values)</td></tr>
+                            <tr><td>@f.FieldName</td><td>@f.Display</td></tr>
                         }
                         @* The OCR affordance (#999) — the issue's second pane. This pane has no edit mode, so
                            the chips commit IMMEDIATELY (its idiom: read-only context with direct actions); the

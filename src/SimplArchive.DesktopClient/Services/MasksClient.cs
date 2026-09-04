@@ -30,6 +30,7 @@ public sealed class MasksClient
     // to be a list rather than a single value (#703), and it comes from the SERVER rather than being inferred
     // from DataType — the two clients inferring a rule separately is how they came to disagree before (#671).
     public sealed record MaskFieldInfo(Guid Id, string Name, string DataType, bool IsRequired, bool IsList = false,
+        bool ClassifierOwned = false,
         // Writing this field needs the manage-mail-routing right (#703) — the server marks it; combined with
         // whoami's flag it renders the editor read-only instead of offering an edit the save would 403.
         bool RequiresMailRouting = false);
@@ -79,6 +80,7 @@ public sealed class MasksClient
                     f.TryGetProperty("dataType", out var dataType) ? dataType.GetString() ?? "Text" : "Text",
                     f.TryGetProperty("isRequired", out var required) && required.GetBoolean(),
                     f.TryGetProperty("isList", out var isList) && isList.GetBoolean(),
+                    f.TryGetProperty("classifierOwned", out var owned) && owned.GetBoolean(),
                     f.TryGetProperty("requiresMailRouting", out var rmr) && rmr.GetBoolean()));
             }
         }

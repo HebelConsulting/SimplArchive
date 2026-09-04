@@ -134,9 +134,40 @@ internal static class DavWrites
         db.DocumentVersions.Add(version);
         await db.SaveChangesAsync(context.Cancellation);
 
-        // The finalizer confirms the version, classifies the content into the Contact/Calendar mask and fills
-        // its fields — the same path every other upload takes.
-        await services.GetRequiredService<DocumentFinalizer>().FinalizeAsync(version, context.Cancellation);
+        // The finalizer confirms the version, classifies the content into the Contact/Calendar/Room-booking
+        // mask and fills its fields — the same path every other upload takes. In a Schedule the same pass
+        // moves the claim row (ADR 0744), so a booking refusal surfaces HERE.
+        try
+        {
+            await services.GetRequiredService<DocumentFinalizer>().FinalizeAsync(version, context.Cancellation);
+        }
+        catch (Errors.Exceptions.Booking.BookingException refusal)
+        {
+            // A refused booking write must not strand its husk: a DAV client retries AT THE SAME resource
+            // name (a different time, same event), and a lingering maskless document there would turn every
+            // retry into a sibling-name 409 — the save-loop failure the WebDAV lessons warn about. So a
+            // NEWLY created document is removed with its version and blob; a refused REPLACE just leaves
+            // its Pending version to the incomplete-upload sweep, the previous version still current.
+            context.Log?.LogWarning(
+                "Refused a booking {Method} on {Resource} in folder {FolderId}: {Reason} "
+                + "Enable Trace on this source to see the exchange",
+                context.Request.Method, resourceName, folderId, refusal.Message);
+
+            db.ChangeTracker.Clear();
+            if (existing is null)
+            {
+                // The PURGER, not hand-rolled row deletes: by refusal time the version is confirmed, its
+                // chat entry written (a Restrict FK) and the quota counted — the purger is the one path
+                // that already unwinds all of that (rows + blobs + index + usage) for a document.
+                var husk = await db.Documents.FirstOrDefaultAsync(d => d.Id == document.Id, context.Cancellation);
+                if (husk is not null)
+                {
+                    await services.GetRequiredService<DocumentPurger>().PurgeAsync([husk], context.Cancellation);
+                }
+            }
+
+            return new StatusCodeResult(refusal.StatusCode);
+        }
 
         await services.GetRequiredService<IAuditRecorder>().RecordAsync(
             existing is null ? AuditActions.DocumentFiled : AuditActions.DocumentVersionAdded,

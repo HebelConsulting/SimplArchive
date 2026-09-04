@@ -26,15 +26,15 @@ namespace SimplArchive.Api.Controllers;
 /// book it — an industry module tightens that through its state machine (ADR 0742), the core does not.
 /// </para>
 /// <para>
-/// A booking is three things made together: the <b>Room booking document</b> (a child of the room — the
-/// room is a folder of its bookings, so rights flow down the normal way), the <b>appointment</b> in the
-/// room's one <c>Schedule</c> calendar (the CalDAV-subscribable projection), and the
-/// <see cref="ResourceBooking"/> row that carries the authoritative slot. The row and the booking document
-/// are saved FIRST, so the no-overlap invariant refuses a taken slot before any object-storage write.
+/// A booking is two things made together (ADR 0744): the <b>.ics document</b> in the room's one
+/// <c>Schedule</c> — the booking IS the calendar entry, wearing the Room-booking mask, CalDAV-subscribable,
+/// rights flowing down from the room the normal way — and the <see cref="ResourceBooking"/> row that
+/// carries the authoritative slot. The row and the (still-unclassified) document are saved FIRST, so the
+/// no-overlap invariant refuses a taken slot before any object-storage write.
 /// </para>
 /// <para>
-/// Cancelling keeps history: the row goes <see cref="BookingStatus.Cancelled"/>, the booking document
-/// stays as the record, and the appointment is soft-deleted so every subscribed calendar clears.
+/// Cancelling soft-deletes the .ics so every subscribed calendar clears; the row goes
+/// <see cref="BookingStatus.Cancelled"/> and is the durable history, outliving even a purge.
 /// </para>
 /// </remarks>
 [ApiController]
@@ -197,40 +197,24 @@ public class BookingsController : ControllerBase
         var (userId, serviceAccountId) = _access.GetCallerIdentity();
         var now = DateTimeOffset.UtcNow;
 
-        // 1. The booking document + the claim row, FIRST and in one save: the DbContext's no-overlap
-        //    invariant refuses a taken slot here, before anything touches object storage.
+        var schedule = await EnsureScheduleAsync(room, userId, serviceAccountId, cancellationToken);
+
+        // 1. The (still-unclassified) booking document + the claim row, FIRST and in one save: the
+        //    DbContext's no-overlap invariant refuses a taken slot here, before anything touches object
+        //    storage. Maskless deliberately — the finalizer classifies an .ics in a Schedule as Room
+        //    booking and fills its fields (ADR 0744), the same path a CalDAV PUT takes.
         var bookingDocument = new Document
         {
             Id = Guid.NewGuid(),
             TenantId = room.TenantId,
-            ParentId = room.Id,
-            Name = await UniqueNameAsync(room.Id, $"Booking {startsAt:yyyy-MM-dd HH:mm}–{endsAt:HH:mm}", cancellationToken),
-            MaskVersionId = await CurrentMaskVersionIdAsync(WellKnownMaskIds.RoomBooking, cancellationToken),
+            ParentId = schedule.Id,
+            Name = await UniqueNameAsync(schedule.Id, $"Booking {startsAt:yyyy-MM-dd HH:mm}–{endsAt:HH:mm}", cancellationToken),
             CreatedByUserId = userId,
             CreatedByServiceAccountId = serviceAccountId,
             CreatedAt = now,
             StorageFolderId = Guid.NewGuid(),
         };
         _dbContext.Documents.Add(bookingDocument);
-
-        if (!string.IsNullOrWhiteSpace(request.Purpose))
-        {
-            var purposeFieldId = await _dbContext.FieldDefinitions
-                .Where(f => f.MaskVersionId == bookingDocument.MaskVersionId && f.Name == "Purpose")
-                .Select(f => (Guid?)f.Id)
-                .SingleOrDefaultAsync(cancellationToken);
-            if (purposeFieldId is { } fieldId)
-            {
-                _dbContext.FieldValues.Add(new FieldValue
-                {
-                    Id = Guid.NewGuid(),
-                    TenantId = room.TenantId,
-                    DocumentId = bookingDocument.Id,
-                    FieldDefinitionId = fieldId,
-                    Value = request.Purpose.Trim(),
-                });
-            }
-        }
 
         var booking = new ResourceBooking
         {
@@ -251,20 +235,51 @@ public class BookingsController : ControllerBase
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
-        catch (BookingInvariantException ex) when (ex.Message.Contains("overlaps"))
+        catch (BookingInvariantException ex) when (ex.Kind == BookingInvariantKind.SlotTaken)
         {
-            // Caught SPECIFICALLY: left to a blanket InvalidOperationException catch, a slot conflict
-            // reports as whatever that catch assumes (the blanket-catch-false-cause lesson).
+            // Caught SPECIFICALLY — by the invariant's own Kind, not by matching message text — because
+            // left to a blanket InvalidOperationException catch, a slot conflict reports as whatever that
+            // catch assumes (the blanket-catch-false-cause lesson).
             throw new BookingSlotConflictException(ex.Message);
         }
 
-        // 2. The projection: the room's one Schedule calendar (created on first booking — the
-        //    child-cardinality rule caps it at one), and the appointment inside it. AppointmentDocumentId
-        //    stays null if anything past the save fails — the slot is held either way, and the column is
-        //    nullable by design (ADR 0503's precedent).
-        var appointmentId = await FileAppointmentAsync(room, bookingDocument.Name, startsAt, endsAt, userId, serviceAccountId, cancellationToken);
-        booking.AppointmentDocumentId = appointmentId;
+        // 2. The bytes: the booking IS the .ics (ADR 0744) — the slot, the room as LOCATION, the purpose
+        //    as DESCRIPTION — finalized through the same classifier every write path uses, which stamps
+        //    the Room-booking mask, indexes the fields, and adopts the row created above. If anything past
+        //    the first save fails, the slot is held and the document is an unclassified husk the cancel
+        //    path still clears — the same failure mode the two-document shape had.
+        var uid = Guid.NewGuid().ToString();
+        var blob = _appointments.Merge(null, DocumentAppointmentController.FromResource(new DocumentAppointmentController.AppointmentResource
+        {
+            Summary = bookingDocument.Name,
+            Start = startsAt.UtcDateTime,
+            End = endsAt.UtcDateTime,
+            StartTimeZoneId = "UTC",
+            EndTimeZoneId = "UTC",
+            Location = room.Name,
+            Description = string.IsNullOrWhiteSpace(request.Purpose) ? null : request.Purpose.Trim(),
+        }), uid);
+
+        var versionId = Guid.NewGuid();
+        var objectKey = ObjectKeyBuilder.Build(room.TenantId, now, bookingDocument.StorageFolderId, versionId, ".ics");
+        await _storage.PutObjectAsync(objectKey, new MemoryStream(System.Text.Encoding.UTF8.GetBytes(blob)), "text/calendar", cancellationToken);
+
+        var version = new DocumentVersion
+        {
+            Id = versionId,
+            DocumentId = bookingDocument.Id,
+            TenantId = room.TenantId,
+            Status = DocumentVersionStatus.Pending,
+            ObjectKey = objectKey,
+            // Exactly one of the two — the caller may be a service account (CK_DocumentVersions_ExactlyOneCreator).
+            CreatedByUserId = userId,
+            CreatedByServiceAccountId = serviceAccountId,
+            CreatedAt = now,
+            DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
+        };
+        _dbContext.DocumentVersions.Add(version);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await _finalizer.FinalizeAsync(version, cancellationToken);
 
         var created = await ToResourceAsync(booking, rights.CanDelete, userId, serviceAccountId, cancellationToken);
         Response.Headers.ETag = $"\"{booking.ConcurrencyToken}\"";
@@ -303,16 +318,14 @@ public class BookingsController : ControllerBase
         _dbContext.Entry(booking).Property(b => b.ConcurrencyToken).OriginalValue = expectedToken;
         booking.Status = BookingStatus.Cancelled;
 
-        // The projection follows the claim: soft-delete the appointment so every subscribed calendar
-        // clears; the booking DOCUMENT stays — cancelled is history, not erasure.
-        if (booking.AppointmentDocumentId is { } appointmentId)
+        // The booking IS the .ics (ADR 0744): soft-delete it, so every subscribed calendar clears and the
+        // recycle bin holds the document until purge. The row — flipped here and, in agreement, by the
+        // SaveChanges sync that watches booking documents — is the durable history.
+        var bookingDocument = await _dbContext.Documents
+            .FirstOrDefaultAsync(d => d.Id == booking.BookingDocumentId, cancellationToken);
+        if (bookingDocument is not null)
         {
-            var appointment = await _dbContext.Documents
-                .FirstOrDefaultAsync(d => d.Id == appointmentId, cancellationToken);
-            if (appointment is not null)
-            {
-                appointment.DeletedAt = DateTimeOffset.UtcNow;
-            }
+            bookingDocument.DeletedAt = DateTimeOffset.UtcNow;
         }
 
         try
@@ -350,89 +363,41 @@ public class BookingsController : ControllerBase
         return isBookable ? room : null;
     }
 
-    private async Task<Guid?> FileAppointmentAsync(
-        Document room, string summary, DateTimeOffset startsAt, DateTimeOffset endsAt,
-        Guid? userId, Guid? serviceAccountId, CancellationToken cancellationToken)
+    /// <summary>The room's one Schedule (ADR 0744), created on first booking.</summary>
+    /// <remarks>
+    /// By mask, not by name (a renamed schedule still counts); the cardinality rule caps a room at one, so
+    /// there is nothing to order between. An old-shape room may still hold a plain Calendar named
+    /// "Schedule" — the unique-name fallback steps around it, and the leftover is inert (ADR 0744: no
+    /// dual-shape support, no heal).
+    /// </remarks>
+    private async Task<Document> EnsureScheduleAsync(
+        Document room, Guid? userId, Guid? serviceAccountId, CancellationToken cancellationToken)
     {
-        // The room's Schedule calendar, created on first booking. By mask, not by name (a renamed calendar
-        // still counts), and the OLDEST one deterministically — cardinality is deliberately uncapped (a
-        // capacity rule would derive Calendar into ImmutableStructuralMasks against the decided boundary),
-        // so a second calendar is harmless clutter this ordering simply ignores.
-        var calendarMaskVersionId = await CurrentMaskVersionIdAsync(WellKnownMaskIds.Calendar, cancellationToken);
-        var calendar = await _dbContext.Documents
+        var schedule = await _dbContext.Documents
             .Where(d => d.ParentId == room.Id)
             .Join(_dbContext.MaskVersions, d => d.MaskVersionId, v => (Guid?)v.Id, (d, v) => new { d, v.MaskId })
-            .Where(x => x.MaskId == WellKnownMaskIds.Calendar)
+            .Where(x => x.MaskId == WellKnownMaskIds.Schedule)
             .Select(x => x.d)
-            .OrderBy(d => d.CreatedAt).ThenBy(d => d.Id)
             .FirstOrDefaultAsync(cancellationToken);
-        if (calendar is null)
+        if (schedule is not null)
         {
-            calendar = new Document
-            {
-                Id = Guid.NewGuid(),
-                TenantId = room.TenantId,
-                ParentId = room.Id,
-                Name = "Schedule",
-                MaskVersionId = calendarMaskVersionId,
-                CreatedByUserId = userId,
-                CreatedByServiceAccountId = serviceAccountId,
-                CreatedAt = DateTimeOffset.UtcNow,
-            };
-            _dbContext.Documents.Add(calendar);
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            return schedule;
         }
 
-        var uid = Guid.NewGuid().ToString();
-        var blob = _appointments.Merge(null, DocumentAppointmentController.FromResource(new DocumentAppointmentController.AppointmentResource
-        {
-            Summary = summary,
-            Start = startsAt.UtcDateTime,
-            End = endsAt.UtcDateTime,
-            StartTimeZoneId = "UTC",
-            EndTimeZoneId = "UTC",
-            Location = room.Name,
-        }), uid);
-
-        var now = DateTimeOffset.UtcNow;
-        var versionId = Guid.NewGuid();
-        var storageFolderId = Guid.NewGuid();
-        var appointment = new Document
+        schedule = new Document
         {
             Id = Guid.NewGuid(),
             TenantId = room.TenantId,
-            ParentId = calendar.Id,
-            Name = await UniqueNameAsync(calendar.Id, summary, cancellationToken),
+            ParentId = room.Id,
+            Name = await UniqueNameAsync(room.Id, "Schedule", cancellationToken),
+            MaskVersionId = await CurrentMaskVersionIdAsync(WellKnownMaskIds.Schedule, cancellationToken),
             CreatedByUserId = userId,
             CreatedByServiceAccountId = serviceAccountId,
-            CreatedAt = now,
-            StorageFolderId = storageFolderId,
-            // Maskless: the finalizer classifies .ics as Appointment (the TypedItemsController reasoning).
+            CreatedAt = DateTimeOffset.UtcNow,
         };
-        _dbContext.Documents.Add(appointment);
+        _dbContext.Documents.Add(schedule);
         await _dbContext.SaveChangesAsync(cancellationToken);
-
-        var objectKey = ObjectKeyBuilder.Build(room.TenantId, now, storageFolderId, versionId, ".ics");
-        await _storage.PutObjectAsync(objectKey, new MemoryStream(System.Text.Encoding.UTF8.GetBytes(blob)), "text/calendar", cancellationToken);
-
-        var version = new DocumentVersion
-        {
-            Id = versionId,
-            DocumentId = appointment.Id,
-            TenantId = room.TenantId,
-            Status = DocumentVersionStatus.Pending,
-            ObjectKey = objectKey,
-            // Exactly one of the two — the caller may be a service account (CK_DocumentVersions_ExactlyOneCreator).
-            CreatedByUserId = userId,
-            CreatedByServiceAccountId = serviceAccountId,
-            CreatedAt = now,
-            DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
-        };
-        _dbContext.DocumentVersions.Add(version);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        await _finalizer.FinalizeAsync(version, cancellationToken);
-
-        return appointment.Id;
+        return schedule;
     }
 
     private async Task<BookingResource> ToResourceAsync(

@@ -97,4 +97,17 @@ public static class ChildCreationPolicy
         folderMaskId is { } maskId
         && WellKnownMaskIds.TypedFolderRules.FirstOrDefault(r => r.FolderMaskId == maskId) is { } rule
         && rule.Admits.Any(a => a.MaskId == itemMaskId);
+
+    /// <summary>
+    /// Whether this folder serves the APPOINTMENTS surface — a Calendar's entries or a Schedule's bookings
+    /// (ADR 0744): the same rel, the same endpoints, the same row shape; only the admitted mask differs.
+    /// </summary>
+    /// <remarks>
+    /// One predicate rather than an <c>|| RoomBooking</c> at each rel-emitting site, because the sites are
+    /// exactly where a listing forgets one emitter and a tab goes silently empty (the new-rel-must-reach-
+    /// every-listing lesson).
+    /// </remarks>
+    public static bool AdmitsCalendarEntries(Guid? folderMaskId) =>
+        AdmitsTypedItem(folderMaskId, WellKnownMaskIds.Appointment)
+        || AdmitsTypedItem(folderMaskId, WellKnownMaskIds.RoomBooking);
 }

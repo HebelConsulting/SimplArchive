@@ -60,7 +60,7 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
 
 
 
-    public sealed record IndexField(string FieldName, IReadOnlyList<string> Values);
+    public sealed record IndexField(string FieldName, IReadOnlyList<string> Values, string DataType = "Text");
 
     public sealed record MentionableUser(Guid Id, string DisplayName);
 
@@ -134,7 +134,10 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
                 var values = field.TryGetProperty("values", out var vs) && vs.ValueKind == JsonValueKind.Array
                     ? vs.EnumerateArray().Select(x => x.GetString() ?? "").ToList()
                     : [];
-                fields.Add(new IndexField(field.GetProperty("fieldName").GetString() ?? "", values));
+                fields.Add(new IndexField(
+                    field.GetProperty("fieldName").GetString() ?? "",
+                    values,
+                    field.TryGetProperty("dataType", out var dt) ? dt.GetString() ?? "Text" : "Text"));
             }
         }
 

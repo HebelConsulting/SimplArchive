@@ -78,7 +78,7 @@ public class TypedItemsController : ControllerBase
         [FromBody] DocumentContactCardController.ContactCardResource request,
         CancellationToken cancellationToken)
     {
-        if (await RequireFolderAsync(documentId, WellKnownMaskIds.Addressbook, cancellationToken) is not { } folder)
+        if (await RequireFolderAsync(documentId, [WellKnownMaskIds.Addressbook], cancellationToken) is not { } folder)
         {
             return NotFound();
         }
@@ -105,7 +105,7 @@ public class TypedItemsController : ControllerBase
         [FromBody] DocumentAppointmentController.AppointmentResource request,
         CancellationToken cancellationToken)
     {
-        if (await RequireFolderAsync(documentId, WellKnownMaskIds.Calendar, cancellationToken) is not { } folder)
+        if (await RequireFolderAsync(documentId, CalendarFamily, cancellationToken) is not { } folder)
         {
             return NotFound();
         }
@@ -206,7 +206,7 @@ public class TypedItemsController : ControllerBase
     public Task<IActionResult> ListContacts(
         Guid documentId, [FromQuery] string? cursor, [FromQuery] int? limit, CancellationToken cancellationToken) =>
         ListAsync(
-            documentId, WellKnownMaskIds.Addressbook, cursor, limit, cancellationToken,
+            documentId, [WellKnownMaskIds.Addressbook], cursor, limit, cancellationToken,
             (id, name, field) => new ContactEntryResource
             {
                 Id = id,
@@ -221,7 +221,7 @@ public class TypedItemsController : ControllerBase
 
     [HttpHead("contacts")]
     public async Task<IActionResult> HeadContacts(Guid documentId, CancellationToken cancellationToken) =>
-        await RequireFolderAsync(documentId, WellKnownMaskIds.Addressbook, cancellationToken) is null
+        await RequireFolderAsync(documentId, [WellKnownMaskIds.Addressbook], cancellationToken) is null
             ? NotFound()
             : await CanListAsync(documentId, cancellationToken) ? NoContent() : Forbid();
 
@@ -230,7 +230,7 @@ public class TypedItemsController : ControllerBase
     public Task<IActionResult> ListAppointments(
         Guid documentId, [FromQuery] string? cursor, [FromQuery] int? limit, CancellationToken cancellationToken) =>
         ListAsync(
-            documentId, WellKnownMaskIds.Calendar, cursor, limit, cancellationToken,
+            documentId, CalendarFamily, cursor, limit, cancellationToken,
             (id, name, field) => new AppointmentEntryResource
             {
                 Id = id,
@@ -246,7 +246,7 @@ public class TypedItemsController : ControllerBase
 
     [HttpHead("appointments")]
     public async Task<IActionResult> HeadAppointments(Guid documentId, CancellationToken cancellationToken) =>
-        await RequireFolderAsync(documentId, WellKnownMaskIds.Calendar, cancellationToken) is null
+        await RequireFolderAsync(documentId, CalendarFamily, cancellationToken) is null
             ? NotFound()
             : await CanListAsync(documentId, cancellationToken) ? NoContent() : Forbid();
 
@@ -275,7 +275,7 @@ public class TypedItemsController : ControllerBase
     /// </remarks>
     private async Task<IActionResult> ListAsync<TEntry, TList>(
         Guid documentId,
-        Guid folderMaskId,
+        IReadOnlyList<Guid> folderMaskIds,
         string? cursor,
         int? limit,
         CancellationToken cancellationToken,
@@ -284,7 +284,7 @@ public class TypedItemsController : ControllerBase
         where TEntry : HypermediaResource
         where TList : HypermediaResource
     {
-        if (await RequireFolderAsync(documentId, folderMaskId, cancellationToken) is null)
+        if (await RequireFolderAsync(documentId, folderMaskIds, cancellationToken) is null)
         {
             return NotFound();
         }
@@ -368,7 +368,12 @@ public class TypedItemsController : ControllerBase
     /// EXIST on an ordinary folder, which is what their absent rel already says. A 403 would imply the caller
     /// might be granted them.
     /// </remarks>
-    private async Task<Document?> RequireFolderAsync(Guid documentId, Guid maskId, CancellationToken cancellationToken)
+    // A room's Schedule serves the whole appointments surface (ADR 0744): the tab lists it as a calendar,
+    // so its entries must list — and a create THERE is a booking, classified and conflict-checked by the
+    // same finalizer pass every .ics write goes through.
+    private static readonly Guid[] CalendarFamily = [WellKnownMaskIds.Calendar, WellKnownMaskIds.Schedule];
+
+    private async Task<Document?> RequireFolderAsync(Guid documentId, IReadOnlyList<Guid> maskIds, CancellationToken cancellationToken)
     {
         var folder = await _dbContext.Documents.FirstOrDefaultAsync(d => d.Id == documentId, cancellationToken);
         if (folder?.MaskVersionId is not { } maskVersionId)
@@ -381,7 +386,7 @@ public class TypedItemsController : ControllerBase
             .Select(v => (Guid?)v.MaskId)
             .SingleOrDefaultAsync(cancellationToken);
 
-        if (actual == maskId)
+        if (actual is { } maskId && maskIds.Contains(maskId))
         {
             return folder;
         }
@@ -390,8 +395,8 @@ public class TypedItemsController : ControllerBase
         // absent rel already said so (ADR 0626's boundary). It is logged at all because the interesting case is
         // a client that DID ask, which means its rel gating disagrees with this rule.
         _logger.LogDebug(
-            "Refused a typed-item create on {DocumentId}: it wears {ActualMaskId}, the create needs {RequiredMaskId}",
-            documentId, actual, maskId);
+            "Refused a typed-item create on {DocumentId}: it wears {ActualMaskId}, the create needs one of {RequiredMaskIds}",
+            documentId, actual, maskIds);
         return null;
     }
 

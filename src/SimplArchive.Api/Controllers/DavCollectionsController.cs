@@ -85,11 +85,13 @@ public class DavCollectionsController : ControllerBase
             return Forbid();
         }
 
+        // A meeting room's Schedule is a calendar to every client of this listing (ADR 0744): it lists in
+        // the Calendar tab and subscribes over CalDAV like any other — what differs is what it admits.
         var wanted = kind?.ToLowerInvariant() switch
         {
             "addressbook" => new[] { WellKnownMaskIds.Addressbook },
-            "calendar" => [WellKnownMaskIds.Calendar],
-            _ => [WellKnownMaskIds.Addressbook, WellKnownMaskIds.Calendar],
+            "calendar" => [WellKnownMaskIds.Calendar, WellKnownMaskIds.Schedule],
+            _ => [WellKnownMaskIds.Addressbook, WellKnownMaskIds.Calendar, WellKnownMaskIds.Schedule],
         };
 
         var maskVersions = await _dbContext.MaskVersions
@@ -157,7 +159,7 @@ public class DavCollectionsController : ControllerBase
             // or offers one that is refused, and the second is what an unqualified rel would now do.
             var typedItems = new List<Link>();
             var contacts = ChildCreationPolicy.AdmitsTypedItem(folderMaskId, WellKnownMaskIds.Contact);
-            var appointments = ChildCreationPolicy.AdmitsTypedItem(folderMaskId, WellKnownMaskIds.Appointment);
+            var appointments = ChildCreationPolicy.AdmitsCalendarEntries(folderMaskId);
             if (contacts)
             {
                 typedItems.Add(new Link("contacts", $"/api/documents/{candidate.Id}/contacts", "GET"));

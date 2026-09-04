@@ -186,10 +186,21 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             new FieldSpec("Capacity", FieldDataType.Number, IsRequired: false),
         ], cancellationToken);
 
+        // The booking IS the .ics in the room's Schedule (ADR 0744), so the mask carries the Appointment
+        // mask's calendar facts — same names, same types, so the classifier and every calendar surface
+        // read both masks identically — plus the one domain field (Purpose, indexed from DESCRIPTION).
+        // Deliberately NO Repeats: a recurring booking is refused (the row models one slot).
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.RoomBooking, "Room booking",
         [
+            new FieldSpec("Event UID", FieldDataType.Text, IsRequired: true),
+            new FieldSpec("Start", FieldDataType.DateTime, IsRequired: false),
+            new FieldSpec("End", FieldDataType.DateTime, IsRequired: false),
+            new FieldSpec("Location", FieldDataType.Text, IsRequired: false),
             new FieldSpec("Purpose", FieldDataType.Text, IsRequired: false),
         ], cancellationToken);
+
+        // The room's booking calendar (ADR 0744): a calendar kind, so it carries the calendar's one field.
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.Schedule, "Schedule", [ColourField], cancellationToken);
 
         // The module-license artefact (ADRs 0740/0743). Both fields are a server-stamped projection of the
         // VERIFIED claims — optional, so an admin can file the raw .json with nothing to type, and a license

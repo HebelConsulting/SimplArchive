@@ -13,8 +13,10 @@ namespace SimplArchive.Api.CalDav;
 /// <param name="NamespacePrefix">The prefix bound to it in emitted XML.</param>
 /// <param name="HomeSetProperty">The home-set property name a client discovers on the principal.</param>
 /// <param name="CollectionResourceType">The element marking a collection as this protocol's kind.</param>
-/// <param name="FolderMaskId">The well-known mask a folder must wear to be one of this protocol's collections.</param>
-/// <param name="ItemMaskId">The well-known mask its items wear.</param>
+/// <param name="Kinds">The collection kinds this protocol serves (ADR 0744): CalDAV serves both plain
+/// Calendars and meeting-room Schedules — same wire behaviour, different masks — so the masks are SETS
+/// derived from the kinds, while the extension and UID field must agree across them (one protocol, one
+/// item grammar).</param>
 /// <param name="Extension">The item file extension, e.g. <c>.ics</c>.</param>
 /// <param name="ContentType">The item media type served on GET.</param>
 /// <param name="UidFieldName">The item mask's UID field — the resource name is derived from it.</param>
@@ -28,8 +30,7 @@ internal sealed record DavProtocol(
     string NamespacePrefix,
     string HomeSetProperty,
     string CollectionResourceType,
-    Guid FolderMaskId,
-    Guid ItemMaskId,
+    IReadOnlyList<Domain.CalDav.DavCollectionKind> Kinds,
     string Extension,
     string ContentType,
     string UidFieldName,
@@ -44,8 +45,7 @@ internal sealed record DavProtocol(
         NamespacePrefix: "C",
         HomeSetProperty: "calendar-home-set",
         CollectionResourceType: "calendar",
-        FolderMaskId: Domain.CalDav.DavCollectionKinds.Calendar.FolderMaskId,
-        ItemMaskId: Domain.CalDav.DavCollectionKinds.Calendar.ItemMaskId,
+        Kinds: [Domain.CalDav.DavCollectionKinds.Calendar, Domain.CalDav.DavCollectionKinds.Schedule],
         Extension: Domain.CalDav.DavCollectionKinds.Calendar.Extension,
         ContentType: "text/calendar; charset=utf-8",
         UidFieldName: Domain.CalDav.DavCollectionKinds.Calendar.UidFieldName,
@@ -60,8 +60,7 @@ internal sealed record DavProtocol(
         NamespacePrefix: "CARD",
         HomeSetProperty: "addressbook-home-set",
         CollectionResourceType: "addressbook",
-        FolderMaskId: Domain.CalDav.DavCollectionKinds.Addressbook.FolderMaskId,
-        ItemMaskId: Domain.CalDav.DavCollectionKinds.Addressbook.ItemMaskId,
+        Kinds: [Domain.CalDav.DavCollectionKinds.Addressbook],
         Extension: Domain.CalDav.DavCollectionKinds.Addressbook.Extension,
         ContentType: "text/vcard; charset=utf-8",
         UidFieldName: Domain.CalDav.DavCollectionKinds.Addressbook.UidFieldName,
@@ -70,6 +69,12 @@ internal sealed record DavProtocol(
         DavCompliance: "addressbook");
 
     internal static readonly IReadOnlyList<DavProtocol> All = [CalDav, CardDav];
+
+    /// <summary>The folder masks this protocol's collections wear — a List for EF's Contains translation.</summary>
+    internal List<Guid> FolderMaskIds { get; } = [.. Kinds.Select(k => k.FolderMaskId)];
+
+    /// <summary>The item masks this protocol's items wear — a List for EF's Contains translation.</summary>
+    internal List<Guid> ItemMaskIds { get; } = [.. Kinds.Select(k => k.ItemMaskId)];
 
     /// <summary>The protocol serving this request path, or null when the path is not a DAV one.</summary>
     internal static DavProtocol? ForPath(string path) =>

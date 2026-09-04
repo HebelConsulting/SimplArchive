@@ -139,13 +139,10 @@ public class MaskContainmentEquivalenceTests
             WellKnownMaskIds.AlsoAdmitPlainFolders.Any(m => m.FolderMaskId == parentMaskId)
             && childMaskId == WellKnownMaskIds.Folder;
 
-        // The generalised one-directional admission (a meeting room's Schedule calendar) — same fold-in as
-        // the plain-folder case above, and for the same reason: it widens the parent without confining the
-        // child (ADR 0735 endpoints tranche).
-        var alsoAdmitted =
-            WellKnownMaskIds.AlsoAdmit.Any(m => m.FolderMaskId == parentMaskId && m.ChildMaskId == childMaskId);
+        // (The generalised one-directional AlsoAdmit fold-in that stood here is GONE with ADR 0744: the
+        // room's calendar became the Schedule mask, admitted through the two-directional table.)
 
-        if (!alsoTakesPlainFolders && !alsoAdmitted
+        if (!alsoTakesPlainFolders
             && WellKnownMaskIds.TypedFolderRules.FirstOrDefault(r => r.FolderMaskId == parentMaskId) is { } parentRule
             && !parentRule.Admits.Any(a => a.MaskId == childMaskId))
         {

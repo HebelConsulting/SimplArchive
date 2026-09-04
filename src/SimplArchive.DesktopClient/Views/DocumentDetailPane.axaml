@@ -232,9 +232,15 @@
                                     <TextBlock Grid.Column="0" Text="{Binding Label}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
                                     <Panel Grid.Column="1">
                                         <CalendarDatePicker IsVisible="{Binding IsDate}" HorizontalAlignment="Left" SelectedDate="{Binding DateValue}" Watermark="yyyy-MM-dd" />
+                                        <!-- A DateTime field is a MOMENT (#660): a day picker alone was the pane bug the
+                                             owner reported — the time was there in the value and nowhere on the screen. -->
+                                        <StackPanel IsVisible="{Binding IsDateTime}" Orientation="Horizontal" Spacing="6">
+                                            <CalendarDatePicker SelectedDate="{Binding DateValue}" Watermark="yyyy-MM-dd" />
+                                            <TimePicker SelectedTime="{Binding TimeValue}" />
+                                        </StackPanel>
                                         <CheckBox IsVisible="{Binding IsBoolean}" IsChecked="{Binding BoolValue}" />
                                         <TextBox IsVisible="{Binding IsMultiLine}" Text="{Binding TextValue}" IsReadOnly="{Binding Locked}" AcceptsReturn="True" Height="60" Watermark="{loc:Tr OneValuePerLine}" />
-                                        <TextBox IsVisible="{Binding IsSingleLine}" Text="{Binding TextValue}" Height="28" Padding="4,2" VerticalContentAlignment="Center" />
+                                        <TextBox IsVisible="{Binding IsSingleLine}" Text="{Binding TextValue}" IsReadOnly="{Binding Locked}" Height="28" Padding="4,2" VerticalContentAlignment="Center" />
                                     </Panel>
                                 </Grid>
                             </DataTemplate>

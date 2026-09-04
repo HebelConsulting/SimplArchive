@@ -63,7 +63,7 @@ internal static class DavChangeLog
     {
         var items = await db.Documents
             .Where(d => d.ParentId == folderId && d.MaskVersionId != null
-                && db.MaskVersions.Any(v => v.Id == d.MaskVersionId && v.MaskId == protocol.ItemMaskId))
+                && db.MaskVersions.Any(v => v.Id == d.MaskVersionId && protocol.ItemMaskIds.Contains(v.MaskId)))
             .Select(d => new
             {
                 d.Id,
@@ -74,7 +74,7 @@ internal static class DavChangeLog
                     .Where(fv => fv.DocumentId == d.Id
                         && db.FieldDefinitions.Any(f => f.Id == fv.FieldDefinitionId
                             && f.Name == protocol.UidFieldName
-                            && db.MaskVersions.Any(mv => mv.Id == f.MaskVersionId && mv.MaskId == protocol.ItemMaskId)))
+                            && db.MaskVersions.Any(mv => mv.Id == f.MaskVersionId && protocol.ItemMaskIds.Contains(mv.MaskId))))
                     .Select(fv => fv.Value)
                     .FirstOrDefault(),
             })

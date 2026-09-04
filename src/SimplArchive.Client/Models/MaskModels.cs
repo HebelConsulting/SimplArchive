@@ -52,6 +52,10 @@ public record MaskFieldInfo
     /// <summary>Whether writing this field needs the manage-mail-routing right (#703). Sent by the server —
     /// deriving "which field is the gated one" per client is the shape #671 forbids.</summary>
     public bool RequiresMailRouting { get; set; }
+
+    /// <summary>Whether the CLASSIFIER owns this field's value (ADRs 0743/0744) — the lockstep projection
+    /// of the stored .ics/.vcf; the metadata PUT refuses a change, so the editor must not offer one.</summary>
+    public bool ClassifierOwned { get; set; }
 }
 
 /// <summary>An OCR language the tenant offers, for the per-item language picker.</summary>
@@ -94,11 +98,21 @@ public sealed class EditField
 
     public DateTime? DateValue { get; set; }
 
+    public TimeSpan? TimeValue { get; set; }
+
     public bool BoolValue { get; set; }
 
-    public bool IsDate => DataType == "Date";
+    /// <summary>The stored wire values, kept verbatim so a LOCKED field round-trips unchanged: the pane
+    /// shows a readable rendering, but the full-replacement PUT must echo exactly what the server holds —
+    /// the classifier-owned guard refuses anything else.</summary>
+    private List<string> _originalValues = [];
 
-    public bool IsBoolean => DataType == "Boolean";
+    public bool IsDate => DataType == "Date" && !Locked;
+
+    /// <summary>A moment, not a day (#660): its editor is a date picker AND a time picker.</summary>
+    public bool IsDateTime => DataType == "DateTime" && !Locked;
+
+    public bool IsBoolean => DataType == "Boolean" && !Locked;
 
     /// <summary>
     /// Whether this field is edited as a LIST — a multi-line box, one value per line.
@@ -108,13 +122,24 @@ public sealed class EditField
     /// (MultiSelect, grandfathered). Asked once, here, so the two clients and the two surfaces that use them
     /// cannot answer it differently — and so the markup picks an editor without re-deriving the rule.
     /// </remarks>
-    public bool IsMultiLine => IsList || DataType == "MultiSelect";
+    public bool IsMultiLine => !Locked && (IsList || DataType == "MultiSelect");
 
-    public bool IsSingleLine => !IsDate && !IsBoolean && !IsMultiLine;
+    public bool IsSingleLine => Locked || (!IsDate && !IsDateTime && !IsBoolean && !IsMultiLine);
 
     public static EditField Create(MaskFieldInfo f, List<string> values, bool mayRouteMail = true)
     {
-        var field = new EditField { FieldDefinitionId = f.Id, Label = f.IsRequired ? $"{f.Name} *" : f.Name, DataType = f.DataType, Required = f.IsRequired, IsList = f.IsList, Locked = f.RequiresMailRouting && !mayRouteMail };
+        // Read-only either for THIS caller (mail routing, #703) or for EVERY caller (the classifier owns
+        // the value — Start/End/UIDs, ADRs 0743/0744; the real write path is the content editor).
+        var field = new EditField { FieldDefinitionId = f.Id, Label = f.IsRequired ? $"{f.Name} *" : f.Name, DataType = f.DataType, Required = f.IsRequired, IsList = f.IsList, Locked = (f.RequiresMailRouting && !mayRouteMail) || f.ClassifierOwned };
+        field._originalValues = [.. values];
+
+        if (field.Locked)
+        {
+            // Readable, not raw: a DateTime shows its local wall clock instead of the ISO wire string.
+            field.TextValue = string.Join(", ", values.Select(v =>
+                f.DataType == "DateTime" ? SimplArchive.Presentation.IndexInstant.Display(v) : v));
+            return field;
+        }
 
         // Multiplicity is decided BEFORE the type: a list of dates is a list first, so it gets the list
         // editor rather than a date picker that could only ever hold one of them.
@@ -127,6 +152,7 @@ public sealed class EditField
         switch (f.DataType)
         {
             case "Date": field.DateValue = DateTime.TryParse(values.FirstOrDefault(), out var d) ? d.Date : null; break;
+            case "DateTime": (field.DateValue, field.TimeValue) = SimplArchive.Presentation.IndexInstant.Split(values.FirstOrDefault()); break;
             case "Boolean": field.BoolValue = values.FirstOrDefault() == "true"; break;
             default: field.TextValue = values.FirstOrDefault() ?? ""; break;
         }
@@ -134,12 +160,17 @@ public sealed class EditField
         return field;
     }
 
-    public List<string> ToValues() => IsMultiLine
-        ? TextValue.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()
-        : DataType switch
-        {
-            "Date" => DateValue is { } d ? [d.ToString("yyyy-MM-dd")] : [],
-            "Boolean" => [BoolValue ? "true" : "false"],
-            _ => string.IsNullOrWhiteSpace(TextValue) ? [] : [TextValue.Trim()],
-        };
+    public List<string> ToValues() => Locked
+        // Echo the wire values verbatim: the PUT is a full replacement, and the server's classifier-owned
+        // guard (rightly) reads any deviation — including a formatted rendering — as an attempted edit.
+        ? _originalValues
+        : IsMultiLine
+            ? TextValue.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()
+            : DataType switch
+            {
+                "Date" => DateValue is { } d ? [d.ToString("yyyy-MM-dd")] : [],
+                "DateTime" => SimplArchive.Presentation.IndexInstant.Compose(DateValue, TimeValue) is { } instant ? [instant] : [],
+                "Boolean" => [BoolValue ? "true" : "false"],
+                _ => string.IsNullOrWhiteSpace(TextValue) ? [] : [TextValue.Trim()],
+            };
 }

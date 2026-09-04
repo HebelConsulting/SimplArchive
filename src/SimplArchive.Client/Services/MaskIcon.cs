@@ -48,6 +48,9 @@ public static class MaskIcon
         // separate. Found by looking at the rendered tree, which no name-comparison test can do.
         ["addressbook"] = (Icons.Material.Filled.ImportContacts, Icons.Material.Outlined.ImportContacts),
         ["calendar"] = (Icons.Material.Filled.CalendarMonth, Icons.Material.Outlined.CalendarMonth),
+        // A room's booking calendar (ADR 0744): a calendar with a check — bookings, not appointments —
+        // because a month grid beside a month grid is two things the eye cannot separate.
+        ["schedule"] = (Icons.Material.Filled.EventAvailable, Icons.Material.Outlined.EventAvailable),
 
         // Item masks — the outline half is never read (an item is not a folder, so it is never empty).
         ["email"] = (Icons.Material.Filled.Email, Icons.Material.Outlined.Email),

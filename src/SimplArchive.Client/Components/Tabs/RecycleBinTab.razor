@@ -109,7 +109,7 @@
                     <MudSimpleTable Dense="true" Bordered="false" Class="mt-1"><tbody>
                         @foreach (var f in _rbIndexData)
                         {
-                            <tr><td>@f.FieldName</td><td>@string.Join(", ", f.Values)</td></tr>
+                            <tr><td>@f.FieldName</td><td>@f.Display</td></tr>
                         }
                     </tbody></MudSimpleTable>
                 }

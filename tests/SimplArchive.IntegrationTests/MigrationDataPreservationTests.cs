@@ -47,6 +47,11 @@ public class MigrationDataPreservationTests
         // service-account creator column, and deletes any link a service account created — such a link cannot be
         // re-attributed to a person, and a live share whose creator cannot be named is the thing being prevented.
         "20260807164245_ExternalLinksArePersonOnly",
+        // The booking is the .ics (ADR 0744): drops ResourceBookings.AppointmentDocumentId — its content
+        // merged into BookingDocumentId, which now names the .ics itself. Owner-approved 2026-09-04 with
+        // no user base to migrate; old-shape rows keep working as history, they only lose the second
+        // pointer to a projection that no longer exists apart from the booking.
+        "20260904073335_BookingIsTheIcs",
     };
 
     private static SimplArchiveDbContext MetadataContext() =>

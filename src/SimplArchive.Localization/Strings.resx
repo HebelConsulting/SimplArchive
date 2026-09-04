@@ -4767,6 +4767,9 @@
   <data name="ApiErrResourceNotBookable" xml:space="preserve">
     <value>This document is not a bookable resource.</value>
   </data>
+  <data name="ApiErrBookingRecurrence" xml:space="preserve">
+    <value>A booking cannot repeat — file each occurrence as its own booking.</value>
+  </data>
   <data name="ApiErrBookingSlotInvalid" xml:space="preserve">
     <value>The slot's start must precede its end.</value>
   </data>

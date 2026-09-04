@@ -57,7 +57,17 @@ public sealed class DocumentRestorer
             doc.DeletedAt = null;
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (Domain.Booking.BookingInvariantException e) when (e.Kind == Domain.Booking.BookingInvariantKind.SlotTaken)
+        {
+            // Restoring a Room booking is a REBOOKING (ADR 0744): the SaveChanges sync re-activates its
+            // claim, and a slot taken since the delete refuses the restore. Translated here — by Kind, not
+            // message text — so both restore endpoints report the real cause instead of a blanket 500.
+            throw new Errors.Exceptions.Booking.BookingSlotConflictException(e.Message);
+        }
 
         foreach (var doc in toRestore)
         {

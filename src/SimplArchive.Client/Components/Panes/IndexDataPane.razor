@@ -242,6 +242,15 @@
                         {
                             <MudDatePicker @bind-Date="f.DateValue" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" />
                         }
+                        else if (f.IsDateTime)
+                        {
+                            @* A moment, not a day (#660): a date picker alone was the pane bug — the time
+                               was in the value and nowhere on the screen. Same pair the desktop shows. *@
+                            <div style="display:flex; gap:6px;">
+                                <MudDatePicker @bind-Date="f.DateValue" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                                <MudTimePicker @bind-Time="f.TimeValue" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                            </div>
+                        }
                         else if (f.IsBoolean)
                         {
                             <MudCheckBox T="bool" @bind-Value="f.BoolValue" />
@@ -291,7 +300,7 @@
                     <tbody>
                         @foreach (var field in Detail.IndexData)
                         {
-                            <tr><td>@field.FieldName</td><td>@string.Join(", ", field.Values)</td></tr>
+                            <tr><td>@field.FieldName</td><td>@field.Display</td></tr>
                         }
                     </tbody>
                 </MudSimpleTable>

@@ -11,8 +11,13 @@ namespace SimplArchive.Api.Errors.Exceptions.Booking;
 public sealed class ResourceNotBookableException : BookingException
 {
     public ResourceNotBookableException(Guid documentId)
-        : base("RESOURCE_NOT_BOOKABLE", StatusCodes.Status409Conflict,
-            $"Document {documentId} is not a bookable resource.")
+        : this($"Document {documentId} is not a bookable resource.")
+    {
+    }
+
+    /// <summary>With the refusing invariant's own words — the classifier's translation path (ADR 0744).</summary>
+    public ResourceNotBookableException(string detail)
+        : base("RESOURCE_NOT_BOOKABLE", StatusCodes.Status409Conflict, detail)
     {
     }
 }

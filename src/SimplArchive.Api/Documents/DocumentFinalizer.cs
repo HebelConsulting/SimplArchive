@@ -356,11 +356,14 @@ public class DocumentFinalizer
     {
         var document = await _dbContext.Documents.SingleAsync(d => d.Id == version.DocumentId, cancellationToken);
 
-        // Already classified with a real (non-Folder) mask → leave it. A document created as a folder carries the
-        // Folder mask (ADR "Folder mask on folders"); once it gets a version it's a leaf, so treat Folder-or-null
-        // as "still unclassified" and reclassify to Basic Entry / eMail.
+        // Already classified with a real (non-Folder) mask → keep the mask, but REFRESH the indexed fields
+        // when this is a collection-kind item (Contact/Appointment/Room booking): a new version means the
+        // bytes changed, and until ADR 0744 nothing re-read them — the editors' "the finalizer re-extracts
+        // the index fields" comments described a step that did not exist, so every edit left Name/UID/
+        // Start/End stale. For a Room booking the refresh is also what makes an edit a REBOOKING.
         if (document.MaskVersionId is not null && !await FolderMask.IsFolderMaskAsync(_dbContext, document.MaskVersionId, cancellationToken))
         {
+            await _calendarContactClassifier.TryRefreshAsync(document, version, cancellationToken);
             return false;
         }
 
@@ -397,8 +400,8 @@ public class DocumentFinalizer
         // the very containment violation that then refused the save, and the user met a bare 500. Elsewhere
         // the card stays an ordinary document, which is what it is when it is not in an addressbook.
         if (CalendarContactClassifier.Handles(extension)
-            && await AdmitsTypedItemAsync(document, extension, cancellationToken)
-            && await _calendarContactClassifier.TryClassifyAsync(document, version, cancellationToken))
+            && await AdmittedItemMaskAsync(document, extension, cancellationToken) is { } itemMaskId
+            && await _calendarContactClassifier.TryClassifyAsync(document, version, itemMaskId, cancellationToken))
         {
             return false; // classified, but it has no attachments to file
         }
@@ -408,17 +411,19 @@ public class DocumentFinalizer
         return false;
     }
 
-    /// <summary>Whether the document's PARENT admits the typed item this extension would make (#665).</summary>
+    /// <summary>The typed-item mask this document's PARENT admits for the extension, or null (#665).</summary>
     /// <remarks>
     /// Asked of the same containment rules the invariant enforces, so the classifier cannot stamp a mask that
     /// <c>SaveChanges</c> is about to refuse. A root document has no parent and admits nothing typed — it is a
-    /// repository, and a contact card is not one.
+    /// repository, and a contact card is not one. WHICH mask an extension makes is the parent's collection
+    /// kind's to say (ADR 0744): an .ics is an Appointment in a Calendar and a Room booking in a Schedule —
+    /// the Note/eMail rule, told apart by where it is filed, not by its bytes.
     /// </remarks>
-    private async Task<bool> AdmitsTypedItemAsync(Document document, string extension, CancellationToken cancellationToken)
+    private async Task<Guid?> AdmittedItemMaskAsync(Document document, string extension, CancellationToken cancellationToken)
     {
         if (document.ParentId is not { } parentId)
         {
-            return false;
+            return null;
         }
 
         var parentMaskId = await _dbContext.Documents
@@ -427,8 +432,11 @@ public class DocumentFinalizer
             .SingleOrDefaultAsync(cancellationToken);
 
         var rules = await _containment.ForAsync(_dbContext, document.TenantId, cancellationToken);
-        var itemMaskId = extension == ".vcf" ? WellKnownMaskIds.Contact : WellKnownMaskIds.Appointment;
-        return rules.Allows(itemMaskId, parentMaskId);
+        var kind = SimplArchive.Domain.CalDav.DavCollectionKinds.ForFolderMask(parentMaskId);
+        var itemMaskId = kind is not null && kind.Extension == extension
+            ? kind.ItemMaskId
+            : extension == ".vcf" ? WellKnownMaskIds.Contact : WellKnownMaskIds.Appointment;
+        return rules.Allows(itemMaskId, parentMaskId) ? itemMaskId : null;
     }
 
     // One level only (a nested email's own attachments aren't extracted); best-effort per attachment. The

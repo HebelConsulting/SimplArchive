@@ -127,8 +127,10 @@ public class WellKnownMaskFieldHealTests
             // 15 → 16 with IMAP Folder (#802) — the user-created mail folder inside the staging tier.
             // 16 → 18 with Meeting room + Room booking (ADR 0735) — the booking primitive's thin core proof.
             // 18 → 19 with Module license (ADRs 0740/0743) — the filed license artefact's core mask.
+            // 19 → 20 with Schedule (ADR 0744) — the room's booking calendar, a calendar kind of its own so
+            // its containment (only Room bookings, only inside a room) stays non-contextual.
             var maskCount = await db.Masks.IgnoreQueryFilters().CountAsync(m => m.TenantId == _tenantId);
-            Assert.Equal(19, maskCount); // + Module license (ADR 0740)
+            Assert.Equal(20, maskCount); // + Schedule (ADR 0744)
             Assert.Equal(maskCount, await db.MaskVersions.IgnoreQueryFilters().CountAsync(v => v.TenantId == _tenantId));
         }
     }

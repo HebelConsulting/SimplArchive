@@ -28,15 +28,13 @@ public class ResourceBooking : ITenantScoped, IConcurrencyTracked
     /// <summary>The bookable resource document (its mask has <c>IsBookable</c>).</summary>
     public Guid ResourceDocumentId { get; set; }
 
-    /// <summary>The booking document — the domain payload (a Room booking, a Charter).</summary>
-    public Guid BookingDocumentId { get; set; }
-
     /// <summary>
-    /// The linked Appointment document that projects the slot onto every calendar surface. A plain
-    /// nullable column, not a FK — the <c>Document.CurrentVersionId</c> precedent (ADR 0503): a FK here
-    /// would entangle the appointment's delete cascade with the booking's lifecycle.
+    /// The booking document — the <c>.ics</c> in the resource's Schedule (ADR 0744: the booking IS the
+    /// calendar entry). A plain column, not a FK — the <c>Document.CurrentVersionId</c> precedent
+    /// (ADR 0503): a FK would entangle the document's delete cascade with the booking's lifecycle, and a
+    /// Cancelled row deliberately outlives a purged document as the durable history.
     /// </summary>
-    public Guid? AppointmentDocumentId { get; set; }
+    public Guid BookingDocumentId { get; set; }
 
     /// <summary>Slot start, inclusive. UTC instants, so the overlap check compares real moments.</summary>
     public DateTimeOffset StartsAtUtc { get; set; }

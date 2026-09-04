@@ -220,7 +220,7 @@ public sealed class DocumentResourceLinks
                 links.Add(new Link("contacts", $"/api/documents/{documentId}/contacts", "POST"));
             }
 
-            if (ChildCreationPolicy.AdmitsTypedItem(folderMaskId, WellKnownMaskIds.Appointment))
+            if (ChildCreationPolicy.AdmitsCalendarEntries(folderMaskId))
             {
                 links.Add(new Link("appointments", $"/api/documents/{documentId}/appointments", "POST"));
             }
@@ -255,7 +255,10 @@ public sealed class DocumentResourceLinks
             links.Add(new Link("contact-card", $"/api/documents/{documentId}/contact-card", "GET"));
         }
 
-        if (rights.CanReadContent && folderMaskId == WellKnownMaskIds.Appointment)
+        // A Room booking is an appointment to the editor too (ADR 0744): the same form edits it, and the
+        // save is a REBOOKING — the finalizer's refresh moves the claim through the overlap check, so a
+        // conflicting edit comes back as the slot-conflict error rather than saving a lie.
+        if (rights.CanReadContent && (folderMaskId == WellKnownMaskIds.Appointment || folderMaskId == WellKnownMaskIds.RoomBooking))
         {
             links.Add(new Link("appointment", $"/api/documents/{documentId}/appointment", "GET"));
         }

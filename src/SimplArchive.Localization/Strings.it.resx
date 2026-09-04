@@ -4767,6 +4767,9 @@
   <data name="ApiErrResourceNotBookable" xml:space="preserve">
     <value>Questo documento non è una risorsa prenotabile.</value>
   </data>
+  <data name="ApiErrBookingRecurrence" xml:space="preserve">
+    <value>Una prenotazione non può ripetersi — registra ogni occorrenza come prenotazione separata.</value>
+  </data>
   <data name="ApiErrBookingSlotInvalid" xml:space="preserve">
     <value>L'inizio della fascia oraria deve precedere la fine.</value>
   </data>
