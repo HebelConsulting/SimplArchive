@@ -219,6 +219,39 @@ public class StateMachineEngineTests
     }
 
     [Fact]
+    public async Task Present_is_satisfied_by_a_filled_field_and_not_by_a_blank_or_missing_one()
+    {
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var rig = await RigAsync(connection);
+
+        // Missing document: absence of evidence is absence of the right, for presence too.
+        Assert.False((await rig.Engine.EvaluateStatusAsync("test-pilot", "Dated", rig.DossierId, Now)).Satisfied);
+
+        // A certificate without the field: the document exists, nothing was said.
+        var certificateId = await rig.Facade.CreateDocumentAsync(
+            rig.DossierId, TestModule.TestModule.CertificateMaskId, "Medical");
+        var absent = await rig.Engine.EvaluateStatusAsync("test-pilot", "Dated", rig.DossierId, Now);
+        Assert.False(absent.Satisfied);
+        Assert.Equal("test.no-expiry-date", Assert.Single(absent.Failed).Code);
+
+        // A field saved BLANK (possible for Text — the core refuses a blank Date outright): a row exists,
+        // but whitespace is not naming anything, and Present must say so (ABI 0.2, #1014).
+        await rig.Facade.SetFieldsAsync(certificateId, new Dictionary<string, string> { ["Issuer"] = " " });
+        var blank = await rig.Engine.EvaluateStatusAsync("test-pilot", "Attributed", rig.DossierId, Now);
+        Assert.False(blank.Satisfied);
+        Assert.Equal("test.no-issuer", Assert.Single(blank.Failed).Code);
+
+        await rig.Facade.SetFieldsAsync(certificateId, new Dictionary<string, string>
+        {
+            ["Valid to"] = "2027-01-01",
+            ["Issuer"] = "Aeromedical Center",
+        });
+        Assert.True((await rig.Engine.EvaluateStatusAsync("test-pilot", "Dated", rig.DossierId, Now)).Satisfied);
+        Assert.True((await rig.Engine.EvaluateStatusAsync("test-pilot", "Attributed", rig.DossierId, Now)).Satisfied);
+    }
+
+    [Fact]
     public async Task A_transition_runs_its_handler_only_through_a_green_guard()
     {
         using var connection = new SqliteConnection("Filename=:memory:");

@@ -21,7 +21,7 @@ public static class ModuleApiServices
     }
 }
 
-internal sealed class ModuleCallerContext(DocumentAccessService access, ICurrentTenantAccessor tenant) : IModuleCallerContext
+internal sealed class ModuleCallerContext(DocumentAccessService access, ICurrentTenantAccessor tenant, SimplArchiveDbContext dbContext) : IModuleCallerContext
 {
     // A module route is tenant-scoped by construction: the activation gate has already refused any request
     // with no resolvable tenant, so an empty accessor here is a programming error, not a caller state.
@@ -34,6 +34,29 @@ internal sealed class ModuleCallerContext(DocumentAccessService access, ICurrent
 
     public Task<bool> IsTenantAdminAsync(CancellationToken cancellationToken = default) =>
         access.IsTenantAdminAsync(cancellationToken);
+
+    public async Task<ModuleCallerIdentity?> GetIdentityAsync(CancellationToken cancellationToken = default)
+    {
+        // The human-readable half of the accessors above (ABI 0.2, #1014): a user has both halves, a
+        // service account a name only. The tenant query filter scopes both lookups already.
+        if (UserId is { } userId)
+        {
+            return await dbContext.Users
+                .Where(u => u.Id == userId)
+                .Select(u => new ModuleCallerIdentity(u.DisplayName, u.Email))
+                .SingleOrDefaultAsync(cancellationToken);
+        }
+
+        if (ServiceAccountId is { } serviceAccountId)
+        {
+            return await dbContext.ServiceAccounts
+                .Where(a => a.Id == serviceAccountId)
+                .Select(a => new ModuleCallerIdentity(a.Name, null))
+                .SingleOrDefaultAsync(cancellationToken);
+        }
+
+        return null;
+    }
 }
 
 internal sealed class ModuleDocumentRights(DocumentAccessService access, SimplArchiveDbContext dbContext) : IModuleDocumentRights

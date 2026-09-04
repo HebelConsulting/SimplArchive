@@ -88,12 +88,16 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
             return null;
         }
 
+        var fields = await FieldsOfAsync(document.Id, cancellationToken);
         return new ModuleDocument(
             document.Id,
             document.ParentId,
             document.Name,
             await MaskIdOfAsync(document.MaskVersionId, cancellationToken),
-            await FieldsOfAsync(document.Id, cancellationToken));
+            fields.Joined)
+        {
+            FieldLists = fields.Lists,
+        };
     }
 
     public async Task<IReadOnlyList<ModuleDocument>> GetChildrenAsync(Guid parentDocumentId, Guid maskId, CancellationToken cancellationToken = default)
@@ -120,7 +124,8 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
                 continue;
             }
 
-            children.Add(new ModuleDocument(row.Id, row.ParentId, row.Name, maskId, await FieldsOfAsync(row.Id, cancellationToken)));
+            var childFields = await FieldsOfAsync(row.Id, cancellationToken);
+            children.Add(new ModuleDocument(row.Id, row.ParentId, row.Name, maskId, childFields.Joined) { FieldLists = childFields.Lists });
         }
 
         return children;
@@ -148,7 +153,8 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
                 continue;
             }
 
-            documents.Add(new ModuleDocument(row.Id, row.ParentId, row.Name, maskId, await FieldsOfAsync(row.Id, cancellationToken)));
+            var documentFields = await FieldsOfAsync(row.Id, cancellationToken);
+            documents.Add(new ModuleDocument(row.Id, row.ParentId, row.Name, maskId, documentFields.Joined) { FieldLists = documentFields.Lists });
         }
 
         return documents;
@@ -218,6 +224,53 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
             }
         }
 
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task SetFieldListAsync(Guid documentId, string fieldName, IReadOnlyList<string> values, CancellationToken cancellationToken = default)
+    {
+        var document = await _dbContext.Documents.SingleOrDefaultAsync(d => d.Id == documentId, cancellationToken)
+            ?? throw new ArgumentException($"Document {documentId} does not exist.", nameof(documentId));
+        if (document.MaskVersionId is not { } maskVersionId)
+        {
+            throw new InvalidOperationException($"Document {documentId} wears no mask; a module can only set fields its mask defines.");
+        }
+
+        // Same by-name-within-the-mask-version resolution as the single-value write (the vCard-UID
+        // lesson); a replace-write like the core's own metadata PUT — the rows afterwards ARE the list.
+        var definitionId = await _dbContext.FieldDefinitions
+            .Where(f => f.MaskVersionId == maskVersionId && f.Name == fieldName)
+            .Select(f => (Guid?)f.Id)
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new ArgumentException($"The document's mask defines no field named '{fieldName}'.", nameof(fieldName));
+
+        var existing = await _dbContext.FieldValues
+            .Where(v => v.DocumentId == documentId && v.FieldDefinitionId == definitionId)
+            .ToListAsync(cancellationToken);
+        _dbContext.FieldValues.RemoveRange(existing);
+        for (var ordinal = 0; ordinal < values.Count; ordinal++)
+        {
+            _dbContext.FieldValues.Add(new FieldValue
+            {
+                Id = Guid.NewGuid(),
+                TenantId = document.TenantId,
+                DocumentId = documentId,
+                FieldDefinitionId = definitionId,
+                Value = values[ordinal],
+                Ordinal = ordinal,
+            });
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task RenameDocumentAsync(Guid documentId, string name, CancellationToken cancellationToken = default)
+    {
+        var document = await _dbContext.Documents.SingleOrDefaultAsync(d => d.Id == documentId, cancellationToken)
+            ?? throw new ArgumentException($"Document {documentId} does not exist.", nameof(documentId));
+
+        // The sibling-name invariant fires in SaveChanges like anyone else's rename (ABI 0.2, #1014).
+        document.Name = name;
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
@@ -293,7 +346,7 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
             ? null
             : await _dbContext.MaskVersions.Where(v => v.Id == maskVersionId).Select(v => (Guid?)v.MaskId).SingleOrDefaultAsync(cancellationToken);
 
-    private async Task<IReadOnlyDictionary<string, string>> FieldsOfAsync(Guid documentId, CancellationToken cancellationToken)
+    private async Task<(IReadOnlyDictionary<string, string> Joined, IReadOnlyDictionary<string, IReadOnlyList<string>> Lists)> FieldsOfAsync(Guid documentId, CancellationToken cancellationToken)
     {
         var rows = await _dbContext.FieldValues
             .Where(v => v.DocumentId == documentId)
@@ -301,9 +354,12 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
             .OrderBy(x => x.Name).ThenBy(x => x.Ordinal)
             .ToListAsync(cancellationToken);
 
-        // List fields collapse to a "+"-joined value in v0.1 — the facade reads facts, not editors.
-        return rows
-            .GroupBy(r => r.Name, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => string.Join("+", g.Select(r => r.Value)), StringComparer.Ordinal);
+        var groups = rows.GroupBy(r => r.Name, StringComparer.Ordinal).ToList();
+
+        // Both wire shapes from one query (ABI 0.2, #1014): FieldLists is the faithful one (ordinal
+        // order); the "+"-joined Fields stays for 0.1 readers.
+        return (
+            groups.ToDictionary(g => g.Key, g => string.Join("+", g.Select(r => r.Value)), StringComparer.Ordinal),
+            groups.ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(r => r.Value).ToList(), StringComparer.Ordinal));
     }
 }

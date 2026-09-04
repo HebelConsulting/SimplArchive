@@ -279,6 +279,9 @@ public sealed class StateMachineEngine
                 && decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var number)
                 && operand is not null
                 && number >= decimal.Parse(operand, CultureInfo.InvariantCulture),
+            // Filled means non-blank (ABI 0.2, #1014): a saved-then-cleared field leaves an empty row,
+            // and "names a pilot" must not be satisfied by whitespace.
+            ConditionTest.Present => !string.IsNullOrWhiteSpace(value),
             _ => false,
         };
     }

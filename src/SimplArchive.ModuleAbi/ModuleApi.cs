@@ -41,7 +41,19 @@ public interface IModuleCallerContext
     /// <summary>Whether the caller holds the tenant-admin bypass — the same answer core gates read
     /// (a user's own flag ∪ their groups', resolved by the core; a service account never has it).</summary>
     Task<bool> IsTenantAdminAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The caller's human-readable identity (ABI 0.2, #1014): a user's display name and e-mail, a service
+    /// account's name with no e-mail. What lets a handler prefill "who is acting" into a field a person
+    /// will read — the GUIDs above are for machines. Null when no principal is resolved (which a module
+    /// endpoint should never see; the activation gate refused the anonymous case already).
+    /// </summary>
+    Task<ModuleCallerIdentity?> GetIdentityAsync(CancellationToken cancellationToken = default);
 }
+
+/// <summary>The caller as a person would name them (ABI 0.2): display name, and e-mail when the principal
+/// kind has one (a user does; a service account does not).</summary>
+public sealed record ModuleCallerIdentity(string DisplayName, string? Email);
 
 /// <summary>
 /// A module controller's ask for a caller's effective rights on a document (ADR 0737) — the core

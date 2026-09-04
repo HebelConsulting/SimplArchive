@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>SimplArchive.ModuleAbi</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Description>The contract industry modules build against: registration, mask seeding, facts, transitions, and the archive facade (ADR 0741).</Description>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>

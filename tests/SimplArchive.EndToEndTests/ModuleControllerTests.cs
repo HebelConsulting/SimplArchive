@@ -258,6 +258,9 @@ public class ModuleControllerTests
             var status = await TestJson.Get(rig.Admin, "/api/test-module/status");
             Assert.Equal(rig.TenantId, status.GetProperty("tenantId").GetGuid());
             Assert.True(status.GetProperty("isTenantAdmin").GetBoolean());
+            // The identity seam (ABI 0.2, #1014): the caller as a person would name them.
+            Assert.Equal("Module Admin", status.GetProperty("callerDisplayName").GetString());
+            Assert.EndsWith("@e2e.local", status.GetProperty("callerEmail").GetString());
             Assert.Contains(status.GetProperty("links").EnumerateArray(),
                 l => l.GetProperty("rel").GetString() == "self");
 

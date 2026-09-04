@@ -26,6 +26,11 @@ public sealed class TestModuleController : ControllerBase
         public Guid? ServiceAccountId { get; set; }
 
         public bool IsTenantAdmin { get; set; }
+
+        /// <summary>The caller as a person would name them (ABI 0.2, #1014) — null when unresolved.</summary>
+        public string? CallerDisplayName { get; set; }
+
+        public string? CallerEmail { get; set; }
     }
 
     /// <summary>A document's rights as the module sees them — the core calculator's answer, relayed.</summary>
@@ -40,19 +45,24 @@ public sealed class TestModuleController : ControllerBase
 
     [HttpGet("status")]
     public async Task<IActionResult> Status(
-        [FromServices] IModuleCallerContext caller, CancellationToken cancellationToken) =>
-        Ok(new ModuleStatusResource
+        [FromServices] IModuleCallerContext caller, CancellationToken cancellationToken)
+    {
+        var identity = await caller.GetIdentityAsync(cancellationToken);
+        return Ok(new ModuleStatusResource
         {
             ModuleId = "test-module",
             TenantId = caller.TenantId,
             UserId = caller.UserId,
             ServiceAccountId = caller.ServiceAccountId,
             IsTenantAdmin = await caller.IsTenantAdminAsync(cancellationToken),
+            CallerDisplayName = identity?.DisplayName,
+            CallerEmail = identity?.Email,
             Links =
             [
                 new Link("self", "/api/test-module/status", "GET"),
             ],
         });
+    }
 
     // The core's standing convention, honoured by the module: every GET action gets its own HEAD action.
     [HttpHead("status")]

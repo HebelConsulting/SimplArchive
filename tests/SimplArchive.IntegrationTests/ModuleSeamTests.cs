@@ -69,8 +69,9 @@ public class ModuleSeamTests
         Assert.False(mask.IsBookable);
         var version = await check.MaskVersions.SingleAsync(v => v.MaskId == mask.Id && v.IsCurrent);
         Assert.Equal("Test Certificate", version.Name);
-        // Two since the fixture's certificate gained the temporarily-void flag (the engine's medical shape).
-        Assert.Equal(2, await check.FieldDefinitions.CountAsync(f => f.MaskVersionId == version.Id));
+        // Three since the fixture's certificate gained Issuer (ABI 0.2's whitespace-Present case, #1014)
+        // on top of the temporarily-void flag (the engine's medical shape).
+        Assert.Equal(3, await check.FieldDefinitions.CountAsync(f => f.MaskVersionId == version.Id));
     }
 
     [Fact]

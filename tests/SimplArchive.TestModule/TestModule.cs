@@ -40,11 +40,18 @@ public sealed class TestModule : IIndustryModule
         [
             new ModuleFieldSeed("Valid to", "Date", IsRequired: false),
             new ModuleFieldSeed("Temporarily void", "Boolean", IsRequired: false),
+            // Text on purpose (ABI 0.2, #1014): the one type where a saved-blank value can exist, which is
+            // what the Present test's whitespace case needs (the core refuses a blank Date outright).
+            new ModuleFieldSeed("Issuer", "Text", IsRequired: false),
         ]),
         // Its own mask, learned the hard way: entries wearing the certificate mask became the NEWEST
         // certificate, and the first logged entry shadowed the medical — every later act read "no Valid
         // to" and refused. A log entry is not a certificate; the model must say so.
-        new ModuleMaskSeed(EntryMaskId, "Test Entry", IsFolderMask: false, IsBookable: false, []),
+        new ModuleMaskSeed(EntryMaskId, "Test Entry", IsFolderMask: false, IsBookable: false,
+        [
+            // The list-field fixture (ABI 0.2, #1014): what SetFieldListAsync round-trips against.
+            new ModuleFieldSeed("Tags", "Text", IsList: true),
+        ]),
     ];
 
     public IReadOnlyList<ModuleRootLink> RootLinks { get; } =
@@ -74,6 +81,14 @@ public sealed class TestModule : IIndustryModule
                     "test.certificate-void", "The certificate is temporarily void."),
                 StateCondition.FactAtLeast("testLandings", 3,
                     "test.recency", "{value} recent landings; 3 required."))
+            // The presence primitive (ABI 0.2, #1014): satisfied only by a non-blank value — the shape
+            // the flight-school's "names a pilot" gates need.
+            .Status("Dated",
+                StateCondition.ChildField(CertificateMaskId, "Valid to", ConditionTest.Present, null,
+                    "test.no-expiry-date", "The certificate carries no expiry date."))
+            .Status("Attributed",
+                StateCondition.ChildField(CertificateMaskId, "Issuer", ConditionTest.Present, null,
+                    "test.no-issuer", "The certificate names no issuer."))
             .Transition("log-entry", "Log entry",
                 [
                     StateCondition.ChildField(CertificateMaskId, "Valid to", ConditionTest.DateNotPast, null,

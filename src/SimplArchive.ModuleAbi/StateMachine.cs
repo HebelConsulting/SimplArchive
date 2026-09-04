@@ -101,6 +101,12 @@ public enum ConditionTest
 
     /// <summary>Numeric: value ≥ <c>Operand</c>.</summary>
     AtLeast,
+
+    /// <summary>The field is filled: present and not blank (ABI 0.2, #1014). The primitive the marker-
+    /// Boolean workaround stood in for — "this entry names a pilot" is a presence question, and
+    /// <see cref="NotEquals"/> deliberately holds for an absent field, so it cannot ask it. Appended,
+    /// per this enum's own append-only rule. Takes no operand.</summary>
+    Present,
 }
 
 /// <summary>A status evaluation's answer: the verdict plus every failed condition's diagnosis.</summary>
