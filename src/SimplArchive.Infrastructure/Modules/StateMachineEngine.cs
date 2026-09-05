@@ -272,6 +272,20 @@ public sealed class StateMachineEngine
                 value is not null
                 && DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date)
                 && date >= asOf,
+            // The clean inverse of DateNotPast — a declared Lapsed rather than a handler-evaluated one (0.4).
+            ConditionTest.DatePast =>
+                value is not null
+                && DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var pastDate)
+                && pastDate < asOf,
+            // The approaching edge: not past AND within Operand days of now (0.4). A non-integer or absent
+            // operand cannot describe a window, so it never holds rather than throwing.
+            ConditionTest.DateWithinDays =>
+                value is not null
+                && DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var soonDate)
+                && operand is not null
+                && int.TryParse(operand, NumberStyles.Integer, CultureInfo.InvariantCulture, out var days)
+                && soonDate >= asOf
+                && soonDate <= asOf.AddDays(days),
             ConditionTest.Equals => value is not null && string.Equals(value, operand, StringComparison.Ordinal),
             ConditionTest.NotEquals => !string.Equals(value, operand, StringComparison.Ordinal),
             ConditionTest.AtLeast =>

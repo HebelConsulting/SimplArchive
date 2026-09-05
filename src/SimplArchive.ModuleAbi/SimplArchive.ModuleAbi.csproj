@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>SimplArchive.ModuleAbi</PackageId>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
     <!-- The BINDING identity is pinned, permanently (ADR 0749): the Docker build stamps -p:Version over
          every project (0.0.0-dev locally), so without this pin the host's ModuleAbi.dll assembly version
          depends on the HOST's stamp and a package-built module fails to bind on any dev host (found by

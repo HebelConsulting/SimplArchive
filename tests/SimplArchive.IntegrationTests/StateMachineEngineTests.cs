@@ -150,6 +150,27 @@ public class StateMachineEngineTests
         Assert.Contains("2026-01-01", failure.Text); // the sentence is a diagnosis, not a verdict (ADR 0742)
     }
 
+    [Theory]
+    // Now is 2026-09-03. Past → Expired only; within 30 days (future) → Expiring only; far future → neither.
+    [InlineData("2026-09-01", true, false)]   // two days past
+    [InlineData("2026-09-20", false, true)]   // 17 days out — inside the window
+    [InlineData("2026-10-03", false, true)]   // exactly now + 30 days — the inclusive edge
+    [InlineData("2027-01-01", false, false)]  // far future — neither
+    public async Task DatePast_and_DateWithinDays_bracket_the_deadline(string validTo, bool expired, bool expiring)
+    {
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var rig = await RigAsync(connection);
+        await rig.Facade.CreateDocumentAsync(rig.DossierId, TestModule.TestModule.CertificateMaskId, "Medical",
+            new Dictionary<string, string> { ["Valid to"] = validTo });
+
+        var expiredResult = await rig.Engine.EvaluateStatusAsync("test-pilot", "Expired", rig.DossierId, Now);
+        var expiringResult = await rig.Engine.EvaluateStatusAsync("test-pilot", "Expiring", rig.DossierId, Now);
+
+        Assert.Equal(expired, expiredResult.Satisfied);
+        Assert.Equal(expiring, expiringResult.Satisfied);
+    }
+
     [Fact]
     public async Task A_missing_certificate_fails_because_absence_of_evidence_is_absence_of_the_right()
     {

@@ -107,6 +107,19 @@ public enum ConditionTest
     /// <see cref="NotEquals"/> deliberately holds for an absent field, so it cannot ask it. Appended,
     /// per this enum's own append-only rule. Takes no operand.</summary>
     Present,
+
+    /// <summary>The value parses as a date STRICTLY BEFORE the evaluation instant — "expired/past". The clean
+    /// inverse of <see cref="DateNotPast"/>, so a Lapsed status can be a declared condition rather than a
+    /// handler-evaluated afterthought. Takes no operand. Appended (ABI 0.4, flight-school #3), per this enum's
+    /// append-only rule.</summary>
+    DatePast,
+
+    /// <summary>The value parses as a date in the window [now, now + <c>Operand</c> days] — "expiring soon, not
+    /// yet past". <c>Operand</c> is the integer day count N. The proactive counterpart to
+    /// <see cref="DateNotPast"/>: that one holds across the whole future, this narrows it to the approaching
+    /// edge, so a status can warn BEFORE a deadline rather than only after it. Appended (ABI 0.4,
+    /// flight-school #3).</summary>
+    DateWithinDays,
 }
 
 /// <summary>A status evaluation's answer: the verdict plus every failed condition's diagnosis.</summary>

@@ -89,6 +89,14 @@ public sealed class TestModule : IIndustryModule
             .Status("Attributed",
                 StateCondition.ChildField(CertificateMaskId, "Issuer", ConditionTest.Present, null,
                     "test.no-issuer", "The certificate names no issuer."))
+            // The date-window primitives (ABI 0.4, flight-school #3): Expired is the clean inverse of MayAct's
+            // DateNotPast; Expiring narrows the future to the approaching 30-day edge.
+            .Status("Expired",
+                StateCondition.ChildField(CertificateMaskId, "Valid to", ConditionTest.DatePast, null,
+                    "test.not-expired", "The certificate has not expired ({value})."))
+            .Status("Expiring",
+                StateCondition.ChildField(CertificateMaskId, "Valid to", ConditionTest.DateWithinDays, "30",
+                    "test.not-expiring", "The certificate is not within 30 days of expiry ({value})."))
             .Transition("log-entry", "Log entry",
                 [
                     StateCondition.ChildField(CertificateMaskId, "Valid to", ConditionTest.DateNotPast, null,
