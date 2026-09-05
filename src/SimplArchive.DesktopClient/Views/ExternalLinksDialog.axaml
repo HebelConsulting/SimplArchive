@@ -41,7 +41,7 @@
             <TextBlock Text="{loc:Tr ExtLinkExpires}" VerticalAlignment="Center" />
             <CalendarDatePicker SelectedDate="{Binding Expiry}" Watermark="yyyy-MM-dd" />
             <TextBlock Text="{loc:Tr ExtLinkMaxAccesses}" VerticalAlignment="Center" />
-            <NumericUpDown Value="{Binding MaxAccesses}" Minimum="1" Width="110" />
+            <NumericUpDown Value="{Binding MaxAccesses}" Minimum="1" Increment="1" FormatString="0" Width="110" />
         </StackPanel>
 
         <ScrollViewer>

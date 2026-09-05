@@ -48,9 +48,9 @@
             <TextBlock Text="{loc:Tr ExtLinkRenewHint}" Foreground="{DynamicResource WbMuted}" FontSize="11" TextWrapping="Wrap" />
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <TextBlock Text="{loc:Tr ExtLinkExtendDays}" VerticalAlignment="Center" />
-                <NumericUpDown Value="{Binding Days}" Minimum="1" Maximum="90" Width="110" />
+                <NumericUpDown Value="{Binding Days}" Minimum="1" Maximum="90" Increment="1" FormatString="0" Width="110" />
                 <TextBlock Text="{loc:Tr ExtLinkMaxAccesses}" VerticalAlignment="Center" />
-                <NumericUpDown Value="{Binding MaxAccesses}" Minimum="1" Width="110" />
+                <NumericUpDown Value="{Binding MaxAccesses}" Minimum="1" Increment="1" FormatString="0" Width="110" />
             </StackPanel>
         </StackPanel>
 
