@@ -60,7 +60,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception e)
         {
-            Status = string.Format(Strings.Get("StErrOpenFolder"), e.Message);
+            ReportError(string.Format(Strings.Get("StErrOpenFolder"), e.Message));
         }
     }
 
@@ -111,7 +111,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (ApiActionException e)
         {
-            Status = e.Message;
+            ReportError(e.Message);
         }
     }
 }

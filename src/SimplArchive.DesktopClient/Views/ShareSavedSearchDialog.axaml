@@ -7,7 +7,7 @@
         Title="{loc:Tr SssTitle}" Width="420" SizeToContent="Height" CanResize="False"
         WindowStartupLocation="CenterOwner">
     <StackPanel Margin="18" Spacing="10">
-        <TextBlock Text="{Binding Name, StringFormat='Share \'{0}\' with:'}" TextWrapping="Wrap" FontWeight="SemiBold" />
+        <SelectableTextBlock Text="{Binding Name, StringFormat='Share \'{0}\' with:'}" TextWrapping="Wrap" FontWeight="SemiBold" />
 
         <StackPanel Spacing="4">
             <RadioButton x:Name="PrivateRadio" GroupName="scope" Content="{loc:Tr SssPrivate}" Checked="OnScopeChecked" Tag="0" />

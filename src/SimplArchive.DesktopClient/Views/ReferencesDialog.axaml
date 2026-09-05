@@ -10,8 +10,8 @@
     <DockPanel Margin="14" LastChildFill="True">
 
         <StackPanel DockPanel.Dock="Top" Spacing="2" Margin="0,0,0,8">
-            <TextBlock Text="{Binding ItemName, StringFormat='Folders that reference {0}'}" FontWeight="SemiBold" TextWrapping="Wrap" />
-            <TextBlock Text="{Binding Status}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+            <SelectableTextBlock Text="{Binding ItemName, StringFormat='Folders that reference {0}'}" FontWeight="SemiBold" TextWrapping="Wrap" />
+            <SelectableTextBlock Text="{Binding Status}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
         </StackPanel>
 
         <!-- The item's real home (ADR 0506): a prominent row set apart from the reference rows below. -->
@@ -23,9 +23,9 @@
                     <StackPanel Orientation="Horizontal" Spacing="4">
                         <TextBlock Text="{loc:Tr RefPrimaryLocation}" FontWeight="SemiBold" />
                         <TextBlock Text="—" />
-                        <TextBlock Text="{Binding PrimaryLocation.Name}" />
+                        <SelectableTextBlock Text="{Binding PrimaryLocation.Name}" />
                     </StackPanel>
-                    <TextBlock Text="{Binding PrimaryLocation.Path}" Foreground="{DynamicResource WbFaint}" FontSize="11" TextWrapping="Wrap" />
+                    <SelectableTextBlock Text="{Binding PrimaryLocation.Path}" Foreground="{DynamicResource WbFaint}" FontSize="11" TextWrapping="Wrap" />
                 </StackPanel>
                 <Button Grid.Column="2" Click="OnOpenPrimary" ToolTip.Tip="{loc:Tr RefOpenFolderTip}">
                     <StackPanel Orientation="Horizontal" Spacing="6">

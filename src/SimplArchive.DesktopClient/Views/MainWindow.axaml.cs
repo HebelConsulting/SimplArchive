@@ -52,6 +52,14 @@ public partial class MainWindow : Window
                 vm.MarkedNodeChanged += node => Dispatcher.UIThread.Post(() =>
                     TreePane.Tree.GetVisualDescendants().OfType<Border>()
                         .FirstOrDefault(b => ReferenceEquals(b.DataContext, node))?.BringIntoView());
+                // The status bar's copy button (errors only) reaches the clipboard through the view (ADR 0730).
+                vm.CopyToClipboard = async text =>
+                {
+                    if (Clipboard is { } clipboard)
+                    {
+                        await clipboard.SetTextAsync(text);
+                    }
+                };
                 vm.ExtendRetentionDialog = name => new ExtendRetentionDialog(name).ShowDialog<string?>(this);
                 vm.Search.SaveSearchNamePrompt = () => new NewFolderDialog("Save search", "Name this saved search").ShowDialog<string?>(this);
                 vm.DuplicateUploadDialog = req => new DuplicateUploadDialog(req).ShowDialog<MainWindowViewModel.DuplicatePromptResult?>(this);

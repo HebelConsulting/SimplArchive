@@ -111,7 +111,7 @@
                          child at its DESIRED width, and a TextBox with no Width desires almost nothing. -->
                     <TextBox Text="{Binding FindQuery}" Watermark="{loc:Tr FindInDocument}" Tag="find" Width="160" Height="26" Padding="4,2"
                              VerticalContentAlignment="Center" v:SearchField.Clearable="True" />
-                    <TextBlock Text="{Binding FindPosition}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" MinWidth="44"
+                    <SelectableTextBlock Text="{Binding FindPosition}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" MinWidth="44"
                                IsVisible="{Binding FindQuery, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                     <Button Command="{Binding FindPreviousCommand}" IsEnabled="{Binding CanFindNavigate}" ToolTip.Tip="{loc:Tr PvFindPrev}" Height="26" Padding="6,0"><i:Icon Value="mdi-chevron-up" /></Button>
                     <Button Command="{Binding FindNextCommand}" IsEnabled="{Binding CanFindNavigate}" ToolTip.Tip="{loc:Tr PvFindNext}" Height="26" Padding="6,0"><i:Icon Value="mdi-chevron-down" /></Button>
@@ -155,7 +155,7 @@
             <ScrollViewer IsVisible="{Binding PreviewText, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
                 <SelectableTextBlock Text="{Binding PreviewText}" FontFamily="Menlo,Consolas,monospace" FontSize="12" Padding="10" />
             </ScrollViewer>
-            <TextBlock Text="{Binding PreviewPlaceholder}" Foreground="{DynamicResource WbFaint}" TextWrapping="Wrap" MaxWidth="280"
+            <SelectableTextBlock Text="{Binding PreviewPlaceholder}" Foreground="{DynamicResource WbFaint}" TextWrapping="Wrap" MaxWidth="280"
                        HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
                        IsVisible="{Binding PreviewPlaceholder, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
             <!-- Sensitivity watermark (ADR "Document watermarking") — repeating diagonal label+viewer, click-through. -->

@@ -35,24 +35,24 @@
                     <StackPanel IsVisible="{Binding HasSelection}" Spacing="10">
                         <StackPanel>
                             <TextBlock Text="{loc:Tr SmNameLabel}" FontSize="11" Foreground="{DynamicResource WbMuted}" />
-                            <TextBlock Text="{Binding Selected.Name}" FontSize="14" />
+                            <SelectableTextBlock Text="{Binding Selected.Name}" FontSize="14" />
                         </StackPanel>
                         <StackPanel>
                             <TextBlock Text="{loc:Tr SmUrlLabel}" FontSize="11" Foreground="{DynamicResource WbMuted}" />
                             <!-- Tints light green when a live probe confirms the selected profile is our server (issue #270). -->
                             <Border Background="{Binding SelectedIsOurServer, Converter={x:Static vm:GreenTintConverter.Instance}, ConverterParameter=bg}"
                                     CornerRadius="3" Padding="4,2" HorizontalAlignment="Left">
-                                <TextBlock Text="{Binding Selected.ApiRootUrl}" FontSize="14" TextWrapping="Wrap"
+                                <SelectableTextBlock Text="{Binding Selected.ApiRootUrl}" FontSize="14" TextWrapping="Wrap"
                                            Foreground="{Binding SelectedIsOurServer, Converter={x:Static vm:GreenTintConverter.Instance}, ConverterParameter=fg}" />
                             </Border>
                         </StackPanel>
                         <StackPanel>
                             <TextBlock Text="{loc:Tr SmThemeLabel}" FontSize="11" Foreground="{DynamicResource WbMuted}" />
-                            <TextBlock Text="{Binding SelectedThemeName}" FontSize="14" />
+                            <SelectableTextBlock Text="{Binding SelectedThemeName}" FontSize="14" />
                         </StackPanel>
                         <StackPanel>
                             <TextBlock Text="{loc:Tr SmEnvLabel}" FontSize="11" Foreground="{DynamicResource WbMuted}" />
-                            <TextBlock Text="{Binding SelectedEnvironmentName}" FontSize="14" />
+                            <SelectableTextBlock Text="{Binding SelectedEnvironmentName}" FontSize="14" />
                         </StackPanel>
                         <Button Command="{Binding EditCommand}" HorizontalAlignment="Left" Margin="0,4,0,0">
                             <StackPanel Orientation="Horizontal" Spacing="5"><i:Icon Value="mdi-pencil" /><TextBlock Text="{loc:Tr Edit}" /></StackPanel>
@@ -117,7 +117,7 @@
                             </ComboBox.ItemTemplate>
                         </ComboBox>
                     </StackPanel>
-                    <TextBlock Text="{Binding Error}" Foreground="{DynamicResource WbDanger}" FontSize="12" IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" TextWrapping="Wrap" />
+                    <SelectableTextBlock Text="{Binding Error}" Foreground="{DynamicResource WbDanger}" FontSize="12" IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" TextWrapping="Wrap" />
                     <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
                         <Button Command="{Binding SaveCommand}" Classes="accent"><StackPanel Orientation="Horizontal" Spacing="5"><i:Icon Value="mdi-content-save-outline" /><TextBlock Text="{loc:Tr Save}" /></StackPanel></Button>
                         <Button Command="{Binding CancelCommand}" Content="{loc:Tr Cancel}" />

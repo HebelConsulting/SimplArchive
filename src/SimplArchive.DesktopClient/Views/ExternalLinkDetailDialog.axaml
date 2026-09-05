@@ -11,16 +11,16 @@
     <StackPanel Margin="16" Spacing="10">
         <Grid ColumnDefinitions="130,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" >
             <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr ExtLinkDocument}" Foreground="{DynamicResource WbMuted}" />
-            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding DocumentName}" TextWrapping="Wrap" />
+            <SelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding DocumentName}" TextWrapping="Wrap" />
 
             <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr ExtLinkCreatedBy}" Foreground="{DynamicResource WbMuted}" Margin="0,6,0,0" />
-            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding CreatedByName}" Margin="0,6,0,0" />
+            <SelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding CreatedByName}" Margin="0,6,0,0" />
 
             <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr ExtLinkExpires}" Foreground="{DynamicResource WbMuted}" Margin="0,6,0,0" />
-            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Expires}" Margin="0,6,0,0" />
+            <SelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Expires}" Margin="0,6,0,0" />
 
             <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:Tr ExtLinkAccesses}" Foreground="{DynamicResource WbMuted}" Margin="0,6,0,0" />
-            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Accesses}" Margin="0,6,0,0" />
+            <SelectableTextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Accesses}" Margin="0,6,0,0" />
 
             <!-- Three states, decided by whether the server advertised `reveal-url` (issue #412): a tenant that
                  has not opted in gets the note explaining the absence; one that has gets a button, and then the
@@ -28,7 +28,7 @@
                  line next to a shown URL is exactly the contradiction this row used to print. -->
             <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:Tr ExtLinkUrl}" Foreground="{DynamicResource WbMuted}" Margin="0,6,0,0" />
             <StackPanel Grid.Row="4" Grid.Column="1" Spacing="6" Margin="0,6,0,0">
-                <TextBlock Text="{Binding UrlNote}" IsVisible="{Binding ShowUrlNote}" Foreground="{DynamicResource WbMuted}"
+                <SelectableTextBlock Text="{Binding UrlNote}" IsVisible="{Binding ShowUrlNote}" Foreground="{DynamicResource WbMuted}"
                            FontStyle="Italic" TextWrapping="Wrap" />
                 <Button Content="{loc:Tr ExtLinkShowUrl}" Command="{Binding RevealUrlCommand}"
                         IsVisible="{Binding ShowRevealButton}" HorizontalAlignment="Left" Padding="10,3" />
@@ -55,7 +55,7 @@
         </StackPanel>
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-            <TextBlock Text="{Binding Status}" VerticalAlignment="Center" />
+            <SelectableTextBlock Text="{Binding Status}" VerticalAlignment="Center" />
             <Button Content="{loc:Tr ExtLinkApply}" Command="{Binding ApplyCommand}" IsVisible="{Binding CanRenew}" />
             <Button Content="{loc:Tr Close}" Click="OnClose" />
         </StackPanel>

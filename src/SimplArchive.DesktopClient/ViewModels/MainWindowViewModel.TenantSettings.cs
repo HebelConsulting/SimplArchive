@@ -103,7 +103,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrLoadTenant");
+            ReportError(Strings.Get("StErrLoadTenant"));
         }
     }
 
@@ -196,11 +196,11 @@ public sealed partial class MainWindowViewModel
         }
         catch (ApiActionException ex)
         {
-            Status = ex.Message;
+            ReportError(ex.Message);
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrRecompute");
+            ReportError(Strings.Get("StErrRecompute"));
         }
     }
 
@@ -219,11 +219,11 @@ public sealed partial class MainWindowViewModel
         }
         catch (ApiActionException ex)
         {
-            Status = ex.Message;
+            ReportError(ex.Message);
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrTestEvent");
+            ReportError(Strings.Get("StErrTestEvent"));
         }
     }
 

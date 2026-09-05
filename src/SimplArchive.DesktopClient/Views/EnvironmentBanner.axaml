@@ -10,7 +10,7 @@
          for AA contrast when the set was fixed — see EnvironmentLevels). Hidden entirely when the profile
          declares nothing, which is the single-deployment norm. -->
     <Border Background="{Binding EnvBanner.Background}" Padding="12,3" IsVisible="{Binding EnvBanner.IsShown}">
-        <TextBlock Text="{Binding EnvBanner.Name}" Foreground="White" FontSize="12" FontWeight="SemiBold"
+        <SelectableTextBlock Text="{Binding EnvBanner.Name}" Foreground="White" FontSize="12" FontWeight="SemiBold"
                    HorizontalAlignment="Center" />
     </Border>
 </UserControl>

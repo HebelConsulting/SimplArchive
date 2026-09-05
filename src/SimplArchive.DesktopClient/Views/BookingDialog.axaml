@@ -7,7 +7,7 @@
         Title="{loc:Tr BookTitle}" Width="460" SizeToContent="Height" CanResize="False"
         WindowStartupLocation="CenterOwner">
     <StackPanel Margin="18" Spacing="10">
-        <TextBlock Text="{Binding ResourceName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+        <SelectableTextBlock Text="{Binding ResourceName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
 
         <!-- The resource's bookings, each cancellable where the row says so (canCancel — the booker, or a
              room admin). Empty → nothing renders, like the reminder rows this dialog is modeled on. -->
@@ -17,10 +17,10 @@
                     <Grid ColumnDefinitions="*,Auto" Margin="0,2">
                         <StackPanel Grid.Column="0">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <TextBlock Text="{Binding TimeText}" FontSize="12" />
-                                <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="Gray" VerticalAlignment="Center" />
+                                <SelectableTextBlock Text="{Binding TimeText}" FontSize="12" />
+                                <SelectableTextBlock Text="{Binding StatusText}" FontSize="11" Foreground="Gray" VerticalAlignment="Center" />
                             </StackPanel>
-                            <TextBlock Text="{Binding Row.BookedBy}" FontSize="11" Foreground="Gray" />
+                            <SelectableTextBlock Text="{Binding Row.BookedBy}" FontSize="11" Foreground="Gray" />
                         </StackPanel>
                         <Button Grid.Column="1" Content="{loc:Tr Cancel}" FontSize="11"
                                 IsVisible="{Binding Row.CanCancel}"
@@ -48,7 +48,7 @@
 
         <!-- The refusal's home: the localized slot-conflict sentence lands HERE, beside the form that caused
              it (ADR 0550 — the state's message next to the control that started the transition). -->
-        <TextBlock Text="{Binding Status}" Foreground="{DynamicResource SystemErrorTextColor}" FontSize="12"
+        <SelectableTextBlock Text="{Binding Status}" Foreground="{DynamicResource SystemErrorTextColor}" FontSize="12"
                    TextWrapping="Wrap" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">

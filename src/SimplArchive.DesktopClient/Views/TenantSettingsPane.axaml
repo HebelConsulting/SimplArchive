@@ -20,11 +20,11 @@
                 <TextBlock Text="{loc:Tr TenantReference}" FontWeight="SemiBold" Foreground="{DynamicResource WbMuted}" />
                 <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr TenantIdLabel}" Foreground="{DynamicResource WbMuted}" Margin="0,2" />
-                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding TenantId}" Margin="0,2" />
+                    <SelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding TenantId}" Margin="0,2" />
                     <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr WorkflowStatus}" Foreground="{DynamicResource WbMuted}" Margin="0,2" />
-                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TenantStatus}" Margin="0,2" />
+                    <SelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TenantStatus}" Margin="0,2" />
                     <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr SysCreated}" Foreground="{DynamicResource WbMuted}" Margin="0,2" />
-                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding TenantCreated}" Margin="0,2" />
+                    <SelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding TenantCreated}" Margin="0,2" />
                 </Grid>
 
                 <StackPanel Spacing="4" IsVisible="{Binding HasTenantSettings}">
@@ -47,7 +47,7 @@
                                 ToolTip.Tip="{loc:Tr TenantOcrInfo}" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock Text="{Binding TenantOcrDisplay}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                        <SelectableTextBlock Text="{Binding TenantOcrDisplay}" VerticalAlignment="Center" TextWrapping="Wrap" />
                         <Button Content="{loc:Tr MwEditEllipsis}" Click="OnEditOcrLanguages" IsVisible="{Binding IsEditingTenantCapture}" ToolTip.Tip="{loc:Tr MwChooseOcr}" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,8,0,0">
@@ -129,10 +129,10 @@
                     <NumericUpDown Value="{Binding TenantStorageQuotaMb}" Minimum="0" Increment="50" FormatString="0"
                                    IsEnabled="{Binding IsEditingTenantStorage}" HorizontalAlignment="Left" Width="200" />
                     <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
-                        <TextBlock Text="{Binding TenantStorageUsage}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                        <SelectableTextBlock Text="{Binding TenantStorageUsage}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
                         <Border Background="#c0392b" CornerRadius="9" Padding="8,1" Margin="8,0,0,0" VerticalAlignment="Center"
                                 IsVisible="{Binding TenantStorageWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                            <TextBlock Text="{Binding TenantStorageWarning}" Foreground="White" FontSize="12" />
+                            <SelectableTextBlock Text="{Binding TenantStorageWarning}" Foreground="White" FontSize="12" />
                         </Border>
                         <Button Content="{loc:Tr TenantRecompute}" Command="{Binding RecomputeStorageCommand}" Padding="8,2"
                                 ToolTip.Tip="{loc:Tr MwRecomputeTip}" />
@@ -203,10 +203,10 @@
                     </StackPanel>
                     <TextBox Text="{Binding TenantAuditWebhookSecret}" PasswordChar="•" IsVisible="{Binding IsEditingTenantAuditStreaming}"
                              Watermark="{Binding TenantWebhookSecretWatermark}" />
-                    <TextBlock Margin="0,4,0,0" Foreground="{DynamicResource WbMuted}" IsVisible="{Binding !IsEditingTenantAuditStreaming}"
+                    <SelectableTextBlock Margin="0,4,0,0" Foreground="{DynamicResource WbMuted}" IsVisible="{Binding !IsEditingTenantAuditStreaming}"
                                Text="{Binding TenantWebhookSecretStatus}" />
                     <!-- Read-only delivery health (ADR "Audit webhook delivery retry/backoff"). Green when healthy, amber when failing. -->
-                    <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" IsVisible="{Binding TenantWebhookHealthVisible}"
+                    <SelectableTextBlock Margin="0,4,0,0" TextWrapping="Wrap" IsVisible="{Binding TenantWebhookHealthVisible}"
                                Text="{Binding TenantWebhookHealth}"
                                Foreground="{Binding TenantWebhookHealthBrush}" />
                     <Button Content="{loc:Tr TenantSendTest}" Command="{Binding TestWebhookCommand}" Padding="8,2" Margin="0,6,0,0"
@@ -225,8 +225,8 @@
                             <DataTemplate x:DataType="vm:ModuleRowViewModel">
                                 <Grid ColumnDefinitions="*,Auto" Margin="0,3">
                                     <StackPanel Grid.Column="0">
-                                        <TextBlock Text="{Binding DisplayName}" />
-                                        <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="{Binding StatusBrush}" />
+                                        <SelectableTextBlock Text="{Binding DisplayName}" />
+                                        <SelectableTextBlock Text="{Binding StatusText}" FontSize="11" Foreground="{Binding StatusBrush}" />
                                     </StackPanel>
                                     <Button Grid.Column="1" Content="{Binding ActivateLabel}" FontSize="11" VerticalAlignment="Center"
                                             IsVisible="{Binding CanActivate}" Click="OnActivateModule" />

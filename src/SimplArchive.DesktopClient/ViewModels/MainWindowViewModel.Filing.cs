@@ -39,7 +39,7 @@ public sealed partial class MainWindowViewModel
         // `Personal` open is the first level that refuses it (#634).
         if (!folderLinks.TryGetValue("children", out var childrenHref))
         {
-            Status = Strings.Get("StErrUploadNotHere");
+            ReportError(Strings.Get("StErrUploadNotHere"));
             return;
         }
 
@@ -109,12 +109,12 @@ public sealed partial class MainWindowViewModel
             }
             catch (Services.ApiActionException e)
             {
-                Status = e.Message;
+                ReportError(e.Message);
                 failed++;
             }
             catch (Exception e)
             {
-                Status = string.Format(Strings.Get("StErrUpload2"), file.Name, e.Message);
+                ReportError(string.Format(Strings.Get("StErrUpload2"), file.Name, e.Message));
                 failed++;
             }
         }
@@ -124,7 +124,7 @@ public sealed partial class MainWindowViewModel
             await LoadFolderContentsAsync(openFolderId);
         }
 
-        Status = string.Format(Strings.Get("StUploadedN"), uploaded) + (failed > 0 ? string.Format(Strings.Get("StFailedN"), failed) : "") + ".";
+        ReportError(string.Format(Strings.Get("StUploadedN"), uploaded) + (failed > 0 ? string.Format(Strings.Get("StFailedN"), failed) : "") + ".");
     }
 
     // Dropping OS files onto a document row offers the intray-style filing dialog (ADR "List-pane drop filing"):
@@ -191,12 +191,12 @@ public sealed partial class MainWindowViewModel
             }
             catch (Services.ApiActionException e)
             {
-                Status = e.Message;
+                ReportError(e.Message);
                 failed++;
             }
             catch (Exception e)
             {
-                Status = string.Format(Strings.Get("StErrFiling2"), file.Name, e.Message);
+                ReportError(string.Format(Strings.Get("StErrFiling2"), file.Name, e.Message));
                 failed++;
             }
         }

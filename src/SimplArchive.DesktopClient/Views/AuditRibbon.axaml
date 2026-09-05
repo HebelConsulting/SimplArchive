@@ -27,10 +27,10 @@
             </StackPanel>
             <!-- Verify outcomes are feedback, not actions — they ride beside the buttons that produced them. -->
             <Border IsVisible="{Binding AuditVerifyShown}" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" CornerRadius="9" Padding="9,2" Margin="0,0,8,4" VerticalAlignment="Center">
-                <TextBlock Text="{Binding AuditVerifyStatus}" FontSize="12" />
+                <SelectableTextBlock Text="{Binding AuditVerifyStatus}" FontSize="12" />
             </Border>
             <Border IsVisible="{Binding WormVerifyShown}" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" CornerRadius="9" Padding="9,2" Margin="0,0,0,4" VerticalAlignment="Center">
-                <TextBlock Text="{Binding WormVerifyStatus}" FontSize="12" />
+                <SelectableTextBlock Text="{Binding WormVerifyStatus}" FontSize="12" />
             </Border>
         </WrapPanel>
     </Border>

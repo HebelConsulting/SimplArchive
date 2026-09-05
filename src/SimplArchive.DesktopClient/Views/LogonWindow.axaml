@@ -39,7 +39,7 @@
 
         <!-- Self-update notice for the selected deployment (issue #271), above the Login button. -->
         <StackPanel Spacing="4" IsVisible="{Binding UpdateStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-            <TextBlock Text="{Binding UpdateStatus}" Foreground="#b26a00" FontSize="12" TextWrapping="Wrap"
+            <SelectableTextBlock Text="{Binding UpdateStatus}" Foreground="#b26a00" FontSize="12" TextWrapping="Wrap"
                        HorizontalAlignment="Center" TextAlignment="Center" />
             <Button Command="{Binding OpenDownloadCommand}" IsVisible="{Binding HasUpdateLink}"
                     HorizontalAlignment="Center" Padding="8,2">
@@ -57,7 +57,7 @@
             </StackPanel>
         </Button>
 
-        <TextBlock Text="{Binding Status}" Foreground="{DynamicResource WbMuted}" FontSize="12" TextWrapping="Wrap" HorizontalAlignment="Center" />
+        <SelectableTextBlock Text="{Binding Status}" Foreground="{DynamicResource WbMuted}" FontSize="12" TextWrapping="Wrap" HorizontalAlignment="Center" />
         <TextBlock Text="{loc:Tr LogonManageServers}" Foreground="{DynamicResource WbFaint}" FontSize="11" HorizontalAlignment="Center" />
     </StackPanel>
 </Window>

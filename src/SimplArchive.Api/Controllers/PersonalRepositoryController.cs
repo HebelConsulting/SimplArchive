@@ -79,6 +79,12 @@ public class PersonalRepositoryController : ControllerBase
                 // other folder — the same pair the repositories listing carries (#443).
                 new Link("references", $"/api/documents/{id}/references", "GET"),
                 new Link("document", $"/api/documents/{id}", "GET"),
+                // The personal space is a real folder with the UserFolder mask (PersonalRepositoryProvisioner),
+                // so it advertises its mask + index data exactly as a repository row does — otherwise a client
+                // that follows the `mask` rel to fill the detail pane finds nothing and cannot show what mask
+                // the node carries (#… — the "rel not advertised for 'Demo Admin'" the desktop hit).
+                new Link("index-data", $"/api/documents/{id}/index-data", "GET"),
+                new Link("mask", $"/api/documents/{id}/mask", "GET"),
             ],
         };
     }

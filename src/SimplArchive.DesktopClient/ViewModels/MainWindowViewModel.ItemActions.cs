@@ -207,11 +207,11 @@ public sealed partial class MainWindowViewModel
         }
         catch (Services.ApiActionException e)
         {
-            Status = e.Message;
+            ReportError(e.Message);
         }
         catch (Exception e)
         {
-            Status = string.Format(Strings.Get("StErrRename"), e.Message);
+            ReportError(string.Format(Strings.Get("StErrRename"), e.Message));
         }
     }
 
@@ -235,7 +235,7 @@ public sealed partial class MainWindowViewModel
             {
                 if (node.ReferenceDeleteHref is not { } referenceDeleteHref)
                 {
-                    Status = string.Format(Strings.Get("StErrDeleteMsg"), $"'{node.Name}' offered no way to remove the shortcut.");
+                    ReportError(string.Format(Strings.Get("StErrDeleteMsg"), $"'{node.Name}' offered no way to remove the shortcut."));
                     return;
                 }
 
@@ -257,11 +257,11 @@ public sealed partial class MainWindowViewModel
         }
         catch (Services.ApiActionException e)
         {
-            Status = e.Message;
+            ReportError(e.Message);
         }
         catch (Exception e)
         {
-            Status = string.Format(Strings.Get("StErrDeleteMsg"), e.Message);
+            ReportError(string.Format(Strings.Get("StErrDeleteMsg"), e.Message));
         }
     }
 
@@ -281,11 +281,11 @@ public sealed partial class MainWindowViewModel
         }
         catch (Services.ApiActionException e)
         {
-            Status = e.Message;
+            ReportError(e.Message);
         }
         catch (Exception e)
         {
-            Status = string.Format(Strings.Get("StErrMove"), e.Message);
+            ReportError(string.Format(Strings.Get("StErrMove"), e.Message));
         }
     }
 
@@ -309,7 +309,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception)
         {
-            Status = Strings.Get("StTakeOverFailed");
+            ReportError(Strings.Get("StTakeOverFailed"));
         }
     }
 }

@@ -34,7 +34,7 @@ public sealed partial class MainWindowViewModel
         var token = await SimplArchiveApiClient.ExchangeImpersonationTokenAsync(api.AccessToken, targetUserId);
         if (token is null)
         {
-            Status = Strings.Get("StErrImpersonate");
+            ReportError(Strings.Get("StErrImpersonate"));
             return;
         }
 

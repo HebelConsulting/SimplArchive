@@ -8,7 +8,7 @@
         Title="{loc:Tr VersionsTitle}" Width="680" Height="440"
         WindowStartupLocation="CenterOwner">
     <DockPanel Margin="16" LastChildFill="True">
-        <TextBlock DockPanel.Dock="Top" Text="{Binding DocumentName}" FontWeight="SemiBold" FontSize="15" Margin="0,0,0,10" />
+        <SelectableTextBlock DockPanel.Dock="Top" Text="{Binding DocumentName}" FontWeight="SemiBold" FontSize="15" Margin="0,0,0,10" />
 
         <!-- Footer: Compare launcher + Make current (on the selected row, confirmed) + status + Close. -->
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,10,0,0">
@@ -18,7 +18,7 @@
             <Button Click="OnMakeCurrent" IsEnabled="{Binding CanMakeCurrentSelected}" Margin="8,0,0,0" Classes="makecurrent">
                 <StackPanel Orientation="Horizontal" Spacing="5"><i:Icon Value="mdi-history" /><TextBlock Text="{loc:Tr MakeCurrent}" /></StackPanel>
             </Button>
-            <TextBlock Text="{Binding Status}" Foreground="{DynamicResource WbMuted}" FontSize="12" VerticalAlignment="Center" Margin="12,0,0,0" />
+            <SelectableTextBlock Text="{Binding Status}" Foreground="{DynamicResource WbMuted}" FontSize="12" VerticalAlignment="Center" Margin="12,0,0,0" />
             <Button Content="{loc:Tr Close}" Click="OnClose" HorizontalAlignment="Right" Margin="0" DockPanel.Dock="Right" />
         </StackPanel>
 

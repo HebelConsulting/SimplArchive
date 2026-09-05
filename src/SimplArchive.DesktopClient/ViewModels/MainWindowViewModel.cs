@@ -444,7 +444,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrSubscription");
+            ReportError(Strings.Get("StErrSubscription"));
         }
     }
 
@@ -577,7 +577,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
             var result = await _authenticator.AuthenticateAsync(forceLogin: _forceLoginNext);
             if (result is null)
             {
-                Status = Strings.Get("StSignInFailed");
+                ReportError(Strings.Get("StSignInFailed"));
                 return;
             }
 
@@ -599,7 +599,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         }
         catch (Exception e)
         {
-            Status = string.Format(Strings.Get("StErrSignIn"), e.Message);
+            ReportError(string.Format(Strings.Get("StErrSignIn"), e.Message));
         }
     }
 
@@ -815,7 +815,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         }
         catch (Exception e)
         {
-            Status = string.Format(Strings.Get("StErrLoad"), e.Message);
+            ReportError(string.Format(Strings.Get("StErrLoad"), e.Message));
         }
     }
 
@@ -1020,11 +1020,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         }
         catch (Services.ApiActionException e)
         {
-            Status = e.Message;
+            ReportError(e.Message);
         }
         catch (Exception e)
         {
-            Status = string.Format(Strings.Get("StErrCreateFolder"), e.Message);
+            ReportError(string.Format(Strings.Get("StErrCreateFolder"), e.Message));
         }
     }
 
@@ -1155,7 +1155,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         }
         catch (Exception e)
         {
-            Status = string.Format(Strings.Get("StErrStartConversion"), e.Message);
+            ReportError(string.Format(Strings.Get("StErrStartConversion"), e.Message));
         }
     }
 
@@ -1514,18 +1514,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
 
         try
         {
-            var mask = await _api.Documents.GetMaskAsync(document.Href("mask"));
+            await LoadMaskAndIndexAsync(document);
             if (Superseded()) { return; }
-
-            MaskLine = mask.Name is null ? "No mask" : $"Mask: {mask.Name}" + (mask.VersionNumber is { } v ? $" · version {v}" : "");
-
-            var indexData = await _api.Documents.GetIndexDataAsync(document.Href("index-data"));
-            if (Superseded()) { return; }
-
-            foreach (var field in indexData)
-            {
-                IndexFields.Add(new IndexFieldViewModel { FieldName = field.FieldName, Values = string.Join(", ", field.Values) });
-            }
 
             // A folder advertises no `versions`, and that absence is the ANSWER rather than a mistake — there
             // is nothing to preview and no current version to name. Asked with TryHref so a folder takes the
@@ -1550,7 +1540,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         }
         catch (Exception e)
         {
-            Status = string.Format(Strings.Get("StErrLoad2"), document.Name, e.Message);
+            ReportError(string.Format(Strings.Get("StErrLoad2"), document.Name, e.Message));
         }
     }
 
@@ -1602,7 +1592,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrLoadRetention");
+            ReportError(Strings.Get("StErrLoadRetention"));
         }
     }
 
@@ -1622,7 +1612,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         }
         catch (ApiActionException e)
         {
-            Status = e.Message;
+            ReportError(e.Message);
         }
     }
 
@@ -1647,7 +1637,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         }
         catch (ApiActionException e)
         {
-            Status = e.Message;
+            ReportError(e.Message);
         }
     }
 
@@ -1666,7 +1656,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         }
         catch (ApiActionException ex)
         {
-            Status = ex.Message;
+            ReportError(ex.Message);
         }
     }
 

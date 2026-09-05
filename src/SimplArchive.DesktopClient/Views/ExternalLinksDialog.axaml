@@ -9,7 +9,7 @@
     <!-- External links (ADR 0546). Serves both the per-document dialog and the cross-document "My external
          links" view; ShowCreate and CanViewOthers decide which controls appear. -->
     <DockPanel Margin="16">
-        <TextBlock DockPanel.Dock="Top" Text="{Binding DocumentName}" FontWeight="SemiBold" Margin="0,0,0,8" />
+        <SelectableTextBlock DockPanel.Dock="Top" Text="{Binding DocumentName}" FontWeight="SemiBold" Margin="0,0,0,8" />
 
         <!-- The tenant-admin picker: whose links to show. Only rendered when the server said the caller may. -->
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8"
@@ -33,7 +33,7 @@
 
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right"
                     Spacing="8" Margin="0,12,0,0">
-            <TextBlock Text="{Binding Status}" VerticalAlignment="Center" />
+            <SelectableTextBlock Text="{Binding Status}" VerticalAlignment="Center" />
             <Button Content="{loc:Tr ExtLinkCreate}" Command="{Binding CreateCommand}"
                     IsVisible="{Binding ShowCreate}" IsEnabled="{Binding CanCreate}" />
             <Button Content="{loc:Tr Close}" Click="OnClose" />
@@ -55,10 +55,10 @@
                         <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1" Padding="0,6">
                             <Grid ColumnDefinitions="*,Auto,Auto">
                                 <StackPanel Grid.Column="0" Spacing="1">
-                                    <TextBlock Text="{Binding DocumentName}" FontWeight="SemiBold" FontSize="12" />
-                                    <TextBlock FontSize="11" Foreground="{DynamicResource WbMuted}"
+                                    <SelectableTextBlock Text="{Binding DocumentName}" FontWeight="SemiBold" FontSize="12" />
+                                    <SelectableTextBlock FontSize="11" Foreground="{DynamicResource WbMuted}"
                                                Text="{Binding ExpiresLocal}" />
-                                    <TextBlock FontSize="11" Foreground="{DynamicResource WbMuted}"
+                                    <SelectableTextBlock FontSize="11" Foreground="{DynamicResource WbMuted}"
                                                Text="{Binding CreatedByName}" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">

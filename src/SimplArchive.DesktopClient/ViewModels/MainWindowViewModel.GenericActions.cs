@@ -52,11 +52,11 @@ public partial class MainWindowViewModel
         catch (ApiActionException e)
         {
             // The problem detail is the explanation (ADR 0742: a diagnosis, not a verdict).
-            Status = e.Message;
+            ReportError(e.Message);
         }
         catch (Exception e)
         {
-            Status = e.Message;
+            ReportError(e.Message);
         }
     }
 }

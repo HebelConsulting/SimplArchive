@@ -119,7 +119,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception e)
         {
-            Status = string.Format(Strings.Get("StErrPostComment"), e.Message);
+            ReportError(string.Format(Strings.Get("StErrPostComment"), e.Message));
         }
     }
 
@@ -139,7 +139,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception e)
         {
-            Status = string.Format(Strings.Get("StErrPostComment"), e.Message);
+            ReportError(string.Format(Strings.Get("StErrPostComment"), e.Message));
         }
     }
 }

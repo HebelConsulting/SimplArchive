@@ -42,7 +42,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrLoadTenant");
+            ReportError(Strings.Get("StErrLoadTenant"));
         }
     }
 

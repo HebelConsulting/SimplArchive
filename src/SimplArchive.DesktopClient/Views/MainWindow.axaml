@@ -43,9 +43,16 @@
             </StackPanel>
         </Border>
 
-        <!-- Status bar -->
+        <!-- Status bar: the text is SELECTABLE and carries a copy button, because the message it most often
+             holds is an error a user needs to paste into a report (found on the kiosk). The button shows only
+             when there is something to copy. -->
         <Border DockPanel.Dock="Bottom" Background="{DynamicResource WbChrome}" Padding="12,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,1,0,0">
-            <TextBlock Text="{Binding Status}" Foreground="{DynamicResource WbMuted}" />
+            <DockPanel LastChildFill="True">
+                <Button DockPanel.Dock="Right" Content="{loc:Tr Copy}" Command="{Binding CopyStatusCommand}"
+                        IsVisible="{Binding StatusIsError}"
+                        FontSize="11" Padding="8,1" Margin="8,0,0,0" VerticalAlignment="Center" />
+                <SelectableTextBlock Text="{Binding Status}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+            </DockPanel>
         </Border>
 
         <!-- Logged-out prompt -->
@@ -135,7 +142,7 @@
                         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                 <TextBlock Text="{loc:Tr TabIntray}" FontWeight="SemiBold" />
-                                <TextBlock Text="{Binding Intray.Status}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                <SelectableTextBlock Text="{Binding Intray.Status}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                             </StackPanel>
                         </Grid>
                         <!-- View filter (ADR 0532): a CanManageIntrays holder gets a user-picker to open another
@@ -184,7 +191,7 @@
                         <!-- Mask / index-data header -->
                         <Border Grid.Row="0" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,0,0,0">
                             <Grid ColumnDefinitions="*,Auto" Margin="12,6">
-                                <TextBlock Grid.Column="0" Text="{Binding Intray.DetailTitle}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <SelectableTextBlock Grid.Column="0" Text="{Binding Intray.DetailTitle}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
                                 <Button Grid.Column="1" Command="{Binding Intray.ToggleMaskCommand}" ToolTip.Tip="{loc:Tr MwCollapseExpand}"><i:Icon Value="{Binding Intray.MaskCaret}" /></Button>
                             </Grid>
                         </Border>
@@ -229,14 +236,14 @@
                                         <!-- OCR languages for a scannable item — staged, applied to the searchable-PDF conversion at filing (ADR "Inbox OCR-language staging"). -->
                                         <Grid ColumnDefinitions="180,*,Auto" IsVisible="{Binding Intray.StgScannable}">
                                             <TextBlock Grid.Column="0" Text="{loc:Tr SysOcrLanguages}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="1" Text="{Binding Intray.OcrDisplay}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                            <SelectableTextBlock Grid.Column="1" Text="{Binding Intray.OcrDisplay}" VerticalAlignment="Center" TextWrapping="Wrap" />
                                             <Button Grid.Column="2" Click="OnEditIntrayOcrLanguages" Margin="6,2,0,2" ToolTip.Tip="{loc:Tr MwEditOcr}"><i:Icon Value="mdi-pencil-outline" /></Button>
                                         </Grid>
                                         <ItemsControl ItemsSource="{Binding Intray.MaskEditFields}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:MaskFieldEditViewModel">
                                                     <Grid ColumnDefinitions="180,*" Margin="0,3">
-                                                        <TextBlock Grid.Column="0" Text="{Binding Label}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                                        <SelectableTextBlock Grid.Column="0" Text="{Binding Label}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
                                                         <Panel Grid.Column="1">
                                                             <CalendarDatePicker IsVisible="{Binding IsDate}" HorizontalAlignment="Left" SelectedDate="{Binding DateValue}" Watermark="yyyy-MM-dd" />
                                                             <CheckBox IsVisible="{Binding IsBoolean}" IsChecked="{Binding BoolValue}" />
@@ -290,7 +297,7 @@
                         <i:Icon Value="mdi-lock-outline" FontSize="20" />
                         <Border IsVisible="{Binding HasCheckouts}" Background="{DynamicResource WbAccent}" CornerRadius="8" MinWidth="16" Height="16"
                                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-5,-9,0" Padding="4,0">
-                            <TextBlock Text="{Binding CheckoutCount}" Foreground="{DynamicResource WbOnAccent}" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <SelectableTextBlock Text="{Binding CheckoutCount}" Foreground="{DynamicResource WbOnAccent}" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                     </Panel>
                 </TabItem.Header>
@@ -321,7 +328,7 @@
                         <!-- Pending-task count badge (ADR "Workflow / document state model", 0009). -->
                         <Border IsVisible="{Binding HasTasks}" Background="#e53935" CornerRadius="8" MinWidth="16" Height="16"
                                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-5,-9,0" Padding="4,0">
-                            <TextBlock Text="{Binding TaskCount}" Foreground="White" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <SelectableTextBlock Text="{Binding TaskCount}" Foreground="White" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                     </Panel>
                 </TabItem.Header>
@@ -392,7 +399,7 @@
                         </ListBox>
                         <DockPanel Grid.Column="1" Margin="10,0,0,0" LastChildFill="True" IsVisible="{Binding HasSelectedHold}">
                             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
-                                <TextBlock Text="{Binding SelectedLegalHold.Name}" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center" />
+                                <SelectableTextBlock Text="{Binding SelectedLegalHold.Name}" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center" />
                             </StackPanel>
                             <TextBlock DockPanel.Dock="Top" Text="{loc:Tr MwDocuments}" FontWeight="SemiBold" Margin="0,0,0,4" />
                             <ScrollViewer>

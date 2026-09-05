@@ -13,7 +13,7 @@
                 <DataTemplate x:DataType="vm:DiffRowViewModel">
                     <Grid ColumnDefinitions="34,*,34,*">
                         <Border Grid.Column="0" Background="{Binding OldBackground}">
-                            <TextBlock Text="{Binding OldNumber}" Foreground="{DynamicResource WbMuted}"
+                            <SelectableTextBlock Text="{Binding OldNumber}" Foreground="{DynamicResource WbMuted}"
                                        FontFamily="Cascadia Code,Menlo,Consolas,monospace" FontSize="11"
                                        HorizontalAlignment="Right" Padding="0,1,6,0" />
                         </Border>
@@ -22,7 +22,7 @@
                                                    FontFamily="Cascadia Code,Menlo,Consolas,monospace" FontSize="12.5" TextWrapping="Wrap" />
                         </Border>
                         <Border Grid.Column="2" Background="{Binding NewBackground}">
-                            <TextBlock Text="{Binding NewNumber}" Foreground="{DynamicResource WbMuted}"
+                            <SelectableTextBlock Text="{Binding NewNumber}" Foreground="{DynamicResource WbMuted}"
                                        FontFamily="Cascadia Code,Menlo,Consolas,monospace" FontSize="11"
                                        HorizontalAlignment="Right" Padding="0,1,6,0" />
                         </Border>

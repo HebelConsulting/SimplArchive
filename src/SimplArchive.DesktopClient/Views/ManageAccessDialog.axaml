@@ -21,7 +21,7 @@
             <!-- Inheritance indicator + break/restore toggle. -->
             <Grid ColumnDefinitions="Auto,*,Auto">
                 <i:Icon Grid.Column="0" Value="mdi-link-variant" VerticalAlignment="Center" Margin="0,0,6,0" Foreground="{DynamicResource WbMuted}" />
-                <TextBlock Grid.Column="1" Text="{Binding InheritanceText}" TextWrapping="Wrap" VerticalAlignment="Center"
+                <SelectableTextBlock Grid.Column="1" Text="{Binding InheritanceText}" TextWrapping="Wrap" VerticalAlignment="Center"
                            Foreground="{DynamicResource WbMuted}" />
                 <Button Grid.Column="2" Content="{Binding InheritanceToggleLabel}" Command="{Binding ToggleInheritanceCommand}"
                         IsVisible="{Binding CanToggleInheritance}"
@@ -39,10 +39,10 @@
                             <DataTemplate x:DataType="vm:AclRowViewModel">
                                 <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="8,4">
                                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding PrincipalLabel}" />
-                                        <TextBlock Text="{Binding TypeLabel}" FontSize="11" Foreground="{DynamicResource WbMuted}" />
+                                        <SelectableTextBlock Text="{Binding PrincipalLabel}" />
+                                        <SelectableTextBlock Text="{Binding TypeLabel}" FontSize="11" Foreground="{DynamicResource WbMuted}" />
                                     </StackPanel>
-                                    <TextBlock Grid.Column="1" Text="{Binding RoleLabel}" VerticalAlignment="Center"
+                                    <SelectableTextBlock Grid.Column="1" Text="{Binding RoleLabel}" VerticalAlignment="Center"
                                                Margin="8,0" Foreground="{DynamicResource WbMuted}" />
                                     <Button Grid.Column="2" Command="{Binding EditCommand}" ToolTip.Tip="{loc:Tr Edit}"
                                             Background="Transparent" Padding="6,2"><i:Icon Value="mdi-pencil" /></Button>
@@ -70,11 +70,11 @@
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
-                    <TextBlock Text="{Binding EditingPrincipalLabel}" FontWeight="SemiBold" IsVisible="{Binding !IsNew}" />
+                    <SelectableTextBlock Text="{Binding EditingPrincipalLabel}" FontWeight="SemiBold" IsVisible="{Binding !IsNew}" />
 
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <TextBlock Text="{loc:Tr MaRole}" VerticalAlignment="Center" />
-                        <TextBlock Text="{Binding PresetLabel}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <SelectableTextBlock Text="{Binding PresetLabel}" FontWeight="SemiBold" VerticalAlignment="Center" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <!-- A preset is offered only where the caller may grant EVERY right in it. Applying
@@ -107,7 +107,7 @@
                         </Grid>
                     </Expander>
 
-                    <TextBlock Text="{Binding Status}" Foreground="#c62828" TextWrapping="Wrap" IsVisible="{Binding HasStatus}" />
+                    <SelectableTextBlock Text="{Binding Status}" Foreground="#c62828" TextWrapping="Wrap" IsVisible="{Binding HasStatus}" />
 
                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
                         <Button Content="{loc:Tr Cancel}" Command="{Binding CancelEditCommand}" />
@@ -120,16 +120,16 @@
             <Expander Header="{loc:Tr MaEffectiveAccess}" IsExpanded="{Binding EffectiveExpanded}">
                 <StackPanel Spacing="6" Margin="0,4,0,0">
                     <ProgressBar IsIndeterminate="True" Height="4" IsVisible="{Binding EffectiveLoading}" />
-                    <TextBlock Text="{Binding InheritedFromText}" IsVisible="{Binding HasInheritedFrom}" FontStyle="Italic" Foreground="{DynamicResource WbMuted}" />
+                    <SelectableTextBlock Text="{Binding InheritedFromText}" IsVisible="{Binding HasInheritedFrom}" FontStyle="Italic" Foreground="{DynamicResource WbMuted}" />
                     <TextBlock Text="{loc:Tr MaEffNoAccess}" IsVisible="{Binding EffectiveEmpty}" Foreground="{DynamicResource WbMuted}" />
                     <ItemsControl ItemsSource="{Binding Effective}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:EffectiveRowViewModel">
                                 <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,2">
                                     <i:Icon Grid.Column="0" Value="{Binding Icon}" VerticalAlignment="Center" Margin="0,0,6,0" Foreground="{DynamicResource WbMuted}" />
-                                    <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="2" Text="{Binding SourceLabel}" VerticalAlignment="Center" Margin="8,0" FontSize="11" Foreground="{DynamicResource WbMuted}" />
-                                    <TextBlock Grid.Column="3" Text="{Binding RoleLabel}" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource WbMuted}" />
+                                    <SelectableTextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" />
+                                    <SelectableTextBlock Grid.Column="2" Text="{Binding SourceLabel}" VerticalAlignment="Center" Margin="8,0" FontSize="11" Foreground="{DynamicResource WbMuted}" />
+                                    <SelectableTextBlock Grid.Column="3" Text="{Binding RoleLabel}" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource WbMuted}" />
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>

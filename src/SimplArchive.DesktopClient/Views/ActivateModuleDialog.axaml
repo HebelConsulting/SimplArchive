@@ -7,7 +7,7 @@
         Title="{loc:Tr ModDialogTitle}" Width="440" SizeToContent="Height" CanResize="False"
         WindowStartupLocation="CenterOwner">
     <StackPanel Margin="18" Spacing="10">
-        <TextBlock Text="{Binding ModuleName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+        <SelectableTextBlock Text="{Binding ModuleName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
 
         <!-- The dropdown of filed license artefacts (documents wearing the Module-license mask, newest
              first). The empty state names the remedy, not just the absence (ADR 0550). -->
@@ -26,7 +26,7 @@
                    Foreground="{DynamicResource WbMuted}" IsVisible="{Binding NoDocuments}" />
 
         <!-- The refusal's home: the server's precise rejection, localized, beside the form (ADR 0550). -->
-        <TextBlock Text="{Binding Status}" Foreground="{DynamicResource SystemErrorTextColor}" FontSize="12"
+        <SelectableTextBlock Text="{Binding Status}" Foreground="{DynamicResource SystemErrorTextColor}" FontSize="12"
                    TextWrapping="Wrap" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">

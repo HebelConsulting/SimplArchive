@@ -14,7 +14,7 @@
         <!-- Edit lives ribbon-style in the pane's upper-right; Save/Cancel take its slot
              while editing (ADR 0550 — the commit controls sit where the pencil was). -->
         <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
-            <TextBlock Grid.Column="0" Text="{Binding PrincipalRightsHeader}" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center" />
+            <SelectableTextBlock Grid.Column="0" Text="{Binding PrincipalRightsHeader}" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center" />
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
                 <Button Command="{Binding BeginRightsEditCommand}" ToolTip.Tip="{loc:Tr Edit}"
                         IsVisible="{Binding !UgEditingRights}" IsEnabled="{Binding !UgBusy}"><i:Icon Value="mdi-pencil" FontSize="18" /></Button>
@@ -45,7 +45,7 @@
                     <DataTemplate x:CompileBindings="False">
                         <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,1">
                             <i:Icon Value="mdi-account" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
-                            <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" Width="240" TextTrimming="CharacterEllipsis" />
+                            <SelectableTextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" Width="240" TextTrimming="CharacterEllipsis" />
                             <Button Padding="4,0" ToolTip.Tip="{loc:Tr UgRemoveMember}"
                                     Command="{Binding DataContext.RemoveMemberCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                     CommandParameter="{Binding}"><i:Icon Value="mdi-close" Foreground="#e53935" /></Button>
@@ -70,9 +70,9 @@
                 <!-- Admin password reset — ADR "User password management". -->
                 <Button Content="{loc:Tr UgResetPassword}" Click="OnResetPrincipalPassword" />
                 <!-- Two-factor status + admin reset — ADR "MFA (interactive login, TOTP)". -->
-                <TextBlock Text="{Binding SelectedPrincipalMfaStatus}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                <SelectableTextBlock Text="{Binding SelectedPrincipalMfaStatus}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
                 <!-- Read-only (#793): the preference stays self-service. -->
-                <TextBlock Text="{Binding SelectedPrincipalImapStatus}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                <SelectableTextBlock Text="{Binding SelectedPrincipalImapStatus}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
                 <Button Content="{loc:Tr UgResetMfa}" Click="OnResetPrincipalMfa" IsVisible="{Binding CanResetSelectedPrincipalMfa}" />
                 <!-- Impersonate a non-admin user — ADR "User impersonation". -->
                 <Button Content="{loc:Tr UgImpersonate}" Click="OnImpersonatePrincipal" IsVisible="{Binding CanImpersonateSelectedPrincipal}" />

@@ -20,7 +20,7 @@
             <Button Content="Add" Command="{Binding CreateCommand}" IsVisible="{Binding CanManage}" />
         </StackPanel>
 
-        <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Foreground="#c62828" Margin="0,8,0,0" />
+        <SelectableTextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Foreground="#c62828" Margin="0,8,0,0" />
         <Button DockPanel.Dock="Bottom" Content="{loc:Tr Close}" Click="OnClose" HorizontalAlignment="Right" Margin="0,8,0,0" />
 
         <ScrollViewer>

@@ -99,7 +99,7 @@
                 Background="{DynamicResource WbChrome}" CornerRadius="3" Padding="6,2" Margin="0,0,0,6"
                 HorizontalAlignment="Left">
           <StackPanel Orientation="Horizontal" Spacing="6">
-            <TextBlock Text="{Binding DayFilterLabel}" VerticalAlignment="Center" />
+            <SelectableTextBlock Text="{Binding DayFilterLabel}" VerticalAlignment="Center" />
             <Button Content="✕" Command="{Binding ClearDayFilterCommand}" Padding="4,0"
                     Background="Transparent" BorderThickness="0" />
           </StackPanel>
@@ -114,7 +114,7 @@
         <DockPanel Grid.Row="1" IsVisible="{Binding IsMonthView}" LastChildFill="True">
           <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
             <Button Content="◀" Command="{Binding PreviousMonthCommand}" ToolTip.Tip="{loc:Tr CalendarPrevMonth}" />
-            <TextBlock Text="{Binding MonthName}" FontWeight="SemiBold" VerticalAlignment="Center"
+            <SelectableTextBlock Text="{Binding MonthName}" FontWeight="SemiBold" VerticalAlignment="Center"
                        MinWidth="140" TextAlignment="Center" />
             <Button Content="▶" Command="{Binding NextMonthCommand}" ToolTip.Tip="{loc:Tr CalendarNextMonth}" />
             <Button Content="{loc:Tr CalendarToday}" Command="{Binding GoTodayCommand}" Margin="8,0,0,0" />
@@ -147,7 +147,7 @@
                     <Style Selector="Border.outside"><Setter Property="Opacity" Value="0.45" /></Style>
                   </Border.Styles>
                   <StackPanel Spacing="1">
-                    <TextBlock Text="{Binding DayNumber}" FontSize="11"
+                    <SelectableTextBlock Text="{Binding DayNumber}" FontSize="11"
                                Foreground="{DynamicResource WbMuted}" />
                     <ItemsControl ItemsSource="{Binding Entries}">
                       <ItemsControl.ItemTemplate>
@@ -201,7 +201,7 @@
           </ItemsControl>
         </DockPanel>
 
-        <TextBlock Grid.Row="0" Text="{Binding EmptyMessage}"
+        <SelectableTextBlock Grid.Row="0" Text="{Binding EmptyMessage}"
                    Foreground="{DynamicResource WbMuted}" Margin="2,4,0,4" TextWrapping="Wrap"
                    IsVisible="{Binding !Appointments.Count}" />
         <ListBox Grid.Row="1" ItemsSource="{Binding VisibleAppointments}" SelectedItem="{Binding Selected}"
@@ -236,8 +236,8 @@
       <!-- Detail. Sized to its content: this pane must not claim space it is not using (ADR 0550). -->
       <ScrollViewer Grid.Column="4">
         <StackPanel Spacing="8" Margin="8,0,0,0" IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
-          <TextBlock Text="{Binding Selected.Title}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
-          <TextBlock Text="{Binding Selected.CollectionName}" Foreground="{DynamicResource WbMuted}" />
+          <SelectableTextBlock Text="{Binding Selected.Title}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+          <SelectableTextBlock Text="{Binding Selected.CollectionName}" Foreground="{DynamicResource WbMuted}" />
           <!-- One instant, three readings (ADR 0690). UTC first because it is what anything else can be
                compared against; then what the organiser actually wrote, with the zone each endpoint names —
                two lines when they differ, which is a real appointment (a flight) and not an edge case; then
@@ -247,7 +247,7 @@
           <StackPanel Spacing="6" IsVisible="{Binding Detail.HasTimes, FallbackValue=False}">
             <Grid ColumnDefinitions="Auto,*">
               <TextBlock Grid.Column="0" Text="{loc:Tr CalendarUtc}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,0" />
-              <TextBlock Grid.Column="1" Text="{Binding Detail.UtcRange}" TextWrapping="Wrap" />
+              <SelectableTextBlock Grid.Column="1" Text="{Binding Detail.UtcRange}" TextWrapping="Wrap" />
             </Grid>
 
             <Grid ColumnDefinitions="Auto,*">
@@ -260,7 +260,7 @@
                          name that does not fit was CLIPPED mid-word rather than moving to the next line —
                          seen by capturing the pane, not by reading the markup. -->
                     <WrapPanel>
-                      <TextBlock Text="{Binding Range}" Margin="0,0,6,0" />
+                      <SelectableTextBlock Text="{Binding Range}" Margin="0,0,6,0" />
                       <!-- A floating time names no zone, and saying so in words is not the same as leaving the
                            label blank: it means "this time, wherever you are". -->
                       <TextBlock Text="{Binding Zone, TargetNullValue={loc:Tr CalendarNoZone}}"
@@ -274,8 +274,8 @@
             <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding Detail.HasViewerTime, FallbackValue=False}">
               <TextBlock Grid.Column="0" Text="{loc:Tr CalendarYourZone}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,0" />
               <WrapPanel Grid.Column="1">
-                <TextBlock Text="{Binding Detail.ViewerRange}" Margin="0,0,6,0" />
-                <TextBlock Text="{Binding Detail.ViewerZone}" Foreground="{DynamicResource WbMuted}"
+                <SelectableTextBlock Text="{Binding Detail.ViewerRange}" Margin="0,0,6,0" />
+                <SelectableTextBlock Text="{Binding Detail.ViewerZone}" Foreground="{DynamicResource WbMuted}"
                            FontSize="11" VerticalAlignment="Center" />
               </WrapPanel>
             </Grid>
@@ -285,23 +285,23 @@
                single row it always had. -->
           <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding !Detail.HasTimes, FallbackValue=True}">
             <TextBlock Grid.Column="0" Text="{loc:Tr CalendarWhen}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,0" />
-            <TextBlock Grid.Column="1" Text="{Binding Selected.TimeRange}" TextWrapping="Wrap" />
+            <SelectableTextBlock Grid.Column="1" Text="{Binding Selected.TimeRange}" TextWrapping="Wrap" />
           </Grid>
 
           <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding Detail.HasLocation, FallbackValue=False}">
             <TextBlock Grid.Column="0" Text="{loc:Tr CalendarWhere}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,0" />
-            <TextBlock Grid.Column="1" Text="{Binding Detail.Location}" TextWrapping="Wrap" />
+            <SelectableTextBlock Grid.Column="1" Text="{Binding Detail.Location}" TextWrapping="Wrap" />
           </Grid>
 
           <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding Detail.HasUrl, FallbackValue=False}">
             <TextBlock Grid.Column="0" Text="{loc:Tr CalendarLink}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,0" />
-            <TextBlock Grid.Column="1" Text="{Binding Detail.Url}" TextWrapping="Wrap" />
+            <SelectableTextBlock Grid.Column="1" Text="{Binding Detail.Url}" TextWrapping="Wrap" />
           </Grid>
 
           <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding Detail.HasNotes, FallbackValue=False}">
             <TextBlock Grid.Column="0" Text="{loc:Tr CalendarNotes}" Foreground="{DynamicResource WbMuted}"
                        Margin="0,0,8,0" VerticalAlignment="Top" />
-            <TextBlock Grid.Column="1" Text="{Binding Detail.Notes}" TextWrapping="Wrap" />
+            <SelectableTextBlock Grid.Column="1" Text="{Binding Detail.Notes}" TextWrapping="Wrap" />
           </Grid>
 
           <!-- The rule verbatim, where there is room for it: a mark answers "does this repeat" but not "how",
@@ -309,7 +309,7 @@
                we deliberately do not interpret would state more than we know. -->
           <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding Selected.Recurring}">
             <TextBlock Grid.Column="0" Text="{loc:Tr CalendarRepeats}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,0" />
-            <TextBlock Grid.Column="1" Text="{Binding Selected.Repeats}" TextWrapping="Wrap" FontFamily="monospace" />
+            <SelectableTextBlock Grid.Column="1" Text="{Binding Selected.Repeats}" TextWrapping="Wrap" FontFamily="monospace" />
           </Grid>
         </StackPanel>
       </ScrollViewer>

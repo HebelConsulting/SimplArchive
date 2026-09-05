@@ -93,7 +93,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrLoadHolds");
+            ReportError(Strings.Get("StErrLoadHolds"));
         }
     }
 
@@ -144,12 +144,12 @@ public sealed partial class MainWindowViewModel
         }
         catch (ApiActionException ex)
         {
-            Status = ex.Message;
+            ReportError(ex.Message);
             return false;
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrCreateHold");
+            ReportError(Strings.Get("StErrCreateHold"));
             return false;
         }
     }
@@ -170,7 +170,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrReleaseHold");
+            ReportError(Strings.Get("StErrReleaseHold"));
         }
     }
 
@@ -193,7 +193,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrRemoveFromHold");
+            ReportError(Strings.Get("StErrRemoveFromHold"));
         }
     }
 

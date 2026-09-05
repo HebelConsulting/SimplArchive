@@ -96,7 +96,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception e)
         {
-            Status = string.Format(Strings.Get("StErrStartEdit"), e.Message);
+            ReportError(string.Format(Strings.Get("StErrStartEdit"), e.Message));
         }
         finally
         {
@@ -272,7 +272,7 @@ public sealed partial class MainWindowViewModel
 
         if (failures.Count > 0)
         {
-            Status = string.Format(Strings.Get("StErrSaveJoin"), string.Join("; ", failures));
+            ReportError(string.Format(Strings.Get("StErrSaveJoin"), string.Join("; ", failures)));
             return; // stay in edit mode so the user can correct the rejected field(s)
         }
 

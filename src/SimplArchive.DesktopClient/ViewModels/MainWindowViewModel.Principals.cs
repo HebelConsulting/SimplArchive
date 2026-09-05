@@ -121,11 +121,11 @@ public sealed partial class MainWindowViewModel
         }
         catch (ApiActionException ex)
         {
-            Status = ex.Message;
+            ReportError(ex.Message);
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrAddMember");
+            ReportError(Strings.Get("StErrAddMember"));
         }
 
         SelectedMemberToAdd = null; // reset the picker for the next add
@@ -153,7 +153,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrLoadMembers");
+            ReportError(Strings.Get("StErrLoadMembers"));
         }
     }
 
@@ -186,7 +186,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrRemoveMember");
+            ReportError(Strings.Get("StErrRemoveMember"));
         }
     }
 
@@ -246,7 +246,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrDisableMfa");
+            ReportError(Strings.Get("StErrDisableMfa"));
         }
     }
 
@@ -268,11 +268,11 @@ public sealed partial class MainWindowViewModel
         }
         catch (ApiActionException ex)
         {
-            Status = ex.Message;
+            ReportError(ex.Message);
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrResetMfa");
+            ReportError(Strings.Get("StErrResetMfa"));
         }
     }
 
@@ -292,11 +292,11 @@ public sealed partial class MainWindowViewModel
         }
         catch (ApiActionException ex)
         {
-            Status = ex.Message;
+            ReportError(ex.Message);
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrChangePw");
+            ReportError(Strings.Get("StErrChangePw"));
         }
     }
 
@@ -316,12 +316,12 @@ public sealed partial class MainWindowViewModel
         }
         catch (ApiActionException ex)
         {
-            Status = ex.Message;
+            ReportError(ex.Message);
             return null;
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrResetPw");
+            ReportError(Strings.Get("StErrResetPw"));
             return null;
         }
     }
@@ -361,11 +361,11 @@ public sealed partial class MainWindowViewModel
         }
         catch (ApiActionException ex)
         {
-            Status = ex.Message;
+            ReportError(ex.Message);
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrUpdatePhoto");
+            ReportError(Strings.Get("StErrUpdatePhoto"));
         }
     }
 
@@ -404,11 +404,11 @@ public sealed partial class MainWindowViewModel
         }
         catch (ApiActionException ex)
         {
-            Status = ex.Message;
+            ReportError(ex.Message);
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrUpdatePhoto");
+            ReportError(Strings.Get("StErrUpdatePhoto"));
         }
     }
 
@@ -427,7 +427,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrRemovePhoto");
+            ReportError(Strings.Get("StErrRemovePhoto"));
         }
     }
 
@@ -455,7 +455,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrLoadUsers");
+            ReportError(Strings.Get("StErrLoadUsers"));
         }
     }
 
@@ -490,11 +490,11 @@ public sealed partial class MainWindowViewModel
         }
         catch (ApiActionException ex)
         {
-            Status = ex.Message;
+            ReportError(ex.Message);
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrSaveRights");
+            ReportError(Strings.Get("StErrSaveRights"));
         }
         finally
         {
@@ -527,11 +527,11 @@ public sealed partial class MainWindowViewModel
         }
         catch (ApiActionException ex)
         {
-            Status = ex.Message;
+            ReportError(ex.Message);
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrCreate");
+            ReportError(Strings.Get("StErrCreate"));
         }
     }
 
@@ -568,12 +568,12 @@ public sealed partial class MainWindowViewModel
         }
         catch (ApiActionException ex)
         {
-            Status = ex.Message;
+            ReportError(ex.Message);
             return DeletePrincipalOutcome.Failed;
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrDelete");
+            ReportError(Strings.Get("StErrDelete"));
             return DeletePrincipalOutcome.Failed;
         }
     }
@@ -602,11 +602,11 @@ public sealed partial class MainWindowViewModel
         }
         catch (ApiActionException ex)
         {
-            Status = ex.Message;
+            ReportError(ex.Message);
         }
         catch (Exception)
         {
-            Status = Strings.Get("StErrReassign");
+            ReportError(Strings.Get("StErrReassign"));
         }
     }
 

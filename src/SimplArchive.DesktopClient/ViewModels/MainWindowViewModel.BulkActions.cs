@@ -70,11 +70,11 @@ public sealed partial class MainWindowViewModel
         }
         catch (Services.ApiActionException e)
         {
-            Status = e.Message;
+            ReportError(e.Message);
         }
         catch (Exception e)
         {
-            Status = string.Format(Strings.Get("StErrBulk"), e.Message);
+            ReportError(string.Format(Strings.Get("StErrBulk"), e.Message));
         }
     }
 
@@ -95,11 +95,11 @@ public sealed partial class MainWindowViewModel
         }
         catch (Services.ApiActionException e)
         {
-            Status = e.Message;
+            ReportError(e.Message);
         }
         catch (Exception e)
         {
-            Status = string.Format(Strings.Get("StErrPlaceRef"), e.Message);
+            ReportError(string.Format(Strings.Get("StErrPlaceRef"), e.Message));
         }
     }
 
@@ -126,11 +126,11 @@ public sealed partial class MainWindowViewModel
         }
         catch (Services.ApiActionException e)
         {
-            Status = e.Message;
+            ReportError(e.Message);
         }
         catch (Exception e)
         {
-            Status = string.Format(Strings.Get("StErrBulk"), e.Message);
+            ReportError(string.Format(Strings.Get("StErrBulk"), e.Message));
         }
     }
 }

@@ -94,7 +94,7 @@
         <Grid ColumnDefinitions="110,*" IsVisible="{Binding Repeats}">
           <TextBlock Grid.Column="0" Text="{loc:Tr ApptRepeats}" VerticalAlignment="Top" />
           <StackPanel Grid.Column="1" Spacing="2">
-            <TextBlock Text="{Binding RecurrenceText}" TextWrapping="Wrap" />
+            <SelectableTextBlock Text="{Binding RecurrenceText}" TextWrapping="Wrap" />
             <TextBlock Text="{loc:Tr ApptRecurrenceReadOnly}" Foreground="{DynamicResource WbMuted}"
                        FontSize="11" TextWrapping="Wrap" />
           </StackPanel>
@@ -109,9 +109,9 @@
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:AttendeeRowViewModel">
                   <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Grid.Column="0" Text="{Binding Name}" TextTrimming="CharacterEllipsis"
+                    <SelectableTextBlock Grid.Column="0" Text="{Binding Name}" TextTrimming="CharacterEllipsis"
                                ToolTip.Tip="{Binding Address}" />
-                    <TextBlock Grid.Column="1" Text="{Binding Status}" Foreground="{DynamicResource WbMuted}"
+                    <SelectableTextBlock Grid.Column="1" Text="{Binding Status}" Foreground="{DynamicResource WbMuted}"
                                FontSize="11" Margin="8,0,0,0" />
                   </Grid>
                 </DataTemplate>

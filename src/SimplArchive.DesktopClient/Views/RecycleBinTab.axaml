@@ -28,7 +28,7 @@
             <Grid Margin="12" ColumnDefinitions="1.6*,10,2.4*">
                 <!-- Master list: Name / Path / DeletedAt / DeletedBy + per-row Restore / Hard-delete. -->
                 <DockPanel Grid.Column="0" LastChildFill="True">
-                    <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Foreground="{DynamicResource WbFaint}" FontSize="12" Margin="2,6,0,0" />
+                    <SelectableTextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Foreground="{DynamicResource WbFaint}" FontSize="12" Margin="2,6,0,0" />
                     <!-- No select-all and no checkbox column (#530 tranche 1): the list
                          multi-selects natively, like every other tab. Header columns match
                          RecycleBinRow's grid. -->
@@ -60,30 +60,30 @@
                     <Grid RowDefinitions="Auto,*" IsVisible="{Binding HasSelection}">
                         <ScrollViewer Grid.Row="0" MaxHeight="210" Padding="10,6">
                             <StackPanel Spacing="4">
-                                <TextBlock Text="{Binding DetailTitle}" FontWeight="SemiBold" FontSize="15" />
+                                <SelectableTextBlock Text="{Binding DetailTitle}" FontWeight="SemiBold" FontSize="15" />
                                 <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
                                     <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr Name}" Foreground="{DynamicResource WbMuted}" FontSize="12" />
-                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SysName}" FontSize="12" TextWrapping="Wrap" />
+                                    <SelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SysName}" FontSize="12" TextWrapping="Wrap" />
                                     <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr SysFileExtension}" Foreground="{DynamicResource WbMuted}" FontSize="12" />
-                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SysFileExtension}" FontSize="12" />
+                                    <SelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SysFileExtension}" FontSize="12" />
                                     <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr VerColDocDate}" Foreground="{DynamicResource WbMuted}" FontSize="12" />
-                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SysDocumentDate}" FontSize="12" />
+                                    <SelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SysDocumentDate}" FontSize="12" />
                                     <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:Tr SysCreated}" Foreground="{DynamicResource WbMuted}" FontSize="12" />
-                                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SysCreated}" FontSize="12" />
+                                    <SelectableTextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SysCreated}" FontSize="12" />
                                     <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:Tr SysCreatedBy}" Foreground="{DynamicResource WbMuted}" FontSize="12" />
-                                    <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SysCreatedBy}" FontSize="12" />
+                                    <SelectableTextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SysCreatedBy}" FontSize="12" />
                                     <TextBlock Grid.Row="5" Grid.Column="0" Text="{loc:Tr SysOcrLanguages}" Foreground="{DynamicResource WbMuted}" FontSize="12"
                                                IsVisible="{Binding SysOcrLanguages, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
-                                    <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SysOcrLanguages}" FontSize="12"
+                                    <SelectableTextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SysOcrLanguages}" FontSize="12"
                                                IsVisible="{Binding SysOcrLanguages, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                                 </Grid>
-                                <TextBlock Text="{Binding MaskLine}" Foreground="{DynamicResource WbMuted}" FontSize="12" Margin="0,4,0,0" />
+                                <SelectableTextBlock Text="{Binding MaskLine}" Foreground="{DynamicResource WbMuted}" FontSize="12" Margin="0,4,0,0" />
                                 <ItemsControl ItemsSource="{Binding IndexFields}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:IndexFieldViewModel">
                                             <Grid ColumnDefinitions="110,*" Margin="0,1">
-                                                <TextBlock Grid.Column="0" Text="{Binding FieldName}" Foreground="{DynamicResource WbMuted}" FontSize="12" />
-                                                <TextBlock Grid.Column="1" Text="{Binding Values}" FontSize="12" TextWrapping="Wrap" />
+                                                <SelectableTextBlock Grid.Column="0" Text="{Binding FieldName}" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                                                <SelectableTextBlock Grid.Column="1" Text="{Binding Values}" FontSize="12" TextWrapping="Wrap" />
                                             </Grid>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -140,14 +140,14 @@
                                                             </Flyout>
                                                         </Button.Flyout>
                                                     </Button>
-                                                    <TextBlock IsVisible="{Binding ShowAuthorPlainName}" Text="{Binding AuthorName}"
+                                                    <SelectableTextBlock IsVisible="{Binding ShowAuthorPlainName}" Text="{Binding AuthorName}"
                                                                Foreground="{DynamicResource WbFaint}" FontSize="11" />
-                                                    <TextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                                    <SelectableTextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                 </StackPanel>
-                                                        <TextBlock Text="{Binding DisplayBody}" TextWrapping="Wrap" FontSize="13" IsVisible="{Binding IsUserPost}" />
+                                                        <SelectableTextBlock Text="{Binding DisplayBody}" TextWrapping="Wrap" FontSize="13" IsVisible="{Binding IsUserPost}" />
                                                 <!-- An automatic entry (ADR 0545): the sentence, then the
                                                      version block with its icon and optional comment. -->
-                                                <TextBlock Text="{Binding SystemSentence}" TextWrapping="Wrap" FontSize="13"
+                                                <SelectableTextBlock Text="{Binding SystemSentence}" TextWrapping="Wrap" FontSize="13"
                                                            FontStyle="Italic" Foreground="{DynamicResource WbMuted}"
                                                            IsVisible="{Binding IsSystemEntry}" />
                                                 <Border IsVisible="{Binding HasVersionEntry}" Margin="0,3,0,0" Padding="6,3"
@@ -155,8 +155,8 @@
                                                     <StackPanel Orientation="Horizontal" Spacing="6">
 
                                                         <StackPanel Spacing="1">
-                                                            <TextBlock Text="{Binding VersionLabel}" FontSize="11" />
-                                                            <TextBlock Text="{Binding VersionCommentText}" FontSize="11" TextWrapping="Wrap"
+                                                            <SelectableTextBlock Text="{Binding VersionLabel}" FontSize="11" />
+                                                            <SelectableTextBlock Text="{Binding VersionCommentText}" FontSize="11" TextWrapping="Wrap"
                                                                        Foreground="{DynamicResource WbMuted}"
                                                                        IsVisible="{Binding HasVersionComment}" />
                                                         </StackPanel>
@@ -202,14 +202,14 @@
                                                             </Flyout>
                                                         </Button.Flyout>
                                                     </Button>
-                                                    <TextBlock IsVisible="{Binding ShowAuthorPlainName}" Text="{Binding AuthorName}"
+                                                    <SelectableTextBlock IsVisible="{Binding ShowAuthorPlainName}" Text="{Binding AuthorName}"
                                                                Foreground="{DynamicResource WbFaint}" FontSize="11" />
-                                                    <TextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                                    <SelectableTextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                 </StackPanel>
-                                                                            <TextBlock Text="{Binding DisplayBody}" TextWrapping="Wrap" FontSize="13" IsVisible="{Binding IsUserPost}" />
+                                                                            <SelectableTextBlock Text="{Binding DisplayBody}" TextWrapping="Wrap" FontSize="13" IsVisible="{Binding IsUserPost}" />
                                                 <!-- An automatic entry (ADR 0545): the sentence, then the
                                                      version block with its icon and optional comment. -->
-                                                <TextBlock Text="{Binding SystemSentence}" TextWrapping="Wrap" FontSize="13"
+                                                <SelectableTextBlock Text="{Binding SystemSentence}" TextWrapping="Wrap" FontSize="13"
                                                            FontStyle="Italic" Foreground="{DynamicResource WbMuted}"
                                                            IsVisible="{Binding IsSystemEntry}" />
                                                 <Border IsVisible="{Binding HasVersionEntry}" Margin="0,3,0,0" Padding="6,3"
@@ -217,8 +217,8 @@
                                                     <StackPanel Orientation="Horizontal" Spacing="6">
 
                                                         <StackPanel Spacing="1">
-                                                            <TextBlock Text="{Binding VersionLabel}" FontSize="11" />
-                                                            <TextBlock Text="{Binding VersionCommentText}" FontSize="11" TextWrapping="Wrap"
+                                                            <SelectableTextBlock Text="{Binding VersionLabel}" FontSize="11" />
+                                                            <SelectableTextBlock Text="{Binding VersionCommentText}" FontSize="11" TextWrapping="Wrap"
                                                                        Foreground="{DynamicResource WbMuted}"
                                                                        IsVisible="{Binding HasVersionComment}" />
                                                         </StackPanel>

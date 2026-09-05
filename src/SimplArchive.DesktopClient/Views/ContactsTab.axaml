@@ -67,7 +67,7 @@
       <DockPanel Grid.Column="2" LastChildFill="True">
         <TextBox DockPanel.Dock="Top" Text="{Binding Filter}" Watermark="{loc:Tr FilterHint}" Margin="0,0,0,6"
                  v:SearchField.Clearable="True" />
-        <TextBlock DockPanel.Dock="Top" Text="{Binding EmptyMessage}"
+        <SelectableTextBlock DockPanel.Dock="Top" Text="{Binding EmptyMessage}"
                    Foreground="{DynamicResource WbMuted}" Margin="2,4,0,0" TextWrapping="Wrap"
                    IsVisible="{Binding !Contacts.Count}" />
         <!-- A ListBox with a column-shaped template rather than a DataGrid: this project does not reference
@@ -121,17 +121,17 @@
               </Border>
             </Panel>
             <StackPanel VerticalAlignment="Center">
-              <TextBlock Text="{Binding Selected.FullName}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
-              <TextBlock Text="{Binding Selected.CollectionName}" Foreground="{DynamicResource WbMuted}" />
+              <SelectableTextBlock Text="{Binding Selected.FullName}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+              <SelectableTextBlock Text="{Binding Selected.CollectionName}" Foreground="{DynamicResource WbMuted}" />
             </StackPanel>
           </StackPanel>
           <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" >
             <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr ContactsOrg}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,4" />
-            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Selected.Organization}" TextWrapping="Wrap" Margin="0,0,0,4" />
+            <SelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Selected.Organization}" TextWrapping="Wrap" Margin="0,0,0,4" />
             <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr ContactsEmail}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,4" />
-            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Selected.Email}" TextWrapping="Wrap" Margin="0,0,0,4" />
+            <SelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Selected.Email}" TextWrapping="Wrap" Margin="0,0,0,4" />
             <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr ContactsPhone}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,4" />
-            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Selected.Phone}" TextWrapping="Wrap" Margin="0,0,0,4" />
+            <SelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Selected.Phone}" TextWrapping="Wrap" Margin="0,0,0,4" />
           </Grid>
         </StackPanel>
       </ScrollViewer>

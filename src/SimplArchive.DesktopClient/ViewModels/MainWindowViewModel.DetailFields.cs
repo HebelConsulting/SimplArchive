@@ -123,4 +123,33 @@ public sealed partial class MainWindowViewModel
         _stagedOcrCodes = codes;
         SysOcrLanguages = (_ocrLanguages?.Describe(codes) ?? "");
     }
+
+    // Loads the selected node's mask line and index fields — or leaves "No mask" when the node advertises no
+    // `mask` rel, the personal-space root among them. That absence is the ANSWER (like `versions` for a folder),
+    // not a failure: following a rel the resource never advertised is what threw the ADR 0543 "rel not
+    // advertised for 'Demo Admin'" status line on the kiosk. Its own superseded checks mirror LoadDetailAsync's
+    // (ADR 0559), so a stale load stops rather than repainting the pane for the previous subject.
+    private async Task LoadMaskAndIndexAsync(NodeViewModel document)
+    {
+        if (document.TryHref("mask") is not { } maskHref)
+        {
+            MaskLine = "No mask";
+            return;
+        }
+
+        var mask = await _api!.Documents.GetMaskAsync(maskHref);
+        if (_selectedDocumentId != document.Id) { return; }
+
+        MaskLine = mask.Name is null ? "No mask" : $"Mask: {mask.Name}" + (mask.VersionNumber is { } v ? $" · version {v}" : "");
+
+        if (document.TryHref("index-data") is not { } indexHref) { return; }
+
+        var indexData = await _api!.Documents.GetIndexDataAsync(indexHref);
+        if (_selectedDocumentId != document.Id) { return; }
+
+        foreach (var field in indexData)
+        {
+            IndexFields.Add(new IndexFieldViewModel { FieldName = field.FieldName, Values = string.Join(", ", field.Values) });
+        }
+    }
 }

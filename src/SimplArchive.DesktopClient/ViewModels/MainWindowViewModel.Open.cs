@@ -77,7 +77,7 @@ public sealed partial class MainWindowViewModel
                 var bytes = await DownloadArchiveEntryAsync(node);
                 if (bytes is null)
                 {
-                    Status = string.Format(Strings.Get("StErrReadArchive"), node.Name);
+                    ReportError(string.Format(Strings.Get("StErrReadArchive"), node.Name));
                     return;
                 }
 
@@ -86,7 +86,7 @@ public sealed partial class MainWindowViewModel
             }
             catch (Exception e)
             {
-                Status = string.Format(Strings.Get("StErrOpen2"), node.Name, e.Message);
+                ReportError(string.Format(Strings.Get("StErrOpen2"), node.Name, e.Message));
             }
 
             return;
@@ -127,7 +127,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception e)
         {
-            Status = string.Format(Strings.Get("StErrOpen2"), node.Name, e.Message);
+            ReportError(string.Format(Strings.Get("StErrOpen2"), node.Name, e.Message));
         }
     }
 
@@ -170,7 +170,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            Status = string.Format(Strings.Get("StErrRead2"), zip.Name, ex.Message);
+            ReportError(string.Format(Strings.Get("StErrRead2"), zip.Name, ex.Message));
         }
     }
 

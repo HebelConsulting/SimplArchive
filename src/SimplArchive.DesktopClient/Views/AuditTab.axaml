@@ -19,7 +19,7 @@
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,8,0,6" VerticalAlignment="Center">
             <i:Icon Value="mdi-delete-clock-outline" VerticalAlignment="Center" />
             <TextBlock Text="{loc:Tr AuditRetentionLabel}" VerticalAlignment="Center" />
-            <TextBlock Text="{Binding AuditRetentionDays}" VerticalAlignment="Center" IsVisible="{Binding !AuditRetentionEditing}" />
+            <SelectableTextBlock Text="{Binding AuditRetentionDays}" VerticalAlignment="Center" IsVisible="{Binding !AuditRetentionEditing}" />
             <Border Classes="ribbon" IsVisible="{Binding IsTenantAdmin}">
                 <Button AutomationProperties.AutomationId="audit-ret-edit" Command="{Binding BeginAuditRetentionEditCommand}"
                         IsVisible="{Binding !AuditRetentionEditing}" ToolTip.Tip="{loc:Tr Edit}"><i:Icon Value="mdi-pencil" FontSize="16" /></Button>
@@ -30,7 +30,7 @@
                 <Button Content="{loc:Tr Save}" Command="{Binding SaveAuditRetentionEditCommand}" />
                 <Button Content="{loc:Tr Cancel}" Command="{Binding CancelAuditRetentionEditCommand}" />
             </StackPanel>
-            <TextBlock Text="{Binding AuditRetentionNote}" Foreground="{DynamicResource WbMuted}" FontSize="12" VerticalAlignment="Center" />
+            <SelectableTextBlock Text="{Binding AuditRetentionNote}" Foreground="{DynamicResource WbMuted}" FontSize="12" VerticalAlignment="Center" />
         </StackPanel>
 
         <!-- filter bar — the form keeps its shape; Apply/Clear wear the ribbon-button style, by
@@ -70,11 +70,11 @@
                             <DataTemplate x:DataType="vm:AuditEventRowViewModel">
                                 <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
                                     <Grid ColumnDefinitions="170,190,170,2*,3*">
-                                        <TextBlock Grid.Column="0" Text="{Binding When}" Margin="6,3" FontSize="12" />
-                                        <TextBlock Grid.Column="1" Text="{Binding Actor}" Margin="6,3" FontSize="12" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Grid.Column="2" Text="{Binding Action}" Margin="6,3" FontSize="12" />
-                                        <TextBlock Grid.Column="3" Text="{Binding Target}" Margin="6,3" FontSize="12" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Grid.Column="4" Text="{Binding Details}" Margin="6,3" FontSize="12" Foreground="{DynamicResource WbMuted}" TextTrimming="CharacterEllipsis" />
+                                        <SelectableTextBlock Grid.Column="0" Text="{Binding When}" Margin="6,3" FontSize="12" />
+                                        <SelectableTextBlock Grid.Column="1" Text="{Binding Actor}" Margin="6,3" FontSize="12" TextTrimming="CharacterEllipsis" />
+                                        <SelectableTextBlock Grid.Column="2" Text="{Binding Action}" Margin="6,3" FontSize="12" />
+                                        <SelectableTextBlock Grid.Column="3" Text="{Binding Target}" Margin="6,3" FontSize="12" TextTrimming="CharacterEllipsis" />
+                                        <SelectableTextBlock Grid.Column="4" Text="{Binding Details}" Margin="6,3" FontSize="12" Foreground="{DynamicResource WbMuted}" TextTrimming="CharacterEllipsis" />
                                     </Grid>
                                 </Border>
                             </DataTemplate>

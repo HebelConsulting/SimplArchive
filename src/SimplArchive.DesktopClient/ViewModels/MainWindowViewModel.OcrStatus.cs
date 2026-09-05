@@ -50,11 +50,11 @@ public partial class MainWindowViewModel
         }
         catch (ApiActionException e)
         {
-            Status = e.Message;
+            ReportError(e.Message);
         }
         catch (Exception e)
         {
-            Status = e.Message;
+            ReportError(e.Message);
         }
     }
 }

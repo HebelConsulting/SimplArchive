@@ -316,7 +316,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Services.ApiActionException ex)
         {
-            Status = ex.Message;
+            ReportError(ex.Message);
         }
     }
 }

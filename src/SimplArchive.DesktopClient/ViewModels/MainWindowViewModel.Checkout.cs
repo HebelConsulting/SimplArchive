@@ -43,11 +43,11 @@ public sealed partial class MainWindowViewModel
         }
         catch (ApiActionException e)
         {
-            Status = e.Message;
+            ReportError(e.Message);
         }
         catch (Exception e)
         {
-            Status = string.Format(Strings.Get("StErrCheckout2"), item.Name, e.Message);
+            ReportError(string.Format(Strings.Get("StErrCheckout2"), item.Name, e.Message));
         }
     }
 
@@ -67,11 +67,11 @@ public sealed partial class MainWindowViewModel
         }
         catch (ApiActionException e)
         {
-            Status = e.Message;
+            ReportError(e.Message);
         }
         catch (Exception e)
         {
-            Status = string.Format(Strings.Get("StErrOverride2"), item.Name, e.Message);
+            ReportError(string.Format(Strings.Get("StErrOverride2"), item.Name, e.Message));
         }
     }
 
