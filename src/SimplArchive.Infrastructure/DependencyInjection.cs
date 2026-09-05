@@ -129,6 +129,10 @@ public static class DependencyInjection
         services.AddScoped<Modules.ModuleActivationService>();
         services.AddScoped<Modules.ModuleEscalationService>();
         services.AddHostedService<Modules.ModuleEscalationWorker>();
+        // The status-escalation sweep (ADR 0753/#5): fires active modules' declared status escalations. Distinct
+        // from ModuleEscalationService above, which escalates a module's LICENCE lifecycle (ADR 0740).
+        services.AddScoped<Modules.ModuleStatusEscalationService>();
+        services.AddHostedService<Modules.ModuleStatusEscalationWorker>();
         services.AddScoped<IStorageQuotaService, Storage.StorageQuotaService>();
         services.AddScoped<ILegalHoldService, LegalHolds.LegalHoldService>();
         services.AddScoped<IRetentionService, Retention.RetentionService>();

@@ -44,6 +44,11 @@ public static class NotificationTypePolicy
             // A deadline/compliance escalation like the checkout and storage ones: the whole point of ADR
             // 0740's ladder is that nobody discovers the deactivation from a missing button.
             NotificationType.ModuleLicenseEscalation => false,
+
+            // A module's own status escalation (ABI 0.5): the module marked this status worth a reminder
+            // precisely because sitting in it silently is the failure — a training window nobody is warned is
+            // closing. Like the other escalations, not mutable, so it is always emailed and cannot be muted.
+            NotificationType.ModuleStatusEscalation => false,
         };
 #pragma warning restore CS8524
 

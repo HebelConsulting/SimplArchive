@@ -48,6 +48,12 @@ public enum NotificationType
     // (ADR 0740's escalate → grace → self-deactivate ladder) — the tenant's admins are told at each step,
     // because the deactivation is otherwise SILENT: derived at ask-time, there is no moment that fails loudly.
     ModuleLicenseEscalation = 15,
+
+    // An active industry module's own escalation off one of its derived statuses (ABI 0.5): a subject sat in
+    // a state the module marked worth a reminder (a training window expiring, say) and the module's handler
+    // named who to tell and what to say. Generic on purpose — the core owns delivery, the module owns the
+    // meaning — so one type carries every module's status escalations. The status-sweep worker writes it.
+    ModuleStatusEscalation = 16,
 }
 
 // A per-User in-app notification (ADR "Notifications (in-app, first slice)"). Written by INotificationService

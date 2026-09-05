@@ -36,7 +36,25 @@ public interface IStateMachineBuilder
     /// needs localized captions.
     /// </summary>
     IStateMachineBuilder Transition(string name, string label, IReadOnlyList<StateCondition> guard, Func<TransitionContext, Task> handler);
+
+    /// <summary>
+    /// An escalation off a derived status (ABI 0.5): a core background sweep evaluates <paramref name="statusName"/>
+    /// per subject and, WHILE it holds, invokes <paramref name="handler"/> to turn "this subject is in that
+    /// state" into who to tell and what to say. The handler receives the same context a transition does — the
+    /// subject and the facade — so it can walk the subject's own graph to resolve the audience (an enrollment's
+    /// instructor lives up on the dossier, not on the enrollment) and read/write its OWN idempotency marker: it
+    /// returns the notices to send the FIRST time and an empty list once it has recorded that it warned, so the
+    /// sweep does not re-notify every tick. The core resolves each notice's recipient e-mail to a tenant user and
+    /// files an in-app notification; a marker keyed to the deadline it warned about re-arms on renewal for free.
+    /// The status arithmetic (is it Expiring?) stays the engine's; who-and-what stays the module's.
+    /// </summary>
+    IStateMachineBuilder Escalates(string statusName, Func<TransitionContext, Task<IReadOnlyList<EscalationNotice>>> handler);
 }
+
+/// <summary>One reminder the sweep should deliver (ABI 0.5): a recipient e-mail the core resolves to a tenant
+/// user, and the already-localized title and body the module composed. The module returns these from its
+/// escalation handler; the core owns only delivery and the e-mail→user resolution.</summary>
+public sealed record EscalationNotice(string RecipientEmail, string Title, string Message);
 
 /// <summary>What a transition's handler receives: the subject, the archive, and the request's services.</summary>
 /// <param name="SubjectDocumentId">The document the machine was asked about.</param>

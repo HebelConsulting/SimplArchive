@@ -24,6 +24,10 @@ public sealed class TestModule : IIndustryModule
     /// generate a key pair at runtime and plant the public half here — no key material in the repo.</summary>
     public static string VerifyKeyPem { get; set; } = string.Empty;
 
+    /// <summary>Settable by the escalation test: who the "Expiring" escalation names as its recipient (the
+    /// module resolves the audience; the core resolves the e-mail to a tenant user).</summary>
+    public static string EscalationRecipientEmail { get; set; } = string.Empty;
+
     /// <summary>
     /// The static works only when the test constructs the module in ITS OWN load context; a module the
     /// LOADER brought in lives in an isolated context whose statics the test cannot reach (ADR 0741's
@@ -35,7 +39,12 @@ public sealed class TestModule : IIndustryModule
 
     public IReadOnlyList<ModuleMaskSeed> Masks { get; } =
     [
-        new ModuleMaskSeed(DossierMaskId, "Test Dossier", IsFolderMask: true, IsBookable: false, []),
+        new ModuleMaskSeed(DossierMaskId, "Test Dossier", IsFolderMask: true, IsBookable: false,
+        [
+            // The escalation's own idempotency marker (ABI 0.5): the handler stores the certificate date it
+            // warned about, so it warns once and re-arms only when that date moves.
+            new ModuleFieldSeed("Reminder sent for", "Text", IsRequired: false),
+        ]),
         new ModuleMaskSeed(CertificateMaskId, "Test Certificate", IsFolderMask: false, IsBookable: false,
         [
             new ModuleFieldSeed("Valid to", "Date", IsRequired: false),
@@ -97,6 +106,24 @@ public sealed class TestModule : IIndustryModule
             .Status("Expiring",
                 StateCondition.ChildField(CertificateMaskId, "Valid to", ConditionTest.DateWithinDays, "30",
                     "test.not-expiring", "The certificate is not within 30 days of expiry ({value})."))
+            // The escalation off that status (ABI 0.5): while a dossier's newest certificate is expiring, warn
+            // the configured recipient ONCE — the marker stores the date warned about, so a re-run sends nothing
+            // and a moved date re-arms. The module resolves who-and-what; the core resolves e-mail→user + delivers.
+            .Escalates("Expiring", async ctx =>
+            {
+                var certs = await ctx.Archive.GetChildrenAsync(ctx.SubjectDocumentId, CertificateMaskId);
+                var deadline = certs.Count > 0 && certs[^1].Fields.TryGetValue("Valid to", out var v) ? v : string.Empty;
+
+                var subject = await ctx.Archive.GetDocumentAsync(ctx.SubjectDocumentId);
+                var warnedFor = subject is not null && subject.Fields.TryGetValue("Reminder sent for", out var w) ? w : string.Empty;
+                if (warnedFor == deadline)
+                {
+                    return []; // already warned for this deadline
+                }
+
+                await ctx.Archive.SetFieldsAsync(ctx.SubjectDocumentId, new Dictionary<string, string> { ["Reminder sent for"] = deadline });
+                return [new EscalationNotice(EscalationRecipientEmail, "Certificate expiring", $"The certificate expires {deadline}.")];
+            })
             .Transition("log-entry", "Log entry",
                 [
                     StateCondition.ChildField(CertificateMaskId, "Valid to", ConditionTest.DateNotPast, null,

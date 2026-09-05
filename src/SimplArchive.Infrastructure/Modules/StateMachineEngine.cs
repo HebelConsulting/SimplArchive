@@ -27,7 +27,10 @@ public sealed class StateMachineCatalog : IStateMachineDefinitions
         string? ModuleId,
         Guid SubjectMaskId,
         Dictionary<string, IReadOnlyList<StateCondition>> Statuses,
-        Dictionary<string, TransitionDefinition> Transitions);
+        Dictionary<string, TransitionDefinition> Transitions,
+        // statusName → the module's escalation handler (ABI 0.5): what the background sweep invokes while that
+        // status holds to learn who to remind and what to say.
+        Dictionary<string, Func<TransitionContext, Task<IReadOnlyList<EscalationNotice>>>> Escalations);
 
     public IReadOnlyDictionary<string, MachineDefinition> Machines => _machines;
 
@@ -41,7 +44,8 @@ public sealed class StateMachineCatalog : IStateMachineDefinitions
     {
         var definition = new MachineDefinition(machineId, moduleId, subjectMaskId,
             new Dictionary<string, IReadOnlyList<StateCondition>>(StringComparer.Ordinal),
-            new Dictionary<string, TransitionDefinition>(StringComparer.Ordinal));
+            new Dictionary<string, TransitionDefinition>(StringComparer.Ordinal),
+            new Dictionary<string, Func<TransitionContext, Task<IReadOnlyList<EscalationNotice>>>>(StringComparer.Ordinal));
         _machines[machineId] = definition;
         return new Builder(definition);
     }
@@ -63,6 +67,12 @@ public sealed class StateMachineCatalog : IStateMachineDefinitions
         public IStateMachineBuilder Transition(string name, string label, IReadOnlyList<StateCondition> guard, Func<TransitionContext, Task> handler)
         {
             definition.Transitions[name] = new TransitionDefinition(label, guard, handler);
+            return this;
+        }
+
+        public IStateMachineBuilder Escalates(string statusName, Func<TransitionContext, Task<IReadOnlyList<EscalationNotice>>> handler)
+        {
+            definition.Escalations[statusName] = handler;
             return this;
         }
     }
@@ -141,9 +151,59 @@ public sealed class StateMachineEngine
             return verdict;
         }
 
-        // The act's one transaction (ADRs 0737/0738): every wired module read-model context shares the
-        // core connection, so ENLISTING them here is what makes a handler's document writes and its
-        // projection writes one commit — and one rollback, when the handler throws.
+        // The act's one transaction (ADRs 0737/0738): the handler's document + projection writes are one
+        // commit, and one rollback when it throws (InEngineTransactionAsync owns the enlist/rollback).
+        await InEngineTransactionAsync(async () =>
+        {
+            await transition.Handler(new TransitionContext(subjectDocumentId, _archive, _services));
+            return true;
+        }, cancellationToken);
+
+        return verdict;
+    }
+
+    /// <summary>
+    /// Evaluates a status and, WHILE it holds, runs the module's escalation handler for it (ABI 0.5): the
+    /// same act-as-the-module + engine-owned-transaction contract as a transition, so the handler's OWN
+    /// idempotency-marker write commits (or rolls back with a throw). Returns the notices the module wants
+    /// delivered — empty when the status does not hold (the subject is not in that state) or the module has
+    /// already warned (its handler returns empty). The core delivers what comes back; it never composes the
+    /// message or picks the audience (ADR 0736: who-and-what is the module's, the arithmetic is the engine's).
+    /// </summary>
+    public async Task<IReadOnlyList<EscalationNotice>> ExecuteEscalationAsync(string machineId, string statusName, Guid subjectDocumentId, DateTimeOffset asOf, CancellationToken cancellationToken = default)
+    {
+        var machine = Require(machineId);
+        ActAs(machine);
+        if (!machine.Escalations.TryGetValue(statusName, out var handler))
+        {
+            throw new ArgumentException($"Machine '{machineId}' declares no escalation on status '{statusName}'.", nameof(statusName));
+        }
+
+        if (!machine.Statuses.TryGetValue(statusName, out var conditions))
+        {
+            throw new ArgumentException($"Machine '{machineId}' declares no status '{statusName}'.", nameof(statusName));
+        }
+
+        // The status is the gate: only a subject actually in that state escalates.
+        if (!(await EvaluateAsync(conditions, subjectDocumentId, asOf, cancellationToken)).Satisfied)
+        {
+            return [];
+        }
+
+        return await InEngineTransactionAsync(
+            () => handler(new TransitionContext(subjectDocumentId, _archive, _services)), cancellationToken);
+    }
+
+    /// <summary>
+    /// Runs <paramref name="body"/> inside the engine-owned transaction (ADRs 0737/0738): every wired module
+    /// read-model context shares the core connection, so enlisting them here is what makes a handler's document
+    /// writes and its projection writes ONE commit — and one rollback when it throws. On a throw the change
+    /// TRACKERS are also cleared: the database rolls back on dispose but the contexts would still hold the
+    /// handler's writes as clean entities, so a later FindAsync would serve a phantom row and a later save could
+    /// resurrect rolled-back state (found by the rollback test reading Count = 1 from a table that held nothing).
+    /// </summary>
+    private async Task<T> InEngineTransactionAsync<T>(Func<Task<T>> body, CancellationToken cancellationToken)
+    {
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
         var enlisted = new List<Microsoft.EntityFrameworkCore.DbContext>();
         foreach (var contextType in _readModels.ContextTypes)
@@ -155,15 +215,12 @@ public sealed class StateMachineEngine
 
         try
         {
-            await transition.Handler(new TransitionContext(subjectDocumentId, _archive, _services));
+            var result = await body();
             await transaction.CommitAsync(cancellationToken);
+            return result;
         }
         catch
         {
-            // The database rolls back on dispose — but the CHANGE TRACKERS would not: every context still
-            // holds the handler's writes as clean entities, so a FindAsync would serve a phantom row and a
-            // later save in this request could quietly resurrect rolled-back state. Found by the rollback
-            // test reading Count = 1 from a table that held nothing.
             _dbContext.ChangeTracker.Clear();
             foreach (var readModelContext in enlisted)
             {
@@ -179,8 +236,6 @@ public sealed class StateMachineEngine
                 await readModelContext.Database.UseTransactionAsync(null, CancellationToken.None);
             }
         }
-
-        return verdict;
     }
 
     private StateMachineCatalog.MachineDefinition Require(string machineId) =>
