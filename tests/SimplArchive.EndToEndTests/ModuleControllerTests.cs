@@ -155,6 +155,40 @@ public class ModuleControllerTests
     }
 
     [Fact]
+    public async Task A_documents_resource_carries_its_machines_derived_statuses_with_diagnoses()
+    {
+        var rig = await RigAsync();
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", vendorKey.ExportSubjectPublicKeyInfoPem());
+        try
+        {
+            await ActivateAsync(rig, vendorKey);
+            var dossierId = (await TestJson.Post(rig.Owner, $"/api/documents/{rig.RepoId}/children",
+                new { name = $"Dossier {Guid.NewGuid():N}", maskId = SimplArchive.TestModule.TestModule.DossierMaskId }))
+                .GetProperty("id").GetGuid();
+
+            // BEFORE any certificate: the test-pilot machine's MayAct status rides the document (#1021),
+            // unmet, carrying the ADR-0742 diagnoses a client renders — the whole point of surfacing it.
+            var doc = await TestJson.Get(rig.Admin, $"/api/documents/{dossierId}");
+            var mayAct = doc.GetProperty("machineStatuses").EnumerateArray()
+                .Single(x => x.GetProperty("name").GetString() == "MayAct");
+            Assert.False(mayAct.GetProperty("satisfied").GetBoolean());
+            Assert.Contains(mayAct.GetProperty("failures").EnumerateArray(),
+                f => f.GetProperty("code").GetString() == "test.certificate-expired");
+
+            // A document no machine watches carries an empty set, not a missing field.
+            var plain = await TestJson.Get(rig.Admin, $"/api/documents/{rig.RepoId}");
+            Assert.Empty(plain.GetProperty("machineStatuses").EnumerateArray());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", null);
+            rig.Admin.Dispose();
+            rig.Owner.Dispose();
+        }
+    }
+
+    [Fact]
     public async Task The_fact_gated_act_reads_the_modules_projection_and_rebuild_rederives_it()
     {
         var rig = await RigAsync();

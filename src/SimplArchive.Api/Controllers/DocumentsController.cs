@@ -49,11 +49,13 @@ public class DocumentsController : ControllerBase
         IUserSystemRightsResolver userSystemRights,
         ICurrentTenantAccessor currentTenantAccessor,
         Documents.DocumentMover mover,
-        Documents.DocumentResourceLinks resourceLinks)
+        Documents.DocumentResourceLinks resourceLinks,
+        Documents.MachineStatusEvaluator machineStatuses)
     {
         _currentTenantAccessor = currentTenantAccessor;
         _mover = mover;
         _resourceLinks = resourceLinks;
+        _machineStatuses = machineStatuses;
         _dbContext = dbContext;
         _access = access;
         _currentUserAccessor = currentUserAccessor;
@@ -177,6 +179,11 @@ public class DocumentsController : ControllerBase
         // from its parent's listing, where the child's own setting has never been fetched. Meaningless for a
         // document, which lists nothing.
         public FolderContentsSortOrder ContentsSortOrder { get; set; }
+
+        /// <summary>The derived statuses of the machines whose subject mask this document wears (#1021) —
+        /// each with its verdict and, when unmet, the ADR-0742 diagnoses. Empty for a document no active
+        /// machine watches. Computed on GET (ADR 0742: never stored).</summary>
+        public List<Documents.MachineStatusResource> MachineStatuses { get; set; } = [];
     }
 
     public class RetentionInfo
@@ -199,8 +206,9 @@ public class DocumentsController : ControllerBase
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly Documents.DocumentMover _mover;
     private readonly Documents.DocumentResourceLinks _resourceLinks;
+    private readonly Documents.MachineStatusEvaluator _machineStatuses;
 
-    private record DocumentRow(string Name, Guid ConcurrencyToken, Guid? SensitivityLabelId, string? SensitivityLabelName, string? SensitivityLabelColor, bool SensitivityWatermark, bool BreaksInheritance, FolderContentsSortOrder ContentsSortOrder, Guid? ParentId);
+    private record DocumentRow(string Name, Guid ConcurrencyToken, Guid? SensitivityLabelId, string? SensitivityLabelName, string? SensitivityLabelColor, bool SensitivityWatermark, bool BreaksInheritance, FolderContentsSortOrder ContentsSortOrder, Guid? ParentId, Guid? MaskVersionId);
 
     [HttpGet]
     public async Task<IActionResult> Get(Guid documentId, CancellationToken cancellationToken)
@@ -263,6 +271,10 @@ public class DocumentsController : ControllerBase
         var (links, canCreateChildren) = await _resourceLinks.BuildAsync(
             Url, documentId, document.ParentId, rights, checkedOut, isFolder, isArchive, externalLinksAllowed, cancellationToken);
 
+        var maskId = document.MaskVersionId is { } mvId
+            ? await _dbContext.MaskVersions.Where(v => v.Id == mvId).Select(v => (Guid?)v.MaskId).SingleOrDefaultAsync(cancellationToken)
+            : null;
+
         return Ok(new DocumentResource
         {
             Id = documentId,
@@ -280,6 +292,7 @@ public class DocumentsController : ControllerBase
             CanCreateChildren = canCreateChildren,
             BreaksInheritance = document.BreaksInheritance,
             ContentsSortOrder = document.ContentsSortOrder,
+            MachineStatuses = [.. await _machineStatuses.EvaluateAsync(documentId, maskId, DateTimeOffset.UtcNow, cancellationToken)],
             Links = links,
         });
     }
@@ -750,7 +763,8 @@ public class DocumentsController : ControllerBase
                 d.SensitivityLabelId != null && _dbContext.SensitivityLabelDefinitions.Any(l => l.Id == d.SensitivityLabelId && l.Watermark),
                 d.BreaksInheritance,
                 d.ContentsSortOrder,
-                d.ParentId))
+                d.ParentId,
+                d.MaskVersionId))
             .SingleOrDefaultAsync(cancellationToken);
     }
 
