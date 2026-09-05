@@ -136,7 +136,7 @@ public class WellKnownMaskFieldHealTests
     }
 
     [Fact]
-    public async Task An_existing_mask_missing_a_REQUIRED_field_fails_loudly_rather_than_invalidating_documents()
+    public async Task An_existing_mask_missing_a_REQUIRED_field_heals_it_in_place_with_its_requiredness()
     {
         using var connection = new SqliteConnection("Filename=:memory:");
         await connection.OpenAsync();
@@ -158,14 +158,19 @@ public class WellKnownMaskFieldHealTests
             await db.SaveChangesAsync();
         }
 
-        // It refuses. Adding it would retroactively invalidate every document already on the mask (ADR 0176), and
-        // skipping it quietly would leave the mask permanently wrong with nobody told.
+        // It heals, requiredness included (ADR 0748, #1018 — supersedes ADR 0616's refusal, which
+        // boot-crashed every pre-reshape database: v0.13 → v0.14 crash-looped on Room booking's new
+        // required Event UID). Existing documents stay usable because required-field validation applies on
+        // (re)assignment only (ADR 0176). The revisit trigger — a real user base — is recorded at the seeder.
         using (var db = Ctx(connection, accessor))
         {
-            var thrown = await Assert.ThrowsAsync<RequiredFieldAddedToWellKnownMaskException>(
-                () => Seeder(db).EnsureWellKnownMasksAsync(_tenantId));
-            Assert.Contains("Subject", thrown.FieldNames);
-            Assert.Equal(WellKnownMaskIds.EMail, thrown.MaskId);
+            await Seeder(db).EnsureWellKnownMasksAsync(_tenantId);
+        }
+
+        using (var db = Ctx(connection, accessor))
+        {
+            var healed = await db.FieldDefinitions.IgnoreQueryFilters().SingleAsync(f => f.Name == "Subject");
+            Assert.True(healed.IsRequired); // spec'd requiredness arrives with the heal, not a demotion
         }
     }
 
@@ -191,7 +196,7 @@ public class WellKnownMaskFieldHealTests
             var field = await AddressFieldAsync(db);
             Assert.Equal(FieldDataType.EmailAddress, field.DataType);
             Assert.True(field.IsList);
-            Assert.False(field.IsRequired); // load-bearing: the heal refuses required fields (ADR 0616)
+            Assert.False(field.IsRequired); // the SPEC says optional; the heal carries spec'd requiredness (ADR 0748)
         }
 
         // The HEAL path: a tenant seeded before the field existed gains it at next startup, multiplicity and

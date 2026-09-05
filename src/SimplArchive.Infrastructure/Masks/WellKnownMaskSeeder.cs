@@ -538,14 +538,13 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             return;
         }
 
-        var required = missing.Where(f => f.IsRequired).Select(f => f.Name).ToList();
-        if (required.Count > 0)
-        {
-            // Loud rather than silent: the alternative is invalidating documents at startup, and the alternative
-            // to that is skipping quietly, which would leave the mask permanently wrong with nobody told.
-            throw new RequiredFieldAddedToWellKnownMaskException(maskId, tenantId, required);
-        }
-
+        // Missing fields are added WITH their spec'd requiredness — including required ones (ADR 0748,
+        // #1018, owner-decided 2026-09-05, superseding ADR 0616's refusal). The refusal boot-crashed every
+        // pre-reshape database (v0.13 → v0.14 crash-looped on Room booking's new required Event UID), which
+        // is worse than what it protected against: required-field validation applies on (re)assignment only
+        // (ADR 0176), so existing documents stay readable and editable; only a mask (re)assignment asks for
+        // the new field. TRIGGER TO REVISIT: when a real user base exists, this becomes a new-MaskVersion
+        // mechanism so a reshape never changes what an existing version means.
         foreach (var field in missing)
         {
             _dbContext.FieldDefinitions.Add(new FieldDefinition
@@ -555,7 +554,7 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
                 MaskVersionId = currentVersion,
                 Name = field.Name,
                 DataType = field.DataType,
-                IsRequired = false,
+                IsRequired = field.IsRequired,
                 IsList = field.IsList,
                 CreatedAt = DateTimeOffset.UtcNow,
             });

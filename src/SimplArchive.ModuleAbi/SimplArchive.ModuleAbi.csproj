@@ -7,7 +7,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>SimplArchive.ModuleAbi</PackageId>
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
+    <!-- The BINDING identity is pinned, permanently (ADR 0749): the Docker build stamps -p:Version over
+         every project (0.0.0-dev locally), so without this pin the host's ModuleAbi.dll assembly version
+         depends on the HOST's stamp and a package-built module fails to bind on any dev host (found by
+         the flight-school loader smoke, 2026-09-05). Binding never carries the compatibility contract -
+         the loader's AbiMajorVersion gate does (ADR 0741), with a clean admin-facing refusal. -->
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <Description>The contract industry modules build against: registration, mask seeding, facts, transitions, and the archive facade (ADR 0741).</Description>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
