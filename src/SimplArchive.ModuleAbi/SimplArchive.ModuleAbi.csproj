@@ -16,6 +16,14 @@
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <Description>The contract industry modules build against: registration, mask seeding, facts, transitions, and the archive facade (ADR 0741).</Description>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Package metadata for the real feed (ADR 0751): published to GitHub Packages under the org, so a
+         module author references it as a package rather than vendoring a .nupkg. Apache-2.0, like the project. -->
+    <Authors>Hebel Consulting</Authors>
+    <Company>Hebel Consulting</Company>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/HebelConsulting/SimplArchive</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>simplarchive;dms;industry-module;abi</PackageTags>
   </PropertyGroup>
 
   <!-- The industry-module ABI (ADR 0741): the ONLY assembly a module may reference from the core. A leaf
