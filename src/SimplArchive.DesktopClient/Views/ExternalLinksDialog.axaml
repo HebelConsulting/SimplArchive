@@ -24,7 +24,11 @@
         <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8"
                     IsVisible="{Binding CreatedUrl, Converter={x:Static ObjectConverters.IsNotNull}}">
             <TextBlock Text="{loc:Tr ExtLinkShownOnce}" TextWrapping="Wrap" Margin="0,0,0,4" />
-            <TextBox Text="{Binding CreatedUrlWithOptions, Mode=OneWay}" IsReadOnly="True" />
+            <DockPanel LastChildFill="True">
+                <Button DockPanel.Dock="Right" Content="{loc:Tr ExtLinkCopyToClipboard}" Command="{Binding CopyUrlCommand}"
+                        Margin="6,0,0,0" Padding="10,3" VerticalAlignment="Stretch" />
+                <TextBox Text="{Binding CreatedUrlWithOptions, Mode=OneWay}" IsReadOnly="True" />
+            </DockPanel>
         </StackPanel>
 
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right"

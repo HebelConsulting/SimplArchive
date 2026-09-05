@@ -83,6 +83,23 @@ public partial class ExternalLinksDialogViewModel : ObservableObject
 
     partial void OnCreatedUrlChanged(string? value) => OnPropertyChanged(nameof(CreatedUrlWithOptions));
 
+    /// <summary>
+    /// Copies the just-created URL. The token is shown once and the list endpoints never return it, so a copy
+    /// button is the difference between keeping the link and having to revoke-and-recreate it (ADR 0546).
+    /// </summary>
+    [RelayCommand]
+    private async Task CopyUrlAsync()
+    {
+        if (CreatedUrlWithOptions is { Length: > 0 } url && CopyToClipboard is { } copy)
+        {
+            await copy(url);
+            Status = Strings.Get("ExtLinkUrlCopied");
+        }
+    }
+
+    /// <summary>Supplied by the view: reaching a clipboard needs a toolkit type, and this VM holds none (ADR 0730).</summary>
+    public Func<string, Task>? CopyToClipboard { get; set; }
+
     public async Task LoadAsync()
     {
         var result = _crossDocument

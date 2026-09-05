@@ -20,6 +20,16 @@ public partial class ExternalLinksDialog : Window
         {
             DataContext = viewModel;
             Opened += async (_, _) => await viewModel.LoadAsync();
+
+            // The clipboard is the view's to reach, so the view-model stays free of a toolkit type (ADR 0730):
+            // the created URL is shown once, so being able to copy it is the point.
+            viewModel.CopyToClipboard = async text =>
+            {
+                if (Clipboard is { } clipboard)
+                {
+                    await clipboard.SetTextAsync(text);
+                }
+            };
         }
     }
 
