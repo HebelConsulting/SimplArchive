@@ -21,6 +21,7 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
     private readonly ICurrentServiceAccountAccessor _currentServiceAccount;
     private readonly ModuleIdentityAccessor? _identity;
     private readonly IEffectiveRightsCalculator? _rights;
+    private readonly IObjectStorageClient? _objectStorage;
     private Guid? _principalId;
     private bool _principalResolved;
 
@@ -29,13 +30,15 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         ICurrentUserAccessor currentUser,
         ICurrentServiceAccountAccessor currentServiceAccount,
         ModuleIdentityAccessor? identity = null,
-        IEffectiveRightsCalculator? rights = null)
+        IEffectiveRightsCalculator? rights = null,
+        IObjectStorageClient? objectStorage = null)
     {
         _dbContext = dbContext;
         _currentUser = currentUser;
         _currentServiceAccount = currentServiceAccount;
         _identity = identity;
         _rights = rights;
+        _objectStorage = objectStorage;
     }
 
     /// <summary>
@@ -98,6 +101,37 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         {
             FieldLists = fields.Lists,
         };
+    }
+
+    public async Task<byte[]?> GetDocumentContentAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        // Same consent gate as the field reads (ADR 0736): a module reads content only of a document its
+        // principal may see; ungranted reads as nonexistent.
+        if (!await ModuleMaySeeAsync(documentId, cancellationToken))
+        {
+            return null;
+        }
+
+        var pointer = await _dbContext.Documents
+            .Where(d => d.Id == documentId)
+            .Select(d => d.CurrentVersionId)
+            .SingleOrDefaultAsync(cancellationToken);
+        var version = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, documentId, pointer, cancellationToken);
+        if (version is null)
+        {
+            return null; // no confirmed version — nothing to parse
+        }
+
+        if (_objectStorage is null)
+        {
+            throw new InvalidOperationException(
+                "Content reads need an object-storage client; the host wires one — a test facade that reads content must supply it.");
+        }
+
+        await using var content = await _objectStorage.GetObjectAsync(version.ObjectKey, cancellationToken);
+        using var buffer = new MemoryStream();
+        await content.CopyToAsync(buffer, cancellationToken);
+        return buffer.ToArray();
     }
 
     public async Task<IReadOnlyList<ModuleDocument>> GetChildrenAsync(Guid parentDocumentId, Guid maskId, CancellationToken cancellationToken = default)

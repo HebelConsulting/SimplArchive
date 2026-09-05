@@ -23,6 +23,16 @@ public interface IModuleArchiveFacade
     /// <summary>A document's identity, mask, and index fields — the read every guard starts from.</summary>
     Task<ModuleDocument?> GetDocumentAsync(Guid documentId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The current version's CONTENT bytes (ABI 0.3, #1024) — how a module parses a document it owns, the
+    /// syllabus-JSON case above all (flight-school ADR 0003: the module parses its own document). Resolves
+    /// the current version (honoring the CurrentVersionId pointer); null when the document has no confirmed
+    /// version, or the module principal cannot see it (the same consent gate as the field reads). Loads the
+    /// whole content — intended for the metadata-scale structured documents a module reads (a syllabus is a
+    /// few KB), NOT for large binary content.
+    /// </summary>
+    Task<byte[]?> GetDocumentContentAsync(Guid documentId, CancellationToken cancellationToken = default);
+
     /// <summary>The documents directly under a parent wearing a given module mask — a dossier's
     /// certificates, a fleet's aircraft. Paged the core way; order is CreatedAt then Id.</summary>
     Task<IReadOnlyList<ModuleDocument>> GetChildrenAsync(Guid parentDocumentId, Guid maskId, CancellationToken cancellationToken = default);
