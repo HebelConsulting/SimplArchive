@@ -1,18 +1,24 @@
-# Mutation testing, MONTHLY FULL SWEEP — ADR 0747.
+# Mutation testing, FULL SWEEP — ADR 0747. MANUAL DISPATCH ONLY (no schedule).
 #
-# The absolute mutation score, over everything, once a month; the weekly incremental (mutation-testing.yml)
-# carries the fast signal in between. Sharded per the 2026-09-05 calibration run (mutant counts per leg are
-# in ADR 0747): six legs, each sized to fit a 300-minute budget on a 2-core public runner — Domain whole
-# (~255 mutants at ~35 s), Infrastructure five ways (~500–900 mutants at ~10–15 s each). `infra-rest` is a
-# COMPLEMENT shard (exclusion-only), so a namespace added later can never silently fall out of the sweep;
-# keep its exclusions in lockstep with the named shards. CLI --mutate REPLACES the config's mutate list, so
-# sharded legs restate the Migrations exclusion themselves.
+# The absolute mutation score, over everything. The weekly incremental (mutation-testing.yml) carries the
+# ongoing signal on a schedule; this is run by hand when an absolute score is actually wanted.
+#
+# Why no monthly cron: a single-namespace calibration leg (issue #1027) measured a FIXED ~65-minute overhead
+# per shard that `--mutate` does NOT reduce — Stryker still creates and coverage-captures the WHOLE
+# Infrastructure project (11,927 mutants) before filtering to the shard's slice, so ~35 min initial test run
+# + ~30 min coverage land on every leg regardless of how narrow it is. Even a 51-mutant leg cancelled at the
+# 120-min ceiling. So the monthly run only ever produced cancelled legs and no score; sharding smaller makes
+# it worse (more legs × fixed overhead). Running it for real needs many more legs or a larger/self-hosted
+# runner — a deliberate manual act, not an unattended monthly one. Details + options on #1027.
+#
+# Sharded six ways (mutant counts per leg in ADR 0747): Domain whole, Infrastructure five ways. `infra-rest`
+# is a COMPLEMENT shard (exclusion-only), so a namespace added later can never silently fall out of the
+# sweep; keep its exclusions in lockstep with the named shards. CLI --mutate REPLACES the config's mutate
+# list, so sharded legs restate the Migrations exclusion themselves.
 name: Mutation testing (full)
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 2 1 * *" # monthly, 1st at 02:00 UTC (only actually runs on the public repo — see the gate job)
 
 permissions:
   contents: read
