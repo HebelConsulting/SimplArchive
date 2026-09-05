@@ -1,0 +1,158 @@
+# Mutation testing, MONTHLY FULL SWEEP — ADR 0747.
+#
+# The absolute mutation score, over everything, once a month; the weekly incremental (mutation-testing.yml)
+# carries the fast signal in between. Sharded per the 2026-09-05 calibration run (mutant counts per leg are
+# in ADR 0747): six legs, each sized to fit a 300-minute budget on a 2-core public runner — Domain whole
+# (~255 mutants at ~35 s), Infrastructure five ways (~500–900 mutants at ~10–15 s each). `infra-rest` is a
+# COMPLEMENT shard (exclusion-only), so a namespace added later can never silently fall out of the sweep;
+# keep its exclusions in lockstep with the named shards. CLI --mutate REPLACES the config's mutate list, so
+# sharded legs restate the Migrations exclusion themselves.
+name: Mutation testing (full)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 2 1 * *" # monthly, 1st at 02:00 UTC (only actually runs on the public repo — see the gate job)
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    timeout-minutes: 10
+    if: ${{ github.repository == 'HebelConsulting/SimplArchive' }}
+    runs-on: ubuntu-latest
+    outputs:
+      public: ${{ steps.check.outputs.public }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          vis=$(gh api "repos/${{ github.repository }}" --jq .visibility)
+          echo "Repository visibility: $vis"
+          echo "public=$([ "$vis" = public ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  mutate:
+    timeout-minutes: 300
+    name: Stryker full (${{ matrix.name }})
+    needs: gate
+    if: ${{ needs.gate.outputs.public == 'true' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: domain
+            project: SimplArchive.Domain
+            mutate: ""
+          - name: infra-persistence
+            project: SimplArchive.Infrastructure
+            mutate: >-
+              --mutate "**/Persistence/**"
+              --mutate "!**/Migrations/*.cs"
+          - name: infra-storage-io
+            project: SimplArchive.Infrastructure
+            mutate: >-
+              --mutate "**/Storage/**"
+              --mutate "**/Conversion/**"
+              --mutate "**/Mail/**"
+              --mutate "**/Http/**"
+              --mutate "**/Intray/**"
+          - name: infra-search-audit
+            project: SimplArchive.Infrastructure
+            mutate: >-
+              --mutate "**/Search/**"
+              --mutate "**/Audit/**"
+              --mutate "**/Notifications/**"
+          - name: infra-modules-masks
+            project: SimplArchive.Infrastructure
+            mutate: >-
+              --mutate "**/Modules/**"
+              --mutate "**/Masks/**"
+          # The COMPLEMENT: everything the named infra shards exclude — Acl, Retention, Workflow, Checkout,
+          # and every namespace that arrives later. Exclusion-only on purpose: an include list here would be
+          # the silent cap this layout exists to avoid. Keep in lockstep with the named shards above.
+          - name: infra-rest
+            project: SimplArchive.Infrastructure
+            mutate: >-
+              --mutate "!**/Persistence/**"
+              --mutate "!**/Storage/**"
+              --mutate "!**/Conversion/**"
+              --mutate "!**/Mail/**"
+              --mutate "!**/Http/**"
+              --mutate "!**/Intray/**"
+              --mutate "!**/Search/**"
+              --mutate "!**/Audit/**"
+              --mutate "!**/Notifications/**"
+              --mutate "!**/Modules/**"
+              --mutate "!**/Masks/**"
+              --mutate "!**/Migrations/*.cs"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+      - name: Restore
+        run: dotnet restore
+      - name: Restore local tools
+        run: dotnet tool restore
+      - name: Stryker ${{ matrix.name }}
+        run: >-
+          dotnet stryker
+          --config-file stryker-config.json
+          --project ${{ matrix.project }}.csproj
+          --output stryker-out/${{ matrix.name }}
+          --reporter html --reporter progress
+          ${{ matrix.mutate }}
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mutation-report-full-${{ matrix.name }}
+          path: stryker-out/${{ matrix.name }}/**/mutation-report.html
+          if-no-files-found: ignore
+
+  # A green FULL sweep also advances the weekly incremental's baseline: everything was just swept, so the
+  # next weekly diff starts from here.
+  advance-baseline:
+    timeout-minutes: 10
+    needs: [gate, mutate]
+    if: ${{ needs.gate.outputs.public == 'true' && needs.mutate.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - run: |
+          git tag -f mutation-baseline HEAD
+          git push -f origin mutation-baseline
+          echo "Baseline advanced to $(git rev-parse --short HEAD)."
+
+  report-death:
+    timeout-minutes: 10
+    needs: [gate, mutate]
+    if: ${{ always() && needs.gate.outputs.public == 'true' && needs.mutate.result != 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Mutation sweep died before reporting"
+          body="The MONTHLY FULL mutation sweep ended '${{ needs.mutate.result }}' without producing its reports: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          A leg that hit its 300-minute timeout reports as cancelled; recalibrate the shard layout in .github/workflows/mutation-full.yml against the leg's mutant count (ADR 0747) rather than raising the timeout first."
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi

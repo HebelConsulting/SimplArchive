@@ -1,11 +1,13 @@
-# Mutation testing (Stryker.NET) — ADR "Stryker.NET mutation testing".
+# Mutation testing, WEEKLY INCREMENTAL (Stryker.NET --since) — ADR 0747.
 #
-# Runs ONLY on the public repository (HebelConsulting/SimplArchive) and only while it is actually public: mutation
-# testing re-runs the whole suite once per mutant → thousands of runs → many CI minutes, metered on private repos
-# but free + unlimited on public ones. The `gate` job resolves the repo's visibility via the API — schedule-safe,
-# unlike the inline `github.event.repository.visibility` context, which is null on scheduled (cron) runs — so the
-# heavy `mutate` job runs only when this is the public repo AND currently public; it's a no-op (zero minutes) on
-# the private canonical. Out-of-band quality signal, never a PR gate.
+# The full sweep outgrew every fixed budget (ADR 0746's shards died on their first run: the workload
+# tripled in three weeks — see the ADR). The weekly signal is now INCREMENTAL: mutate only code changed
+# since the `mutation-baseline` tag, which a green run advances to the swept commit. Cost tracks change
+# rate instead of codebase size. The monthly FULL sweep (mutation-full.yml) keeps the absolute score
+# honest; this run's score is a statement about the week's changes only.
+#
+# Runs ONLY on the public repository and only while public (free unlimited minutes; metered on private) —
+# the gate resolves visibility via the API because the inline context is null on cron.
 name: Mutation testing
 
 on:
@@ -16,23 +18,7 @@ on:
 permissions:
   contents: read
 
-# Out-of-band quality signal, never a PR gate: it measures whether the test suite would actually catch a bug
-# (killed vs. survived mutants), not just what runs (that's the coverage report, ADR 0438). Scope = the projects
-# whose logic is genuinely unit/integration-tested (Domain + Infrastructure — entities/invariants + the
-# EffectiveRights/Clearance calculators + DbContext invariants + group expansion), run by UnitTests +
-# IntegrationTests (configured in stryker-config.json). Generated EF migrations are excluded there.
-#
-# SHARDED because the codebase outgrew the budget (found 2026-09-05): whole-project legs died for a month —
-# 6h GitHub ceiling before the 120-min cap, then the cap — and, being out-of-band, the corpse paged nobody.
-# Infrastructure now runs as four legs: three named shards and a COMPLEMENT shard that mutates everything the
-# named ones exclude, so a new namespace can never silently fall out of the sweep (a top-N shard list would be
-# a silent cap). CLI --mutate REPLACES the config's mutate list, so every sharded leg restates the Migrations
-# exclusion itself. The `report-death` job is the other half of the fix: a sweep that dies now files/updates a
-# tracking issue instead of dying quietly.
 jobs:
-  # "Is this the public repo, and is it currently public?" — resolved via the API so it holds on every event type
-  # (the inline visibility context is null on cron). Name-gated, so it's skipped outright on the private canonical,
-  # which cascades to skip `mutate`.
   gate:
     timeout-minutes: 10
     if: ${{ github.repository == 'HebelConsulting/SimplArchive' }}
@@ -49,57 +35,26 @@ jobs:
           echo "public=$([ "$vis" = public ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
   mutate:
-    timeout-minutes: 180
-    name: Stryker (${{ matrix.name }})
+    timeout-minutes: 120
+    name: Stryker incremental (${{ matrix.project }})
     needs: gate
     if: ${{ needs.gate.outputs.public == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # Domain fits in one leg (1h33 at last success, 2026-08-17); the config's Migrations exclusion applies.
-          - name: domain
-            project: SimplArchive.Domain
-            mutate: ""
-          - name: infra-persistence
-            project: SimplArchive.Infrastructure
-            mutate: >-
-              --mutate "**/Persistence/**"
-              --mutate "!**/Migrations/*.cs"
-          - name: infra-storage-io
-            project: SimplArchive.Infrastructure
-            mutate: >-
-              --mutate "**/Storage/**"
-              --mutate "**/Conversion/**"
-              --mutate "**/Mail/**"
-              --mutate "**/Http/**"
-              --mutate "**/Intray/**"
-          - name: infra-search-audit
-            project: SimplArchive.Infrastructure
-            mutate: >-
-              --mutate "**/Search/**"
-              --mutate "**/Audit/**"
-              --mutate "**/Notifications/**"
-          # The COMPLEMENT: everything the named infra shards exclude — Modules, Masks, Acl, Retention,
-          # Workflow, Checkout, and every namespace that arrives later. Exclusion-only on purpose: an
-          # include list here would be the silent cap this layout exists to avoid. Keep these exclusions
-          # in lockstep with the named shards above.
-          - name: infra-rest
-            project: SimplArchive.Infrastructure
-            mutate: >-
-              --mutate "!**/Persistence/**"
-              --mutate "!**/Storage/**"
-              --mutate "!**/Conversion/**"
-              --mutate "!**/Mail/**"
-              --mutate "!**/Http/**"
-              --mutate "!**/Intray/**"
-              --mutate "!**/Search/**"
-              --mutate "!**/Audit/**"
-              --mutate "!**/Notifications/**"
-              --mutate "!**/Migrations/*.cs"
+        project: [SimplArchive.Domain, SimplArchive.Infrastructure]
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # --since needs real history and the baseline tag
+      - name: Require the baseline tag
+        run: |
+          git rev-parse --verify refs/tags/mutation-baseline >/dev/null 2>&1 || {
+            echo "::error::The mutation-baseline tag is missing — bootstrap it (git tag mutation-baseline && git push origin mutation-baseline) or run the full sweep."
+            exit 1
+          }
+          echo "Baseline: $(git rev-parse --short mutation-baseline) ($(git log -1 --format=%cs mutation-baseline))"
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
@@ -113,26 +68,40 @@ jobs:
         run: dotnet restore
       - name: Restore local tools
         run: dotnet tool restore
-      - name: Stryker ${{ matrix.name }}
+      - name: Stryker ${{ matrix.project }} (since mutation-baseline)
         run: >-
           dotnet stryker
           --config-file stryker-config.json
           --project ${{ matrix.project }}.csproj
-          --output stryker-out/${{ matrix.name }}
+          --output stryker-out/${{ matrix.project }}
           --reporter html --reporter progress
-          ${{ matrix.mutate }}
+          --since:mutation-baseline
       - name: Upload mutation report
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: mutation-report-${{ matrix.name }}
-          path: stryker-out/${{ matrix.name }}/**/mutation-report.html
+          name: mutation-report-incremental-${{ matrix.project }}
+          path: stryker-out/${{ matrix.project }}/**/mutation-report.html
           if-no-files-found: ignore
 
-  # The loud death (2026-09-05): the sweep was dead for a month — timeouts, then the cap — and, being
-  # out-of-band by design (never a PR gate), the corpse paged nobody until a human asked why there were no
-  # reports. A run that ends any way but green now files a tracking issue on this (public) repo, or comments
-  # on the open one, so the next death is a notification instead of an absence.
+  # A green sweep moves the baseline to the swept commit — next week diffs against THIS week. Advancing on
+  # completion (not on score) is deliberate: the score is the signal, the baseline is just "what was swept".
+  advance-baseline:
+    timeout-minutes: 10
+    needs: [gate, mutate]
+    if: ${{ needs.gate.outputs.public == 'true' && needs.mutate.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - run: |
+          git tag -f mutation-baseline HEAD
+          git push -f origin mutation-baseline
+          echo "Baseline advanced to $(git rev-parse --short HEAD)."
+
+  # The loud death (ADR 0746, kept in v3): a sweep that ends any way but green files/updates the tracking
+  # issue on this (public) repo — the next death is a notification, never an absence.
   report-death:
     timeout-minutes: 10
     needs: [gate, mutate]
@@ -145,9 +114,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           title="Mutation sweep died before reporting"
-          body="The scheduled mutation sweep ended '${{ needs.mutate.result }}' without producing its reports: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          body="The WEEKLY INCREMENTAL mutation sweep ended '${{ needs.mutate.result }}' without producing its reports: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-          A leg that hit its 180-minute timeout reports as cancelled; check whether the shard layout in .github/workflows/mutation-testing.yml still fits the codebase, and rebalance the shards rather than raising the timeout first."
+          An incremental leg that dies usually means the baseline tag is missing/stale or one week's diff was enormous; check the leg log before raising any budget (.github/workflows/mutation-testing.yml, ADR 0747)."
           existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
           if [ -n "$existing" ]; then
             gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
