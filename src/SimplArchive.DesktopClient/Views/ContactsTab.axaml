@@ -45,12 +45,17 @@
         <ListBox ItemsSource="{Binding Collections}" Background="Transparent" BorderThickness="0">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:ContactCollectionViewModel">
-              <StackPanel Orientation="Horizontal" Spacing="6">
-                <CheckBox IsChecked="{Binding IsChecked}" VerticalAlignment="Center" />
-                <Border Width="10" Height="10" CornerRadius="5" VerticalAlignment="Center"
+              <!-- Read-only addressbooks carry the same lock as read-only calendars (ADR 0511: the two tabs are
+                   one surface). Pinned right so a long name trims rather than pushing it off. -->
+              <DockPanel LastChildFill="True">
+                <CheckBox DockPanel.Dock="Left" IsChecked="{Binding IsChecked}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <Border DockPanel.Dock="Left" Width="10" Height="10" CornerRadius="5" VerticalAlignment="Center" Margin="0,0,6,0"
                         Background="{Binding Color, TargetNullValue=#8a8a8a}" />
+                <i:Icon DockPanel.Dock="Right" Value="mdi-lock-outline" FontSize="13" Foreground="{DynamicResource WbMuted}"
+                        VerticalAlignment="Center" Margin="6,0,0,0" IsVisible="{Binding !Writable}"
+                        ToolTip.Tip="{loc:Tr DavReadOnly}" />
                 <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-              </StackPanel>
+              </DockPanel>
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>

@@ -4344,6 +4344,9 @@
   <data name="CalendarCollections" xml:space="preserve">
     <value>Kalender</value>
   </data>
+  <data name="DavReadOnly" xml:space="preserve">
+    <value>Schreibgeschützt</value>
+  </data>
   <data name="CalendarNoneSelected" xml:space="preserve">
     <value>Kalender ankreuzen, um dessen Termine zu sehen.</value>
   </data>

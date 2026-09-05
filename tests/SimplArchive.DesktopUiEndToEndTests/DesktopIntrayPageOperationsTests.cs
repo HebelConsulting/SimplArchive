@@ -98,6 +98,25 @@ public class DesktopIntrayPageOperationsTests
         Assert.Equal(canJoin, actions.CanJoin);
     }
 
+    // The printable separator sheet is a COLLECTION-level action gated on the intray's advertised address, so
+    // its enabled state must refresh WHEN THE HREF ARRIVES — a fresh intray sets it with no selection. #860
+    // wired the notification to OnPagesChanged instead, leaving the button disabled until a selection happened
+    // to change Pages. The value getter never regressed, so the guard is that PropertyChanged actually fires.
+    [Fact]
+    public void Offering_the_separator_sheet_notifies_when_its_address_arrives()
+    {
+        var actions = new IntrayItemActionsViewModel();
+        Assert.False(actions.CanOpenPatchCodeSheet);
+
+        var raised = new List<string?>();
+        actions.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        actions.PatchCodeSheetHref = "api/intray/patch-code-sheet";
+
+        Assert.True(actions.CanOpenPatchCodeSheet);
+        Assert.Contains(nameof(IntrayItemActionsViewModel.CanOpenPatchCodeSheet), raised);
+    }
+
     // The gating is CLEARED before the newly selected row is asked about, so the buttons never describe the
     // previous selection while a request is in flight (ADR 0559). Passing null is that clear.
     [Fact]

@@ -787,17 +787,19 @@ public sealed partial class CalendarTabViewModel : ObservableObject
     {
         var calendars = new[]
         {
-            ("Personal / My Calendar", "#1e88e5", true),
-            ("Team / Releases", "#8e24aa", false),
+            // The team calendar is read-only on purpose: it is what shows the lock (#…), and a demo where every
+            // calendar is writable can never show that it works.
+            ("Personal / My Calendar", "#1e88e5", true, true),
+            ("Team / Releases", "#8e24aa", false, false),
         };
 
         Collections.Clear();
-        foreach (var (name, colour, personal) in calendars)
+        foreach (var (name, colour, personal, writable) in calendars)
         {
             Collections.Add(new CalendarCollectionViewModel
             {
                 Collection = new DavCollection(
-                    Guid.NewGuid(), name, name.Split('/')[^1].Trim(), "calendar", colour, true, personal, false,
+                    Guid.NewGuid(), name, name.Split('/')[^1].Trim(), "calendar", colour, writable, personal, false,
                     new Dictionary<string, string>()),
                 Color = colour,
                 IsChecked = true,

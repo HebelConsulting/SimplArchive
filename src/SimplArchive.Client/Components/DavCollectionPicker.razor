@@ -22,8 +22,15 @@
                              aria-label="@collection.DisplayName" />
                 @* The swatch is what tells overlaid collections apart once more than one is ticked (ADR 0620). *@
                 <span style="@SwatchStyle(collection.Color)"></span>
-                <MudText Typo="Typo.body2" Style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                <MudText Typo="Typo.body2" Style="flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
                          title="@collection.DisplayName">@collection.DisplayName</MudText>
+                @* A read-only collection (calendar or addressbook) carries a lock, like Thunderbird. !Writable,
+                   not the create rel: the lock states the collection cannot be written at all. *@
+                @if (!collection.Writable)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Class="mud-text-secondary"
+                             Style="flex:0 0 auto;" title="@Strings.Get("DavReadOnly")" />
+                }
             </div>
         }
         @if (Collections.Count == 0)

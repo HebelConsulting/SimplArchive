@@ -117,12 +117,18 @@ public sealed partial class IntrayItemActionsViewModel : ObservableObject
         OnPropertyChanged(nameof(CanSort));
         OnPropertyChanged(nameof(CanDeskew));
         OnPropertyChanged(nameof(CanCutAtPatchCodes));
-        OnPropertyChanged(nameof(CanOpenPatchCodeSheet));
     }
 
     partial void OnSelectedCountChanged(int value) => OnPropertyChanged(nameof(CanJoin));
 
     partial void OnJoinHrefChanged(string? value) => OnPropertyChanged(nameof(CanJoin));
+
+    // The printable separator sheet is a COLLECTION-level action (it depends on the intray's `patchCodeSheet`
+    // rel, captured at listing), not on the selected item's pages — so its enabled state must refresh when the
+    // href arrives, exactly as CanJoin refreshes on JoinHref. Wiring it to OnPagesChanged instead (its state
+    // when #860 landed) left it disabled until a selection happened to change Pages, since a fresh intray sets
+    // the href without any selection. Mirror the JoinHref hook.
+    partial void OnPatchCodeSheetHrefChanged(string? value) => OnPropertyChanged(nameof(CanOpenPatchCodeSheet));
 
     /// <summary>
     /// Asks what the newly selected item's pages can do. One request, and only for a row whose name says it

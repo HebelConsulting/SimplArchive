@@ -4344,6 +4344,9 @@
   <data name="CalendarCollections" xml:space="preserve">
     <value>Calendarios</value>
   </data>
+  <data name="DavReadOnly" xml:space="preserve">
+    <value>Solo lectura</value>
+  </data>
   <data name="CalendarNoneSelected" xml:space="preserve">
     <value>Marca un calendario para ver sus citas.</value>
   </data>
