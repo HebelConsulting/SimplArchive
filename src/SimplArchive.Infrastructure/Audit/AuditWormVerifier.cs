@@ -42,7 +42,7 @@ public sealed class AuditWormVerifier : IAuditWormVerifier
             .Select(e => new { e.Sequence, e.Hash })
             .ToDictionaryAsync(e => e.Sequence, e => e.Hash, cancellationToken);
 
-        var prefix = $"tenants/{tenantId}/{AuditWormArchiver.Prefix}/";
+        var prefix = SimplArchive.Application.Abstractions.ObjectKeyPrefixes.AuditWorm(tenantId);
         var segments = (await _objectStorage.ListObjectsAsync(prefix, cancellationToken))
             .OrderBy(o => o.Key, StringComparer.Ordinal) // the {from:D20}-{to:D20} names sort in Sequence order
             .ToList();

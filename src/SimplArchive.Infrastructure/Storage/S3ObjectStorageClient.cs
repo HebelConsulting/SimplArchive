@@ -65,7 +65,7 @@ public class S3ObjectStorageClient : IObjectStorageClient
     // no call-site changes. A non-tenant-scoped key is a programming error.
     private string BucketFor(string keyOrPrefix)
     {
-        const string root = "tenants/";
+        var root = SimplArchive.Application.Abstractions.ObjectKeyPrefixes.Root;
         if (keyOrPrefix.StartsWith(root, StringComparison.Ordinal))
         {
             var rest = keyOrPrefix.AsSpan(root.Length);

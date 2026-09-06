@@ -10,5 +10,5 @@ namespace SimplArchive.Application.Abstractions;
 public static class CheckoutStashKey
 {
     public static string Build(Guid tenantId, Guid userId, Guid documentId) =>
-        $"tenants/{tenantId}/users/{userId}/checkout/{documentId}";
+        $"{ObjectKeyPrefixes.UserCheckout(tenantId, userId)}{documentId}";
 }

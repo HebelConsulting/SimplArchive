@@ -365,7 +365,7 @@ public class AuditEventsController : ControllerBase
             return Forbid();
         }
 
-        var prefix = $"tenants/{tenantId}/{SimplArchive.Infrastructure.Audit.AuditWormArchiver.Prefix}/";
+        var prefix = SimplArchive.Application.Abstractions.ObjectKeyPrefixes.AuditWorm(tenantId);
         var objects = await _objectStorage.ListObjectsAsync(prefix, cancellationToken);
 
         var segments = new List<WormSegmentResource>();

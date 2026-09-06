@@ -18,10 +18,10 @@ internal sealed record SpecialFile(string Name, long Size, DateTimeOffset Modifi
 // the HTTP verbs that act on them stay in the middleware.
 internal static class WebDavUserAreas
 {
-    internal static string IntrayPrefix(User user) => $"tenants/{user.TenantId}/users/{user.Id}/inbox/";
+    internal static string IntrayPrefix(User user) => SimplArchive.Application.Abstractions.ObjectKeyPrefixes.UserInbox(user.TenantId, user.Id);
 
     // Per-user temp staging area for in-progress downloads — the same tier as intray/ and checkout/ (ADR 0368).
-    internal static string TempPrefix(User user) => $"tenants/{user.TenantId}/users/{user.Id}/temp/";
+    internal static string TempPrefix(User user) => SimplArchive.Application.Abstractions.ObjectKeyPrefixes.UserTemp(user.TenantId, user.Id);
 
     // A staged download-temp's object key is derived from its WebDAV path so the PUT (stage) and the later MOVE
     // (commit) resolve the same object across requests. Hashed to keep the key opaque + free of path characters.
@@ -56,7 +56,7 @@ internal static class WebDavUserAreas
     /// of the user's work ceased to exist (#794). Every other surface would have survived this: the tree keeps
     /// version history, and a deleted document is soft-deleted.
     /// </remarks>
-    internal static string IntrayPreviousPrefix(User user) => $"tenants/{user.TenantId}/users/{user.Id}/inbox-previous/";
+    internal static string IntrayPreviousPrefix(User user) => SimplArchive.Application.Abstractions.ObjectKeyPrefixes.UserInboxPrevious(user.TenantId, user.Id);
 
     /// <summary>Copy aside whatever an Intray write is about to replace, so the replacement cannot be final.</summary>
     /// <remarks>
@@ -91,7 +91,7 @@ internal static class WebDavUserAreas
             name, previous);
     }
 
-    internal static string CheckoutScratchPrefix(User user) => $"tenants/{user.TenantId}/users/{user.Id}/checkout-scratch/";
+    internal static string CheckoutScratchPrefix(User user) => SimplArchive.Application.Abstractions.ObjectKeyPrefixes.UserCheckoutScratch(user.TenantId, user.Id);
 
     internal static async Task<List<SpecialFile>> CheckoutScratchFilesAsync(IObjectStorageClient storage, User user)
     {

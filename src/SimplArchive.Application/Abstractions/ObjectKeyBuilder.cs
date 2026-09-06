@@ -20,7 +20,7 @@ public static class ObjectKeyBuilder
             ? string.Empty
             : extension.StartsWith('.') ? extension : $".{extension}";
 
-        return $"tenants/{tenantId}/{filingDate.Year}/{storageFolderId}/{versionId}{suffix}";
+        return $"{ObjectKeyPrefixes.DocumentContentFolder(tenantId, filingDate.Year, storageFolderId)}{versionId}{suffix}";
     }
 
     // The EPHEMERAL key of a delivered message, under the per-user mail prefix rather than the archive's
@@ -40,7 +40,7 @@ public static class ObjectKeyBuilder
             ? string.Empty
             : extension.StartsWith('.') ? extension : $".{extension}";
 
-        return $"tenants/{tenantId}/users/{userId}/mail/{storageFolderId}/{versionId}{suffix}";
+        return $"{ObjectKeyPrefixes.UserMail(tenantId, userId)}{storageFolderId}/{versionId}{suffix}";
     }
 
     // The department-mailbox counterpart (#703 PR 4): a message delivered to a claimed mailbox with no
@@ -52,7 +52,7 @@ public static class ObjectKeyBuilder
             ? string.Empty
             : extension.StartsWith('.') ? extension : $".{extension}";
 
-        return $"tenants/{tenantId}/mailboxes/{mailboxDocumentId}/mail/{storageFolderId}/{versionId}{suffix}";
+        return $"{ObjectKeyPrefixes.MailboxMail(tenantId, mailboxDocumentId)}{storageFolderId}/{versionId}{suffix}";
     }
 
     // Whether a key names ephemeral mail storage — the question "has this document's content crossed into the

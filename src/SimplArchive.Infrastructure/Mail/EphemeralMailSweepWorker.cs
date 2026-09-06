@@ -212,7 +212,7 @@ public sealed class EphemeralMailSweepWorker : BackgroundService
             List<StorageObject> objects;
             try
             {
-                objects = [.. await storage.ListObjectsAsync($"tenants/{tenantId}/users/", cancellationToken)];
+                objects = [.. await storage.ListObjectsAsync(SimplArchive.Application.Abstractions.ObjectKeyPrefixes.TenantUsers(tenantId), cancellationToken)];
             }
             catch (Exception e)
             {

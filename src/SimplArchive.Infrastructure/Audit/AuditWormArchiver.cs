@@ -18,7 +18,7 @@ public sealed class AuditWormArchiver : IAuditWormArchiver
     private static readonly string[] TenantFilterOnly = ["TenantFilter"];
     private static readonly JsonSerializerOptions LineJsonOptions = new(JsonSerializerDefaults.Web);
 
-    public const string Prefix = "audit-worm";
+    public const string Prefix = SimplArchive.Application.Abstractions.ObjectKeyPrefixes.AuditWormSegment;
 
     private readonly Persistence.SimplArchiveDbContext _dbContext;
     private readonly IObjectStorageClient _objectStorage;
@@ -79,7 +79,7 @@ public sealed class AuditWormArchiver : IAuditWormArchiver
             builder.Append(JsonSerializer.Serialize(ToLine(e), LineJsonOptions)).Append('\n');
         }
 
-        var key = $"tenants/{tenantId}/{Prefix}/{from:D20}-{to:D20}.ndjson";
+        var key = $"{SimplArchive.Application.Abstractions.ObjectKeyPrefixes.AuditWorm(tenantId)}{from:D20}-{to:D20}.ndjson";
         var bytes = Encoding.UTF8.GetBytes(builder.ToString());
         await _objectStorage.PutObjectAsync(key, new MemoryStream(bytes), "application/x-ndjson", cancellationToken);
 

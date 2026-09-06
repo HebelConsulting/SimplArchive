@@ -491,7 +491,7 @@ public static class DemoDataSeeder
         // 0532) — so the group-intray view isn't empty and "pick it up" / Send-to are demonstrable live.
         var scanBytes = await ReadResourceAsync(assembly, "DemoTelekomInvoiceMar.pdf");
         using var content = new MemoryStream(scanBytes);
-        await storage.PutObjectAsync($"tenants/{tenantId}/groups/{scanTeam.Id}/inbox/scan-2026-03-intray.pdf", content, "application/pdf");
+        await storage.PutObjectAsync($"{SimplArchive.Application.Abstractions.ObjectKeyPrefixes.GroupInbox(tenantId, scanTeam.Id)}scan-2026-03-intray.pdf", content, "application/pdf");
 
         return (anna.Id, tom.Id);
     }

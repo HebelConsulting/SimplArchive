@@ -31,7 +31,7 @@ namespace SimplArchive.Api.WebDav;
 internal static class WebDavSafeSave
 {
     /// <summary>Everything one user has in flight; a sibling of the intray/checkout tiers.</summary>
-    private static string Prefix(User user) => $"tenants/{user.TenantId}/users/{user.Id}/safe-save/";
+    private static string Prefix(User user) => SimplArchive.Application.Abstractions.ObjectKeyPrefixes.UserSafeSave(user.TenantId, user.Id);
 
     /// <summary>The marker written at MKCOL, which is what makes the collection EXIST before anything is in it.</summary>
     private const string Marker = ".collection";
@@ -111,7 +111,7 @@ internal static class WebDavSafeSave
     // Kept per user and per PATH, outside the archive: no Document is created, so none of it reaches the tree,
     // the search index or anyone else's view. It is a scratch surface the client owns for the life of its work.
 
-    private static string ShadowPrefix(User user) => $"tenants/{user.TenantId}/users/{user.Id}/shadow/";
+    private static string ShadowPrefix(User user) => SimplArchive.Application.Abstractions.ObjectKeyPrefixes.UserShadow(user.TenantId, user.Id);
 
     /// <summary>The key under which a swallowed path is remembered.</summary>
     internal static string ShadowKey(User user, IReadOnlyList<string> segments) =>
@@ -165,7 +165,7 @@ internal static class WebDavSafeSave
     /// </remarks>
     /// <summary>Where the working-copy bytes a save is about to replace are kept.</summary>
     internal static string PreviousStashKey(User user, Guid documentId) =>
-        $"tenants/{user.TenantId}/users/{user.Id}/stash-previous/{documentId:D}";
+        $"{SimplArchive.Application.Abstractions.ObjectKeyPrefixes.UserStashPrevious(user.TenantId, user.Id)}{documentId:D}";
 
     /// <summary>Copy aside the working copy a save is about to overwrite, so the overwrite cannot be final.</summary>
     /// <remarks>
@@ -276,7 +276,7 @@ internal static class WebDavSafeSave
     }
 
     /// <summary>Where a document staged aside by an atomic save is recorded, keyed by the path it left.</summary>
-    private static string SetAsidePrefix(User user) => $"tenants/{user.TenantId}/users/{user.Id}/set-aside/";
+    private static string SetAsidePrefix(User user) => SimplArchive.Application.Abstractions.ObjectKeyPrefixes.UserSetAside(user.TenantId, user.Id);
 
     /// <summary>
     /// How long a set-aside stays believed before the mount shows the document again.

@@ -11,8 +11,8 @@ namespace SimplArchive.Infrastructure.Intray;
 /// </remarks>
 public static class IntrayScopePrefix
 {
-    public static string ForUser(Guid tenantId, Guid userId) => $"tenants/{tenantId}/users/{userId}/inbox/";
+    public static string ForUser(Guid tenantId, Guid userId) => Application.Abstractions.ObjectKeyPrefixes.UserInbox(tenantId, userId);
 
     // A group intray is the exact peer of the per-user intray, keyed by group (ADR 0532).
-    public static string ForGroup(Guid tenantId, Guid groupId) => $"tenants/{tenantId}/groups/{groupId}/inbox/";
+    public static string ForGroup(Guid tenantId, Guid groupId) => Application.Abstractions.ObjectKeyPrefixes.GroupInbox(tenantId, groupId);
 }
