@@ -674,6 +674,7 @@ public sealed class RepositoryImporter
             CreatedByServiceAccountId = svcId,
             CreatedAt = version.FiledAt,
             DocumentDate = DateOnly.ParseExact(version.DocumentDate, "yyyy-MM-dd"),
+            DocumentTime = version.DocumentTime is { } t && TimeOnly.TryParse(t, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dtime) ? dtime : null,
             OcrLanguages = version.OcrLanguages,
             Comment = version.Comment,
             SizeBytes = bytes.Length, // storage-quota accounting (ADR "Per-tenant storage quota")
@@ -853,7 +854,7 @@ public sealed class RepositoryImporter
     private sealed record ManifestRoot(Guid DocumentId, string Name);
     private sealed record ArchiveAcl(Guid DocumentId, Guid? UserId, Guid? GroupId, Guid? ServiceAccountId, bool CanSee, bool CanReadContent, bool CanEditContent, bool CanEditIndexData, bool CanDelete, bool CanCreateSubItems, bool CanMove, bool CanManagePermissions, bool CanAnnotate);
     private sealed record ArchiveDocument(Guid Id, Guid? ParentId, string Name, Guid? MaskVersionId, string? SensitivityLabel, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, DateTimeOffset CreatedAt, bool BreaksInheritance, Guid? PersonalOfUserId = null);
-    private sealed record ArchiveVersion(Guid Id, Guid DocumentId, int? VersionNumber, string DocumentDate, DateTimeOffset FiledAt, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, string? Sha256, string? FileExtension, string? OcrLanguages, string? Comment, string? BlobRef);
+    private sealed record ArchiveVersion(Guid Id, Guid DocumentId, int? VersionNumber, string DocumentDate, DateTimeOffset FiledAt, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, string? Sha256, string? FileExtension, string? OcrLanguages, string? Comment, string? BlobRef, string? DocumentTime = null);
     private sealed record ArchiveChatMessage(Guid Id, Guid DocumentId, Guid? ParentMessageId, string Body, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, DateTimeOffset CreatedAt);
 
 

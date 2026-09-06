@@ -77,7 +77,7 @@ public class RepositoryExporterTests
         storage.Objects["k/v2.pdf"] = Encoding.UTF8.GetBytes("v2-bytes");
         storage.Objects["k/b.txt"] = Encoding.UTF8.GetBytes("b-bytes");
 
-        var v1 = new DocumentVersion { Id = Guid.NewGuid(), TenantId = _tenantId, DocumentId = docA.Id, Status = DocumentVersionStatus.Confirmed, VersionNumber = 1, Sha256Hash = v1Sha, ObjectKey = "k/v1.pdf", DocumentDate = new DateOnly(2024, 1, 1), CreatedByUserId = userId, CreatedAt = DateTimeOffset.UtcNow };
+        var v1 = new DocumentVersion { Id = Guid.NewGuid(), TenantId = _tenantId, DocumentId = docA.Id, Status = DocumentVersionStatus.Confirmed, VersionNumber = 1, Sha256Hash = v1Sha, ObjectKey = "k/v1.pdf", DocumentDate = new DateOnly(2024, 1, 1), DocumentTime = new TimeOnly(9, 50), CreatedByUserId = userId, CreatedAt = DateTimeOffset.UtcNow };
         var v2 = new DocumentVersion { Id = Guid.NewGuid(), TenantId = _tenantId, DocumentId = docA.Id, Status = DocumentVersionStatus.Confirmed, VersionNumber = 2, Sha256Hash = v2Sha, ObjectKey = "k/v2.pdf", DocumentDate = v2DocDate, CreatedByUserId = userId, CreatedAt = DateTimeOffset.UtcNow };
         var bVer = new DocumentVersion { Id = Guid.NewGuid(), TenantId = _tenantId, DocumentId = docB.Id, Status = DocumentVersionStatus.Confirmed, VersionNumber = 1, Sha256Hash = bSha, ObjectKey = "k/b.txt", DocumentDate = new DateOnly(2024, 6, 1), CreatedByServiceAccountId = svcId, CreatedAt = DateTimeOffset.UtcNow };
         context.DocumentVersions.AddRange(v1, v2, bVer);
@@ -180,6 +180,11 @@ public class RepositoryExporterTests
             .Select(l => JsonDocument.Parse(l).RootElement.GetProperty("id").GetGuid()).ToHashSet();
         Assert.Contains(seed.V1Id, exportedVersionIds);       // v1 = the current (Released/never-submitted) version
         Assert.DoesNotContain(seed.V2Id, exportedVersionIds); // v2 is gated in review
+
+        // The document time round-trips through the manifest (#1046 — export must not silently drop it).
+        var v1Line = entries["tree/versions.jsonl"].Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Single(l => JsonDocument.Parse(l).RootElement.GetProperty("id").GetGuid() == seed.V1Id);
+        Assert.Equal("09:50:00", JsonDocument.Parse(v1Line).RootElement.GetProperty("documentTime").GetString());
         Assert.False(entries.ContainsKey($"blobs/{seed.V2Sha}"));
     }
 

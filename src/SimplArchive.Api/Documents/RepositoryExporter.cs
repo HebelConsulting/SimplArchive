@@ -256,6 +256,7 @@ public sealed class RepositoryExporter
             documentId = v.DocumentId,
             versionNumber = v.VersionNumber,
             documentDate = v.DocumentDate.ToString("yyyy-MM-dd"),
+            documentTime = v.DocumentTime?.ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture),
             filedAt = v.CreatedAt,
             createdByUserId = v.CreatedByUserId,
             createdByServiceAccountId = v.CreatedByServiceAccountId,
