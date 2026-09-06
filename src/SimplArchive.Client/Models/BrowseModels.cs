@@ -47,6 +47,8 @@ public record DocumentSummary
     public string FileExtension { get; set; } = string.Empty;
     public string DocumentType { get; set; } = string.Empty;
     public DateOnly? DocumentDate { get; set; }
+
+    public TimeOnly? DocumentTime { get; set; }
     public long? SizeBytes { get; set; }
     public List<string> Tags { get; set; } = [];
     public Guid? SensitivityLabelId { get; set; }
@@ -93,6 +95,8 @@ public record ReferenceSummary
     public string FileExtension { get; set; } = string.Empty;
     public string DocumentType { get; set; } = string.Empty;
     public DateOnly? DocumentDate { get; set; }
+
+    public TimeOnly? DocumentTime { get; set; }
     public long? SizeBytes { get; set; }
     public List<string> Tags { get; set; } = [];
     public string SensitivityLabelName { get; set; } = string.Empty;

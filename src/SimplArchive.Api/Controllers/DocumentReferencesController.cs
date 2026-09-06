@@ -91,6 +91,8 @@ public class DocumentReferencesController : ControllerBase
 
         public DateOnly? DocumentDate { get; set; }
 
+        public TimeOnly? DocumentTime { get; set; }
+
         public long? SizeBytes { get; set; }
 
         public List<string> Tags { get; set; } = [];
@@ -376,6 +378,7 @@ public class DocumentReferencesController : ControllerBase
             FileExtension = Path.GetExtension(columns?.LatestObjectKey ?? ""),
             DocumentType = columns?.DocumentType ?? "",
             DocumentDate = columns?.DocumentDate,
+            DocumentTime = columns?.DocumentTime,
             SizeBytes = columns?.SizeBytes,
             Tags = tagsByDoc.TryGetValue(row.TargetId, out var tags) ? tags : [],
             SensitivityLabelName = columns?.SensitivityLabelName ?? "",

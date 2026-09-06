@@ -34,7 +34,7 @@ public sealed record AclRights(
 public sealed record CreatableChild(Guid MaskId, string Name, bool Folder, string Href, string? FolderMask, string Prompt, string? Icon = null);
 
 public sealed record Node(Guid Id, string Name, bool HasChildren, bool HasVersions, bool HasSubfolders, bool HasReferences, bool OnLegalHold = false, bool CheckedOut = false, bool CheckedOutByMe = false, string CheckedOutByName = "",
-    string DocumentType = "", DateOnly? DocumentDate = null, long? SizeBytes = null, IReadOnlyList<string>? Tags = null, string SensitivityLabelName = "", string? SensitivityLabelColor = null, int VersionCount = 0,
+    string DocumentType = "", DateOnly? DocumentDate = null, TimeOnly? DocumentTime = null, long? SizeBytes = null, IReadOnlyList<string>? Tags = null, string SensitivityLabelName = "", string? SensitivityLabelColor = null, int VersionCount = 0,
     // Who filed the current version, falling back to who created the document (#768) — the owner column.
     string CreatedBy = "",
     // The latest confirmed version's CreatedAt (filing timestamp) — the "Created" folder contents-sort key

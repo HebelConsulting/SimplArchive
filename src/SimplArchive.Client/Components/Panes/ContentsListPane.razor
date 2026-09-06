@@ -1,6 +1,7 @@
 @using Microsoft.AspNetCore.Components.Web
 @using SimplArchive.Client.Models
 @using SimplArchive.Client.Services
+@using SimplArchive.Presentation
 
 <style>
     /* Contents-list columns (ADR "List-row columns and sorting" + "Pane-adaptive contents columns") — a grid
@@ -130,7 +131,7 @@
                    server was already giving (#824). Only the genuine plain Folder is localised; a mask name is
                    tenant data and renders as itself, exactly as the mask line in the detail pane does. *@
                 <span class="wb-ccell" title="@node.DocumentType">@(node.IsFolder && (node.DocumentType.Length == 0 || node.DocumentType == "Folder") ? Strings.Get("FolderType") : node.DocumentType)</span>
-                <span class="wb-ccell" title="@(node.DocumentDate?.ToString("yyyy-MM-dd") ?? "")">@(node.DocumentDate?.ToString("yyyy-MM-dd") ?? "")</span>
+                <span class="wb-ccell" title="@(node.DocumentDate is { } dd ? DocumentDateFormat.Display(dd, node.DocumentTime) : "")">@(node.DocumentDate is { } dd2 ? DocumentDateFormat.Display(dd2, node.DocumentTime) : "")</span>
                 <span class="wb-ccell" title="@ByteSize.Format(node.SizeBytes)">@ByteSize.Format(node.SizeBytes)</span>
                 <span class="wb-ccell" title="@string.Join(", ", node.TagList)">@string.Join(", ", node.TagList)</span>
                 <span class="wb-ccell" title="@node.CreatedBy">@node.CreatedBy</span>
@@ -267,7 +268,7 @@
 
     private IEnumerable<BrowseNode> ApplyFolderSort(IEnumerable<BrowseNode> items) => FolderSortOrder switch
     {
-        FolderContentsSortOrder.DocumentDate => items.OrderBy(n => n.DocumentDate ?? DateOnly.MinValue).ThenBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
+        FolderContentsSortOrder.DocumentDate => items.OrderBy(n => n.DocumentDate ?? DateOnly.MinValue).ThenBy(n => n.DocumentTime ?? TimeOnly.MinValue).ThenBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
         FolderContentsSortOrder.Created => items.OrderBy(n => n.VersionCreatedAt ?? DateTimeOffset.MinValue).ThenBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
         _ => items.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
     };
@@ -277,7 +278,7 @@
         IEnumerable<BrowseNode> ordered = _contentSort switch
         {
             ContentSort.Type => items.OrderBy(n => n.DocumentType, StringComparer.OrdinalIgnoreCase),
-            ContentSort.Date => items.OrderBy(n => n.DocumentDate ?? DateOnly.MinValue),
+            ContentSort.Date => items.OrderBy(n => n.DocumentDate ?? DateOnly.MinValue).ThenBy(n => n.DocumentTime ?? TimeOnly.MinValue),
             ContentSort.Size => items.OrderBy(n => n.SizeBytes ?? -1),
             ContentSort.Tags => items.OrderBy(n => string.Join(",", n.TagList), StringComparer.OrdinalIgnoreCase),
             ContentSort.Owner => items.OrderBy(n => n.CreatedBy, StringComparer.OrdinalIgnoreCase),

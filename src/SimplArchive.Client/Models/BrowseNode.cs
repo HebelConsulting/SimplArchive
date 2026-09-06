@@ -34,7 +34,7 @@ public record BrowseNode(Guid Id, string Name, bool HasChildren, bool HasVersion
     string PersonalKind = "",
     // List-row columns (ADR "List-row columns and sorting"). CreatedBy is who filed the current version,
     // falling back to who created the document (#768) — a name, ready to draw.
-    string DocumentType = "", DateOnly? DocumentDate = null, long? SizeBytes = null, IReadOnlyList<string>? Tags = null,
+    string DocumentType = "", DateOnly? DocumentDate = null, TimeOnly? DocumentTime = null, long? SizeBytes = null, IReadOnlyList<string>? Tags = null,
     string CreatedBy = "",
     // The data-classification sensitivity label (ADR "Configurable sensitivity labels + upload defaults") —
     // the label name + colour for the list-row badge; empty name = None (no badge).

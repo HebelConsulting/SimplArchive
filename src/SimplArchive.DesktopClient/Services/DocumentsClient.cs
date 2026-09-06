@@ -617,6 +617,7 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         // List-row columns (ADR "List-row columns and sorting").
         item.TryGetProperty("documentType", out var dt) ? dt.GetString() ?? "" : "",
         item.TryGetProperty("documentDate", out var dd) && dd.ValueKind == JsonValueKind.String && DateOnly.TryParse(dd.GetString(), out var date) ? date : null,
+        item.TryGetProperty("documentTime", out var dtm) && dtm.ValueKind == JsonValueKind.String && TimeOnly.TryParse(dtm.GetString(), out var dtime) ? dtime : null,
         item.TryGetProperty("sizeBytes", out var sz) && sz.ValueKind == JsonValueKind.Number ? sz.GetInt64() : null,
         item.TryGetProperty("tags", out var tg) && tg.ValueKind == JsonValueKind.Array ? tg.EnumerateArray().Select(x => x.GetString() ?? "").Where(s => s.Length > 0).ToList() : [],
         item.TryGetProperty("sensitivityLabelName", out var sln) ? sln.GetString() ?? "" : "",

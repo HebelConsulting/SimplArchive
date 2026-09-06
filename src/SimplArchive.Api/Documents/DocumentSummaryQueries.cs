@@ -4,7 +4,7 @@ using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Api.Documents;
 
-internal record DocumentSummaryRow(Guid Id, string Name, DateTimeOffset CreatedAt, bool HasChildren, bool HasVersions, bool HasSubfolders, bool HasReferences, bool OnLegalHold, Guid? CheckedOutByUserId, string? CheckedOutByName, string? LatestObjectKey, string? DocumentType, DateOnly? DocumentDate, long? SizeBytes, Guid? SensitivityLabelId, string? SensitivityLabelName, string? SensitivityLabelColor, int VersionCount, DateTimeOffset? VersionCreatedAt, Guid? MaskId, string? CreatedByName);
+internal record DocumentSummaryRow(Guid Id, string Name, DateTimeOffset CreatedAt, bool HasChildren, bool HasVersions, bool HasSubfolders, bool HasReferences, bool OnLegalHold, Guid? CheckedOutByUserId, string? CheckedOutByName, string? LatestObjectKey, string? DocumentType, DateOnly? DocumentDate, TimeOnly? DocumentTime, long? SizeBytes, Guid? SensitivityLabelId, string? SensitivityLabelName, string? SensitivityLabelColor, int VersionCount, DateTimeOffset? VersionCreatedAt, Guid? MaskId, string? CreatedByName);
 
 /// <summary>
 /// The one projection of a document into a LIST ROW — its columns, its presentation booleans, its addresses.
@@ -70,6 +70,9 @@ internal static class DocumentSummaryQueries
                 d.CurrentVersionId != null
                     ? db.DocumentVersions.Where(v => v.Id == d.CurrentVersionId && v.DocumentId == d.Id).Select(v => (DateOnly?)v.DocumentDate).FirstOrDefault()
                     : db.DocumentVersions.Where(v => v.DocumentId == d.Id && v.Status == DocumentVersionStatus.Confirmed).OrderByDescending(v => v.VersionNumber).Select(v => (DateOnly?)v.DocumentDate).FirstOrDefault(),
+                d.CurrentVersionId != null
+                    ? db.DocumentVersions.Where(v => v.Id == d.CurrentVersionId && v.DocumentId == d.Id).Select(v => v.DocumentTime).FirstOrDefault()
+                    : db.DocumentVersions.Where(v => v.DocumentId == d.Id && v.Status == DocumentVersionStatus.Confirmed).OrderByDescending(v => v.VersionNumber).Select(v => v.DocumentTime).FirstOrDefault(),
                 d.CurrentVersionId != null
                     ? db.DocumentVersions.Where(v => v.Id == d.CurrentVersionId && v.DocumentId == d.Id).Select(v => v.SizeBytes).FirstOrDefault()
                     : db.DocumentVersions.Where(v => v.DocumentId == d.Id && v.Status == DocumentVersionStatus.Confirmed).OrderByDescending(v => v.VersionNumber).Select(v => v.SizeBytes).FirstOrDefault(),

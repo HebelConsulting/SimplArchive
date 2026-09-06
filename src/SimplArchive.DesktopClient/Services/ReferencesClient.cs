@@ -44,7 +44,7 @@ public sealed class ReferencesClient(ApiCore core)
         // The TARGET's list-row columns, exactly as a children row carries them (#768). Without these a
         // shortcut row drew blank Type / Doc date / Size / Tags / Owner cells beside a real row that filled
         // them — the same defect on both clients, from the same missing projection.
-        string DocumentType = "", DateOnly? DocumentDate = null, long? SizeBytes = null,
+        string DocumentType = "", DateOnly? DocumentDate = null, TimeOnly? DocumentTime = null, long? SizeBytes = null,
         IReadOnlyList<string>? Tags = null, string CreatedBy = "", string SensitivityLabelName = "",
         string? SensitivityLabelColor = null, int VersionCount = 0, DateTimeOffset? VersionCreatedAt = null,
         string? Icon = null);
@@ -149,6 +149,7 @@ public sealed class ReferencesClient(ApiCore core)
         ApiCore.ParseLinks(item),
         item.TryGetProperty("documentType", out var dt) ? dt.GetString() ?? "" : "",
         item.TryGetProperty("documentDate", out var dd) && dd.ValueKind == JsonValueKind.String && DateOnly.TryParse(dd.GetString(), out var date) ? date : null,
+        item.TryGetProperty("documentTime", out var dtm) && dtm.ValueKind == JsonValueKind.String && TimeOnly.TryParse(dtm.GetString(), out var dtime) ? dtime : null,
         item.TryGetProperty("sizeBytes", out var sz) && sz.ValueKind == JsonValueKind.Number ? sz.GetInt64() : null,
         item.TryGetProperty("tags", out var tg) && tg.ValueKind == JsonValueKind.Array ? tg.EnumerateArray().Select(x => x.GetString() ?? "").Where(v => v.Length > 0).ToList() : [],
         item.TryGetProperty("createdBy", out var cb) ? cb.GetString() ?? "" : "",

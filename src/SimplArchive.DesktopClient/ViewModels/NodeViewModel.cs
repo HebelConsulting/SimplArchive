@@ -1,3 +1,5 @@
+using SimplArchive.Presentation;
+
 namespace SimplArchive.DesktopClient.ViewModels;
 
 // A row in the contents list — a repository/folder, a document, or a reference (shortcut) to one.
@@ -114,6 +116,8 @@ public sealed class NodeViewModel
 
     public DateOnly? DocumentDate { get; init; }
 
+    public TimeOnly? DocumentTime { get; init; }
+
     public long? SizeBytes { get; init; }
 
     public IReadOnlyList<string> Tags { get; init; } = [];
@@ -137,7 +141,7 @@ public sealed class NodeViewModel
     public string TypeText => IsFolder && (DocumentType.Length == 0 || DocumentType == "Folder")
         ? SimplArchive.Localization.Strings.Get("FolderType")
         : DocumentType;
-    public string DocumentDateText => DocumentDate?.ToString("yyyy-MM-dd") ?? "";
+    public string DocumentDateText => DocumentDate is { } d ? DocumentDateFormat.Display(d, DocumentTime) : "";
     public string TagsText => string.Join(", ", Tags);
 
     /// <summary>Who filed the current version, falling back to who created the document (#768).</summary>

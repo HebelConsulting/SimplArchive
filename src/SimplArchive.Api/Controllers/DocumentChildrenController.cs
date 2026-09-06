@@ -140,6 +140,8 @@ public class DocumentChildrenController : ControllerBase
 
         public DateOnly? DocumentDate { get; set; }
 
+        public TimeOnly? DocumentTime { get; set; }
+
         public long? SizeBytes { get; set; }
 
         public List<string> Tags { get; set; } = [];
@@ -311,6 +313,7 @@ public class DocumentChildrenController : ControllerBase
             FileExtension = Path.GetExtension(d.LatestObjectKey ?? ""),
             DocumentType = d.DocumentType ?? "",
             DocumentDate = d.DocumentDate,
+            DocumentTime = d.DocumentTime,
             SizeBytes = d.SizeBytes,
             Tags = tagsByDoc.TryGetValue(d.Id, out var tags) ? tags : [],
             CreatedBy = d.CreatedByName ?? "",
