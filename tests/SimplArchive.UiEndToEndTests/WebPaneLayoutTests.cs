@@ -28,4 +28,24 @@ public class WebPaneLayoutTests
         await Expect(page.Locator(".wb-tab[aria-label=\"Repositories\"]").First).ToBeVisibleAsync();
         await Expect(page.Locator("[data-pane='tree']")).ToHaveAttributeAsync("data-collapsed", "1");
     }
+
+    [Fact]
+    public async Task Collapsing_the_preview_persists_and_hands_the_row_to_the_chat_pane()
+    {
+        var page = await Ui.LoginAsync(_app);
+        await Expect(page.GetByText("Demo Repository")).ToBeVisibleAsync();
+
+        // Collapse the preview via its own gutter caret (it is the grow pane — the annotations/chat pane
+        // absorbs the freed width, asserted here as "still visible while the preview is collapsed").
+        await page.Locator("[data-gutter='preview'] .wb-gutter-toggle").ClickAsync();
+        await Expect(page.Locator("[data-pane='preview']")).ToHaveAttributeAsync("data-collapsed", "1");
+        await Expect(page.Locator("[data-pane='chat']")).ToBeVisibleAsync();
+
+        // Reload → still collapsed (persisted), then re-expand so later tests meet a default layout.
+        await page.ReloadAsync();
+        await Expect(page.Locator(".wb-tab[aria-label=\"Repositories\"]").First).ToBeVisibleAsync();
+        await Expect(page.Locator("[data-pane='preview']")).ToHaveAttributeAsync("data-collapsed", "1");
+        await page.Locator("[data-gutter='preview'] .wb-gutter-toggle").ClickAsync();
+        await Expect(page.Locator("[data-pane='preview']")).Not.ToHaveAttributeAsync("data-collapsed", "1");
+    }
 }

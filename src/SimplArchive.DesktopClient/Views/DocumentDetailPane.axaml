@@ -293,7 +293,7 @@
         <!-- preview | chat -->
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="3*" />
+                <ColumnDefinition Width="{Binding PreviewWidth, Mode=TwoWay}" />
                 <ColumnDefinition Width="10" />
                 <ColumnDefinition Width="{Binding ChatWidth, Mode=TwoWay}" />
             </Grid.ColumnDefinitions>
@@ -305,11 +305,16 @@
                 <v:PreviewPane DataContext="{Binding Preview}" />
             </Border>
 
-            <!-- gutter: resize + collapse the chat -->
+            <!-- gutter: resize, plus BOTH collapses — the preview's (upper caret) and the chat's (lower). -->
             <GridSplitter Grid.Column="1" Background="{DynamicResource WbBorder}" ResizeDirection="Columns" IsEnabled="{Binding !ChatCollapsed}" />
-            <Button Grid.Column="1" Command="{Binding ToggleChatCommand}" Width="10" Height="24" Padding="0" MinWidth="0" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip.Tip="{loc:Tr MwCollapseExpand}">
-                <i:Icon Value="{Binding ChatCaret}" FontSize="11" />
-            </Button>
+            <StackPanel Grid.Column="1" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Button Command="{Binding TogglePreviewPaneCommand}" Width="10" Height="24" Padding="0" MinWidth="0" ToolTip.Tip="{loc:Tr MwCollapseExpand}">
+                    <i:Icon Value="{Binding PreviewPaneCaret}" FontSize="11" />
+                </Button>
+                <Button Command="{Binding ToggleChatCommand}" Width="10" Height="24" Padding="0" MinWidth="0" ToolTip.Tip="{loc:Tr MwCollapseExpand}">
+                    <i:Icon Value="{Binding ChatCaret}" FontSize="11" />
+                </Button>
+            </StackPanel>
 
             <!-- Chat -->
             <Border Grid.Column="2" AutomationProperties.AutomationId="tour:pane-chat" IsVisible="{Binding !ChatCollapsed}" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,1,0,0">

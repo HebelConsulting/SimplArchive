@@ -24,6 +24,12 @@
    IPreviewAnnotationHost. The annotation TOOLBAR arrives the same way — as a Toolbar fragment — so a pane with
    nothing to annotate simply passes neither. *@
 
+@if (CollapseGutter)
+{
+    @* The pane's own collapse gutter, rendered as a preceding flex SIBLING so it stands between this pane and
+       its left neighbour in the host row. Only the Repositories tab opts in (wbLayout.js keys on "preview"). *@
+    <WbGutter Name="preview" />
+}
 <div class="wb-preview @(_fullscreen ? "wb-pv-fullscreen" : "")" style="@Style" data-pane="@DataPane" data-tour="@DataTour">
     @* min-height:0 or this column's content-driven minimum wins over the pane's bounds, and a tall document
        stretches the pane to the document's own height — on the Intray tab, whose ancestor chain has no
@@ -100,6 +106,9 @@
     /// <summary>`data-pane` for the resizable-layout script; omitted when null.</summary>
     [Parameter]
     public string? DataPane { get; set; }
+
+    /// <summary>Render the pane's collapse gutter before it (the Repositories tab's wbLayout collapse).</summary>
+    [Parameter] public bool CollapseGutter { get; set; }
 
     /// <summary>`data-tour` anchor — a PUBLISHED contract (issue #414), so keep the name stable.</summary>
     [Parameter]

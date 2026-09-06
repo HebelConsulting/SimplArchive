@@ -209,6 +209,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         ChatWidth = _chatSaved;
 
         Intray.ResetLayout();
+        ResetPreviewLayout();
 
         StoredColNameWidth = DefaultColName;
         ColTypeWidth = DefaultColType;
@@ -242,6 +243,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         ChatWidth = ChatCollapsed ? new GridLength(0) : _chatSaved;
 
         Intray.LoadLayout(settings);
+        LoadPreviewLayout(settings);
 
         StoredColNameWidth = ParseDouble(settings.ColName, DefaultColName);
         ColTypeWidth = ParseDouble(settings.ColType, DefaultColType);
@@ -279,6 +281,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         };
 
         Intray.WriteLayout(settings);   // the tab's four panes are its own to describe
+        WritePreviewLayout(settings);
         LayoutSettingsStore.Save(settings);
     }
 

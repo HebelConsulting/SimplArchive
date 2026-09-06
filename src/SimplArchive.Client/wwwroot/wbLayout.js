@@ -43,6 +43,9 @@ const GUTTERS = {
     tree: { pane: 'tree', mode: 'left' },
     list: { pane: 'list', mode: 'left' },
     index: { pane: 'index', mode: 'top' },
+    // The preview collapses too (it has no persisted SIZE — it is the grow pane; collapsing it hands the
+    // row to the annotations/chat pane, the one neighbour that can use it).
+    preview: { pane: 'preview', mode: 'left' },
     chat: { pane: 'chat', mode: 'right' },
 };
 
@@ -166,7 +169,7 @@ function loadState() {
     try { s = JSON.parse(localStorage.getItem(KEY)); } catch { /* ignore */ }
     s = s || {};
     s.sizes = { ...DEFAULTS, ...(s.sizes || {}) };
-    s.collapsed = { tree: false, list: false, index: false, chat: false, ...(s.collapsed || {}) };
+    s.collapsed = { tree: false, list: false, index: false, preview: false, chat: false, ...(s.collapsed || {}) };
     return s;
 }
 
@@ -258,8 +261,16 @@ export function attach(root) {
             return;
         }
 
+        // The preview is the GROW pane — expanded it takes whatever the row has, so it needs no size.
+        if (name === 'preview') {
+            el.style.maxHeight = '';
+            el.style.flex = '1 1 auto';
+            return;
+        }
+
         el.style.maxHeight = '';
-        el.style.flex = `0 0 ${state.sizes[name]}px`;
+        // A collapsed preview hands its row to the chat pane — the one neighbour that can use the width.
+        el.style.flex = name === 'chat' && state.collapsed.preview ? '1 1 auto' : `0 0 ${state.sizes[name]}px`;
     }
 
     function updateCaret(name) {
@@ -277,6 +288,7 @@ export function attach(root) {
         g.addEventListener('mousedown', e => {
             if (btn && (e.target === btn || btn.contains(e.target))) return;
             if (state.collapsed[cfg.pane]) return;
+            if (cfg.pane === 'preview') return; // no size to drag — the toggle is this gutter's only job
             const el = pane(cfg.pane);
             if (!el) return;
             e.preventDefault();
@@ -312,11 +324,21 @@ export function attach(root) {
             document.addEventListener('mouseup', onUp);
         });
 
+        if (btn && cfg.pane === 'preview') {
+            // The preview toggle rides ABOVE center: when the preview collapses to 0px its gutter lands
+            // adjacent to the chat gutter, and two centered toggles overlap — the chat one then intercepts
+            // the click, burying the collapsed preview's only re-open affordance (ADR 0550). Same answer as
+            // the desktop's stacked carets. Set by the engine, which already owns this gutter's other quirks.
+            btn.style.top = 'calc(50% - 30px)';
+        }
+
         if (btn) {
             btn.addEventListener('click', e => {
                 e.stopPropagation();
                 state.collapsed[cfg.pane] = !state.collapsed[cfg.pane];
                 applyPane(cfg.pane);
+                // preview and chat share their row's width, so toggling either re-flexes the other.
+                if (cfg.pane === 'preview' || cfg.pane === 'chat') { applyPane('preview'); applyPane('chat'); }
                 updateCaret(cfg.pane);
                 saveState(state);
             });

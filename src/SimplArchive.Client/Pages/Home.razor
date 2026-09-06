@@ -329,7 +329,7 @@
        (!important also beats any residual inline flex if JS hasn't cleared it yet.) */
     @@media (max-width: 1199px) {
         /* Tablet / iPad: drop the chat (comments) pane; trim the tree + contents list; the preview flexes to fill. */
-        .wb-chat, [data-gutter="chat"] { display: none !important; }
+        .wb-chat, [data-gutter="chat"], [data-gutter="preview"] { display: none !important; }
         .wb-tree { flex: 0 0 190px !important; }
         .wb-list { flex: 0 1 34% !important; min-width: 200px; max-width: 340px; }
         /* Column collapse is handled by the .wb-list container queries above (by pane width), not here. */
@@ -396,7 +396,7 @@
         .wb-phone-topbar { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; padding: 2px 6px;
             border-bottom: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-surface); }
         /* Above 1199px the trim tier does not run, so a large tablet would otherwise keep the chat pane. */
-        .wb-chat, [data-gutter="chat"] { display: none !important; }
+        .wb-chat, [data-gutter="chat"], [data-gutter="preview"] { display: none !important; }
         .wb-cols { position: relative; }
         .wb-cols [data-gutter] { display: none !important; }
 
@@ -617,7 +617,7 @@
                         </NodeMenu>
                     </TreePane>
 
-                    <div class="wb-gutter wb-gutter-v" data-gutter="tree"><button type="button" class="wb-gutter-toggle"></button></div>
+                    <WbGutter Name="tree" />
 
                     @* The whole contents pane is a drop target for the currently-listed folder, so files
                        can be dropped anywhere in it (empty area or a document row), not only onto a
@@ -727,7 +727,7 @@
                         </RowMenu>
                     </ContentsListPane>
 
-                    <div class="wb-gutter wb-gutter-v" data-gutter="list"><button type="button" class="wb-gutter-toggle"></button></div>
+                    <WbGutter Name="list" />
 
                     <div class="wb-detail @(_isSinglePane && _selectedItem is not null ? "wb-phone-detail-open" : "") wb-ptab-@_phoneDetailTab">
                         @* Phone-only detail bar: back to the folder list + Preview/Details/Comments sub-tabs
@@ -778,7 +778,7 @@
                                 <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" aria-label="Add tag" OnClick="@(() => Editor.AddTypedTag())" />
                             </TagAdd>
                         </IndexDataPane>
-                        <div class="wb-gutter wb-gutter-h" data-gutter="index"><button type="button" class="wb-gutter-toggle"></button></div>
+                        <WbGutter Name="index" Horizontal="true" />
 
                         <div class="wb-detail-bottom">
                             @* One PreviewPane instance per tab (ADR 0558). Before the extraction this tab and
@@ -787,7 +787,7 @@
                                annotation tools ride in as Toolbar, and the gestures come back through
                                IPreviewAnnotationHost, because acting on one writes to the version's
                                annotation collection — document state this pane deliberately does not hold. *@
-                            <PreviewPane @ref="_repoPreview" DataPane="preview" DataTour="pane-preview"
+                            <PreviewPane @ref="_repoPreview" DataPane="preview" DataTour="pane-preview" CollapseGutter="true"
                                          EmptyText="@(_selectedItem is null ? Strings.Get("NoDocSelected") : Strings.Get("NoPreview"))"
                                          ConvertedBadgeTooltip="@Strings.Get("ConvertedPreviewTooltip")"
                                          AnnotationHost="Annotations">
@@ -802,7 +802,7 @@
                                     }
                                 </Overlay>
                             </PreviewPane>
-                            <div class="wb-gutter wb-gutter-v" data-gutter="chat"><button type="button" class="wb-gutter-toggle"></button></div>
+                            <WbGutter Name="chat" />
 
                             @* The chat pane (ADR 0558). The composer's text stays in the SHELL: a half-typed
                                comment is unsaved input, and this pane is disposed on every tab switch. *@

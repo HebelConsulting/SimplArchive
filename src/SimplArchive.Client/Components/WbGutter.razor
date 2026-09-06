@@ -1,0 +1,12 @@
+@* A workbench pane gutter (drag + collapse caret), one per collapsible pane — wired by wbLayout.js via the
+   data-gutter name (ADR 0224). Extracted from the shell (ADR 0558: Home.razor may only get smaller); the
+   markup is identical five times over, which is exactly the "same work is ONE implementation" shape. *@
+<div class="wb-gutter @(Horizontal ? "wb-gutter-h" : "wb-gutter-v")" data-gutter="@Name"><button type="button" class="wb-gutter-toggle"></button></div>
+
+@code {
+    /// <summary>The pane name wbLayout.js keys the gutter to (tree/list/index/preview/chat).</summary>
+    [Parameter] public string Name { get; set; } = string.Empty;
+
+    /// <summary>True for a horizontal gutter (a top-collapsing pane); false for the vertical ones.</summary>
+    [Parameter] public bool Horizontal { get; set; }
+}

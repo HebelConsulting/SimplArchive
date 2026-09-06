@@ -12,6 +12,11 @@ public sealed class LayoutSettings
     public string IndexHeight { get; set; } = "1.5*";
     public string ChatWidth { get; set; } = "2*";
 
+    // The Repositories tab's preview pane (collapsible like its neighbours; the chat absorbs its width).
+    public string PreviewWidth { get; set; } = "3*";
+
+    public bool PreviewCollapsed { get; set; }
+
     public bool TreeCollapsed { get; set; }
     public bool ListCollapsed { get; set; }
     public bool IndexCollapsed { get; set; }
