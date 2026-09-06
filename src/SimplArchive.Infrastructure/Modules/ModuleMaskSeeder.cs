@@ -54,9 +54,9 @@ public sealed class ModuleMaskSeeder
                 CreatedAt = DateTimeOffset.UtcNow,
             };
             _dbContext.MaskVersions.Add(version);
-            foreach (var field in seed.Fields)
+            for (var i = 0; i < seed.Fields.Count; i++)
             {
-                _dbContext.FieldDefinitions.Add(NewField(version, field, tenantId));
+                _dbContext.FieldDefinitions.Add(NewField(version, seed.Fields[i], tenantId, i));
             }
 
             await _dbContext.SaveChangesAsync(cancellationToken);
@@ -76,11 +76,27 @@ public sealed class ModuleMaskSeeder
             .SingleAsync(v => v.TenantId == tenantId && v.MaskId == seed.MaskId && v.IsCurrent, cancellationToken);
         var existingFields = await _dbContext.FieldDefinitions.IgnoreQueryFilters(["TenantFilter"])
             .Where(f => f.TenantId == tenantId && f.MaskVersionId == current.Id)
-            .Select(f => f.Name)
             .ToListAsync(cancellationToken);
 
-        foreach (var field in seed.Fields.Where(f => !existingFields.Contains(f.Name, StringComparer.Ordinal)))
+        // The seed list's index IS the display order (ADR 0761) — corrected in place, unconditionally, the
+        // same way IsFolderMask/IsBookable are above: the module's seed is the authority for its own masks.
+        for (var i = 0; i < seed.Fields.Count; i++)
         {
+            if (existingFields.FirstOrDefault(f => string.Equals(f.Name, seed.Fields[i].Name, StringComparison.Ordinal)) is { } defined
+                && defined.SortOrder != i)
+            {
+                defined.SortOrder = i;
+            }
+        }
+
+        for (var i = 0; i < seed.Fields.Count; i++)
+        {
+            var field = seed.Fields[i];
+            if (existingFields.Any(f => string.Equals(f.Name, field.Name, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
             if (field.IsRequired)
             {
                 // A required field arriving on a worn mask would invalidate every existing document — the
@@ -93,17 +109,18 @@ public sealed class ModuleMaskSeeder
 
             _logger.LogInformation("Module {ModuleId}: healing field {Field} onto mask {Mask} in tenant {TenantId}.",
                 moduleId, field.Name, seed.Name, tenantId);
-            _dbContext.FieldDefinitions.Add(NewField(current, field, tenantId));
+            _dbContext.FieldDefinitions.Add(NewField(current, field, tenantId, i));
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private static FieldDefinition NewField(MaskVersion version, ModuleFieldSeed field, Guid tenantId) => new()
+    private static FieldDefinition NewField(MaskVersion version, ModuleFieldSeed field, Guid tenantId, int sortOrder) => new()
     {
         Id = Guid.NewGuid(),
         TenantId = tenantId,
         MaskVersionId = version.Id,
+        SortOrder = sortOrder,
         Name = field.Name,
         DataType = ParseDataType(field.DataType),
         IsRequired = field.IsRequired,

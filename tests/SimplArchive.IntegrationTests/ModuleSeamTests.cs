@@ -230,4 +230,44 @@ public class ModuleSeamTests
         // No loaded modules — must complete without throwing.
         await ModuleMaskBackfill.HealAsync(heal, seeder, [], NullLogger.Instance);
     }
+
+    [Fact]
+    public async Task A_module_masks_field_order_heals_to_the_seed_lists_index()
+    {
+        // ADR 0761: the module seed list's index is the display order, corrected in place by the heal —
+        // the same unconditional authority the seeder already exercises for IsFolderMask/IsBookable.
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        using (var setup = CreateContext(connection)) await setup.Database.EnsureCreatedAsync();
+        var (tenantId, _, _) = await SeedTenantAsync(connection);
+
+        var module = new TestModule.TestModule();
+        using (var context = CreateContext(connection, tenantId))
+        {
+            var seeder = new ModuleMaskSeeder(context, NullLogger<ModuleMaskSeeder>.Instance);
+            await seeder.SeedAsync(module, tenantId);
+        }
+
+        // Scramble (a pre-column tenant), then heal.
+        using (var scramble = CreateContext(connection, tenantId))
+        {
+            foreach (var field in await scramble.FieldDefinitions.ToListAsync())
+            {
+                field.SortOrder = 99;
+            }
+
+            await scramble.SaveChangesAsync();
+            var seeder = new ModuleMaskSeeder(scramble, NullLogger<ModuleMaskSeeder>.Instance);
+            await seeder.SeedAsync(module, tenantId);
+        }
+
+        using var check = CreateContext(connection, tenantId);
+        var certVersion = await check.MaskVersions
+            .SingleAsync(v => v.MaskId == TestModule.TestModule.CertificateMaskId && v.IsCurrent);
+        var ordered = await check.FieldDefinitions
+            .Where(f => f.MaskVersionId == certVersion.Id)
+            .OrderBy(f => f.SortOrder).Select(f => f.Name).ToListAsync();
+        Assert.Equal(["Valid to", "Temporarily void", "Issuer"], ordered); // the TestModule seed's order
+    }
+
 }

@@ -251,6 +251,7 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         var maskVersion = new MaskVersion { Id = Guid.NewGuid(), TenantId = tenantId, MaskId = maskId, Name = name, CreatedAt = DateTimeOffset.UtcNow };
         _dbContext.MaskVersions.Add(maskVersion);
 
+        var createOrder = 0;
         foreach (var field in fields)
         {
             _dbContext.FieldDefinitions.Add(new FieldDefinition
@@ -258,6 +259,7 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
                 MaskVersionId = maskVersion.Id,
+                SortOrder = createOrder++,
                 Name = field.Name,
                 DataType = field.DataType,
                 IsRequired = field.IsRequired,
@@ -506,6 +508,9 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         // from mask-version immutability (ADR 0166) and it is safe only while that premise holds — widening
         // Date → DateTime does not invalidate a stored value (every `yyyy-MM-dd` still parses), but a future
         // NARROWING would, and would need a real version.
+        // The seed list's index IS the display order (ADR 0761) — healed unconditionally like DataType/IsList.
+        var displayOrder = fields.Select((f, i) => (f.Name, Index: i))
+            .ToDictionary(x => x.Name, x => x.Index, StringComparer.OrdinalIgnoreCase);
         foreach (var field in defined)
         {
             if (fields.FirstOrDefault(f => string.Equals(f.Name, field.Name, StringComparison.OrdinalIgnoreCase)) is not { } spec)
@@ -516,6 +521,11 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             if (field.DataType != spec.DataType)
             {
                 field.DataType = spec.DataType;
+            }
+
+            if (displayOrder.TryGetValue(field.Name, out var position) && field.SortOrder != position)
+            {
+                field.SortOrder = position;
             }
 
             // Multiplicity drifts exactly as the type does, and for the same reason (#703): every field
@@ -552,6 +562,7 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
                 MaskVersionId = currentVersion,
+                SortOrder = displayOrder.GetValueOrDefault(field.Name),
                 Name = field.Name,
                 DataType = field.DataType,
                 IsRequired = field.IsRequired,

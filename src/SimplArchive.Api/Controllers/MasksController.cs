@@ -296,8 +296,10 @@ public class MasksController : ControllerBase
             return NotFound();
         }
 
+        // Display order (ADR 0761): SortOrder first; CreatedAt+Id keep pre-column rows (all 0) stable.
         var fields = await _dbContext.FieldDefinitions
             .Where(f => f.MaskVersionId == version.Id)
+            .OrderBy(f => f.SortOrder).ThenBy(f => f.CreatedAt).ThenBy(f => f.Id)
             .ToListAsync(cancellationToken);
 
         return Ok(BuildResource(maskId, version.Name, version.VersionNumber, version.ReviewSlaDays, version.RetentionYears, version.DefaultSensitivityLabelId, fields));

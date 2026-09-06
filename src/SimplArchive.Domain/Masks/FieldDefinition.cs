@@ -43,6 +43,12 @@ public class FieldDefinition : ITenantScoped
     /// </remarks>
     public bool IsList { get; set; }
 
+    // The field's position in its mask's display order (ADR 0761): assigned by the seeders from the seed
+    // list's index and healed unconditionally, so a reordered seed reaches existing tenants at the next
+    // startup. Rows predating the column read 0 until healed — the API's (SortOrder, CreatedAt, Id) order
+    // keeps them stable in the meantime.
+    public int SortOrder { get; set; }
+
     public string? FormatPattern { get; set; }
 
     public int? MaxTextLength { get; set; }

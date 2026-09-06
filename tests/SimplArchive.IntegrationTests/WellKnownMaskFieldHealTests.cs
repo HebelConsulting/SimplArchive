@@ -303,4 +303,45 @@ public class WellKnownMaskFieldHealTests
         Assert.Equal("Booking", (await check.MaskVersions.IgnoreQueryFilters()
             .SingleAsync(v => v.TenantId == _tenantId && v.MaskId == WellKnownMaskIds.Booking && v.IsCurrent)).Name);
     }
+
+    [Fact]
+    public async Task Field_display_order_heals_to_the_seed_lists_index()
+    {
+        // ADR 0761: SortOrder is the seed list's index, assigned unconditionally by the heal — so a tenant
+        // seeded before the column existed (all rows 0), or before a deliberate reorder, converges on the
+        // declared order at the next startup backfill.
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var accessor = new CurrentTenantAccessor();
+        using (var setup = Ctx(connection, accessor)) await setup.Database.EnsureCreatedAsync();
+        using (var db = Ctx(connection, accessor))
+        {
+            db.Tenants.Add(new Tenant { Id = _tenantId, Name = "T", CreatedAt = DateTimeOffset.UtcNow });
+            await db.SaveChangesAsync();
+            await Seeder(db).EnsureWellKnownMasksAsync(_tenantId);
+        }
+
+        // Scramble, as a pre-column tenant would read (every row 0 → undefined order).
+        using (var db = Ctx(connection, accessor))
+        {
+            foreach (var field in await db.FieldDefinitions.IgnoreQueryFilters()
+                .Where(f => f.TenantId == _tenantId).ToListAsync())
+            {
+                field.SortOrder = 0;
+            }
+
+            await db.SaveChangesAsync();
+            await Seeder(db).EnsureWellKnownMasksAsync(_tenantId);
+        }
+
+        using var check = Ctx(connection, accessor);
+        var emailVersion = await check.MaskVersions.IgnoreQueryFilters()
+            .SingleAsync(v => v.TenantId == _tenantId && v.MaskId == WellKnownMaskIds.EMail && v.IsCurrent);
+        var ordered = await check.FieldDefinitions.IgnoreQueryFilters()
+            .Where(f => f.MaskVersionId == emailVersion.Id)
+            .OrderBy(f => f.SortOrder).Select(f => new { f.Name, f.SortOrder }).ToListAsync();
+        Assert.Equal(Enumerable.Range(0, ordered.Count), ordered.Select(f => f.SortOrder)); // distinct, 0..n-1
+        Assert.Equal("From", ordered[0].Name); // the seed list's first field leads
+    }
+
 }

@@ -615,12 +615,13 @@ public class DocumentMetadataController : ControllerBase
 
     private async Task<IndexDataResource> BuildIndexDataResourceAsync(Guid documentId, CancellationToken cancellationToken)
     {
-        // Ordered by Ordinal, tie-broken on Id (#703): the tie-break is what gives a STABLE order to rows
+        // FIELD position first (ADR 0761 — the pane shows fields in the mask's display order), then Ordinal
+        // within a list field, tie-broken on Id (#703): the tie-break is what gives a STABLE order to rows
         // written before ordinals existed, which all share 0 — arbitrary, but no longer different each read.
         var rows = await _dbContext.FieldValues
             .Where(v => v.DocumentId == documentId)
-            .Join(_dbContext.FieldDefinitions, v => v.FieldDefinitionId, f => f.Id, (v, f) => new { f.Id, f.Name, f.DataType, v.Value, v.Ordinal, ValueId = v.Id })
-            .OrderBy(r => r.Ordinal).ThenBy(r => r.ValueId)
+            .Join(_dbContext.FieldDefinitions, v => v.FieldDefinitionId, f => f.Id, (v, f) => new { f.Id, f.Name, f.DataType, f.SortOrder, v.Value, v.Ordinal, ValueId = v.Id })
+            .OrderBy(r => r.SortOrder).ThenBy(r => r.Ordinal).ThenBy(r => r.ValueId)
             .ToListAsync(cancellationToken);
 
         var fields = rows
