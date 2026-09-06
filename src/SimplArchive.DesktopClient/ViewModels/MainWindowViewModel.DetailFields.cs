@@ -151,7 +151,10 @@ public sealed partial class MainWindowViewModel
 
         foreach (var field in indexData)
         {
-            IndexFields.Add(new IndexFieldViewModel { FieldName = field.FieldName, Values = string.Join(", ", field.Values) });
+            // Through the one factory (its own comment warns about exactly this copy): this site hand-rolled
+            // the row, so the MAIN tab showed a DateTime as the raw wire instant while every other tab
+            // rendered it — and it is what gives Url fields their link rows (ADR 0763).
+            IndexFields.Add(IndexFieldViewModel.From(field));
         }
     }
 }

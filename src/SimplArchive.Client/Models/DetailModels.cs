@@ -20,6 +20,9 @@ public record FieldGroup
     /// <summary>The values as the pane SHOWS them — type-aware, matching the desktop's rendering (ADR 0511).</summary>
     public string Display => string.Join(", ", Values.Select(v =>
         DataType == "DateTime" ? SimplArchive.Presentation.IndexInstant.Display(v) : v));
+
+    /// <summary>A Url field's values render as LINKS (ADR 0763) — the read row swaps the text for anchors.</summary>
+    public bool IsUrl => DataType == "Url";
 }
 
 /// <summary>One message in a document's chat thread, with the addresses its row advertised (ADR 0543).</summary>

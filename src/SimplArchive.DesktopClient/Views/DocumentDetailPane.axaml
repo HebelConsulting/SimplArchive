@@ -169,7 +169,17 @@
                             <DataTemplate x:DataType="vm:IndexFieldViewModel">
                                 <Grid ColumnDefinitions="180,*" Margin="0,2">
                                     <SelectableTextBlock Grid.Column="0" Text="{Binding FieldName}" Foreground="{DynamicResource WbMuted}" />
-                                    <SelectableTextBlock Grid.Column="1" Text="{Binding Values}" TextWrapping="Wrap" />
+                                    <SelectableTextBlock Grid.Column="1" Text="{Binding Values}" TextWrapping="Wrap" IsVisible="{Binding !IsUrl}" />
+                                    <!-- A Url field's values are LINKS (ADR 0763): each opens the OS browser. -->
+                                    <ItemsControl Grid.Column="1" ItemsSource="{Binding UrlValues}" IsVisible="{Binding IsUrl}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="x:String">
+                                                <HyperlinkButton Content="{Binding}" Padding="0"
+                                                                 Command="{Binding $parent[ItemsControl].((vm:IndexFieldViewModel)DataContext).OpenUrlCommand}"
+                                                                 CommandParameter="{Binding}" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>

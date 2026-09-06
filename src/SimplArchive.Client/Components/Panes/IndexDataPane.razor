@@ -305,7 +305,23 @@
                     <tbody>
                         @foreach (var field in Detail.IndexData)
                         {
-                            <tr><td>@field.FieldName</td><td>@field.Display</td></tr>
+                            <tr>
+                                <td>@field.FieldName</td>
+                                <td>
+                                    @if (field.IsUrl)
+                                    {
+                                        @* A Url field's values are LINKS (ADR 0763): new tab, no opener. *@
+                                        @foreach (var url in field.Values)
+                                        {
+                                            <a href="@url" target="_blank" rel="noopener noreferrer" class="mr-2">@url</a>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        @field.Display
+                                    }
+                                </td>
+                            </tr>
                         }
                     </tbody>
                 </MudSimpleTable>
