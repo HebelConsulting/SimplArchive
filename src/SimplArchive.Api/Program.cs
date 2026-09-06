@@ -479,6 +479,16 @@ using (var scope = app.Services.CreateScope())
         // installation. Renamed to the owner here; WebDavMiddleware keeps serving the old segment as an alias.
         await SimplArchive.Api.Documents.LegacyPersonalSpaceHealer.HealAsync(
             dbContext, services.GetRequiredService<ILoggerFactory>().CreateLogger("SimplArchive.Api.Documents.LegacyPersonalSpaceHealer"));
+
+        // …and the same stranded-shape for MODULE masks (ADR 0757): a module's masks are seeded only at
+        // ACTIVATION, so a module UPDATED after a tenant activated it (a new mask or field) leaves that tenant
+        // missing the shape — MASK_NOT_FOUND on the new feature — until re-activation. ModuleMaskSeeder is
+        // idempotent and heals, so re-running it here for every active tenant backfills a module upgrade.
+        await SimplArchive.Infrastructure.Modules.ModuleMaskBackfill.HealAsync(
+            dbContext,
+            services.GetRequiredService<SimplArchive.Infrastructure.Modules.ModuleMaskSeeder>(),
+            [.. services.GetRequiredService<IReadOnlyList<SimplArchive.Infrastructure.Modules.ModuleLoader.LoadedModule>>().Select(m => m.Module)],
+            services.GetRequiredService<ILoggerFactory>().CreateLogger("SimplArchive.Infrastructure.Modules.ModuleMaskBackfill"));
     }
 
     var applicationManager = services.GetRequiredService<IOpenIddictApplicationManager>();

@@ -3,10 +3,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Documents;
+using SimplArchive.Domain.Modules;
 using SimplArchive.Domain.Tenants;
 using SimplArchive.Domain.Users;
 using SimplArchive.Infrastructure.Modules;
 using SimplArchive.Infrastructure.Persistence;
+using SimplArchive.ModuleAbi;
 using SimplArchive.TestModule;
 
 namespace SimplArchive.IntegrationTests;
@@ -150,5 +152,82 @@ public class ModuleSeamTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             facade.CreateDocumentAsync(rootId, TestModule.TestModule.CertificateMaskId, "Anonymous"));
+    }
+
+    [Fact]
+    public async Task Backfill_heals_a_module_mask_a_tenant_activated_before_it_existed()
+    {
+        // The upgrade shape (ADR 0757): a tenant activated an EARLIER module version, so one of the module's
+        // masks was never seeded for it. On the next startup the backfill must heal it — otherwise the newer
+        // feature is MASK_NOT_FOUND until re-activation.
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        using (var setup = CreateContext(connection)) await setup.Database.EnsureCreatedAsync();
+        var (tenantId, _, _) = await SeedTenantAsync(connection);
+
+        var module = new TestModule.TestModule();
+        using (var context = CreateContext(connection, tenantId))
+        {
+            var seeder = new ModuleMaskSeeder(context, NullLogger<ModuleMaskSeeder>.Instance);
+            await seeder.SeedAsync(module, tenantId);
+            context.ModuleActivations.Add(new ModuleActivation
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ModuleId = module.ModuleId,
+                SupportContractEndDate = DateTimeOffset.UtcNow.AddYears(1),
+            });
+            await context.SaveChangesAsync();
+        }
+
+        // Simulate "this mask did not exist when the tenant activated": remove it entirely.
+        using (var strip = CreateContext(connection, tenantId))
+        {
+            var mask = await strip.Masks.SingleAsync(m => m.Id == TestModule.TestModule.EntryMaskId);
+            var versions = await strip.MaskVersions.Where(v => v.MaskId == mask.Id).ToListAsync();
+            var versionIds = versions.Select(v => v.Id).ToList();
+            strip.FieldDefinitions.RemoveRange(strip.FieldDefinitions.Where(fd => versionIds.Contains(fd.MaskVersionId)));
+            strip.MaskVersions.RemoveRange(versions);
+            strip.Masks.Remove(mask);
+            await strip.SaveChangesAsync();
+        }
+
+        using (var heal = CreateContext(connection))
+        {
+            var seeder = new ModuleMaskSeeder(heal, NullLogger<ModuleMaskSeeder>.Instance);
+            await ModuleMaskBackfill.HealAsync(heal, seeder, [module], NullLogger.Instance);
+        }
+
+        using var check = CreateContext(connection, tenantId);
+        Assert.True(await check.Masks.AnyAsync(m => m.Id == TestModule.TestModule.EntryMaskId),
+            "the backfill should have re-seeded the mask the tenant activated before it existed");
+    }
+
+    [Fact]
+    public async Task Backfill_ignores_an_activation_whose_module_is_not_loaded()
+    {
+        // A tenant may hold an activation for a module this deployment no longer ships — the backfill must
+        // skip it silently rather than throw (no module instance to seed from).
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        using (var setup = CreateContext(connection)) await setup.Database.EnsureCreatedAsync();
+        var (tenantId, _, _) = await SeedTenantAsync(connection);
+
+        using (var context = CreateContext(connection, tenantId))
+        {
+            context.ModuleActivations.Add(new ModuleActivation
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ModuleId = "a-module-no-longer-loaded",
+                SupportContractEndDate = DateTimeOffset.UtcNow.AddYears(1),
+            });
+            await context.SaveChangesAsync();
+        }
+
+        using var heal = CreateContext(connection);
+        var seeder = new ModuleMaskSeeder(heal, NullLogger<ModuleMaskSeeder>.Instance);
+        // No loaded modules — must complete without throwing.
+        await ModuleMaskBackfill.HealAsync(heal, seeder, [], NullLogger.Instance);
     }
 }
