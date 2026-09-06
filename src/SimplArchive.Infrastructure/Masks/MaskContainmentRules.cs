@@ -67,7 +67,7 @@ public sealed class MaskContainmentRules
     {
         var masks = await db.Masks.IgnoreQueryFilters(["TenantFilter"])
             .Where(m => m.TenantId == tenantId)
-            .Select(m => new { m.Id, m.IsFolderMask, m.AdmitsOnlyDeclaredChildren, m.AdmitsNoSubfolders, m.Icon, m.UserCreatable })
+            .Select(m => new { m.Id, m.IsFolderMask, m.IsBookable, m.AdmitsOnlyDeclaredChildren, m.AdmitsNoSubfolders, m.Icon, m.UserCreatable })
             .ToListAsync(cancellationToken);
 
         // The CURRENT version's name, so a refusal names the mask as it is called today. The static tables
@@ -79,15 +79,26 @@ public sealed class MaskContainmentRules
             .ToListAsync(cancellationToken))
             .ToDictionary(v => v.MaskId, v => v.Name);
 
-        var parents = await db.MaskAllowedParents.IgnoreQueryFilters(["TenantFilter"])
+        var parents = (await db.MaskAllowedParents.IgnoreQueryFilters(["TenantFilter"])
             .Where(p => p.TenantId == tenantId)
             .Select(p => new { p.MaskId, p.ParentMaskId })
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken)).ToList();
 
-        var children = await db.MaskAdmittedChildren.IgnoreQueryFilters(["TenantFilter"])
+        var children = (await db.MaskAdmittedChildren.IgnoreQueryFilters(["TenantFilter"])
             .Where(c => c.TenantId == tenantId)
             .Select(c => new { c.FolderMaskId, c.ChildMaskId })
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken)).ToList();
+
+        // A BOOKABLE mask holds its Schedule — the booking primitive's own semantics (ADR 0762), DERIVED from
+        // IsBookable rather than seeded as rows. The static table's "Schedule only in a Meeting room" was
+        // written for ADR 0744's proof, before modules made other masks bookable; without this, the first
+        // booking of a bookable module resource (an aircraft) died on ItemBelongsElsewhere in SaveChanges.
+        // Derivation needs no reconcile and heals with IsBookable itself, which both seeders already correct.
+        foreach (var bookable in masks.Where(m => m.IsBookable))
+        {
+            parents.Add(new { MaskId = WellKnownMaskIds.Schedule, ParentMaskId = bookable.Id });
+            children.Add(new { FolderMaskId = bookable.Id, ChildMaskId = WellKnownMaskIds.Schedule });
+        }
 
         string NameOf(Guid maskId) => names.TryGetValue(maskId, out var name) ? name : maskId.ToString();
 

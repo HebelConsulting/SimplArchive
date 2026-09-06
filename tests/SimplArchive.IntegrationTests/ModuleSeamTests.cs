@@ -6,6 +6,7 @@ using SimplArchive.Domain.Documents;
 using SimplArchive.Domain.Modules;
 using SimplArchive.Domain.Tenants;
 using SimplArchive.Domain.Users;
+using SimplArchive.Infrastructure.Masks;
 using SimplArchive.Infrastructure.Modules;
 using SimplArchive.Infrastructure.Persistence;
 using SimplArchive.ModuleAbi;
@@ -268,6 +269,69 @@ public class ModuleSeamTests
             .Where(f => f.MaskVersionId == certVersion.Id)
             .OrderBy(f => f.SortOrder).Select(f => f.Name).ToListAsync();
         Assert.Equal(["Valid to", "Temporarily void", "Issuer"], ordered); // the TestModule seed's order
+    }
+
+    private sealed class TwoMaskModule(ModuleMaskSeed first, ModuleMaskSeed second) : IIndustryModule
+    {
+        public string ModuleId => "two-mask";
+        public string DisplayName => "Two masks";
+        public int AbiMajorVersion => ModuleAbiVersion.Major;
+        public string LicenseVerifyKeyPem => string.Empty;
+        public IReadOnlyList<ModuleMaskSeed> Masks => [first, second];
+        public void ConfigureServices(Microsoft.Extensions.DependencyInjection.IServiceCollection services) { }
+    }
+
+    [Fact]
+    public async Task A_modules_containment_declarations_write_heal_and_bind()
+    {
+        // ABI 0.8 (ADR 0762): a module declares its masks' containment; the seeder reconciles the rows on
+        // create AND heal (the module is the authority for its own mask), and the loaded rules enforce them.
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        using (var setup = CreateContext(connection)) await setup.Database.EnsureCreatedAsync();
+        var (tenantId, _, _) = await SeedTenantAsync(connection);
+
+        var folderish = Guid.NewGuid();
+        var leafId = Guid.NewGuid();
+        var leaf = new ModuleMaskSeed(leafId, "Hangar note", IsFolderMask: false, IsBookable: false, Fields: []);
+        ModuleMaskSeed Hangar(IReadOnlyList<Guid> admitted) => new(
+            folderish, "Hangar", IsFolderMask: true, IsBookable: false, Fields: [],
+            AdmitsOnlyDeclaredChildren: true, AdmittedChildren: admitted);
+
+        using (var db = CreateContext(connection, tenantId))
+        {
+            // The real well-known seeder first, so the CORE Folder endpoint exists for the FK.
+            await new Infrastructure.Masks.WellKnownMaskSeeder(db,
+                NullLogger<Infrastructure.Masks.WellKnownMaskSeeder>.Instance).EnsureWellKnownMasksAsync(tenantId);
+            var seeder = new ModuleMaskSeeder(db, NullLogger<ModuleMaskSeeder>.Instance);
+            await seeder.SeedAsync(new TwoMaskModule(Hangar([CoreMaskIds.Folder, leafId]), leaf), tenantId);
+        }
+
+        using (var check = CreateContext(connection, tenantId))
+        {
+            Assert.True((await check.Masks.SingleAsync(m => m.Id == folderish)).AdmitsOnlyDeclaredChildren);
+            var rows = await check.MaskAdmittedChildren.Where(c => c.FolderMaskId == folderish)
+                .Select(c => c.ChildMaskId).ToListAsync();
+            Assert.Equal(2, rows.Count);
+            Assert.Contains(CoreMaskIds.Folder, rows);
+        }
+
+        // The upgrade narrows the declaration — the heal must REMOVE the stale row.
+        using (var db = CreateContext(connection, tenantId))
+        {
+            var seeder = new ModuleMaskSeeder(db, NullLogger<ModuleMaskSeeder>.Instance);
+            await seeder.SeedAsync(new TwoMaskModule(Hangar([CoreMaskIds.Folder]), leaf), tenantId);
+        }
+
+        using var final = CreateContext(connection, tenantId);
+        var remaining = await final.MaskAdmittedChildren.Where(c => c.FolderMaskId == folderish)
+            .Select(c => c.ChildMaskId).ToListAsync();
+        Assert.Equal([CoreMaskIds.Folder], remaining);
+
+        // …and the loaded rules BIND: the exclusive folder admits the Folder, refuses the undeclared leaf.
+        var rules = await MaskContainmentRules.LoadAsync(final, tenantId, CancellationToken.None);
+        Assert.True(rules.Allows(CoreMaskIds.Folder, folderish));
+        Assert.False(rules.Allows(leafId, folderish));
     }
 
 }
