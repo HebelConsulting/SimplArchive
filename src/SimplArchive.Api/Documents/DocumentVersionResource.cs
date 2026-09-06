@@ -34,6 +34,10 @@ public class DocumentVersionResource : HypermediaResource
     // The issuing date ("yyyy-MM-dd") — a string on the wire (XmlSerializer doesn't support DateOnly).
     public string DocumentDate { get; set; } = string.Empty;
 
+    // The document date's optional time-of-day in UTC ("HH:mm"), or null when the date carries no time
+    // (ADR "Optional time on the document date"). A string on the wire (XmlSerializer doesn't support TimeOnly).
+    public string? DocumentTime { get; set; }
+
     // The version's OCR-language override (Tesseract "+"-joined; null = inherit the tenant default) — the
     // system-field picker on a TIFF version (ADR "Per-tenant / per-version OCR languages").
     public string? OcrLanguages { get; set; }

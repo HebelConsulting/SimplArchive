@@ -596,6 +596,9 @@ public class DocumentFinalizer
         {
             AddValue("Date", date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
             version.DocumentDate = DateOnly.FromDateTime(date.UtcDateTime);
+            // The e-mail's own time-of-day, kept (ADR "Optional time on the document date"): the message Date
+            // carries a precise instant, no longer truncated to the day.
+            version.DocumentTime = TimeOnly.FromDateTime(date.UtcDateTime);
         }
 
         if (!string.IsNullOrWhiteSpace(metadata.Subject))

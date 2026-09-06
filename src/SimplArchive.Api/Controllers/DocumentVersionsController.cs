@@ -223,7 +223,7 @@ public class DocumentVersionsController : ControllerBase
 
     private record VersionRow(
         Guid Id, Guid DocumentId, DocumentVersionStatus Status, int? VersionNumber, string ObjectKey,
-        string? Sha256Hash, DateTimeOffset CreatedAt, DateOnly DocumentDate,
+        string? Sha256Hash, DateTimeOffset CreatedAt, DateOnly DocumentDate, TimeOnly? DocumentTime,
         Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, string? OcrLanguages, string? Comment,
         OcrVerdict? OcrVerdict = null, bool? IsSigned = null);
 
@@ -294,7 +294,7 @@ public class DocumentVersionsController : ControllerBase
         var fetched = await query
             .OrderBy(v => v.CreatedAt).ThenBy(v => v.Id)
             .Take(pageSize + 1)
-            .Select(v => new VersionRow(v.Id, v.DocumentId, v.Status, v.VersionNumber, v.ObjectKey, v.Sha256Hash, v.CreatedAt, v.DocumentDate, v.CreatedByUserId, v.CreatedByServiceAccountId, v.OcrLanguages, v.Comment, v.OcrVerdict, v.IsSigned))
+            .Select(v => new VersionRow(v.Id, v.DocumentId, v.Status, v.VersionNumber, v.ObjectKey, v.Sha256Hash, v.CreatedAt, v.DocumentDate, v.DocumentTime, v.CreatedByUserId, v.CreatedByServiceAccountId, v.OcrLanguages, v.Comment, v.OcrVerdict, v.IsSigned))
             .ToListAsync(cancellationToken);
 
         var (page, hasMore) = Cursor.Split(fetched, pageSize);
@@ -649,7 +649,7 @@ public class DocumentVersionsController : ControllerBase
         var wasPending = version.Status == DocumentVersionStatus.Pending;
         await _finalizer.FinalizeAsync(version, cancellationToken);
 
-        var row = new VersionRow(versionId, documentId, version.Status, version.VersionNumber, version.ObjectKey, version.Sha256Hash, version.CreatedAt, version.DocumentDate, version.CreatedByUserId, version.CreatedByServiceAccountId, version.OcrLanguages, version.Comment, version.OcrVerdict, version.IsSigned);
+        var row = new VersionRow(versionId, documentId, version.Status, version.VersionNumber, version.ObjectKey, version.Sha256Hash, version.CreatedAt, version.DocumentDate, version.DocumentTime, version.CreatedByUserId, version.CreatedByServiceAccountId, version.OcrLanguages, version.Comment, version.OcrVerdict, version.IsSigned);
 
         var documentName = await LoadDocumentNameAsync(documentId, cancellationToken);
 
@@ -716,7 +716,7 @@ public class DocumentVersionsController : ControllerBase
         }
 
         var name = await LoadDocumentNameAsync(documentId, cancellationToken);
-        var row = new VersionRow(source.Id, documentId, source.Status, source.VersionNumber, source.ObjectKey, source.Sha256Hash, source.CreatedAt, source.DocumentDate, source.CreatedByUserId, source.CreatedByServiceAccountId, source.OcrLanguages, source.Comment, source.OcrVerdict, source.IsSigned);
+        var row = new VersionRow(source.Id, documentId, source.Status, source.VersionNumber, source.ObjectKey, source.Sha256Hash, source.CreatedAt, source.DocumentDate, source.DocumentTime, source.CreatedByUserId, source.CreatedByServiceAccountId, source.OcrLanguages, source.Comment, source.OcrVerdict, source.IsSigned);
         return Ok(await BuildResourceAsync(row, name, cancellationToken));
     }
 
@@ -752,19 +752,41 @@ public class DocumentVersionsController : ControllerBase
         }
 
         version.DocumentDate = date;
+        version.DocumentTime = ParseOptionalDocumentTime(request.DocumentTime);
         await _dbContext.SaveChangesAsync(cancellationToken);
         await _queue.EnqueueAsync(documentId, cancellationToken);
         await _wormLock.ReconcileAsync(documentId, cancellationToken); // the retention anchor (document date) moved
 
-        var row = new VersionRow(versionId, documentId, version.Status, version.VersionNumber, version.ObjectKey, version.Sha256Hash, version.CreatedAt, version.DocumentDate, version.CreatedByUserId, version.CreatedByServiceAccountId, version.OcrLanguages, version.Comment, version.OcrVerdict, version.IsSigned);
+        var row = new VersionRow(versionId, documentId, version.Status, version.VersionNumber, version.ObjectKey, version.Sha256Hash, version.CreatedAt, version.DocumentDate, version.DocumentTime, version.CreatedByUserId, version.CreatedByServiceAccountId, version.OcrLanguages, version.Comment, version.OcrVerdict, version.IsSigned);
         var documentName = await LoadDocumentNameAsync(documentId, cancellationToken);
-        await _audit.RecordAsync(AuditActions.DocumentDateChanged, "Document", documentId, documentName, $"Document date set to {date:yyyy-MM-dd} (version {version.VersionNumber})", cancellationToken: cancellationToken);
+        var stamp = version.DocumentTime is { } t ? $"{date:yyyy-MM-dd} {t:HH:mm} UTC" : $"{date:yyyy-MM-dd}";
+        await _audit.RecordAsync(AuditActions.DocumentDateChanged, "Document", documentId, documentName, $"Document date set to {stamp} (version {version.VersionNumber})", cancellationToken: cancellationToken);
         return Ok(await BuildResourceAsync(row, documentName, cancellationToken));
     }
 
     public class SetDocumentDateRequest
     {
         public string DocumentDate { get; set; } = string.Empty;
+
+        // Optional UTC time-of-day ("HH:mm"); null or empty CLEARS it (the "delete the time" action). The
+        // client normalizes typed input (0950 / 9:50 / 09:50) to HH:mm before sending (ADR "Optional time...").
+        public string? DocumentTime { get; set; }
+    }
+
+    // Null/empty means "no time" (date-only); otherwise the canonical wire form is HH:mm (24h, UTC).
+    private static TimeOnly? ParseOptionalDocumentTime(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        if (!TimeOnly.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var time))
+        {
+            throw new InvalidDocumentTimeException($"'{value}' is not a valid time (expected HH:mm, 24-hour UTC).");
+        }
+
+        return time;
     }
 
     private async Task<VersionRow?> LoadForReadAsync(Guid documentId, Guid versionId, CancellationToken cancellationToken)
@@ -777,7 +799,7 @@ public class DocumentVersionsController : ControllerBase
 
         var version = await _dbContext.DocumentVersions
             .Where(v => v.Id == versionId && v.DocumentId == documentId)
-            .Select(v => new { v.Status, v.VersionNumber, v.ObjectKey, v.Sha256Hash, v.CreatedAt, v.DocumentDate, v.CreatedByUserId, v.CreatedByServiceAccountId, v.OcrLanguages, v.Comment, v.OcrVerdict, v.IsSigned })
+            .Select(v => new { v.Status, v.VersionNumber, v.ObjectKey, v.Sha256Hash, v.CreatedAt, v.DocumentDate, v.DocumentTime, v.CreatedByUserId, v.CreatedByServiceAccountId, v.OcrLanguages, v.Comment, v.OcrVerdict, v.IsSigned })
             .SingleOrDefaultAsync(cancellationToken);
 
         if (version is null)
@@ -785,7 +807,7 @@ public class DocumentVersionsController : ControllerBase
             return null;
         }
 
-        return new VersionRow(versionId, documentId, version.Status, version.VersionNumber, version.ObjectKey, version.Sha256Hash, version.CreatedAt, version.DocumentDate, version.CreatedByUserId, version.CreatedByServiceAccountId, version.OcrLanguages, version.Comment, version.OcrVerdict, version.IsSigned);
+        return new VersionRow(versionId, documentId, version.Status, version.VersionNumber, version.ObjectKey, version.Sha256Hash, version.CreatedAt, version.DocumentDate, version.DocumentTime, version.CreatedByUserId, version.CreatedByServiceAccountId, version.OcrLanguages, version.Comment, version.OcrVerdict, version.IsSigned);
     }
 
     // The document's Name — used as the download filename (never the opaque object key). Loaded once per
@@ -898,6 +920,7 @@ public class DocumentVersionsController : ControllerBase
             CreatedAt = version.CreatedAt,
             CreatedByName = await ResolveCreatorNameAsync(version.CreatedByUserId, version.CreatedByServiceAccountId, cancellationToken),
             DocumentDate = version.DocumentDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            DocumentTime = version.DocumentTime?.ToString("HH:mm", CultureInfo.InvariantCulture),
             OcrLanguages = version.OcrLanguages,
             FileExtension = Path.GetExtension(version.ObjectKey),
             Comment = version.Comment,

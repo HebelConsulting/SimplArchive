@@ -216,6 +216,7 @@ public sealed class SearchablePdfWorker : BackgroundService
             ObjectKey = pdfKey,
             Sha256Hash = sha256Hash,
             DocumentDate = source.DocumentDate,
+            DocumentTime = source.DocumentTime,
             CreatedByUserId = source.CreatedByUserId,
             CreatedByServiceAccountId = source.CreatedByServiceAccountId,
             CreatedAt = DateTimeOffset.UtcNow,

@@ -256,6 +256,9 @@ public sealed class CalendarContactClassifier
         if (start is { } startDate)
         {
             version.DocumentDate = DateOnly.FromDateTime(startDate);
+            // A timed appointment carries its start time-of-day; an all-day event (DtStart.HasTime == false)
+            // stays date-only (ADR "Optional time on the document date"). Mirrors the source of the date above.
+            version.DocumentTime = occurrence.DtStart is { HasTime: true } ? TimeOnly.FromDateTime(startDate) : null;
         }
 
         return true;

@@ -52,6 +52,12 @@ public class DocumentVersion : ITenantScoped
     // date)".
     public DateOnly DocumentDate { get; set; }
 
+    // The document date's time-of-day, in UTC — null when the date carries no time (the "delete the time"
+    // state). Read together with DocumentDate: a document may be dated to the day (null) or to a precise
+    // instant (an e-mail's Date, an appointment's start, a METAR observation). Optional by design; historical
+    // versions and every date-only producer leave it null. See ADR "Optional time on the document date".
+    public TimeOnly? DocumentTime { get; set; }
+
     // Optional per-version OCR-language override for the TIFF → searchable-PDF conversion (ADR "Per-tenant /
     // per-version OCR languages") — a Tesseract "+"-joined multi-select of OcrLanguages.Supported codes. Null
     // = inherit the tenant's DefaultOcrLanguages. Set later via a mask field.

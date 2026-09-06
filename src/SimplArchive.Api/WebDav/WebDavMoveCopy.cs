@@ -396,6 +396,7 @@ internal static class WebDavMoveCopy
             CreatedByUserId = user.Id,
             CreatedAt = now,
             DocumentDate = version.DocumentDate,
+            DocumentTime = version.DocumentTime,
         };
         db.DocumentVersions.Add(newVersion);
         await db.SaveChangesAsync(ct);
