@@ -93,6 +93,18 @@ internal static class FieldValueValidation
 
                 break;
 
+            // A URL is validated for SHAPE, per value (ABI 0.6) — an absolute http/https URI, so a clickable
+            // link the clients render can never point at a scheme they must not open (file:, javascript:).
+            case FieldDataType.Url:
+                if (!Uri.TryCreate(fieldValue.Value, UriKind.Absolute, out var url)
+                    || (url.Scheme != Uri.UriSchemeHttp && url.Scheme != Uri.UriSchemeHttps))
+                {
+                    throw new InvalidOperationException(
+                        $"Field value '{fieldValue.Value}' for '{fieldDefinition.Name}' is not a valid http/https URL.");
+                }
+
+                break;
+
             case FieldDataType.Boolean:
             case FieldDataType.SingleSelect:
             case FieldDataType.MultiSelect:

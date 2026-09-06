@@ -62,6 +62,21 @@ public static class ObjectKeyPrefixes
     /// <summary>A user's WebDAV set-aside area: <c>tenants/{tenantId}/users/{userId}/set-aside/</c>.</summary>
     public static string UserSetAside(Guid tenantId, Guid userId) => $"{User(tenantId, userId)}set-aside/";
 
+    /// <summary>
+    /// A module's ephemeral staged-content store: <c>tenants/{tenantId}/fs/special/</c> (ABI 0.6) — where a
+    /// module stages transient artefacts (the flight-school DABS chart and METAR/TAF) via
+    /// <c>StageContentAsync</c>, swept when each document's <c>ExpiresAt</c> passes. Like the mail store, this
+    /// is NOT the archive: deleting here is just deleting, with no retention schedule or disposition review.
+    /// The <c>fs/special</c> segment is flight-school-scoped for now (its only caller); a second module that
+    /// stages content is when it earns a per-module segment, per the "don't generalise before the second
+    /// caller" rule.
+    /// </summary>
+    public static string ModuleStagedContent(Guid tenantId) => $"{Tenant(tenantId)}{ModuleStagedSegment}/";
+
+    /// <summary>The staged-content segment, exposed so <c>ObjectKeyBuilder.IsModuleStagedContentKey</c> can
+    /// recognise a key without rebuilding the tenant-qualified prefix.</summary>
+    public const string ModuleStagedSegment = "fs/special";
+
     /// <summary>A tenant's WORM audit segments: <c>tenants/{tenantId}/audit-worm/</c> (ADR 0356).</summary>
     public static string AuditWorm(Guid tenantId) => $"{Tenant(tenantId)}{AuditWormSegment}/";
 

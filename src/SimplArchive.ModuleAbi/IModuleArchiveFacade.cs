@@ -69,6 +69,47 @@ public interface IModuleArchiveFacade
     /// invariant applies exactly as it does to any other rename.
     /// </summary>
     Task RenameDocumentAsync(Guid documentId, string name, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Stages CONTENT bytes as an EPHEMERAL document under a module folder (ABI 0.6) — the "put a file in
+    /// the archive" power a module lacked (create/read/set-fields/rename could not carry a byte payload).
+    /// The bytes land in the tenant's own <c>fs/special/</c> area with an explicit <paramref name="expiresAt"/>
+    /// the core's ephemeral-content sweep honours, so a transient flight-planning artefact — a DABS chart, a
+    /// METAR — cannot outlive its validity. Pass <paramref name="replaceDocumentId"/> to replace an existing
+    /// staged document IN PLACE (a new confirmed version on the same document, its name/fields/expiry
+    /// refreshed) so a refresh never briefly shows two entries; null mints a new one. Returns the staged
+    /// document's id. Subject to the same tenant/consent gate and invariants as every other write.
+    /// </summary>
+    Task<Guid> StageContentAsync(
+        Guid parentFolderId,
+        Guid maskId,
+        string name,
+        byte[] content,
+        string extension,
+        DateTimeOffset expiresAt,
+        IReadOnlyDictionary<string, string>? fields = null,
+        Guid? replaceDocumentId = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Files CONTENT bytes as a PERMANENT document under a module folder (ABI 0.6) — the companion to
+    /// <see cref="StageContentAsync"/> for content that must persist rather than expire. This is how a module
+    /// files REFERENCE DATA it ships and then reads back through <see cref="GetDocumentContentAsync"/>: the
+    /// Europe ICAO aerodrome list the METAR/TAF autocomplete resolves against, filed as an ordinary archive
+    /// document an administrator can inspect — and correct or extend — without a module redeploy. Writes to
+    /// the tenant's normal archive keyspace (never <c>fs/special/</c>), with no expiry and no sweep. Pass
+    /// <paramref name="replaceDocumentId"/> to replace an existing one IN PLACE (a new version) — how a
+    /// heal-on-upgrade refreshes the shipped list against an admin's edits. Returns the document's id.
+    /// </summary>
+    Task<Guid> CreateContentDocumentAsync(
+        Guid parentFolderId,
+        Guid maskId,
+        string name,
+        byte[] content,
+        string extension,
+        IReadOnlyDictionary<string, string>? fields = null,
+        Guid? replaceDocumentId = null,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>A document as the facade shows it: identity, mask, and its index fields by name.</summary>

@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Documents;
@@ -326,6 +327,172 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         });
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
+
+    public Task<Guid> StageContentAsync(
+        Guid parentFolderId, Guid maskId, string name, byte[] content, string extension, DateTimeOffset expiresAt,
+        IReadOnlyDictionary<string, string>? fields = null, Guid? replaceDocumentId = null, CancellationToken cancellationToken = default) =>
+        // Ephemeral: keyed under the tenant's fs/special/ store, and the document carries the expiry the sweep honours.
+        WriteContentAsync(
+            parentFolderId, maskId, name, content, extension,
+            keyFor: (tenantId, storageFolderId, versionId) => ObjectKeyBuilder.ModuleStagedContentKey(tenantId, storageFolderId, versionId, extension),
+            expiresAt, fields, replaceDocumentId, cancellationToken);
+
+    public Task<Guid> CreateContentDocumentAsync(
+        Guid parentFolderId, Guid maskId, string name, byte[] content, string extension,
+        IReadOnlyDictionary<string, string>? fields = null, Guid? replaceDocumentId = null, CancellationToken cancellationToken = default) =>
+        // Permanent: the ordinary archive keyspace, no expiry — reference data the module files and reads back.
+        WriteContentAsync(
+            parentFolderId, maskId, name, content, extension,
+            keyFor: (tenantId, storageFolderId, versionId) => ObjectKeyBuilder.Build(tenantId, DateTimeOffset.UtcNow, storageFolderId, versionId, extension),
+            expiresAt: null, fields, replaceDocumentId, cancellationToken);
+
+    /// <summary>
+    /// The one content-write both <see cref="StageContentAsync"/> (ephemeral) and
+    /// <see cref="CreateContentDocumentAsync"/> (permanent) share: create-or-replace the document, PUT the
+    /// bytes at the key the caller's <paramref name="keyFor"/> chooses, and mint a CONFIRMED version
+    /// (version number, SHA-256, size) — the minimal finalize a self-produced artefact needs, without the
+    /// upload finalizer's indexing/WORM/quota tail, which transient planning data and small reference data
+    /// neither want nor should pay for. The only differences between the two public methods are the key and
+    /// whether an <paramref name="expiresAt"/> is stamped; everything else lives here exactly once.
+    /// </summary>
+    private async Task<Guid> WriteContentAsync(
+        Guid parentFolderId,
+        Guid maskId,
+        string name,
+        byte[] content,
+        string extension,
+        Func<Guid, Guid, Guid, string> keyFor,
+        DateTimeOffset? expiresAt,
+        IReadOnlyDictionary<string, string>? fields,
+        Guid? replaceDocumentId,
+        CancellationToken cancellationToken)
+    {
+        if (_objectStorage is null)
+        {
+            throw new InvalidOperationException(
+                "Content writes need an object-storage client; the host wires one — a test facade that stages content must supply it.");
+        }
+
+        var (userId, serviceAccountId) = CallerIdentity();
+        var now = DateTimeOffset.UtcNow;
+
+        Document document;
+        Guid maskVersionId;
+        if (replaceDocumentId is { } replaceId)
+        {
+            document = await _dbContext.Documents.SingleOrDefaultAsync(d => d.Id == replaceId, cancellationToken)
+                ?? throw new ArgumentException($"Document {replaceId} to replace does not exist.", nameof(replaceDocumentId));
+            maskVersionId = document.MaskVersionId
+                ?? throw new InvalidOperationException($"Document {replaceId} wears no mask; only a module-mask document can be replaced.");
+            document.Name = name;
+            document.ExpiresAt = expiresAt;
+        }
+        else
+        {
+            var parent = await _dbContext.Documents.SingleOrDefaultAsync(d => d.Id == parentFolderId, cancellationToken)
+                ?? throw new ArgumentException($"Parent document {parentFolderId} does not exist.", nameof(parentFolderId));
+            var maskVersion = await CurrentMaskVersionAsync(maskId, cancellationToken);
+            maskVersionId = maskVersion.Id;
+            document = new Document
+            {
+                Id = Guid.NewGuid(),
+                TenantId = parent.TenantId,
+                ParentId = parent.Id,
+                Name = name,
+                MaskVersionId = maskVersion.Id,
+                CreatedByUserId = userId,
+                CreatedByServiceAccountId = serviceAccountId,
+                CreatedAt = now,
+                ExpiresAt = expiresAt,
+            };
+            _dbContext.Documents.Add(document);
+        }
+
+        if (fields is not null)
+        {
+            await UpsertFieldsAsync(document, maskVersionId, fields, cancellationToken);
+        }
+
+        var versionId = Guid.NewGuid();
+        var objectKey = keyFor(document.TenantId, document.StorageFolderId, versionId);
+        using (var stream = new MemoryStream(content, writable: false))
+        {
+            await _objectStorage.PutObjectAsync(objectKey, stream, ContentTypeFor(extension), cancellationToken);
+        }
+
+        var nextVersionNumber = 1 + (await _dbContext.DocumentVersions
+            .Where(v => v.DocumentId == document.Id && v.VersionNumber != null)
+            .Select(v => v.VersionNumber)
+            .MaxAsync(cancellationToken) ?? 0);
+
+        var version = new DocumentVersion
+        {
+            Id = versionId,
+            TenantId = document.TenantId,
+            DocumentId = document.Id,
+            ObjectKey = objectKey,
+            Status = DocumentVersionStatus.Confirmed,
+            VersionNumber = nextVersionNumber,
+            Sha256Hash = Convert.ToHexStringLower(SHA256.HashData(content)),
+            SizeBytes = content.Length,
+            CreatedByUserId = userId,
+            CreatedByServiceAccountId = serviceAccountId,
+            CreatedAt = now,
+            DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
+        };
+        _dbContext.DocumentVersions.Add(version);
+        document.CurrentVersionId = version.Id; // pin the new version current — the replace case shows the fresh bytes at once
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return document.Id;
+    }
+
+    /// <summary>Upserts index fields by NAME within the document's own mask version (the vCard-UID lesson) —
+    /// shared by the content-write path; does not save (its caller batches the write).</summary>
+    private async Task UpsertFieldsAsync(Document document, Guid maskVersionId, IReadOnlyDictionary<string, string> fields, CancellationToken cancellationToken)
+    {
+        foreach (var (name, value) in fields)
+        {
+            var definitionId = await _dbContext.FieldDefinitions
+                .Where(f => f.MaskVersionId == maskVersionId && f.Name == name)
+                .Select(f => (Guid?)f.Id)
+                .SingleOrDefaultAsync(cancellationToken)
+                ?? throw new ArgumentException($"The document's mask defines no field named '{name}'.", nameof(fields));
+
+            var existing = await _dbContext.FieldValues
+                .SingleOrDefaultAsync(v => v.DocumentId == document.Id && v.FieldDefinitionId == definitionId, cancellationToken);
+            if (existing is null)
+            {
+                _dbContext.FieldValues.Add(new FieldValue
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = document.TenantId,
+                    DocumentId = document.Id,
+                    FieldDefinitionId = definitionId,
+                    Value = value,
+                });
+            }
+            else
+            {
+                existing.Value = value;
+            }
+        }
+    }
+
+    // The stored object's content type from its extension — enough for the artefacts a module stages (a DABS
+    // PDF, a METAR text, a JSON reference list); the preview pipeline sniffs magic bytes regardless, so an
+    // unknown type degrades to octet-stream rather than misclassifying.
+    private static string ContentTypeFor(string extension) =>
+        extension.TrimStart('.').ToLowerInvariant() switch
+        {
+            "pdf" => "application/pdf",
+            "json" => "application/json",
+            "xml" => "application/xml",
+            "txt" => "text/plain",
+            "html" or "htm" => "text/html",
+            "png" => "image/png",
+            _ => "application/octet-stream",
+        };
 
     private (Guid? UserId, Guid? ServiceAccountId) CallerIdentity()
     {

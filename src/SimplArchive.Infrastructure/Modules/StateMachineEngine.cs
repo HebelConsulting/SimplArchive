@@ -16,7 +16,10 @@ public sealed class StateMachineCatalog : IStateMachineDefinitions
     private readonly Dictionary<string, MachineDefinition> _machines = new(StringComparer.Ordinal);
 
     /// <summary>One transition: the button caption, the guard, the module's handler.</summary>
-    public sealed record TransitionDefinition(string Label, IReadOnlyList<StateCondition> Guard, Func<TransitionContext, Task> Handler);
+    // AutoRefreshOnOpen (ABI 0.6): the clients invoke this transition the moment the subject folder is opened,
+    // rather than waiting for a button — the DABS/METAR populate-on-open hook. The subject resource advertises
+    // it with the marker so the clients know which action to auto-run.
+    public sealed record TransitionDefinition(string Label, IReadOnlyList<StateCondition> Guard, Func<TransitionContext, Task> Handler, bool AutoRefreshOnOpen = false);
 
     /// <summary>One declared machine: whose it is, its subject mask, its statuses, its transitions.</summary>
     /// <remarks><see cref="ModuleId"/> is what the wire surface gates activation on (ADR 0737): a
@@ -73,6 +76,14 @@ public sealed class StateMachineCatalog : IStateMachineDefinitions
         public IStateMachineBuilder Escalates(string statusName, Func<TransitionContext, Task<IReadOnlyList<EscalationNotice>>> handler)
         {
             definition.Escalations[statusName] = handler;
+            return this;
+        }
+
+        public IStateMachineBuilder AutoRefreshOnOpen(string name, string label, Func<TransitionContext, Task> handler)
+        {
+            // A transition like any other (executable, refusable, listed) but flagged auto-invoke-on-open —
+            // ungated, because a populate has nothing to refuse (ABI 0.6).
+            definition.Transitions[name] = new TransitionDefinition(label, [], handler, AutoRefreshOnOpen: true);
             return this;
         }
     }

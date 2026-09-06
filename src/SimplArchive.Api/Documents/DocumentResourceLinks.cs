@@ -142,8 +142,15 @@ public sealed class DocumentResourceLinks
 
                 foreach (var (transitionName, transition) in machine.Transitions)
                 {
+                    // An auto-refresh-on-open transition (ABI 0.6) wears a DISTINCT rel prefix so a client
+                    // knows to POST it the moment the folder is opened (the DABS/METAR populate-on-open hook),
+                    // rather than only on a button press. Same href and gate as any transition; the prefix is
+                    // the only signal, so a client that does not understand it simply renders a button.
+                    var rel = transition.AutoRefreshOnOpen
+                        ? $"machine-auto-refresh:{machine.MachineId}:{transitionName}"
+                        : $"machine:{machine.MachineId}:{transitionName}";
                     links.Add(new Link(
-                        $"machine:{machine.MachineId}:{transitionName}",
+                        rel,
                         $"/api/documents/{documentId}/machine/{machine.MachineId}/transitions/{transitionName}",
                         "POST",
                         transition.Label));

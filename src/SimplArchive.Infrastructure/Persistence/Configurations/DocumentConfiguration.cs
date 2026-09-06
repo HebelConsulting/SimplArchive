@@ -114,6 +114,11 @@ public class DocumentConfiguration : IEntityTypeConfiguration<Document>
         builder.HasIndex(d => d.StagedAt)
             .HasFilter("\"StagedAt\" IS NOT NULL");
 
+        // The ephemeral-content sweep (ABI 0.6) scans the small set of staged module documents by their
+        // expiry; a partial index keeps it off the (overwhelmingly null) archive rows, exactly like StagedAt.
+        builder.HasIndex(d => d.ExpiresAt)
+            .HasFilter("\"ExpiresAt\" IS NOT NULL");
+
         // At most one personal repository per user (NULL != NULL exempts ordinary repositories).
         builder.HasIndex(d => new { d.TenantId, d.PersonalOfUserId })
             .IsUnique()

@@ -67,6 +67,15 @@ public class Document : ITenantScoped, IConcurrencyTracked, ISoftDeletable
     // this been in TRASH", which is the question the retention window actually asks.
     public DateTimeOffset? StagedAt { get; set; }
 
+    // When this ephemeral module-staged document (ADR "Module content + ephemeral staging", ABI 0.6) must be
+    // purged — the explicit expiry a module gives every transient flight-planning artefact it stages via
+    // StageContentAsync (a DABS chart's validity date, a METAR's short TTL). The EphemeralContentSweepWorker
+    // reaps rows (and their fs/special/ objects) whose ExpiresAt has passed. Null for every archive document
+    // and every mail item — distinct from StagedAt's retention CLOCK: this is a fixed instant the content
+    // cannot outlive, not a "how long since it landed" window. Unlike a filed document, a staged one is never
+    // promoted in place; the copy2repo move is what makes a permanent copy (its ExpiresAt is then irrelevant).
+    public DateTimeOffset? ExpiresAt { get; set; }
+
     // A per-document retention extension (ADR "Retention review-before-disposition"): when a records manager
     // Extends a document during disposition review, this holds the new "retain until" date. If set and still in
     // the future, the document is not eligible for disposition (neither the auto-sweep nor a manual dispose),

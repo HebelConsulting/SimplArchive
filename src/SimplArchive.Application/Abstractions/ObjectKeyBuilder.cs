@@ -55,6 +55,24 @@ public static class ObjectKeyBuilder
         return $"{ObjectKeyPrefixes.MailboxMail(tenantId, mailboxDocumentId)}{storageFolderId}/{versionId}{suffix}";
     }
 
+    // The EPHEMERAL key of a module-staged artefact (ABI 0.6), under the module staged-content prefix rather
+    // than the archive's year buckets: tenants/{tenantId}/fs/special/{storageFolderId}/{versionId}{ext}. Same
+    // {storageFolderId}/{versionId} tail as the archive and mail keys, so DerivedKey groups a rendition beside
+    // it and the copy2repo move promotes it to a permanent archive key with the same shape.
+    public static string ModuleStagedContentKey(Guid tenantId, Guid storageFolderId, Guid versionId, string? extension = null)
+    {
+        var suffix = string.IsNullOrWhiteSpace(extension)
+            ? string.Empty
+            : extension.StartsWith('.') ? extension : $".{extension}";
+
+        return $"{ObjectKeyPrefixes.ModuleStagedContent(tenantId)}{storageFolderId}/{versionId}{suffix}";
+    }
+
+    // Whether a key names module ephemeral staged content — asked of the key (not the folder), the same way
+    // IsEphemeralMailKey is, so the sweep and the copy2repo move can answer it holding only a version's key.
+    public static bool IsModuleStagedContentKey(string objectKey) =>
+        objectKey.Contains($"/{ObjectKeyPrefixes.ModuleStagedSegment}/", StringComparison.Ordinal);
+
     // Whether a key names ephemeral mail storage — the question "has this document's content crossed into the
     // archive yet?", asked of the key rather than of the folder, because the folder is what a move is changing.
     //

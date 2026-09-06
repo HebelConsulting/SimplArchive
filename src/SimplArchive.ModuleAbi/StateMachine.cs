@@ -49,6 +49,18 @@ public interface IStateMachineBuilder
     /// The status arithmetic (is it Expiring?) stays the engine's; who-and-what stays the module's.
     /// </summary>
     IStateMachineBuilder Escalates(string statusName, Func<TransitionContext, Task<IReadOnlyList<EscalationNotice>>> handler);
+
+    /// <summary>
+    /// A transition the clients invoke AUTOMATICALLY when a subject is opened (ABI 0.6) — the populate-on-open
+    /// hook. Same shape, handler and engine-owned transaction as <see cref="Transition"/> (it IS a transition,
+    /// reachable by its label like any other), but flagged so the subject resource advertises it as
+    /// auto-invoke and both clients run it the moment the folder is opened rather than waiting for a button.
+    /// This is how "opening the folder shows today's DABS" works without inventing a second reactive hook: the
+    /// open IS the lazy, user-triggered fetch. Idempotent by contract — it runs on every open, so the handler
+    /// MUST no-op when nothing changed (the ETag / issue-time check), never blindly re-fetch or duplicate.
+    /// Ungated by design (empty guard): a populate has nothing to refuse; it either finds new data or does not.
+    /// </summary>
+    IStateMachineBuilder AutoRefreshOnOpen(string name, string label, Func<TransitionContext, Task> handler);
 }
 
 /// <summary>One reminder the sweep should deliver (ABI 0.5): a recipient e-mail the core resolves to a tenant

@@ -191,4 +191,66 @@ public class FieldValueFormatRangeTests
 
         Assert.Equal(2, affected);
     }
+
+    [Theory]
+    [InlineData("not-a-url")]
+    [InlineData("file:///etc/passwd")]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("ftp://example.com/x")]
+    public async Task Rejects_a_url_value_that_is_not_an_absolute_http_or_https_url(string value)
+    {
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        using (var setupContext = CreateContext(connection)) await setupContext.Database.EnsureCreatedAsync();
+
+        var (tenantId, maskVersionId, documentId) = await SeedTenantAsync(connection);
+        var fieldId = Guid.NewGuid();
+        using (var seedContext = CreateContext(connection))
+        {
+            seedContext.FieldDefinitions.Add(new FieldDefinition
+            {
+                Id = fieldId,
+                TenantId = tenantId,
+                MaskVersionId = maskVersionId,
+                Name = "Source",
+                DataType = FieldDataType.Url,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await seedContext.SaveChangesAsync();
+        }
+
+        using var context = CreateContext(connection, tenantId);
+        context.FieldValues.Add(new FieldValue { Id = Guid.NewGuid(), TenantId = tenantId, DocumentId = documentId, FieldDefinitionId = fieldId, Value = value });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
+    }
+
+    [Fact]
+    public async Task Accepts_an_absolute_https_url()
+    {
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        using (var setupContext = CreateContext(connection)) await setupContext.Database.EnsureCreatedAsync();
+
+        var (tenantId, maskVersionId, documentId) = await SeedTenantAsync(connection);
+        var fieldId = Guid.NewGuid();
+        using (var seedContext = CreateContext(connection))
+        {
+            seedContext.FieldDefinitions.Add(new FieldDefinition
+            {
+                Id = fieldId,
+                TenantId = tenantId,
+                MaskVersionId = maskVersionId,
+                Name = "Source",
+                DataType = FieldDataType.Url,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await seedContext.SaveChangesAsync();
+        }
+
+        using var context = CreateContext(connection, tenantId);
+        context.FieldValues.Add(new FieldValue { Id = Guid.NewGuid(), TenantId = tenantId, DocumentId = documentId, FieldDefinitionId = fieldId, Value = "https://www.skybriefing.com" });
+
+        Assert.Equal(1, await context.SaveChangesAsync());
+    }
 }

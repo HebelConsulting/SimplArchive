@@ -146,6 +146,11 @@ public static class DependencyInjection
         services.AddSingleton<Mail.EphemeralMailSweepWorker>();
         services.AddHostedService(sp => sp.GetRequiredService<Mail.EphemeralMailSweepWorker>());
 
+        // The module-staged ephemeral-content sweep (ABI 0.6) — same singleton + hosted-service shape so a test
+        // can resolve it and drive one pass directly.
+        services.AddSingleton<Modules.EphemeralContentSweepWorker>();
+        services.AddHostedService(sp => sp.GetRequiredService<Modules.EphemeralContentSweepWorker>());
+
         // The intray ingest pipeline (ADR 0576). REGISTRATION ORDER IS THE PIPELINE ORDER: straightening must
         // run before patch-code detection (#492), because a patch code is horizontal bars read by a projection
         // profile and two degrees of rotation flattens it. Adding a processor here is choosing where in the
@@ -196,6 +201,13 @@ public static class DependencyInjection
             .ConfigurePrimaryHttpMessageHandler(provider =>
                 Http.GuardedOutboundHandler.Create(provider.GetRequiredService<IOutboundAddressPolicy>()));
         services.AddHostedService<Audit.AuditWebhookWorker>();
+
+        // The guarded per-module outbound client (ABI 0.6): same SSRF-guarded primary handler as the webhook
+        // sender, plus a per-acting-module host allowlist the client itself enforces (ModuleHttpClient). One
+        // registration serves every module; a module reaches only the hosts it declared in OutboundHosts.
+        services.AddHttpClient<ModuleAbi.IModuleHttpClient, Modules.ModuleHttpClient>()
+            .ConfigurePrimaryHttpMessageHandler(provider =>
+                Http.GuardedOutboundHandler.Create(provider.GetRequiredService<IOutboundAddressPolicy>()));
         services.AddScoped<ISensitivityLabelSeeder, Documents.SensitivityLabelSeeder>();
         services.AddScoped<INotificationService, Notifications.NotificationService>();
         // Default no-op real-time notifier (ADR "Real-time notifications (SignalR)"); the Api overrides this with

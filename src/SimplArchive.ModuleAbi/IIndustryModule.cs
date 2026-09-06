@@ -83,4 +83,14 @@ public interface IIndustryModule
     /// Default: none — a module may be reachable purely through its transitions and masks.
     /// </summary>
     IReadOnlyList<ModuleRootLink> RootLinks => [];
+
+    /// <summary>
+    /// The external hosts this module's <see cref="IModuleHttpClient"/> may reach (ABI 0.6) — the allowlist
+    /// the core's SSRF policy (ADR 0717) enforces on every request the module makes. A host not named here
+    /// is refused before any request leaves the process, so a module's network egress is declared up front
+    /// and auditable, exactly as its archive reach is enumerable through the facade. Bare host names
+    /// (<c>aviationweather.gov</c>, <c>www.skybriefing.com</c>), no scheme or path. Default: none — a module
+    /// that fetches nothing declares nothing, and its injected client refuses every host.
+    /// </summary>
+    IReadOnlyList<string> OutboundHosts => [];
 }

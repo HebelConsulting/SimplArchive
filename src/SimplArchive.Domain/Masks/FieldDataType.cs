@@ -40,4 +40,17 @@ public enum FieldDataType
     /// </para>
     /// </remarks>
     EmailAddress,
+
+    /// <summary>
+    /// An absolute http/https URL, validated for shape (ABI 0.6) — rendered as a clickable link in both
+    /// clients' detail panes (the DABS folder's link to its source portal).
+    /// </summary>
+    /// <remarks>
+    /// <b>Appended last, and every future value must be too</b> — the ordinal is persisted in
+    /// <c>FieldDefinitions.DataType</c>, so inserting anywhere but the end silently re-types every stored
+    /// field. Distinct from a <see cref="Text"/> field with a URL <c>FormatPattern</c>, the same way
+    /// <see cref="EmailAddress"/> is: the meaning (this IS a link, render it clickable) travels with the type
+    /// rather than with a pattern a tenant could edit away.
+    /// </remarks>
+    Url,
 }

@@ -23,9 +23,10 @@ public sealed record ModuleMaskSeed(
 /// <summary>One field of a module mask. The type vocabulary mirrors the core's field catalog.</summary>
 /// <param name="Name">The field name, unique within the mask.</param>
 /// <param name="DataType">One of the core's field data types by NAME ("Text", "Number", "Date", "DateTime",
-/// "Boolean", "SingleSelect", "MultiSelect", "EmailAddress") — a string rather than a shared enum so the
-/// ABI does not pin the core's enum ordinals into every compiled module (appending a core type must never
-/// re-type a module's stored fields).</param>
+/// "Boolean", "SingleSelect", "MultiSelect", "EmailAddress", "Url") — a string rather than a shared enum so
+/// the ABI does not pin the core's enum ordinals into every compiled module (appending a core type must never
+/// re-type a module's stored fields). "Url" (ABI 0.6) renders as a clickable link in both clients' detail
+/// panes — the DABS folder's link to its source portal.</param>
 /// <param name="IsRequired">Refused at activation when true and the mask is already worn — the same
 /// protection the core's well-known heal has (a required field arriving later would invalidate documents).</param>
 /// <param name="IsList">A repeatable field (the counters list on an Aircraft, ADR module-0004).</param>
