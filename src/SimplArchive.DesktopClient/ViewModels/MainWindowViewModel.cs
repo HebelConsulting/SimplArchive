@@ -321,6 +321,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     // edit toggle on the detail pane"). OCR languages shows only for a TIFF-sourced document.
     [ObservableProperty] private string _sysName = string.Empty;
     [ObservableProperty][NotifyPropertyChangedFor(nameof(SysDocumentDateText))] private DateTime? _sysDocumentDate;
+
+    // The document date's optional UTC time (ADR 0758): SysDocumentTime is the wire "HH:mm" (display);
+    // DocumentTimeEntry is what the user TYPES in edit mode (keyboard-first), normalized on save.
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(SysDocumentDateText))] private string? _sysDocumentTime;
+    [ObservableProperty] private string _documentTimeEntry = string.Empty;
     [ObservableProperty] private string _sysCreated = string.Empty;
     [ObservableProperty] private string _sysCreatedBy = string.Empty;
     [ObservableProperty] private string _sysFileExtension = string.Empty;
@@ -448,8 +453,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         }
     }
 
-    // Read-only display of the document date (edit mode uses the DatePicker bound to SysDocumentDate).
-    public string SysDocumentDateText => SysDocumentDate?.ToString("yyyy-MM-dd") ?? "";
+    // Read-only display of the document date + its optional UTC time (edit mode uses the DatePicker + a typed
+    // time field). "2026-09-06" or "2026-09-06 09:50 UTC".
+    public string SysDocumentDateText => DocumentDateFormat.Display(SysDocumentDate?.ToString("yyyy-MM-dd"), SysDocumentTime);
 
     private Guid _sysCurrentVersionId;
 

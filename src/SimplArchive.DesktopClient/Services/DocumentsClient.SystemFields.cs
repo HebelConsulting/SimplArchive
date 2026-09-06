@@ -14,7 +14,7 @@ public sealed partial class DocumentsClient
     // DocumentDateHref is the current version's own `document-date` address — the detail pane's Save follows it
     // instead of rebuilding a path out of the two ids beside it (ADR 0543, issue #416).
     public sealed record SystemFields(
-        Guid CurrentVersionId, int CurrentVersionNumber, DateTimeOffset CreatedAt, string CreatedByName, string DocumentDate,
+        Guid CurrentVersionId, int CurrentVersionNumber, DateTimeOffset CreatedAt, string CreatedByName, string DocumentDate, string? DocumentTime,
         // Renamed from HasTiffVersion with the #999 widening: an OCR candidate is any unsigned TIFF or PDF —
         // a flag named for TIFFs that also means PDFs is the next reader's trap (the issue's own warning).
         bool IsOcrCandidate, string? OcrLanguages, string FileExtension, string? DocumentDateHref = null, string? WorkflowStatus = null,
@@ -78,6 +78,7 @@ public sealed partial class DocumentsClient
             cur.TryGetProperty("createdAt", out var ca) ? ca.GetDateTimeOffset() : default,
             Str(cur, "createdByName"),
             Str(cur, "documentDate"),
+            SimplArchiveApiClient.StrOrNull(cur, "documentTime"),
             tiff is not null,
             ocr,
             Str(cur, "fileExtension"),

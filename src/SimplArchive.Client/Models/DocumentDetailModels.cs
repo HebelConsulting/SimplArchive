@@ -58,6 +58,9 @@ public record VersionResponse
     public DateTimeOffset CreatedAt { get; set; }
     public string? CreatedByName { get; set; }
     public string? DocumentDate { get; set; }
+
+    // Optional UTC time-of-day ("HH:mm") beside the date, or null when date-only (ADR 0758).
+    public string? DocumentTime { get; set; }
     public string? OcrLanguages { get; set; }
     public string? FileExtension { get; set; }
     public string? ObjectKey { get; set; }

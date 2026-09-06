@@ -1,5 +1,6 @@
 @using SimplArchive.Client.Models
 @using SimplArchive.Client.Services
+@using SimplArchive.Presentation
 @inject DetailState Detail
 @inject DetailCatalogs Catalogs
 
@@ -94,10 +95,14 @@
                         @if (IsEditing)
                         {
                             <MudDatePicker @bind-Date="Detail.EditDocumentDate" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                            @* Keyboard-first time entry (ADR 0758 / the typed-not-picked principle): a plain
+                               text field the user types HH:mm into; empty clears the time. UTC. *@
+                            <MudTextField @bind-Value="Detail.EditDocumentTime" Placeholder="HH:mm UTC" Clearable="true"
+                                          Margin="Margin.Dense" Variant="Variant.Outlined" Class="mt-1" />
                         }
                         else
                         {
-                            @(Detail.SysDocumentDate?.ToString("yyyy-MM-dd"))
+                            @DocumentDateFormat.Display(Detail.SysDocumentDate?.ToString("yyyy-MM-dd"), Detail.SysDocumentTime)
                         }
                     </td>
                 </tr>

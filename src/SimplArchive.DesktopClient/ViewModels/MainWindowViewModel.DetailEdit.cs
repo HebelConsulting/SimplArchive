@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SimplArchive.DesktopClient.Services;
 using SimplArchive.Localization;
+using SimplArchive.Presentation;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -48,6 +49,7 @@ public sealed partial class MainWindowViewModel
     private Guid? _originalMaskId;
     private string _originalName = string.Empty;
     private DateTime? _originalDocumentDate;
+    private string? _originalDocumentTime;
     private bool _loadingMaskEdit;
 
     [RelayCommand]
@@ -67,6 +69,8 @@ public sealed partial class MainWindowViewModel
             // can restore them.
             _originalName = SysName;
             _originalDocumentDate = SysDocumentDate;
+            _originalDocumentTime = SysDocumentTime;
+            DocumentTimeEntry = SysDocumentTime ?? string.Empty;
             _stagedOcrCodes = _sysOcrCodes;
             RebuildSensitivityPicker();
             SelectedSensitivityItem = SensitivityPickerItems.FirstOrDefault(i => i.Id == DetailSensitivityId) ?? SensitivityPickerItems.FirstOrDefault();
@@ -165,15 +169,29 @@ public sealed partial class MainWindowViewModel
             catch (Exception e) { failures.Add($"name ({e.Message})"); }
         }
 
-        // Document date (on the current version).
-        if (_sysDocumentDateHref is { } dateHref && SysDocumentDate is { } date && date != _originalDocumentDate)
+        // Document date + its optional UTC time (on the current version). The time is TYPED (ADR 0758 /
+        // keyboard-first): normalize it, and PUT when the date OR the time changed.
+        if (_sysDocumentDateHref is { } dateHref && SysDocumentDate is { } date)
         {
-            try
+            if (!DocumentDateFormat.TryParseTypedTime(DocumentTimeEntry, out var parsedTime))
             {
-                await _api.Versions.SetDocumentDateAsync(dateHref, date.ToString("yyyy-MM-dd"));
-                _originalDocumentDate = date;
+                failures.Add("document time (expected HH:mm)");
             }
-            catch (Exception e) { failures.Add($"document date ({e.Message})"); }
+            else
+            {
+                var timeStr = DocumentDateFormat.FormatTime(parsedTime);
+                if (date != _originalDocumentDate || !string.Equals(timeStr, _originalDocumentTime, StringComparison.Ordinal))
+                {
+                    try
+                    {
+                        await _api.Versions.SetDocumentDateAsync(dateHref, date.ToString("yyyy-MM-dd"), timeStr);
+                        _originalDocumentDate = date;
+                        SysDocumentTime = _originalDocumentTime = timeStr;
+                        DocumentTimeEntry = timeStr ?? string.Empty;
+                    }
+                    catch (Exception e) { failures.Add($"document date ({e.Message})"); }
+                }
+            }
         }
 
         // OCR languages (only if the ordered selection changed — this re-runs the searchable-PDF conversion).
@@ -302,6 +320,8 @@ public sealed partial class MainWindowViewModel
         // Restore the staged system fields to their loaded values.
         SysName = _originalName;
         SysDocumentDate = _originalDocumentDate;
+        SysDocumentTime = _originalDocumentTime;
+        DocumentTimeEntry = _originalDocumentTime ?? string.Empty;
         _stagedOcrCodes = _sysOcrCodes;
         SysOcrLanguages = (_ocrLanguages?.Describe(_sysOcrCodes) ?? "");
 

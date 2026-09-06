@@ -99,6 +99,8 @@ public sealed partial class MainWindowViewModel
         await LoadWorkflowTransitionsAsync(fields.WorkflowStatus, versionsHref);
         SysFileExtension = fields.FileExtension;
         SysDocumentDate = DateTime.TryParse(fields.DocumentDate, out var d) ? d.Date : null;
+        SysDocumentTime = fields.DocumentTime;
+        DocumentTimeEntry = fields.DocumentTime ?? string.Empty;
         SysOcrCandidate = fields.IsOcrCandidate;
         SetOcrStatus(fields.OcrVerdict, fields.MakeSearchableHref);
 

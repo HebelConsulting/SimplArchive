@@ -51,9 +51,9 @@ public sealed class VersionsClient(ApiCore core)
         return null;
     }
     // Sets a version's document (issuing) date ("yyyy-MM-dd") at the address the version row advertised.
-    public async Task SetDocumentDateAsync(string documentDateHref, string documentDate, CancellationToken cancellationToken = default)
+    public async Task SetDocumentDateAsync(string documentDateHref, string documentDate, string? documentTime = null, CancellationToken cancellationToken = default)
     {
-        var response = await _core.Http.PutAsJsonAsync(documentDateHref, new { documentDate }, cancellationToken);
+        var response = await _core.Http.PutAsJsonAsync(documentDateHref, new { documentDate, documentTime }, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             throw new ApiActionException($"Could not set the document date ({(int)response.StatusCode}).");

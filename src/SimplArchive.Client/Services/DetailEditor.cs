@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using SimplArchive.Client.Hypermedia;
 using SimplArchive.Client.Models;
 
+using SimplArchive.Presentation;
+
 namespace SimplArchive.Client.Services;
 
 /// <summary>Which part of a pane-level save the server refused. The caller names them (see the remarks).</summary>
@@ -107,6 +109,7 @@ public sealed class DetailEditor(HttpClient http, DetailState detail, DetailCata
         {
             detail.EditName = detail.OrigName = detail.SysName;
             detail.EditDocumentDate = detail.OrigDocumentDate = detail.SysDocumentDate;
+            detail.EditDocumentTime = detail.OrigDocumentTime = detail.SysDocumentTime;
             detail.EditOcrCodes = [.. detail.SysOcrCodes];
             detail.OrigOcrCodes = [.. detail.SysOcrCodes];
             detail.EditMaskId = detail.OrigMaskId = detail.MaskId;
@@ -241,10 +244,28 @@ public sealed class DetailEditor(HttpClient http, DetailState detail, DetailCata
 
             // The address is the one the current version's row advertised when the detail loaded (`document-date`,
             // captured in DeriveSystemFields) — its absence means the row offered no such edit here (ADR 0543).
-            if (detail.SysHasVersion && detail.SysDocumentDateHref is { } ddHref && detail.EditDocumentDate is { } dd && dd != detail.OrigDocumentDate)
+            if (detail.SysHasVersion && detail.SysDocumentDateHref is { } ddHref && detail.EditDocumentDate is { } dd)
             {
-                var resp = await http.PutAsJsonAsync(ddHref, new { documentDate = dd.ToString("yyyy-MM-dd") });
-                if (resp.IsSuccessStatusCode) { detail.SysDocumentDate = detail.OrigDocumentDate = dd; } else { failures.Add(DetailSaveFailure.DocumentDate); }
+                // The time is TYPED (ADR 0758 / the keyboard-first principle); normalize it, and PUT when the
+                // date OR the time changed. A malformed typed time is a save failure the user corrects inline.
+                if (!DocumentDateFormat.TryParseTypedTime(detail.EditDocumentTime, out var parsedTime))
+                {
+                    failures.Add(DetailSaveFailure.DocumentDate);
+                }
+                else
+                {
+                    var timeStr = DocumentDateFormat.FormatTime(parsedTime);
+                    if (dd != detail.OrigDocumentDate || !string.Equals(timeStr, detail.OrigDocumentTime, StringComparison.Ordinal))
+                    {
+                        var resp = await http.PutAsJsonAsync(ddHref, new { documentDate = dd.ToString("yyyy-MM-dd"), documentTime = timeStr });
+                        if (resp.IsSuccessStatusCode)
+                        {
+                            detail.SysDocumentDate = detail.OrigDocumentDate = dd;
+                            detail.SysDocumentTime = detail.OrigDocumentTime = detail.EditDocumentTime = timeStr;
+                        }
+                        else { failures.Add(DetailSaveFailure.DocumentDate); }
+                    }
+                }
             }
 
             if (detail.SysOcrCandidate && !detail.EditOcrCodes.SequenceEqual(detail.OrigOcrCodes))

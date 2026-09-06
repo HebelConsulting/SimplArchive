@@ -126,6 +126,9 @@ public sealed class DetailState
     public string SysName { get; set; } = string.Empty;
     public string SysFileExtension { get; set; } = string.Empty;
     public DateTime? SysDocumentDate { get; set; }
+
+    // The document date's optional UTC time as the wire form "HH:mm", or null when date-only (ADR 0758).
+    public string? SysDocumentTime { get; set; }
     public string SysCreated { get; set; } = string.Empty;
     public string SysCreatedBy { get; set; } = string.Empty;
 
@@ -206,6 +209,9 @@ public sealed class DetailState
 
     public string EditName { get; set; } = string.Empty;
     public DateTime? EditDocumentDate { get; set; }
+
+    // The time as the user is TYPING it (keyboard-first); normalized on save. Empty = no time.
+    public string? EditDocumentTime { get; set; }
     public Guid? EditMaskId { get; set; }
     public List<string> EditOcrCodes { get; set; } = [];
     public List<string> EditTags { get; set; } = [];
@@ -230,6 +236,8 @@ public sealed class DetailState
 
     public string OrigName { get; set; } = string.Empty;
     public DateTime? OrigDocumentDate { get; set; }
+
+    public string? OrigDocumentTime { get; set; }
     public Guid? OrigMaskId { get; set; }
     public List<string> OrigOcrCodes { get; set; } = [];
     public List<string> OrigTags { get; set; } = [];

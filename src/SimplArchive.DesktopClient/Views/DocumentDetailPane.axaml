@@ -94,7 +94,12 @@
 
                     <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr VerColDocDate}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
                     <SelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SysDocumentDateText}" VerticalAlignment="Center" Margin="0,2" IsVisible="{Binding !IsEditing}" />
-                    <CalendarDatePicker Grid.Row="2" Grid.Column="1" SelectedDate="{Binding SysDocumentDate}" HorizontalAlignment="Left" Margin="0,2" IsVisible="{Binding IsEditing}" Watermark="yyyy-MM-dd" />
+                    <!-- Edit mode: the date picker plus a KEYBOARD-FIRST typed time field (ADR 0758 / the
+                         typed-not-picked principle). Empty time = date-only; UTC. -->
+                    <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="0,2" IsVisible="{Binding IsEditing}">
+                        <CalendarDatePicker SelectedDate="{Binding SysDocumentDate}" HorizontalAlignment="Left" Watermark="yyyy-MM-dd" />
+                        <TextBox Text="{Binding DocumentTimeEntry}" Watermark="HH:mm UTC" Width="120" VerticalAlignment="Center" />
+                    </StackPanel>
 
                     <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:Tr SysOcrLanguages}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" IsVisible="{Binding SysOcrCandidate}" />
                     <SelectableTextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SysOcrLanguages}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,2" IsVisible="{Binding SysOcrCandidate}" />

@@ -184,6 +184,7 @@ public sealed class DetailLoader(
         detail.SysName = item.Name;
         detail.SysFileExtension = current.FileExtension ?? "";
         detail.SysDocumentDate = DateTime.TryParse(current.DocumentDate, out var d) ? d.Date : null;
+        detail.SysDocumentTime = current.DocumentTime;
         detail.SysCreated = current.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
         detail.SysCreatedBy = current.CreatedByName ?? "";
         detail.SysOcrCandidate = candidate is not null;
