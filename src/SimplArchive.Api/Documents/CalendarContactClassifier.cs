@@ -47,7 +47,7 @@ public sealed class CalendarContactClassifier
     /// Classifies the document behind <paramref name="version"/> when it is a vCard/iCalendar, returning
     /// whether it did. The caller has already established the document is still unclassified and that its
     /// destination admits <paramref name="itemMaskId"/> — which is also what SAYS the mask: an .ics is an
-    /// Appointment in a Calendar and a Room booking in a Schedule (ADR 0744, the Note/eMail precedent —
+    /// Appointment in a Calendar and a Booking in a Schedule (ADR 0744, the Note/eMail precedent —
     /// told apart by where it is filed, not by its bytes).
     /// </summary>
     public async Task<bool> TryClassifyAsync(Document document, DocumentVersion version, Guid itemMaskId, CancellationToken cancellationToken)
@@ -84,7 +84,7 @@ public sealed class CalendarContactClassifier
     /// Re-extracts an ALREADY-classified item's indexed fields from a new version — the half every edit
     /// path was missing (ADR 0744): before this, `AutoClassifyAsync` skipped classified documents and
     /// nothing else re-read the bytes, so an edited appointment kept its original Name/UID/Start/End in
-    /// every listing. For a Room booking the same pass moves the claim row's slot, which is what makes an
+    /// every listing. For a Booking the same pass moves the claim row's slot, which is what makes an
     /// edit a REBOOKING — refused through the overlap invariant like any other booking write.
     /// </summary>
     /// <remarks>Returns false when the document is not a collection-kind item of a handled extension.</remarks>
@@ -218,7 +218,7 @@ public sealed class CalendarContactClassifier
             ("Location", Nonempty(occurrence.Location)),
         };
 
-        if (maskId == WellKnownMaskIds.RoomBooking)
+        if (maskId == WellKnownMaskIds.Booking)
         {
             // The booking IS the .ics (ADR 0744): the same pass that indexes the fields moves the claim.
             // Deliberately BEFORE ApplyAsync, so the row rides the same save as the fields and the
@@ -287,7 +287,7 @@ public sealed class CalendarContactClassifier
         // slot to zero extent, which the invariant refuses with the extent named.
         var endsAt = Instant(occurrence.DtEnd) ?? startsAt;
 
-        // The room is the Schedule's parent — containment guarantees the shape (a Room booking lives only
+        // The room is the Schedule's parent — containment guarantees the shape (a Booking lives only
         // in a Schedule, a Schedule only in a room), so a missing grandparent is a state this code cannot
         // reach through any admitted write.
         var roomId = await _dbContext.Documents

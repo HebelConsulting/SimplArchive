@@ -4777,7 +4777,7 @@
     <value>The slot's start must precede its end.</value>
   </data>
   <data name="BookTitle" xml:space="preserve">
-    <value>Room bookings</value>
+    <value>Bookings</value>
   </data>
   <data name="BookDate" xml:space="preserve">
     <value>Date</value>

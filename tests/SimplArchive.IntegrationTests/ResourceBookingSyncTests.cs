@@ -26,7 +26,7 @@ public class ResourceBookingSyncTests
 
     private sealed record Fixture(Guid TenantId, Guid RoomId, Guid SecondRoomId, Guid ScheduleId, Guid SecondScheduleId, Guid BookingDocumentId, Guid RowId);
 
-    // Two rooms with their Schedules, and one Active booking: an .ics wearing the REAL RoomBooking mask id
+    // Two rooms with their Schedules, and one Active booking: an .ics wearing the REAL Booking mask id
     // (the sync keys on mask identity) inside the first room's Schedule, claimed by its row.
     private static async Task<Fixture> SeedAsync(SqliteConnection connection)
     {
@@ -42,8 +42,8 @@ public class ResourceBookingSyncTests
         seed.Masks.Add(new Mask { Id = Guid.NewGuid(), TenantId = tenantId, IsBookable = true, CreatedAt = DateTimeOffset.UtcNow });
         var roomMask = seed.Masks.Local.Single();
         seed.MaskVersions.Add(new MaskVersion { Id = roomMaskVersion, TenantId = tenantId, MaskId = roomMask.Id, Name = "Room", CreatedAt = DateTimeOffset.UtcNow });
-        seed.Masks.Add(new Mask { Id = WellKnownMaskIds.RoomBooking, TenantId = tenantId, CreatedAt = DateTimeOffset.UtcNow });
-        seed.MaskVersions.Add(new MaskVersion { Id = bookingMaskVersion, TenantId = tenantId, MaskId = WellKnownMaskIds.RoomBooking, Name = "Room booking", CreatedAt = DateTimeOffset.UtcNow });
+        seed.Masks.Add(new Mask { Id = WellKnownMaskIds.Booking, TenantId = tenantId, CreatedAt = DateTimeOffset.UtcNow });
+        seed.MaskVersions.Add(new MaskVersion { Id = bookingMaskVersion, TenantId = tenantId, MaskId = WellKnownMaskIds.Booking, Name = "Booking", CreatedAt = DateTimeOffset.UtcNow });
 
         seed.Documents.Add(new Document { Id = f.RoomId, TenantId = tenantId, Name = "Room 1", MaskVersionId = roomMaskVersion, CreatedByUserId = userId, CreatedAt = DateTimeOffset.UtcNow });
         seed.Documents.Add(new Document { Id = f.SecondRoomId, TenantId = tenantId, Name = "Room 2", MaskVersionId = roomMaskVersion, CreatedByUserId = userId, CreatedAt = DateTimeOffset.UtcNow });

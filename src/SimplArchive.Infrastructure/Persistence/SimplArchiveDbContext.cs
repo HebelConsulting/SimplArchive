@@ -252,7 +252,7 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
         ValidateDocumentsAsync(CancellationToken.None).GetAwaiter().GetResult();
         ValidateFieldValuesAsync(CancellationToken.None).GetAwaiter().GetResult();
         ValidateRequiredFieldsAsync(CancellationToken.None).GetAwaiter().GetResult();
-        SyncRoomBookingDocumentsAsync(CancellationToken.None).GetAwaiter().GetResult();
+        SyncBookingDocumentsAsync(CancellationToken.None).GetAwaiter().GetResult();
         ValidateResourceBookingsAsync(CancellationToken.None).GetAwaiter().GetResult();
         PrepareMaskVersionsAsync(CancellationToken.None).GetAwaiter().GetResult();
         DavChangeRecorder.RecordAsync(this, CancellationToken.None).GetAwaiter().GetResult();
@@ -267,7 +267,7 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
         await ValidateDocumentsAsync(cancellationToken);
         await ValidateFieldValuesAsync(cancellationToken);
         await ValidateRequiredFieldsAsync(cancellationToken);
-        await SyncRoomBookingDocumentsAsync(cancellationToken);
+        await SyncBookingDocumentsAsync(cancellationToken);
         await ValidateResourceBookingsAsync(cancellationToken);
         await PrepareMaskVersionsAsync(cancellationToken);
 

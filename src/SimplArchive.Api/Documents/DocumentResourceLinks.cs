@@ -295,10 +295,10 @@ public sealed class DocumentResourceLinks
             links.Add(new Link("contact-card", $"/api/documents/{documentId}/contact-card", "GET"));
         }
 
-        // A Room booking is an appointment to the editor too (ADR 0744): the same form edits it, and the
+        // A Booking is an appointment to the editor too (ADR 0744): the same form edits it, and the
         // save is a REBOOKING — the finalizer's refresh moves the claim through the overlap check, so a
         // conflicting edit comes back as the slot-conflict error rather than saving a lie.
-        if (rights.CanReadContent && (folderMaskId == WellKnownMaskIds.Appointment || folderMaskId == WellKnownMaskIds.RoomBooking))
+        if (rights.CanReadContent && (folderMaskId == WellKnownMaskIds.Appointment || folderMaskId == WellKnownMaskIds.Booking))
         {
             links.Add(new Link("appointment", $"/api/documents/{documentId}/appointment", "GET"));
         }

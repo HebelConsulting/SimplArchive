@@ -17,7 +17,7 @@ public partial class SimplArchiveDbContext
     // REBOOK: the row goes back to Active here and straight through the overlap invariant below, so a slot
     // taken in the meantime refuses the restore instead of double-booking. A move between two rooms'
     // Schedules re-points the claim at the new room (containment has already refused any other target).
-    private async Task SyncRoomBookingDocumentsAsync(CancellationToken cancellationToken)
+    private async Task SyncBookingDocumentsAsync(CancellationToken cancellationToken)
     {
         var candidates = ChangeTracker.Entries<Document>()
             .Where(e => e.State == EntityState.Deleted
@@ -40,7 +40,7 @@ public partial class SimplArchiveDbContext
             // IgnoreQueryFilters throughout: the write may come from a worker or protocol edge with no
             // ambient tenant, where the tenant filter would silently match nothing (the auth-lookup lesson).
             var isBooking = await MaskVersions.IgnoreQueryFilters()
-                .AnyAsync(v => v.Id == maskVersionId && v.MaskId == WellKnownMaskIds.RoomBooking, cancellationToken);
+                .AnyAsync(v => v.Id == maskVersionId && v.MaskId == WellKnownMaskIds.Booking, cancellationToken);
             if (!isBooking)
             {
                 continue;

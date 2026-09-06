@@ -128,7 +128,7 @@ public class WellKnownMaskFieldHealTests
             // 16 → 18 with Meeting room + Room booking (ADR 0735) — the booking primitive's thin core proof.
             // 18 → 19 with Module license (ADRs 0740/0743) — the filed license artefact's core mask.
             // 19 → 20 with Schedule (ADR 0744) — the room's booking calendar, a calendar kind of its own so
-            // its containment (only Room bookings, only inside a room) stays non-contextual.
+            // its containment (only Bookings, only inside a room) stays non-contextual.
             var maskCount = await db.Masks.IgnoreQueryFilters().CountAsync(m => m.TenantId == _tenantId);
             Assert.Equal(20, maskCount); // + Schedule (ADR 0744)
             Assert.Equal(maskCount, await db.MaskVersions.IgnoreQueryFilters().CountAsync(v => v.TenantId == _tenantId));
@@ -265,5 +265,42 @@ public class WellKnownMaskFieldHealTests
             Assert.False(await db.FieldDefinitions.IgnoreQueryFilters()
                 .Where(f => f.Name == "Subject").Select(f => f.IsList).SingleAsync());
         }
+    }
+
+    [Fact]
+    public async Task The_booking_masks_room_specific_name_heals_to_the_resource_agnostic_one()
+    {
+        // The Booking mask began life as "Room booking" (ADR 0744's meeting-room proof) and went
+        // resource-agnostic when aircraft became bookable (ADR 0760): a pre-rename tenant still carries the
+        // old name, and the startup backfill's RenameIfNeededAsync is what corrects it — the Notebook
+        // precedent, re-pinned for this rename.
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var accessor = new CurrentTenantAccessor();
+        using (var setup = Ctx(connection, accessor)) await setup.Database.EnsureCreatedAsync();
+        using (var db = Ctx(connection, accessor))
+        {
+            db.Tenants.Add(new Tenant { Id = _tenantId, Name = "T", CreatedAt = DateTimeOffset.UtcNow });
+            await db.SaveChangesAsync();
+            await Seeder(db).EnsureWellKnownMasksAsync(_tenantId);
+        }
+
+        // Backdate to the pre-rename name, as a tenant seeded before ADR 0760 would hold it.
+        using (var db = Ctx(connection, accessor))
+        {
+            var current = await db.MaskVersions.IgnoreQueryFilters()
+                .SingleAsync(v => v.TenantId == _tenantId && v.MaskId == WellKnownMaskIds.Booking && v.IsCurrent);
+            current.Name = "Room booking";
+            await db.SaveChangesAsync();
+        }
+
+        using (var db = Ctx(connection, accessor))
+        {
+            await Seeder(db).EnsureWellKnownMasksAsync(_tenantId);
+        }
+
+        using var check = Ctx(connection, accessor);
+        Assert.Equal("Booking", (await check.MaskVersions.IgnoreQueryFilters()
+            .SingleAsync(v => v.TenantId == _tenantId && v.MaskId == WellKnownMaskIds.Booking && v.IsCurrent)).Name);
     }
 }

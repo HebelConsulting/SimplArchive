@@ -357,10 +357,10 @@ public class DocumentFinalizer
         var document = await _dbContext.Documents.SingleAsync(d => d.Id == version.DocumentId, cancellationToken);
 
         // Already classified with a real (non-Folder) mask → keep the mask, but REFRESH the indexed fields
-        // when this is a collection-kind item (Contact/Appointment/Room booking): a new version means the
+        // when this is a collection-kind item (Contact/Appointment/Booking): a new version means the
         // bytes changed, and until ADR 0744 nothing re-read them — the editors' "the finalizer re-extracts
         // the index fields" comments described a step that did not exist, so every edit left Name/UID/
-        // Start/End stale. For a Room booking the refresh is also what makes an edit a REBOOKING.
+        // Start/End stale. For a Booking the refresh is also what makes an edit a REBOOKING.
         if (document.MaskVersionId is not null && !await FolderMask.IsFolderMaskAsync(_dbContext, document.MaskVersionId, cancellationToken))
         {
             await _calendarContactClassifier.TryRefreshAsync(document, version, cancellationToken);
@@ -416,7 +416,7 @@ public class DocumentFinalizer
     /// Asked of the same containment rules the invariant enforces, so the classifier cannot stamp a mask that
     /// <c>SaveChanges</c> is about to refuse. A root document has no parent and admits nothing typed — it is a
     /// repository, and a contact card is not one. WHICH mask an extension makes is the parent's collection
-    /// kind's to say (ADR 0744): an .ics is an Appointment in a Calendar and a Room booking in a Schedule —
+    /// kind's to say (ADR 0744): an .ics is an Appointment in a Calendar and a Booking in a Schedule —
     /// the Note/eMail rule, told apart by where it is filed, not by its bytes.
     /// </remarks>
     private async Task<Guid?> AdmittedItemMaskAsync(Document document, string extension, CancellationToken cancellationToken)

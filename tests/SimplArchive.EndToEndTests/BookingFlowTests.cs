@@ -204,7 +204,7 @@ public class BookingFlowTests
         // The masks listing marks the owned fields, so both clients LOCK the editors instead of offering
         // an edit this PUT refuses (the RequiresMailRouting shape, #703).
         var masks = (await TestJson.Get(api, "/api/masks")).GetProperty("masks").EnumerateArray()
-            .First(m => m.GetProperty("name").GetString() == "Room booking");
+            .First(m => m.GetProperty("name").GetString() == "Booking");
         var fields = (await TestJson.Get(api, masks.GetProperty("links").EnumerateArray()
                 .First(l => l.GetProperty("rel").GetString() == "self").GetProperty("href").GetString()!))
             .GetProperty("fields").EnumerateArray()

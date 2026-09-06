@@ -141,12 +141,12 @@ public static class WellKnownMaskIds
     /// End, Location) and the domain payload (Purpose). The authoritative slot lives on the
     /// <c>ResourceBooking</c> row; the fields here are its lockstep projection.
     /// </remarks>
-    public static readonly Guid RoomBooking = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E43");
+    public static readonly Guid Booking = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E43");
 
     /// <summary>A meeting room's booking calendar (ADR 0744) — a calendar KIND with its own containment.</summary>
     /// <remarks>
     /// Its own mask rather than a plain <see cref="Calendar"/> so that every rule about it stays
-    /// non-contextual: a Schedule exists only in a meeting room, holds only Room bookings, and serves them
+    /// non-contextual: a Schedule exists only in a meeting room, holds only Bookings, and serves them
     /// over CalDAV through its own <c>DavCollectionKinds</c> row — while ordinary calendars everywhere keep
     /// admitting ordinary appointments. A plain Appointment in a Schedule would be visible time the booking
     /// conflict check cannot see, which is why the admission is exclusive in both directions.
@@ -197,7 +197,7 @@ public static class WellKnownMaskIds
         // Appointment inside a Schedule would be visible time the conflict check cannot see. Rights still
         // flow from the room the normal way — see the room, see its schedule, see its bookings.
         new(MeetingRoom, "Meeting room", [(Schedule, "Schedule")]),
-        new(Schedule, "Schedule", [(RoomBooking, "Room booking")]),
+        new(Schedule, "Schedule", [(Booking, "Booking")]),
     ];
 
     /// <summary>How MANY children wearing a given mask a folder admits — a capacity rule, not an admission one.</summary>
@@ -355,14 +355,14 @@ public static class WellKnownMaskIds
         // folder — placement and capacity say where and how many, creatability no longer says never.
         // Schedule joined with ADR 0744: the booking flow creates it, one per room, when the first booking
         // is filed — a hand-made second one would break the cardinality that makes "the schedule" singular.
-        // RoomBooking stays here for the PLAIN create paths only — any .ics WRITE into a Schedule is the
+        // Booking stays here for the PLAIN create paths only — any .ics WRITE into a Schedule is the
         // real creation path and is gated by rights on the Schedule, not by this set.
-        new HashSet<Guid> { Repository, UserFolder, MyDocuments, ImapSpecial, Notebook, RoomBooking, Schedule };
+        new HashSet<Guid> { Repository, UserFolder, MyDocuments, ImapSpecial, Notebook, Booking, Schedule };
 
     /// <summary>The well-known masks an ITEM wears — the complement of <see cref="FolderMasks"/>.</summary>
     /// <remarks>Stated rather than derived, so the partition guard has two sides to compare instead of one.</remarks>
     public static readonly IReadOnlySet<Guid> ItemMasks =
-        new HashSet<Guid> { BasicEntry, EMail, Note, Contact, Appointment, RoomBooking, ModuleLicense };
+        new HashSet<Guid> { BasicEntry, EMail, Note, Contact, Appointment, Booking, ModuleLicense };
 
     /// <summary>
     /// Typed folders that ALSO admit a plain <see cref="Folder"/>, so a user can make folders of their own
@@ -567,7 +567,7 @@ public static class WellKnownMaskIds
         new Dictionary<Guid, IReadOnlySet<string>>
         {
             [Appointment] = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Event UID", "Start", "End" },
-            [RoomBooking] = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Event UID", "Start", "End" },
+            [Booking] = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Event UID", "Start", "End" },
             [Contact] = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Contact UID" },
         };
 

@@ -4777,7 +4777,7 @@
     <value>El inicio de la franja debe preceder a su fin.</value>
   </data>
   <data name="BookTitle" xml:space="preserve">
-    <value>Reservas de la sala</value>
+    <value>Reservas</value>
   </data>
   <data name="BookDate" xml:space="preserve">
     <value>Fecha</value>

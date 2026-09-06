@@ -103,11 +103,11 @@ public static class ChildCreationPolicy
     /// (ADR 0744): the same rel, the same endpoints, the same row shape; only the admitted mask differs.
     /// </summary>
     /// <remarks>
-    /// One predicate rather than an <c>|| RoomBooking</c> at each rel-emitting site, because the sites are
+    /// One predicate rather than an <c>|| Booking</c> at each rel-emitting site, because the sites are
     /// exactly where a listing forgets one emitter and a tab goes silently empty (the new-rel-must-reach-
     /// every-listing lesson).
     /// </remarks>
     public static bool AdmitsCalendarEntries(Guid? folderMaskId) =>
         AdmitsTypedItem(folderMaskId, WellKnownMaskIds.Appointment)
-        || AdmitsTypedItem(folderMaskId, WellKnownMaskIds.RoomBooking);
+        || AdmitsTypedItem(folderMaskId, WellKnownMaskIds.Booking);
 }

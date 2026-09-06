@@ -190,7 +190,7 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         // mask's calendar facts — same names, same types, so the classifier and every calendar surface
         // read both masks identically — plus the one domain field (Purpose, indexed from DESCRIPTION).
         // Deliberately NO Repeats: a recurring booking is refused (the row models one slot).
-        await EnsureMaskAsync(tenantId, WellKnownMaskIds.RoomBooking, "Room booking",
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.Booking, "Booking",
         [
             new FieldSpec("Event UID", FieldDataType.Text, IsRequired: true),
             new FieldSpec("Start", FieldDataType.DateTime, IsRequired: false),
