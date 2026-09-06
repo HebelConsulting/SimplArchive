@@ -130,6 +130,54 @@ public partial class Home
             }
 
             await ShowFolderDetailAsync(folder);
+
+            // The populate-on-open hook (ADR 0756): if the opened folder advertises a machine-auto-refresh
+            // rel (now in Detail.GenericActions), invoke it and reload — a module stages fresh content (a DABS
+            // chart, a METAR) the moment the folder is opened.
+            await AutoRefreshOpenFolderAsync(folder, openedAt);
+        }
+    }
+
+    /// <summary>
+    /// The populate-on-open hook (ADR 0756): when the opened folder advertises a machine-auto-refresh rel
+    /// (loaded into <c>Detail.GenericActions</c> by <see cref="ShowFolderDetailAsync"/>), POST it — a module
+    /// stages fresh content under the folder — and reload the CONTENTS so it appears. Reloads the contents
+    /// only, never re-running the open path, so it cannot loop; and it defers to a newer selection (#784).
+    /// </summary>
+    private async Task AutoRefreshOpenFolderAsync(BrowseNode folder, int openedAt)
+    {
+        var autoRefresh = (Detail.GenericActions ?? [])
+            .Where(a => a.Rel is { } r && r.StartsWith("machine-auto-refresh:", StringComparison.Ordinal))
+            .ToList();
+        if (autoRefresh.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (var action in autoRefresh)
+            {
+                using var request = new HttpRequestMessage(new HttpMethod(action.Method), action.Href.TrimStart('/'));
+                var response = await Http.SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return; // a refused populate is not worth interrupting the open; the folder shows what it has
+                }
+            }
+
+            if (_selectionEpoch != openedAt)
+            {
+                return; // the user navigated on while we fetched; their view wins (#784)
+            }
+
+            _folderContents = (await Browse.LoadContentsAsync(folder.Id, folder.RepositoryId,
+                BrowseService.ChildrenHrefOf(folder), BrowseService.ReferencesHrefOf(folder))).Nodes;
+            StateHasChanged();
+        }
+        catch (HttpRequestException e)
+        {
+            Snackbar.Add(e.Message, Severity.Error);
         }
     }
 
@@ -395,6 +443,18 @@ public partial class Home
             }
 
             Snackbar.Add(action.Label ?? action.Rel, Severity.Success);
+
+            // An auto-refresh action (ADR 0756) staged fresh content under the OPEN FOLDER — reload its
+            // contents so a manual Refresh shows new data too, the same as the on-open path.
+            if (action.Rel is { } rel && rel.StartsWith("machine-auto-refresh:", StringComparison.Ordinal)
+                && _selectedFolder is { } openFolder)
+            {
+                _folderContents = (await Browse.LoadContentsAsync(openFolder.Id, openFolder.RepositoryId,
+                    BrowseService.ChildrenHrefOf(openFolder), BrowseService.ReferencesHrefOf(openFolder))).Nodes;
+                StateHasChanged();
+                return;
+            }
+
             if (Detail.Links is { } links && links.TryGetValue("self", out var selfHref))
             {
                 var document = await Http.GetFromJsonAsync<DocumentLinksResponse>(selfHref.TrimStart('/'));

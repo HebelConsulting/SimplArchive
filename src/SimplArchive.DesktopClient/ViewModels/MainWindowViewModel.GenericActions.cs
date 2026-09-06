@@ -28,6 +28,45 @@ public partial class MainWindowViewModel
         OnPropertyChanged(nameof(HasDetailGenericActions));
     }
 
+    /// <summary>Whether a rel is the populate-on-open hook (ADR 0756) — a transition the client also invokes
+    /// automatically when the folder is opened, so it must reload the folder CONTENTS, not just re-read the
+    /// detail's own actions.</summary>
+    private static bool IsAutoRefresh(string rel) => rel.StartsWith("machine-auto-refresh:", StringComparison.Ordinal);
+
+    /// <summary>
+    /// The populate-on-open hook (ADR 0756): when the just-opened folder advertises a machine-auto-refresh
+    /// rel (now in <see cref="DetailGenericActions"/> after the open-folder detail load), POST it — a module
+    /// stages fresh content under the folder — and reload the contents so it appears. The reload is a
+    /// same-folder reload (<c>isReload</c> is derived true), so it cannot re-enter this hook and loop.
+    /// </summary>
+    private async Task AutoRefreshOpenFolderAsync()
+    {
+        if (_api is null || _currentFolderId is not { } id)
+        {
+            return;
+        }
+
+        var autoRefresh = DetailGenericActions.Where(a => IsAutoRefresh(a.Rel)).ToList();
+        if (autoRefresh.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (var action in autoRefresh)
+            {
+                await _api.Documents.ExecuteActionAsync(action);
+            }
+
+            await LoadFolderContentsAsync(id, _currentFolderLinks); // same folder → a reload, no re-trigger
+        }
+        catch (ApiActionException e)
+        {
+            ReportError(e.Message);
+        }
+    }
+
     [RelayCommand]
     private async Task ExecuteGenericAction(DocumentsClient.GenericActionInfo? action)
     {
@@ -40,6 +79,14 @@ public partial class MainWindowViewModel
         {
             await _api.Documents.ExecuteActionAsync(action);
             Status = action.Label;
+
+            // An auto-refresh action (ADR 0756) staged fresh content under the OPEN FOLDER — reload its
+            // contents so it appears, the same as the on-open path; a manual Refresh must show new data too.
+            if (IsAutoRefresh(action.Rel) && _currentFolderId is { } openFolder)
+            {
+                await LoadFolderContentsAsync(openFolder, _currentFolderLinks);
+                return;
+            }
 
             // The action changed the subject's state, so its rels — including this surface — are stale;
             // re-reading the resource is what makes a state transition's NEW actions appear (ADR 0550).

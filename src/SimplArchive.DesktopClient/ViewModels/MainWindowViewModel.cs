@@ -811,6 +811,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
             if (SelectedItem is null && !isReload)
             {
                 await ShowOpenFolderDetailAsync();
+
+                // The populate-on-open hook (ADR 0756): if the folder just opened advertises a
+                // machine-auto-refresh rel (now loaded into DetailGenericActions), invoke it and reload — a
+                // module stages fresh content (a DABS chart, a METAR) the moment the folder is opened.
+                await AutoRefreshOpenFolderAsync();
             }
         }
         catch (Exception e)

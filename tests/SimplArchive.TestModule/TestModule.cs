@@ -151,7 +151,19 @@ public sealed class TestModule : IIndustryModule
                         context.SubjectDocumentId, EntryMaskId, $"Never {Guid.NewGuid():N}");
                     await IncrementAsync(context, 1); // the projection write must roll back with the document
                     throw new InvalidOperationException("The handler failed after writing.");
-                });
+                })
+            // The populate-on-open hook (ABI 0.6): opening the subject STAGES a content-bearing ephemeral
+            // document under it — the DABS/METAR shape (a real module would fetch the bytes; here a fixed
+            // payload). Replaced in place on every open, so the folder never accumulates a second entry.
+            .AutoRefreshOnOpen("refresh", "Refresh", async context =>
+            {
+                var existing = await context.Archive.GetChildrenAsync(context.SubjectDocumentId, EntryMaskId);
+                var replaceId = existing.Count > 0 ? (Guid?)existing[0].Id : null;
+                await context.Archive.StageContentAsync(
+                    context.SubjectDocumentId, EntryMaskId, "Staged entry",
+                    System.Text.Encoding.UTF8.GetBytes("staged content"), "txt",
+                    DateTimeOffset.UtcNow.AddHours(1), replaceDocumentId: replaceId);
+            });
 
     private static async Task IncrementAsync(TransitionContext context, int by)
     {

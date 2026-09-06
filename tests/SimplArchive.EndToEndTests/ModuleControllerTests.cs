@@ -248,6 +248,51 @@ public class ModuleControllerTests
         }
     }
 
+    [Fact]
+    public async Task An_auto_refresh_transition_stages_content_on_open_and_replaces_it_in_place()
+    {
+        var rig = await RigAsync();
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", vendorKey.ExportSubjectPublicKeyInfoPem());
+        try
+        {
+            await ActivateAsync(rig, vendorKey); // grants the principal too, so its GetChildren sees the folder
+
+            var dossierId = (await TestJson.Post(rig.Owner, $"/api/documents/{rig.RepoId}/children",
+                new { name = $"Dossier {Guid.NewGuid():N}", maskId = SimplArchive.TestModule.TestModule.DossierMaskId }))
+                .GetProperty("id").GetGuid();
+
+            // The populate-on-open hook arrives as a DISTINCT rel (ABI 0.6) the clients auto-POST on open —
+            // not the plain machine: action rel, so a client can tell "run this automatically" from "a button".
+            var document = await TestJson.Get(rig.Admin, $"/api/documents/{dossierId}");
+            var refresh = document.GetProperty("links").EnumerateArray()
+                .Single(l => l.GetProperty("rel").GetString() == "machine-auto-refresh:test-pilot:refresh");
+            Assert.Equal("POST", refresh.GetProperty("method").GetString());
+            Assert.Equal("Refresh", refresh.GetProperty("label").GetString());
+            Assert.Equal(0, await ChildCountAsync(rig.Admin, dossierId));
+
+            // Opening the folder (a client following the rel): the handler STAGES a content-bearing document
+            // under it — content-bearing creation over the real wire and real object storage, which nothing
+            // in the ABI could do before 0.6.
+            Assert.Equal(HttpStatusCode.NoContent,
+                (await rig.Admin.PostAsync(refresh.GetProperty("href").GetString(), null)).StatusCode);
+            var children = (await TestJson.Get(rig.Admin, $"/api/documents/{dossierId}/children")).GetProperty("children");
+            Assert.Equal(1, children.GetArrayLength());
+            Assert.Equal("Staged entry", children.EnumerateArray().Single().GetProperty("name").GetString());
+
+            // Opening again REPLACES in place — the folder never accumulates a second entry.
+            Assert.Equal(HttpStatusCode.NoContent,
+                (await rig.Admin.PostAsync(refresh.GetProperty("href").GetString(), null)).StatusCode);
+            Assert.Equal(1, await ChildCountAsync(rig.Admin, dossierId));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", null);
+            rig.Admin.Dispose();
+            rig.Owner.Dispose();
+        }
+    }
+
     private async Task FileValidCertificateAsync(Rig rig, Guid dossierId)
     {
         var certificateId = (await TestJson.Post(rig.Owner, $"/api/documents/{dossierId}/children",
