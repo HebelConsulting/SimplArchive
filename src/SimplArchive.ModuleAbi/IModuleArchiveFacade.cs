@@ -79,6 +79,10 @@ public interface IModuleArchiveFacade
     /// staged document IN PLACE (a new confirmed version on the same document, its name/fields/expiry
     /// refreshed) so a refresh never briefly shows two entries; null mints a new one. Returns the staged
     /// document's id. Subject to the same tenant/consent gate and invariants as every other write.
+    /// Pass <paramref name="documentDate"/> (and optionally <paramref name="documentTime"/>, a UTC
+    /// time-of-day) to DATE the artefact by its own content — a METAR by its observation time, a chart by its
+    /// day (ABI 0.7, core ADR 0758) — rather than the default filing date; omitted, it defaults to today with
+    /// no time.
     /// </summary>
     Task<Guid> StageContentAsync(
         Guid parentFolderId,
@@ -89,6 +93,8 @@ public interface IModuleArchiveFacade
         DateTimeOffset expiresAt,
         IReadOnlyDictionary<string, string>? fields = null,
         Guid? replaceDocumentId = null,
+        DateOnly? documentDate = null,
+        TimeOnly? documentTime = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -109,6 +115,8 @@ public interface IModuleArchiveFacade
         string extension,
         IReadOnlyDictionary<string, string>? fields = null,
         Guid? replaceDocumentId = null,
+        DateOnly? documentDate = null,
+        TimeOnly? documentTime = null,
         CancellationToken cancellationToken = default);
 }
 

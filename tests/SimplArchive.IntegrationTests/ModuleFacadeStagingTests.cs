@@ -156,4 +156,41 @@ public class ModuleFacadeStagingTests
             new ConfigurationBuilder().Build(),
             NullLogger<EphemeralContentSweepWorker>.Instance);
     }
+
+    [Fact]
+    public async Task StageContentAsync_dates_the_version_from_the_content_when_given()
+    {
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var rig = await RigAsync(connection);
+
+        // ABI 0.7 (core ADR 0758): a module dates its artefact by its own content (a METAR's observation
+        // time), not the filing date.
+        var id = await rig.Facade.StageContentAsync(
+            rig.RootId, TestModule.TestModule.EntryMaskId, "METAR", Encoding.UTF8.GetBytes("METAR LSZH 060950Z"),
+            "txt", DateTimeOffset.UtcNow.AddHours(2),
+            documentDate: new DateOnly(2026, 9, 6), documentTime: new TimeOnly(9, 50));
+
+        using var check = Ctx(connection, rig.TenantId);
+        var version = await check.DocumentVersions.SingleAsync(v => v.DocumentId == id);
+        Assert.Equal(new DateOnly(2026, 9, 6), version.DocumentDate);
+        Assert.Equal(new TimeOnly(9, 50), version.DocumentTime);
+    }
+
+    [Fact]
+    public async Task StageContentAsync_defaults_to_today_with_no_time()
+    {
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var rig = await RigAsync(connection);
+
+        var id = await rig.Facade.StageContentAsync(
+            rig.RootId, TestModule.TestModule.EntryMaskId, "note", Encoding.UTF8.GetBytes("x"), "txt",
+            DateTimeOffset.UtcNow.AddHours(2));
+
+        using var check = Ctx(connection, rig.TenantId);
+        var version = await check.DocumentVersions.SingleAsync(v => v.DocumentId == id);
+        Assert.Null(version.DocumentTime);
+    }
+
 }

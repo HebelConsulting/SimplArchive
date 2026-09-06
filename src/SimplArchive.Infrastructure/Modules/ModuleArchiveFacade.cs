@@ -330,21 +330,23 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
 
     public Task<Guid> StageContentAsync(
         Guid parentFolderId, Guid maskId, string name, byte[] content, string extension, DateTimeOffset expiresAt,
-        IReadOnlyDictionary<string, string>? fields = null, Guid? replaceDocumentId = null, CancellationToken cancellationToken = default) =>
+        IReadOnlyDictionary<string, string>? fields = null, Guid? replaceDocumentId = null,
+        DateOnly? documentDate = null, TimeOnly? documentTime = null, CancellationToken cancellationToken = default) =>
         // Ephemeral: keyed under the tenant's fs/special/ store, and the document carries the expiry the sweep honours.
         WriteContentAsync(
             parentFolderId, maskId, name, content, extension,
             keyFor: (tenantId, storageFolderId, versionId) => ObjectKeyBuilder.ModuleStagedContentKey(tenantId, storageFolderId, versionId, extension),
-            expiresAt, fields, replaceDocumentId, cancellationToken);
+            expiresAt, fields, replaceDocumentId, documentDate, documentTime, cancellationToken);
 
     public Task<Guid> CreateContentDocumentAsync(
         Guid parentFolderId, Guid maskId, string name, byte[] content, string extension,
-        IReadOnlyDictionary<string, string>? fields = null, Guid? replaceDocumentId = null, CancellationToken cancellationToken = default) =>
+        IReadOnlyDictionary<string, string>? fields = null, Guid? replaceDocumentId = null,
+        DateOnly? documentDate = null, TimeOnly? documentTime = null, CancellationToken cancellationToken = default) =>
         // Permanent: the ordinary archive keyspace, no expiry — reference data the module files and reads back.
         WriteContentAsync(
             parentFolderId, maskId, name, content, extension,
             keyFor: (tenantId, storageFolderId, versionId) => ObjectKeyBuilder.Build(tenantId, DateTimeOffset.UtcNow, storageFolderId, versionId, extension),
-            expiresAt: null, fields, replaceDocumentId, cancellationToken);
+            expiresAt: null, fields, replaceDocumentId, documentDate, documentTime, cancellationToken);
 
     /// <summary>
     /// The one content-write both <see cref="StageContentAsync"/> (ephemeral) and
@@ -365,6 +367,8 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         DateTimeOffset? expiresAt,
         IReadOnlyDictionary<string, string>? fields,
         Guid? replaceDocumentId,
+        DateOnly? documentDate,
+        TimeOnly? documentTime,
         CancellationToken cancellationToken)
     {
         if (_objectStorage is null)
@@ -438,7 +442,8 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
             CreatedByUserId = userId,
             CreatedByServiceAccountId = serviceAccountId,
             CreatedAt = now,
-            DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
+            DocumentDate = documentDate ?? DateOnly.FromDateTime(now.UtcDateTime),
+            DocumentTime = documentTime,
         };
         _dbContext.DocumentVersions.Add(version);
         document.CurrentVersionId = version.Id; // pin the new version current — the replace case shows the fresh bytes at once
