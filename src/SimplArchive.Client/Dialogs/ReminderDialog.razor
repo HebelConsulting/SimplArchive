@@ -29,8 +29,8 @@
                 <MudDivider Class="my-2" />
             }
 
-            <MudDatePicker @bind-Date="_date" Label="@Strings.Get("ReminderDate")" MinDate="DateTime.Today" DateFormat="yyyy-MM-dd" Variant="Variant.Outlined" Class="mb-2" />
-            <MudTimePicker @bind-Time="_time" Label="@Strings.Get("ReminderTime")" Variant="Variant.Outlined" Class="mb-2" />
+            <MudDatePicker Editable="true" PickerVariant="PickerVariant.Dialog" @bind-Date="_date" Label="@Strings.Get("ReminderDate")" MinDate="DateTime.Today" DateFormat="yyyy-MM-dd" Variant="Variant.Outlined" Class="mb-2" />
+            <MudTimePicker Editable="true" PickerVariant="PickerVariant.Dialog" @bind-Time="_time" Label="@Strings.Get("ReminderTime")" Variant="Variant.Outlined" Class="mb-2" />
             <MudTextField @bind-Value="_note" Label="@Strings.Get("ReminderNote")" Variant="Variant.Outlined" Class="mb-2" />
             <MudSelect T="int" @bind-Value="_recurrence" Label="@Strings.Get("ReminderRepeat")" Variant="Variant.Outlined" Class="mb-2">
                 <MudSelectItem T="int" Value="@(0)">@Strings.Get("RecurNone")</MudSelectItem>

@@ -40,12 +40,14 @@ public class WebSearchDateFilterTests
         await Expect(result).ToBeVisibleAsync();
 
         // Set "document date from" to a future month (next month, day 15) → the seeded doc (today) is excluded.
+        // TYPED, not picked (#1056): the picker is Editable now, so a click into the input focuses it for
+        // typing rather than opening the calendar — and the typed path is the primary one, so it is the
+        // tested one (the same rule the desktop booking test follows).
         await page.GetByRole(AriaRole.Button, new() { Name = "Filters" }).ClickAsync();
         var docDateRow = page.Locator(".wb-filter-row").Filter(new() { HasText = "Document date" });
-        await docDateRow.Locator("input[placeholder='from']").ClickAsync(); // open the calendar
-
-        await page.Locator(".mud-picker-nav-button-next").ClickAsync(); // next month
-        await page.Locator("button.mud-picker-calendar-day").Filter(new() { HasText = "15" }).First.ClickAsync();
+        var fromDate = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 15).AddMonths(1);
+        await docDateRow.Locator("input[placeholder='from']").FillAsync(fromDate.ToString("yyyy-MM-dd"));
+        await docDateRow.Locator("input[placeholder='from']").PressAsync("Enter"); // commit the typed date
 
         await input.FillAsync("Invoice");
         await input.PressAsync("Enter");

@@ -74,7 +74,7 @@
 
                 @if (_canCreate)
                 {
-                    <MudDatePicker @bind-Date="_expiry" Label="@Strings.Get("ExtLinkExpires")" MinDate="DateTime.Today.AddDays(1)"
+                    <MudDatePicker Editable="true" PickerVariant="PickerVariant.Dialog" @bind-Date="_expiry" Label="@Strings.Get("ExtLinkExpires")" MinDate="DateTime.Today.AddDays(1)"
                                    DateFormat="yyyy-MM-dd" Variant="Variant.Outlined" Class="mb-2" />
                     <MudNumericField T="int?" @bind-Value="_maxAccesses" Label="@Strings.Get("ExtLinkMaxAccesses")"
                                      Min="1" Variant="Variant.Outlined" />

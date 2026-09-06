@@ -72,9 +72,12 @@ public sealed class DetailLoader(
             detail.Links = Links.RelMap(document?.Links);
             // The generic action surface (ADR 0743): a labeled non-GET link is an action; the label being
             // the signal spares this client a known-rel list that would drift the moment a module ships.
+            // The populate hook is NOT a button (ADR 0764): it fires on every interaction, so a manual
+            // trigger would be the one redundant control on the row — it rides in Links, never here.
             detail.GenericActions = document?.Links?
                 .Where(l => !string.IsNullOrEmpty(l.Label)
-                    && !string.Equals(l.Method, "GET", StringComparison.OrdinalIgnoreCase))
+                    && !string.Equals(l.Method, "GET", StringComparison.OrdinalIgnoreCase)
+                    && !(l.Rel?.StartsWith("machine-auto-refresh:", StringComparison.Ordinal) ?? false))
                 .ToList() ?? [];
             detail.MaskId = null;
 

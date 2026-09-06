@@ -29,9 +29,9 @@
             @if (_canBook)
             {
                 <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;" class="mt-3">
-                    <MudDatePicker Date="_date" DateChanged="@((DateTime? d) => _date = d)" Label="@Strings.Get("BookDate")" Style="width:150px" />
-                    <MudTimePicker Time="_start" TimeChanged="@((TimeSpan? t) => _start = t)" Label="@Strings.Get("BookFrom")" Style="width:110px" />
-                    <MudTimePicker Time="_end" TimeChanged="@((TimeSpan? t) => _end = t)" Label="@Strings.Get("BookUntil")" Style="width:110px" />
+                    <MudDatePicker Editable="true" PickerVariant="PickerVariant.Dialog" Date="_date" DateChanged="@((DateTime? d) => _date = d)" Label="@Strings.Get("BookDate")" Style="width:150px" />
+                    <MudTimePicker Editable="true" PickerVariant="PickerVariant.Dialog" Time="_start" TimeChanged="@((TimeSpan? t) => _start = t)" Label="@Strings.Get("BookFrom")" Style="width:110px" />
+                    <MudTimePicker Editable="true" PickerVariant="PickerVariant.Dialog" Time="_end" TimeChanged="@((TimeSpan? t) => _end = t)" Label="@Strings.Get("BookUntil")" Style="width:110px" />
                     <MudTextField @bind-Value="_purpose" Label="@Strings.Get("BookPurpose")" Style="min-width:160px" />
                 </div>
             }

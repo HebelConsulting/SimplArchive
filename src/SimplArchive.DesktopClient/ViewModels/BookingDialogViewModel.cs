@@ -32,8 +32,12 @@ public partial class BookingDialogViewModel : ObservableObject
     public ObservableCollection<BookingRowView> Bookings { get; } = [];
 
     [ObservableProperty] private DateTime? _bookingDate = DateTime.Today.AddDays(1);
-    [ObservableProperty] private TimeSpan? _startTime = new(9, 0, 0);
-    [ObservableProperty] private TimeSpan? _endTime = new(10, 0, 0);
+
+    // TYPED time entry (the keyboard-first principle): the platform TimePicker is a spinner with no keyboard
+    // path at all — the value the user already knows costs a click-hunt. Parsed leniently (0900/9:00/09:00)
+    // by the shared Presentation parser at Book.
+    [ObservableProperty] private string _startEntry = "09:00";
+    [ObservableProperty] private string _endEntry = "10:00";
     [ObservableProperty] private string _purpose = string.Empty;
     [ObservableProperty] private string _status = string.Empty;
     [ObservableProperty] private bool _canBook;
@@ -63,10 +67,21 @@ public partial class BookingDialogViewModel : ObservableObject
     [RelayCommand]
     private async Task Book()
     {
-        if (BookingDate is not { } date || StartTime is not { } start || EndTime is not { } end)
+        if (BookingDate is not { } date)
         {
             return;
         }
+
+        if (!SimplArchive.Presentation.DocumentDateFormat.TryParseTypedTime(StartEntry, out var startParsed)
+            || !SimplArchive.Presentation.DocumentDateFormat.TryParseTypedTime(EndEntry, out var endParsed)
+            || startParsed is not { } startTime || endParsed is not { } endTime)
+        {
+            Status = Strings.Get("BookTimeInvalid");
+            return;
+        }
+
+        var start = startTime.ToTimeSpan();
+        var end = endTime.ToTimeSpan();
 
         // Local wall-clock in, real instants out — the offset is this machine's, and the server compares
         // instants (ADR 0735's [start, end) semantics).

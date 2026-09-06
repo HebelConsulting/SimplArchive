@@ -53,8 +53,8 @@ public class DesktopBookingDialogTests
         Assert.Empty(vm.Bookings);
 
         vm.BookingDate = DateTime.Today.AddDays(7);
-        vm.StartTime = new TimeSpan(9, 0, 0);
-        vm.EndTime = new TimeSpan(10, 0, 0);
+        vm.StartEntry = "0900";  // typed, lenient spelling — the keyboard-first path IS the tested path
+        vm.EndEntry = "10:00";
         vm.Purpose = "Standup";
         await vm.BookCommand.ExecuteAsync(null);
 
@@ -65,7 +65,7 @@ public class DesktopBookingDialogTests
 
         // The same slot again: refused, and the message is ApiErrorText's localized sentence — never the
         // server's English detail (issue #424).
-        vm.EndTime = new TimeSpan(9, 30, 0);
+        vm.EndEntry = "9:30";
         await vm.BookCommand.ExecuteAsync(null);
         Assert.Equal(SimplArchive.Localization.ApiErrorText.For("BOOKING_SLOT_CONFLICT"), vm.Status);
         Assert.Single(vm.Bookings);
@@ -79,8 +79,8 @@ public class DesktopBookingDialogTests
         var vm = new BookingDialogViewModel(api, bookingsHref, roomName);
         await vm.LoadAsync();
         vm.BookingDate = DateTime.Today.AddDays(8);
-        vm.StartTime = new TimeSpan(14, 0, 0);
-        vm.EndTime = new TimeSpan(15, 0, 0);
+        vm.StartEntry = "14:00";
+        vm.EndEntry = "15:00";
         await vm.BookCommand.ExecuteAsync(null);
         var row = Assert.Single(vm.Bookings);
 

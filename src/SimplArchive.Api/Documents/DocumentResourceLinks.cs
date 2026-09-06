@@ -128,7 +128,7 @@ public sealed class DocumentResourceLinks
         // button would read as a missing feature. Emitted only where the caller could execute
         // (CanEditContent, the same right the POST enforces) and where the declaring module is ACTIVE —
         // for anyone else the machine does not exist (ADR 0543).
-        if (maskFacts is not null && rights.CanEditContent)
+        if (maskFacts is not null)
         {
             var now = DateTimeOffset.UtcNow;
             foreach (var machine in _machines.Machines.Values.Where(m => m.SubjectMaskId == maskFacts.MaskId))
@@ -142,6 +142,14 @@ public sealed class DocumentResourceLinks
 
                 foreach (var (transitionName, transition) in machine.Transitions)
                 {
+                    // An ORDINARY transition mutates on the caller's behalf and stays edit-gated; the populate
+                    // hook is an AUTOMATED act the viewer merely triggers (ADR 0764) — CanSee is the whole ask,
+                    // and seeing this resource at all established it.
+                    if (!transition.AutoRefreshOnOpen && !rights.CanEditContent)
+                    {
+                        continue;
+                    }
+
                     // An auto-refresh-on-open transition (ABI 0.6) wears a DISTINCT rel prefix so a client
                     // knows to POST it the moment the folder is opened (the DABS/METAR populate-on-open hook),
                     // rather than only on a button press. Same href and gate as any transition; the prefix is
@@ -182,6 +190,44 @@ public sealed class DocumentResourceLinks
         if (parentId is { } parentDocumentId)
         {
             links.Add(new Link("parent", $"/api/documents/{parentDocumentId}", "GET"));
+        }
+
+        // The populate hook FOLLOWS the content (ADR 0764, widening ADR 0756): a child of an auto-refreshing
+        // folder carries its parent's machine-auto-refresh rel too, so selecting the METAR leaf refreshes it
+        // without a second fetch to discover the parent's affordance (ADR 0557's one-read rule). The href —
+        // and so the SUBJECT — stays the folder; the label rides along for any client that renders it.
+        // Gated on the child's CanEditContent as the folder's own emission is on the folder's — grants inherit
+        // by default, so the two agree except under a deliberately divergent ACL, where the POST's own gate
+        // still has the last word.
+        if (parentId is { } refreshParent
+            && _machines.Machines.Values.Any(m => m.Transitions.Values.Any(t => t.AutoRefreshOnOpen)))
+        {
+            var parentMaskId = await _dbContext.Documents
+                .Where(d => d.Id == refreshParent && d.MaskVersionId != null)
+                .Join(_dbContext.MaskVersions, d => d.MaskVersionId, v => (Guid?)v.Id, (d, v) => (Guid?)v.MaskId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (parentMaskId is { } parentMask)
+            {
+                var now2 = DateTimeOffset.UtcNow;
+                foreach (var machine in _machines.Machines.Values.Where(m => m.SubjectMaskId == parentMask))
+                {
+                    if (machine.ModuleId is { } declaringModule
+                        && !await SimplArchive.Infrastructure.Modules.ModuleActivationCheck
+                            .IsActiveAsync(_dbContext, declaringModule, now2, cancellationToken))
+                    {
+                        continue;
+                    }
+
+                    foreach (var (transitionName, transition) in machine.Transitions.Where(t => t.Value.AutoRefreshOnOpen))
+                    {
+                        links.Add(new Link(
+                            $"machine-auto-refresh:{machine.MachineId}:{transitionName}",
+                            $"/api/documents/{refreshParent}/machine/{machine.MachineId}/transitions/{transitionName}",
+                            "POST",
+                            transition.Label));
+                    }
+                }
+            }
         }
 
         if (parentId is not null && rights.CanManagePermissions)

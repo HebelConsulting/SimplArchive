@@ -146,8 +146,9 @@ public partial class Home
     /// </summary>
     private async Task AutoRefreshOpenFolderAsync(BrowseNode folder, int openedAt)
     {
-        var autoRefresh = (Detail.GenericActions ?? [])
-            .Where(a => a.Rel is { } r && r.StartsWith("machine-auto-refresh:", StringComparison.Ordinal))
+        var autoRefresh = (Detail.Links ?? new Dictionary<string, string>())
+            .Where(kv => kv.Key.StartsWith("machine-auto-refresh:", StringComparison.Ordinal))
+            .Select(kv => kv.Value)
             .ToList();
         if (autoRefresh.Count == 0)
         {
@@ -156,9 +157,9 @@ public partial class Home
 
         try
         {
-            foreach (var action in autoRefresh)
+            foreach (var href in autoRefresh)
             {
-                using var request = new HttpRequestMessage(new HttpMethod(action.Method), action.Href.TrimStart('/'));
+                using var request = new HttpRequestMessage(HttpMethod.Post, href.TrimStart('/'));
                 var response = await Http.SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
@@ -413,6 +414,61 @@ public partial class Home
         }
 
         await LoadCommentsAsync(item);
+        await AutoRefreshSelectionAsync(item, token);
+    }
+
+    // The populate hook follows every interaction (ADR 0764): SELECTING a weather folder — or one of its
+    // leaves, which carry the parent's rel — re-fetches, so the report a user reads is the current one with
+    // no button pressed. A per-href cooldown keeps rapid clicking from hammering the provider, and doubles
+    // as the recursion brake for the reload below.
+    private static readonly Dictionary<string, DateTimeOffset> _autoRefreshedAt = [];
+    private static readonly TimeSpan AutoRefreshCooldown = TimeSpan.FromSeconds(30);
+
+    private async Task AutoRefreshSelectionAsync(BrowseNode item, int token)
+    {
+        var hrefs = (Detail.Links ?? new Dictionary<string, string>())
+            .Where(kv => kv.Key.StartsWith("machine-auto-refresh:", StringComparison.Ordinal))
+            .Select(kv => kv.Value)
+            .Where(h => !_autoRefreshedAt.TryGetValue(h, out var at) || DateTimeOffset.UtcNow - at >= AutoRefreshCooldown)
+            .ToList();
+        if (hrefs.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (var href in hrefs)
+            {
+                _autoRefreshedAt[href] = DateTimeOffset.UtcNow;
+                using var request = new HttpRequestMessage(HttpMethod.Post, href.TrimStart('/'));
+                var response = await Http.SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return; // a refused populate is not worth interrupting a selection
+                }
+            }
+        }
+        catch (HttpRequestException)
+        {
+            return;
+        }
+
+        if (DetailLoad.Superseded(token))
+        {
+            return; // the user moved on — nothing here is theirs to see any more (#784)
+        }
+
+        // The content may have been replaced: re-read what is on screen. The cooldown above makes the
+        // recursive load a plain read. If the selected node IS the open folder, its listed children moved too.
+        if (_selectedFolder is { } open && open.Id == item.Id)
+        {
+            _folderContents = (await Browse.LoadContentsAsync(open.Id, open.RepositoryId,
+                BrowseService.ChildrenHrefOf(open), BrowseService.ReferencesHrefOf(open))).Nodes;
+        }
+
+        await LoadDetailForAsync(item);
+        StateHasChanged();
     }
 
     // The generic action surface's executor (ADR 0743): the labeled link's method against its advertised
@@ -460,7 +516,8 @@ public partial class Home
                 var document = await Http.GetFromJsonAsync<DocumentLinksResponse>(selfHref.TrimStart('/'));
                 Detail.GenericActions = document?.Links?
                     .Where(l => !string.IsNullOrEmpty(l.Label)
-                        && !string.Equals(l.Method, "GET", StringComparison.OrdinalIgnoreCase))
+                        && !string.Equals(l.Method, "GET", StringComparison.OrdinalIgnoreCase)
+                        && !(l.Rel?.StartsWith("machine-auto-refresh:", StringComparison.Ordinal) ?? false))
                     .ToList() ?? [];
                 StateHasChanged();
             }

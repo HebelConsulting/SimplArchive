@@ -139,13 +139,13 @@
         <div class="wb-search-filters">
             <div class="wb-filter-row">
                 <span class="wb-filter-label">@Strings.Get("FilterDocDate")</span>
-                <MudDatePicker @bind-Date="S.DocDateFrom" Placeholder="from" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" Class="wb-filter-date" />
-                <MudDatePicker @bind-Date="S.DocDateTo" Placeholder="to" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" Class="wb-filter-date" />
+                <MudDatePicker Editable="true" @bind-Date="S.DocDateFrom" Placeholder="from" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" Class="wb-filter-date" />
+                <MudDatePicker Editable="true" @bind-Date="S.DocDateTo" Placeholder="to" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" Class="wb-filter-date" />
             </div>
             <div class="wb-filter-row">
                 <span class="wb-filter-label">@Strings.Get("FilterCreated")</span>
-                <MudDatePicker @bind-Date="S.CreatedFrom" Placeholder="from" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" Class="wb-filter-date" />
-                <MudDatePicker @bind-Date="S.CreatedTo" Placeholder="to" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" Class="wb-filter-date" />
+                <MudDatePicker Editable="true" @bind-Date="S.CreatedFrom" Placeholder="from" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" Class="wb-filter-date" />
+                <MudDatePicker Editable="true" @bind-Date="S.CreatedTo" Placeholder="to" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" Class="wb-filter-date" />
             </div>
             <div class="wb-filter-row">
                 <span class="wb-filter-label">@Strings.Get("FilterCreatedBy")</span>
@@ -170,7 +170,7 @@
                     </MudSelect>
                     @if (row.DataType == 2)
                     {
-                        <MudDatePicker @bind-Date="row.DateValue" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" Class="wb-filter-date" />
+                        <MudDatePicker Editable="true" @bind-Date="row.DateValue" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" Class="wb-filter-date" />
                     }
                     else if (row.DataType == 3)
                     {

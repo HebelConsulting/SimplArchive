@@ -14,12 +14,12 @@
             </MudRadioGroup>
 
             <div style="display:flex; gap:12px;">
-                <MudDatePicker @bind-Date="_documentDateFrom" Label="@Strings.Get("ExportDocDateFrom")" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
-                <MudDatePicker @bind-Date="_documentDateTo" Label="@Strings.Get("ExportDocDateTo")" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
+                <MudDatePicker Editable="true" PickerVariant="PickerVariant.Dialog" @bind-Date="_documentDateFrom" Label="@Strings.Get("ExportDocDateFrom")" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
+                <MudDatePicker Editable="true" PickerVariant="PickerVariant.Dialog" @bind-Date="_documentDateTo" Label="@Strings.Get("ExportDocDateTo")" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
             </div>
             <div style="display:flex; gap:12px;">
-                <MudDatePicker @bind-Date="_filedFrom" Label="@Strings.Get("ExportFiledFrom")" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
-                <MudDatePicker @bind-Date="_filedTo" Label="@Strings.Get("ExportFiledTo")" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
+                <MudDatePicker Editable="true" PickerVariant="PickerVariant.Dialog" @bind-Date="_filedFrom" Label="@Strings.Get("ExportFiledFrom")" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
+                <MudDatePicker Editable="true" PickerVariant="PickerVariant.Dialog" @bind-Date="_filedTo" Label="@Strings.Get("ExportFiledTo")" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
             </div>
             <MudTextField @bind-Value="_createdBy" Label="@Strings.Get("ExportCreatedBy")" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
 

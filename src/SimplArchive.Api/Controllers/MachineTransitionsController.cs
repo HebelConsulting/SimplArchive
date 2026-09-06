@@ -74,7 +74,14 @@ public class MachineTransitionsController : ControllerBase
             return NotFound();
         }
 
-        if (!(await _access.GetCallerRightsAsync(documentId, cancellationToken)).CanEditContent)
+        // A handler mutates the subject's world, which is what CanEditContent means everywhere — EXCEPT the
+        // populate hook (ADR 0764): an auto-refresh is an AUTOMATED act the viewer merely triggers, the module
+        // principal does the writing under its own consent grants, so being allowed to SEE the subject is the
+        // whole ask. (CanSee is already established: an invisible document returned NotFound above via the
+        // rights walk in GetCallerRightsAsync — all-false rights read as not-found-shaped Forbid below.)
+        var rights = await _access.GetCallerRightsAsync(documentId, cancellationToken);
+        var required = machine.Transitions[transitionName].AutoRefreshOnOpen ? rights.CanSee : rights.CanEditContent;
+        if (!required)
         {
             return Forbid();
         }

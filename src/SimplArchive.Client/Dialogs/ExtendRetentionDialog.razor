@@ -4,7 +4,7 @@
     <DialogContent>
         <div style="min-width: 320px;">
             <MudText Typo="Typo.body2" Class="mb-2">@((MarkupString)string.Format(Strings.Get("RetainUntilPrompt"), DocumentName))</MudText>
-            <MudDatePicker @bind-Date="_until" Label="@Strings.Get("RetainUntilLabel")" MinDate="DateTime.Today.AddDays(1)"
+            <MudDatePicker Editable="true" PickerVariant="PickerVariant.Dialog" @bind-Date="_until" Label="@Strings.Get("RetainUntilLabel")" MinDate="DateTime.Today.AddDays(1)"
                            DateFormat="yyyy-MM-dd" Variant="Variant.Outlined" />
         </div>
     </DialogContent>

@@ -20,7 +20,9 @@ public partial class MainWindowViewModel
     internal void SetDetailGenericActions(IReadOnlyList<DocumentsClient.GenericActionInfo>? actions)
     {
         DetailGenericActions.Clear();
-        foreach (var action in actions ?? [])
+        // The populate hook is NOT a button (ADR 0764): it fires on every interaction — open, selection, a
+        // leaf click — so a manual trigger would be the one redundant control on the row.
+        foreach (var action in (actions ?? []).Where(a => !IsAutoRefresh(a.Rel)))
         {
             DetailGenericActions.Add(action);
         }
@@ -46,7 +48,7 @@ public partial class MainWindowViewModel
             return;
         }
 
-        var autoRefresh = DetailGenericActions.Where(a => IsAutoRefresh(a.Rel)).ToList();
+        var autoRefresh = AutoRefreshActions();
         if (autoRefresh.Count == 0)
         {
             return;
@@ -105,5 +107,66 @@ public partial class MainWindowViewModel
         {
             ReportError(e.Message);
         }
+    }
+
+    /// <summary>The populate rels from the raw link map (they are filtered OUT of the action buttons —
+    /// ADR 0764), shaped as executable actions.</summary>
+    private List<DocumentsClient.GenericActionInfo> AutoRefreshActions() =>
+        (_detailLinks ?? new Dictionary<string, string>())
+            .Where(kv => IsAutoRefresh(kv.Key))
+            .Select(kv => new DocumentsClient.GenericActionInfo(kv.Key, string.Empty, "POST", kv.Value))
+            .ToList();
+
+    // A per-href cooldown keeps rapid clicking in the weather area from hammering the provider, and doubles
+    // as the recursion brake for the reload after a refresh (ADR 0764).
+    private static readonly Dictionary<string, DateTimeOffset> _autoRefreshedAt = [];
+    private static readonly TimeSpan AutoRefreshCooldown = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// The populate hook follows every interaction (ADR 0764): SELECTING a subject whose resource carries a
+    /// machine-auto-refresh rel — the weather folder, or a leaf carrying its parent's — re-fetches, then
+    /// re-reads what is on screen. CanSee is enough (the update is automated; the module principal writes).
+    /// </summary>
+    private async Task AutoRefreshSelectionAsync(NodeViewModel document)
+    {
+        if (_api is null)
+        {
+            return;
+        }
+
+        var due = AutoRefreshActions()
+            .Where(a => !_autoRefreshedAt.TryGetValue(a.Href, out var at) || DateTimeOffset.UtcNow - at >= AutoRefreshCooldown)
+            .ToList();
+        if (due.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (var action in due)
+            {
+                _autoRefreshedAt[action.Href] = DateTimeOffset.UtcNow;
+                await _api.Documents.ExecuteActionAsync(action);
+            }
+        }
+        catch (ApiActionException)
+        {
+            return; // a refused populate is not worth interrupting a selection
+        }
+
+        if (_selectedDocumentId != document.Id)
+        {
+            return; // the user moved on (ADR 0559)
+        }
+
+        // The content may have been replaced: re-read what is on screen (the cooldown makes this a plain
+        // read), and the listed children too when the subject IS the open folder.
+        if (_currentFolderId is { } open && open == document.Id)
+        {
+            await LoadFolderContentsAsync(open, _currentFolderLinks);
+        }
+
+        await LoadDetailAsync(document);
     }
 }

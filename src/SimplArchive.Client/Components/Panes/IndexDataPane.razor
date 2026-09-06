@@ -94,7 +94,7 @@
                     <td>
                         @if (IsEditing)
                         {
-                            <MudDatePicker @bind-Date="Detail.EditDocumentDate" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                            <MudDatePicker Editable="true" @bind-Date="Detail.EditDocumentDate" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" />
                             @* Keyboard-first time entry (ADR 0758 / the typed-not-picked principle): a plain
                                text field the user types HH:mm into; empty clears the time. UTC. *@
                             <MudTextField @bind-Value="Detail.EditDocumentTime" Placeholder="HH:mm UTC" Clearable="true"
@@ -245,15 +245,15 @@
                         }
                         else if (f.IsDate)
                         {
-                            <MudDatePicker @bind-Date="f.DateValue" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                            <MudDatePicker Editable="true" @bind-Date="f.DateValue" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" />
                         }
                         else if (f.IsDateTime)
                         {
                             @* A moment, not a day (#660): a date picker alone was the pane bug — the time
                                was in the value and nowhere on the screen. Same pair the desktop shows. *@
                             <div style="display:flex; gap:6px;">
-                                <MudDatePicker @bind-Date="f.DateValue" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" />
-                                <MudTimePicker @bind-Time="f.TimeValue" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                                <MudDatePicker Editable="true" @bind-Date="f.DateValue" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                                <MudTimePicker Editable="true" @bind-Time="f.TimeValue" Margin="Margin.Dense" Variant="Variant.Outlined" />
                             </div>
                         }
                         else if (f.IsBoolean)

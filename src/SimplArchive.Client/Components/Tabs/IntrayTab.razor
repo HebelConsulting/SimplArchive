@@ -212,7 +212,7 @@
                     {
                         <table class="wb-sysfields">
                             <tr><td>@Strings.Get("Name")</td><td><MudTextField @bind-Value="_intrayStgName" Margin="Margin.Dense" Variant="Variant.Outlined" /></td></tr>
-                            <tr><td>@Strings.Get("VerColDocDate")</td><td><MudDatePicker @bind-Date="_intrayStgDate" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" /></td></tr>
+                            <tr><td>@Strings.Get("VerColDocDate")</td><td><MudDatePicker Editable="true" @bind-Date="_intrayStgDate" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" /></td></tr>
                             @if (_intrayStgScannable)
                             {
                                 @* OCR languages for a scannable item — staged + applied to the searchable-PDF conversion at filing (ADR "Inbox OCR-language staging"). *@
@@ -247,7 +247,7 @@
                                     <span class="wb-mask-label">@f.Label</span>
                                     @if (f.IsDate)
                                     {
-                                        <MudDatePicker @bind-Date="f.DateValue" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                                        <MudDatePicker Editable="true" @bind-Date="f.DateValue" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" />
                                     }
                                     else if (f.IsBoolean)
                                     {

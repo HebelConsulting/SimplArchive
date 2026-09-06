@@ -34,11 +34,11 @@
                at 11:30 is exactly that. Nothing here converts between zones (ADR 0631 decision 5) — choosing one
                re-labels the same wall clock. The empty entry means a floating time, which stays floating. *@
             <div class="d-flex align-center" style="gap:8px;">
-                <MudDatePicker @bind-Date="Form.StartDate" Label="@Strings.Get("ApptStart")" Variant="Variant.Outlined"
+                <MudDatePicker Editable="true" PickerVariant="PickerVariant.Dialog" @bind-Date="Form.StartDate" Label="@Strings.Get("ApptStart")" Variant="Variant.Outlined"
                                Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
                 @if (!Form.IsAllDay)
                 {
-                    <MudTimePicker @bind-Time="Form.StartTime" Variant="Variant.Outlined" Margin="Margin.Dense"
+                    <MudTimePicker Editable="true" PickerVariant="PickerVariant.Dialog" @bind-Time="Form.StartTime" Variant="Variant.Outlined" Margin="Margin.Dense"
                                    Style="max-width:140px;" Disabled="@(!Form.StructuredEnabled)" />
                     <MudAutocomplete T="string" @bind-Value="Form.StartTimeZoneId" SearchFunc="SearchZones"
                                      Label="@Strings.Get("ApptStartZone")" Variant="Variant.Outlined" Margin="Margin.Dense"
@@ -47,11 +47,11 @@
                 }
             </div>
             <div class="d-flex align-center mt-2" style="gap:8px;">
-                <MudDatePicker @bind-Date="Form.EndDate" Label="@Strings.Get("ApptEnd")" Variant="Variant.Outlined"
+                <MudDatePicker Editable="true" PickerVariant="PickerVariant.Dialog" @bind-Date="Form.EndDate" Label="@Strings.Get("ApptEnd")" Variant="Variant.Outlined"
                                Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
                 @if (!Form.IsAllDay)
                 {
-                    <MudTimePicker @bind-Time="Form.EndTime" Variant="Variant.Outlined" Margin="Margin.Dense"
+                    <MudTimePicker Editable="true" PickerVariant="PickerVariant.Dialog" @bind-Time="Form.EndTime" Variant="Variant.Outlined" Margin="Margin.Dense"
                                    Style="max-width:140px;" Disabled="@(!Form.StructuredEnabled)" />
                     <MudAutocomplete T="string" @bind-Value="Form.EndTimeZoneId" SearchFunc="SearchZones"
                                      Label="@Strings.Get("ApptEndZone")" Variant="Variant.Outlined" Margin="Margin.Dense"

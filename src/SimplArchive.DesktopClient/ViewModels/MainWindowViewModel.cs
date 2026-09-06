@@ -1511,6 +1511,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
             {
                 await LoadCommentsAsync(chat);
             }
+
+            if (!Superseded())
+            {
+                await AutoRefreshSelectionAsync(document); // the populate hook follows selection (ADR 0764)
+            }
         }
         catch (Exception e)
         {

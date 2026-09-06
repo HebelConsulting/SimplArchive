@@ -284,6 +284,32 @@ public class ModuleControllerTests
             Assert.Equal(HttpStatusCode.NoContent,
                 (await rig.Admin.PostAsync(refresh.GetProperty("href").GetString(), null)).StatusCode);
             Assert.Equal(1, await ChildCountAsync(rig.Admin, dossierId));
+
+            // The hook FOLLOWS the content (ADR 0764): the staged CHILD carries its parent's rel too, same
+            // href — so a client selecting the leaf refreshes without a second fetch to find the affordance.
+            var childId = (await TestJson.Get(rig.Admin, $"/api/documents/{dossierId}/children"))
+                .GetProperty("children").EnumerateArray().Single().GetProperty("id").GetGuid();
+            var childRefresh = (await TestJson.Get(rig.Admin, $"/api/documents/{childId}")).GetProperty("links")
+                .EnumerateArray().Single(l => l.GetProperty("rel").GetString() == "machine-auto-refresh:test-pilot:refresh");
+            Assert.Equal(refresh.GetProperty("href").GetString(), childRefresh.GetProperty("href").GetString());
+
+            // And CanSee is the whole ask (ADR 0764 — the update is AUTOMATED; the module principal writes):
+            // a read-only viewer sees the rel and may POST it, while an ordinary transition stays edit-gated.
+            // The grant goes on the REPOSITORY — the dossier's governing ACL scope. An entry on the dossier
+            // itself would be inert (#1060): the dossier does not break inheritance, so the walk (ADR 0183)
+            // resolves rights from the nearest breaking ancestor-or-self, which is the root.
+            var viewerEmail = $"viewer-{Guid.NewGuid():N}@e2e.local";
+            var viewerId = await _factory.SeedUserAsync(rig.TenantId, viewerEmail, "ViewerPw123!", "Viewer");
+            await TestJson.Put(rig.Owner, $"/api/documents/{rig.RepoId}/acl-entries/users/{viewerId}",
+                new { canSee = true, canReadContent = true });
+            using var viewer = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(viewerEmail, "ViewerPw123!"));
+            var viewerDoc = await TestJson.Get(viewer, $"/api/documents/{dossierId}");
+            var viewerRefresh = viewerDoc.GetProperty("links").EnumerateArray()
+                .Single(l => l.GetProperty("rel").GetString() == "machine-auto-refresh:test-pilot:refresh");
+            Assert.Equal(HttpStatusCode.NoContent,
+                (await viewer.PostAsync(viewerRefresh.GetProperty("href").GetString(), null)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden,
+                (await viewer.PostAsync($"/api/documents/{dossierId}/machine/test-pilot/transitions/log-entry", null)).StatusCode);
         }
         finally
         {

@@ -92,8 +92,8 @@
                 <div class="wb-audit-filters">
                     <SearchField @bind-Value="_auditActionFilter" Label="@Strings.Get("AuditActionLabel")"
                                  Placeholder="@Strings.Get("AuditActionPlaceholder")" Style="max-width:220px;" />
-                    <MudDatePicker @bind-Date="_auditFrom" Label="@Strings.Get("AuditFrom")" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:170px;" />
-                    <MudDatePicker @bind-Date="_auditTo" Label="@Strings.Get("AuditTo")" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:170px;" />
+                    <MudDatePicker Editable="true" @bind-Date="_auditFrom" Label="@Strings.Get("AuditFrom")" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:170px;" />
+                    <MudDatePicker Editable="true" @bind-Date="_auditTo" Label="@Strings.Get("AuditTo")" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:170px;" />
                     @* Apply/Clear wear the ribbon-button style, by decision (#530 tranche 9). *@
                     <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="RunAuditSearchAsync"
                                title="@Strings.Get("AuditApply")" aria-label="@Strings.Get("AuditApply")">

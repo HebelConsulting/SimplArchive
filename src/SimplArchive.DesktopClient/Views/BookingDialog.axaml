@@ -37,10 +37,10 @@
             <CalendarDatePicker Grid.Row="0" Grid.Column="1" SelectedDate="{Binding BookingDate}" HorizontalAlignment="Stretch" Watermark="yyyy-MM-dd" />
 
             <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr BookFrom}" VerticalAlignment="Center" />
-            <TimePicker Grid.Row="1" Grid.Column="1" SelectedTime="{Binding StartTime}" ClockIdentifier="24HourClock" HorizontalAlignment="Left" />
+            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding StartEntry}" Watermark="HH:mm" Width="110" HorizontalAlignment="Left" />
 
             <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr BookUntil}" VerticalAlignment="Center" />
-            <TimePicker Grid.Row="2" Grid.Column="1" SelectedTime="{Binding EndTime}" ClockIdentifier="24HourClock" HorizontalAlignment="Left" />
+            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding EndEntry}" Watermark="HH:mm" Width="110" HorizontalAlignment="Left" />
 
             <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:Tr BookPurpose}" VerticalAlignment="Center" />
             <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding Purpose}" Watermark="{loc:Tr OptionalPlaceholder}" />
