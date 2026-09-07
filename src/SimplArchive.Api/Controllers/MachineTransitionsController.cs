@@ -91,7 +91,7 @@ public class MachineTransitionsController : ControllerBase
         {
             // The refusal IS the explanation (ADR 0742): the module's sentences as detail, the
             // machine-readable diagnosis as extensions.
-            throw new MachineTransitionRefusedException(machineId, transitionName, verdict.Failed);
+            throw new MachineTransitionRefusedException(machineId, transitionName, verdict.Failed, machine.ModuleId);
         }
 
         return NoContent();

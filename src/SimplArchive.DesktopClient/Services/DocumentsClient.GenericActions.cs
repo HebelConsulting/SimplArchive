@@ -65,10 +65,10 @@ public sealed partial class DocumentsClient
             return;
         }
 
-        // Parse ONCE, branch from the parse (the read-the-problem-body-once lesson).
-        // Mapped through ApiErrorText, never the English `detail` (issue #424); an unmapped module code
-        // falls back to the generic localized sentence until ADR 0742's engine ships server-localized
-        // explanations as their own field.
-        throw new ApiActionException(SimplArchive.Localization.ApiErrorText.For(await ApiCore.ErrorCodeAsync(response, cancellationToken)));
+        // Parse ONCE, branch from the parse (the read-the-problem-body-once lesson). Mapped through
+        // ApiErrorText — with the module-catalog license (ADR 0767): a problem carrying "module" renders
+        // its culture-composed detail, the precise diagnosis at last (#1062).
+        var (code, module, detail) = await ApiCore.ProblemAsync(response, cancellationToken);
+        throw new ApiActionException(SimplArchive.Localization.ApiErrorText.For(code, module, detail));
     }
 }

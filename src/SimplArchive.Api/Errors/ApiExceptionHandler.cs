@@ -18,6 +18,7 @@ public class ApiExceptionHandler : IExceptionHandler
 
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
+        string? localizedByModule = null;
         var (errorCode, statusCode, detail) = exception switch
         {
             ApiException apiException => (apiException.ErrorCode, apiException.StatusCode, apiException.Message),
@@ -27,6 +28,24 @@ public class ApiExceptionHandler : IExceptionHandler
                 (moduleException.ErrorCode, moduleException.StatusCode, moduleException.Message),
             _ => ("INTERNAL_ERROR", StatusCodes.Status500InternalServerError, "An unexpected error occurred."),
         };
+
+        // The module's catalog text for the request culture (ABI 0.10, ADR 0767): the detail becomes the
+        // localized sentence and the problem carries the module id — the clients' license to render it
+        // (their no-server-detail rule guards against unlocalizable English, which this is not). The acting
+        // module comes from the request's module scope when set; otherwise the code finds its module, since
+        // module codes are prefixed by convention. Falls back to the composed invariant message untouched.
+        if (exception is SimplArchive.ModuleAbi.ModuleApiException m)
+        {
+            var modules = httpContext.RequestServices.GetService<IReadOnlyList<Infrastructure.Modules.ModuleLoader.LoadedModule>>() ?? [];
+            var actingModule = httpContext.RequestServices.GetService<Infrastructure.Modules.ModuleIdentityAccessor>()?.ModuleId;
+            if (Infrastructure.Modules.ModuleTextResolver.Resolve(
+                    modules, actingModule, m.ErrorCode, m.Args.Count > 0 ? m.Args[0] : null,
+                    System.Globalization.CultureInfo.CurrentUICulture) is { } resolved)
+            {
+                detail = Infrastructure.Modules.ModuleTextResolver.Format(resolved.Template, m.Args);
+                localizedByModule = resolved.ModuleId;
+            }
+        }
 
         if (statusCode >= StatusCodes.Status500InternalServerError)
         {
@@ -47,6 +66,10 @@ public class ApiExceptionHandler : IExceptionHandler
             Instance = httpContext.Request.Path,
         };
         problemDetails.Extensions["errorCode"] = errorCode;
+        if (localizedByModule is not null)
+        {
+            problemDetails.Extensions["module"] = localizedByModule;
+        }
         foreach (var (key, value) in (exception as ApiException)?.Extensions ?? new Dictionary<string, object?>())
         {
             problemDetails.Extensions[key] = value;

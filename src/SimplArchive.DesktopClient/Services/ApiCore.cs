@@ -64,6 +64,11 @@ public sealed class ApiCore
         {
             BaseAddress = new Uri(_apiRootUrl),
         };
+        // The APP language, chosen at the logon window and applied before this client exists (ADR 0767):
+        // module-localized texts are composed server-side from Accept-Language, and the sentence next to a
+        // German UI must be German even on an English OS.
+        Http.DefaultRequestHeaders.AcceptLanguage.ParseAdd(
+            System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName);
     }
 
     /// <summary>
@@ -230,16 +235,26 @@ public sealed class ApiCore
     /// The contract the clients localize from (issue #424) — never the English `detail`. Parsed once,
     /// branched from the parse (the read-the-problem-body-once lesson).
     /// </summary>
-    public static async Task<string?> ErrorCodeAsync(HttpResponseMessage response, CancellationToken cancellationToken = default)
+    public static async Task<string?> ErrorCodeAsync(HttpResponseMessage response, CancellationToken cancellationToken = default) =>
+        (await ProblemAsync(response, cancellationToken)).Code;
+
+    /// <summary>The problem's code, plus the module-localization pair (ABI 0.10, core ADR 0767): a problem
+    /// carrying "module" has a detail the module's catalog composed for the request culture — the one
+    /// server text the no-server-detail rule licenses. One parse, all three facts.</summary>
+    public static async Task<(string? Code, string? Module, string? Detail)> ProblemAsync(
+        HttpResponseMessage response, CancellationToken cancellationToken = default)
     {
         try
         {
             var problem = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-            return problem.TryGetProperty("errorCode", out var code) ? code.GetString() : null;
+            return (
+                problem.TryGetProperty("errorCode", out var code) ? code.GetString() : null,
+                problem.TryGetProperty("module", out var module) ? module.GetString() : null,
+                problem.TryGetProperty("detail", out var detail) ? detail.GetString() : null);
         }
         catch (JsonException)
         {
-            return null;
+            return (null, null, null);
         }
     }
 

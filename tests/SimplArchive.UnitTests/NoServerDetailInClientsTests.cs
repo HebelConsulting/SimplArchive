@@ -24,11 +24,22 @@ public partial class NoServerDetailInClientsTests
     [GeneratedRegex(@"\.Detail\b")]
     private static partial Regex TypedDetailAccess();
 
+    // The ONE licensed read (ADR 0767): a problem carrying a "module" extension has a detail the module's
+    // own catalog composed for the REQUEST CULTURE — localized by construction, which is the very property
+    // this guard exists to protect. The sites are counted per file, exactly, the ApiRoot way: a new read
+    // must either flow through these or argue its own license here.
+    private static readonly Dictionary<string, int> LicensedModuleDetailReads = new(StringComparer.Ordinal)
+    {
+        ["src/SimplArchive.Client/Pages/Home.Navigation.razor.cs"] = 2,
+        ["src/SimplArchive.DesktopClient/Services/ApiCore.cs"] = 1,
+    };
+
     [Fact]
     public void No_client_surfaces_the_servers_problem_detail()
     {
         var root = RepoPaths.Root();
         var offenders = new List<string>();
+        var licensedSeen = new Dictionary<string, int>(StringComparer.Ordinal);
 
         foreach (var file in ClientFiles(root))
         {
@@ -50,8 +61,24 @@ public partial class NoServerDetailInClientsTests
                     continue;
                 }
 
-                offenders.Add($"  {Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/')}:{line}  {trimmed.Trim()}");
+                var relative = Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/');
+                if (LicensedModuleDetailReads.ContainsKey(relative))
+                {
+                    licensedSeen[relative] = licensedSeen.GetValueOrDefault(relative) + 1;
+                    continue;
+                }
+
+                offenders.Add($"  {relative}:{line}  {trimmed.Trim()}");
             }
+        }
+
+        // The license is a COUNT, not a blanket: a licensed file growing an extra read fails here, and a
+        // licensed read that disappeared means the list is stale — both are worth a human look.
+        foreach (var (file, expected) in LicensedModuleDetailReads)
+        {
+            Assert.True(licensedSeen.GetValueOrDefault(file) == expected,
+                $"{file}: expected exactly {expected} licensed module-detail read(s), found {licensedSeen.GetValueOrDefault(file)} — "
+                + "update LicensedModuleDetailReads deliberately (ADR 0767) rather than letting it drift.");
         }
 
         Assert.True(offenders.Count == 0,

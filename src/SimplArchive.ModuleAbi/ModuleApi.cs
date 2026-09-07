@@ -16,6 +16,19 @@ public class ModuleApiException : Exception
         StatusCode = statusCode;
     }
 
+    /// <summary>Creates the error with the dynamic parts as ARGS (ABI 0.10, core ADR 0767): the host
+    /// formats the module's per-culture template (<see cref="IIndustryModule.LocalizedTexts"/>) with them,
+    /// {0}-style; <paramref name="message"/> stays the composed invariant fallback, so a catalog gap
+    /// degrades to today's English, never to silence.</summary>
+    public ModuleApiException(string errorCode, int statusCode, string message, IReadOnlyList<string> args)
+        : this(errorCode, statusCode, message)
+    {
+        Args = args;
+    }
+
+    /// <summary>The dynamic parts of the message, in template order — empty when the text is static.</summary>
+    public IReadOnlyList<string> Args { get; } = [];
+
     /// <summary>The stable machine-readable code (`FLIGHT_AIRCRAFT_GROUNDED`) a client branches on.</summary>
     public string ErrorCode { get; }
 

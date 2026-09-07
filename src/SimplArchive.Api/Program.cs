@@ -707,10 +707,10 @@ app.UseExceptionHandler();
 // of UseBlazorFrameworkFiles/UseStaticFiles, not with the API middleware further down (ADR 0084, #844).
 SimplArchive.Api.Security.SecurityHeaders.UseSecurityHeaders(app);
 
-// Request localization for the server-rendered pages (the /Account/Login OAuth surface, ADR "Server login-page
-// localization"): the culture is selected from the browser's Accept-Language header (the SPA + desktop apply their
-// own in-app language client-side, so this only governs the login round-trip). Supported: en (default)/de/it/es —
-// resolves SimplArchive.Localization.Strings for the request via CurrentUICulture.
+// Request localization: the server-rendered pages (the /Account/Login OAuth surface, ADR "Server login-page
+// localization") AND — since ADR 0767 — the module-composed texts on the API itself: status diagnoses and
+// refusal details resolve the acting module's catalog for CurrentUICulture, so the clients send their APP
+// language as Accept-Language. Supported: en (default)/de/it/es.
 var supportedCultures = new[] { "en", "de", "it", "es" };
 app.UseRequestLocalization(new Microsoft.AspNetCore.Builder.RequestLocalizationOptions()
     .SetDefaultCulture("en")

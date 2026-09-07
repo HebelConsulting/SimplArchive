@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -179,6 +180,33 @@ public class ModuleControllerTests
             // A document no machine watches carries an empty set, not a missing field.
             var plain = await TestJson.Get(rig.Admin, $"/api/documents/{rig.RepoId}");
             Assert.Empty(plain.GetProperty("machineStatuses").EnumerateArray());
+
+            // The localization seam, end to end (ABI 0.10, ADR 0767): the SAME diagnosis in German when the
+            // request says so — the engine resolved the module's catalog for the request culture — and the
+            // untranslated sibling code falls back to its composed English rather than to silence.
+            using var germanRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/documents/{dossierId}");
+            germanRequest.Headers.AcceptLanguage.ParseAdd("de");
+            var german = await TestJson.Read(await rig.Admin.SendAsync(germanRequest));
+            var germanMayAct = german.GetProperty("machineStatuses").EnumerateArray()
+                .Single(x => x.GetProperty("name").GetString() == "MayAct");
+            Assert.Contains(germanMayAct.GetProperty("failures").EnumerateArray(),
+                f => f.GetProperty("code").GetString() == "test.certificate-expired"
+                    && f.GetProperty("text").GetString()!.Contains("abgelaufen"));
+            Assert.Contains(germanMayAct.GetProperty("failures").EnumerateArray(),
+                f => f.GetProperty("code").GetString() == "test.recency"
+                    && f.GetProperty("text").GetString()!.Contains("recent landings")); // no catalog entry → English
+
+            // And a REFUSED transition's problem carries the module marker + the localized sentence — the
+            // clients' license to render the detail.
+            using var refusedRequest = new HttpRequestMessage(HttpMethod.Post,
+                $"/api/documents/{dossierId}/machine/test-pilot/transitions/log-entry");
+            refusedRequest.Headers.AcceptLanguage.ParseAdd("de");
+            var refusedResponse = await rig.Admin.SendAsync(refusedRequest);
+            Assert.Equal(HttpStatusCode.Conflict, refusedResponse.StatusCode);
+            var problem = await refusedResponse.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal("MACHINE_TRANSITION_REFUSED", problem.GetProperty("errorCode").GetString());
+            Assert.Equal("test-module", problem.GetProperty("module").GetString());
+            Assert.Contains("abgelaufen", problem.GetProperty("detail").GetString());
         }
         finally
         {

@@ -254,6 +254,9 @@ public sealed class StateMachineEngine
             ? machine
             : throw new ArgumentException($"No module declared a machine '{machineId}'.", nameof(machineId));
 
+    private IEnumerable<ModuleLoader.LoadedModule> Modules() =>
+        _services.GetService(typeof(IReadOnlyList<ModuleLoader.LoadedModule>)) as IReadOnlyList<ModuleLoader.LoadedModule> ?? [];
+
     private async Task<StatusResult> EvaluateAsync(IReadOnlyList<StateCondition> conditions, Guid subjectDocumentId, DateTimeOffset asOf, CancellationToken cancellationToken)
     {
         var failed = new List<ConditionExplanation>();
@@ -269,9 +272,14 @@ public sealed class StateMachineEngine
             if (!Holds(condition, value, asOf))
             {
                 // The diagnosis: the code tests branch on, the VALUE that failed, the module's sentence
-                // with the value substituted — never a bare refusal (ADR 0742).
+                // with the value substituted — never a bare refusal (ADR 0742). The sentence is the
+                // CATALOG's for the request culture when the module ships one (ABI 0.10, ADR 0767) —
+                // ActAs() stamped the acting module just above — else the condition's composed invariant.
+                var template = ModuleTextResolver.Resolve(
+                        Modules(), _identity?.ModuleId, condition.FailCode, null, System.Globalization.CultureInfo.CurrentUICulture)
+                    ?.Template ?? condition.FailText;
                 failed.Add(new ConditionExplanation(condition.FailCode, value,
-                    condition.FailText.Replace("{value}", value ?? "—", StringComparison.Ordinal)));
+                    template.Replace("{value}", value ?? "—", StringComparison.Ordinal)));
             }
         }
 

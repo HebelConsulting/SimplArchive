@@ -34,6 +34,17 @@ public sealed class TestModule : IIndustryModule
     /// isolation working as designed). The E2E activation circle therefore plants the key in an
     /// environment variable, which crosses contexts because there is only one process environment.
     /// </summary>
+    /// <summary>The localization seam under test (ABI 0.10, ADR 0767): one German entry proves the
+    /// culture path; every uncovered code proves the fallback-to-composed-English path.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> LocalizedTexts { get; } =
+        new Dictionary<string, IReadOnlyDictionary<string, string>>
+        {
+            ["de"] = new Dictionary<string, string>
+            {
+                ["test.certificate-expired"] = "Das Zertifikat ist am {value} abgelaufen.",
+            },
+        };
+
     public string LicenseVerifyKeyPem =>
         Environment.GetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY") ?? VerifyKeyPem;
 

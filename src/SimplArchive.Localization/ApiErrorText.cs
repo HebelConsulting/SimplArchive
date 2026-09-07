@@ -32,6 +32,13 @@ namespace SimplArchive.Localization;
 /// </remarks>
 public static class ApiErrorText
 {
+    /// <summary>The message for a problem document that may be MODULE-localized (ABI 0.10, core ADR 0767):
+    /// a problem carrying a "module" extension has a detail the module's own catalog composed for the
+    /// request culture — the one server text the no-server-detail rule licenses, because it is localized by
+    /// construction. Everything else maps through the code as before.</summary>
+    public static string For(string? errorCode, string? module, string? detail) =>
+        module is not null && !string.IsNullOrWhiteSpace(detail) ? detail! : For(errorCode);
+
     public static string For(string? errorCode) => errorCode switch
     {
         // Mail-domain registration (#667). The not-verified one is the interesting case: it is the EXPECTED

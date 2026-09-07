@@ -110,7 +110,15 @@ builder.Services.AddScoped<SimplArchive.Client.Services.AnnotationEditor>();
 // reported by whichever tab happened to ask first as its own feature failing.
 builder.Services.AddScoped<SimplArchive.Client.Services.SessionExpiredHandler>();
 
-builder.Services.AddHttpClient("SimplArchive.Api", client => client.BaseAddress = new Uri(builder.HostEnvironment.BaseAddress))
+builder.Services.AddHttpClient("SimplArchive.Api", client =>
+    {
+        client.BaseAddress = new Uri(builder.HostEnvironment.BaseAddress);
+        // The APP language, not the browser's (ADR 0767): module-localized texts (status diagnoses,
+        // refusal details) are composed server-side from Accept-Language, and the sentence next to a
+        // German UI must be German even on an English OS. Culture is already applied here — Blazor.start
+        // set applicationCulture before Main ran.
+        client.DefaultRequestHeaders.AcceptLanguage.ParseAdd(System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName);
+    })
     .AddHttpMessageHandler(sp => sp.GetRequiredService<SimplArchive.Client.Services.SessionExpiredHandler>())
     .AddHttpMessageHandler(sp => sp.GetRequiredService<AuthorizationMessageHandler>()
         .ConfigureHandler(authorizedUrls: [builder.HostEnvironment.BaseAddress]))

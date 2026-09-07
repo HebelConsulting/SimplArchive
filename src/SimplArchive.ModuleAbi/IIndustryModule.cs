@@ -93,4 +93,13 @@ public interface IIndustryModule
     /// that fetches nothing declares nothing, and its injected client refuses every host.
     /// </summary>
     IReadOnlyList<string> OutboundHosts => [];
+
+    /// <summary>The module's localized refusal and status-diagnosis texts (ABI 0.10, core ADR 0767):
+    /// culture → code → template. Refusal templates use {0}-style slots for the exception's Args; status
+    /// templates use {value} for the condition's evaluated value. The host resolves the request culture
+    /// (falling back culture → "en" → the composed invariant message) and, for refusals, tries
+    /// "CODE.arg0" before "CODE" — the role-dependent-sentence trick. Default empty: an older module
+    /// keeps today's behaviour exactly.</summary>
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> LocalizedTexts =>
+        System.Collections.Immutable.ImmutableDictionary<string, IReadOnlyDictionary<string, string>>.Empty;
 }

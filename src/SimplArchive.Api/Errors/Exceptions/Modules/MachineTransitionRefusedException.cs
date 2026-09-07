@@ -15,7 +15,7 @@ namespace SimplArchive.Api.Errors.Exceptions.Modules;
 /// </remarks>
 public sealed class MachineTransitionRefusedException : ModuleException
 {
-    public MachineTransitionRefusedException(string machineId, string transitionName, IReadOnlyList<ConditionExplanation> refusals)
+    public MachineTransitionRefusedException(string machineId, string transitionName, IReadOnlyList<ConditionExplanation> refusals, string? moduleId = null)
         : base("MACHINE_TRANSITION_REFUSED", StatusCodes.Status409Conflict,
             string.Join(" ", refusals.Select(r => r.Text)),
             new Dictionary<string, object?>
@@ -23,6 +23,10 @@ public sealed class MachineTransitionRefusedException : ModuleException
                 ["machineId"] = machineId,
                 ["transition"] = transitionName,
                 ["refusals"] = refusals.Select(r => new { code = r.Code, value = r.Value, text = r.Text }).ToList(),
+                // The clients' license to render the detail (ADR 0767): the sentences above came out of the
+                // ENGINE, which localized them from the module's catalog for the request culture — so this
+                // problem carries the module id exactly like a ModuleApiException the handler localized.
+                ["module"] = moduleId,
             })
     {
     }

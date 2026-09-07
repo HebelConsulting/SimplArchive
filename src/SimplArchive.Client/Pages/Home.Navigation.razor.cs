@@ -507,17 +507,19 @@ public partial class Home
             var response = await Http.SendAsync(request);
             if (!response.IsSuccessStatusCode)
             {
-                // The errorCode, mapped through ApiErrorText — never the English `detail` (issue #424); an
-                // unmapped module code falls back to its generic localized sentence until ADR 0742's engine
-                // ships server-localized explanations as their own field.
-                string? code = null;
+                // The errorCode, mapped through ApiErrorText — with one licensed exception (ADR 0767): a
+                // problem carrying a "module" extension has a detail the module's catalog composed for the
+                // request culture, so THAT sentence renders (the precise diagnosis, at last — #1062).
+                string? code = null; string? module = null; string? moduleDetail = null;
                 try
                 {
                     var problem = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
                     code = problem.TryGetProperty("errorCode", out var c) ? c.GetString() : null;
+                    module = problem.TryGetProperty("module", out var m) ? m.GetString() : null;
+                    moduleDetail = problem.TryGetProperty("detail", out var d) ? d.GetString() : null;
                 }
                 catch (System.Text.Json.JsonException) { }
-                Snackbar.Add(SimplArchive.Localization.ApiErrorText.For(code), Severity.Error);
+                Snackbar.Add(SimplArchive.Localization.ApiErrorText.For(code, module, moduleDetail), Severity.Error);
                 return;
             }
 
@@ -627,14 +629,16 @@ public partial class Home
         }
         else
         {
-            string? code = null;
+            string? code = null; string? module = null; string? moduleDetail = null;
             try
             {
                 var problem = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
                 code = problem.TryGetProperty("errorCode", out var c) ? c.GetString() : null;
+                module = problem.TryGetProperty("module", out var m) ? m.GetString() : null;
+                moduleDetail = problem.TryGetProperty("detail", out var d) ? d.GetString() : null;
             }
             catch (System.Text.Json.JsonException) { }
-            Snackbar.Add(SimplArchive.Localization.ApiErrorText.For(code), Severity.Error);
+            Snackbar.Add(SimplArchive.Localization.ApiErrorText.For(code, module, moduleDetail), Severity.Error);
         }
     }
 
