@@ -38,7 +38,7 @@
     <div style="display:flex; flex-direction:column; flex:1 1 auto; min-width:0; min-height:0;">
         @* The toolbar shows for a page preview (find + zoom + full-screen) or a text preview (full-screen only). *@
         <div class="wb-pv-findbar" style="@((ShowToolbar && (State.HasPages || State.Kind == "text")) ? "" : "display:none;")">
-            @if (State.HasPages)
+            @if (State.HasPages || State.Kind == "text")
             {
                 <span class="wb-pv-findgrp">
                     <MudIcon Icon="@Icons.Material.Filled.Search" Size="Size.Small" />
@@ -77,7 +77,20 @@
         {
             @if (State.Kind == "text")
             {
-                <div style="flex:1 1 auto; min-height:0; overflow:auto; padding:12px;"><pre style="white-space:pre-wrap; margin:0; font-family:Menlo,Consolas,monospace; font-size:.82em;">@State.Text</pre></div>
+                @* Inline mark styles, deliberately: index.html does not link the scoped-CSS bundle, and a
+                   class with no ruleset is the invisible-control trap — a find that "works" but shows nothing. *@
+                <div style="flex:1 1 auto; min-height:0; overflow:auto; padding:12px;"><pre style="white-space:pre-wrap; margin:0; font-family:Menlo,Consolas,monospace; font-size:.82em;">@{ var hit = 0; }@foreach (var (segment, isHit, isActive) in State.TextSegments())
+{
+    if (isHit)
+    {
+        hit++;
+        <mark id="@($"wb-pv-thit-{hit}")" style="@(isActive ? "background:#f6a821; color:#000;" : "background:#ffe58a; color:#000;")">@segment</mark>
+    }
+    else
+    {
+        @segment
+    }
+}</pre></div>
             }
             else
             {
@@ -298,6 +311,13 @@
     private async Task ApplyFindAsync(string query)
     {
         State.FindQuery = query;
+        if (State.Kind == "text")
+        {
+            State.ApplyTextFind();
+            await ScrollToActiveTextHitAsync();
+            return;
+        }
+
         if (_module is null || !State.HasPages)
         {
             return;
@@ -309,7 +329,12 @@
 
     private async Task FindNextAsync()
     {
-        if (_module is not null && State.Count > 0)
+        if (State.Kind == "text")
+        {
+            State.CycleTextFind(+1);
+            await ScrollToActiveTextHitAsync();
+        }
+        else if (_module is not null && State.Count > 0)
         {
             State.Index = await _module.InvokeAsync<int>("next");
         }
@@ -317,10 +342,30 @@
 
     private async Task FindPrevAsync()
     {
-        if (_module is not null && State.Count > 0)
+        if (State.Kind == "text")
+        {
+            State.CycleTextFind(-1);
+            await ScrollToActiveTextHitAsync();
+        }
+        else if (_module is not null && State.Count > 0)
         {
             State.Index = await _module.InvokeAsync<int>("prev");
         }
+    }
+
+    /// <summary>Brings the active text match into view. After the state change the mark is (re)rendered
+    /// with its ordinal id, so the scroll waits for the render before asking the DOM.</summary>
+    private async Task ScrollToActiveTextHitAsync()
+    {
+        if (State.Count == 0)
+        {
+            return;
+        }
+
+        StateHasChanged();
+        await Task.Yield();
+        _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./preview.js");
+        await _module.InvokeVoidAsync("scrollToTextHit", $"wb-pv-thit-{State.Index}");
     }
 
     // ---- Zoom + full-screen ----------------------------------------------------------------------------

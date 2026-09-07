@@ -653,3 +653,8 @@ export async function pageThumbnails(url, width) {
 
     return thumbnails;
 }
+
+// Find in a TEXT preview (#1063): the marks are Blazor-rendered; this only brings the active one into view.
+export function scrollToTextHit(id) {
+    document.getElementById(id)?.scrollIntoView({ block: 'center' });
+}
