@@ -105,7 +105,19 @@ public static class RowCapabilities
         }
 
         var rights = await access.GetCallerRightsForManyAsync([.. rows.Select(documentIdOf)], cancellationToken);
+        Stamp(rows, documentIdOf, admitsPlainChild, rights);
+    }
 
+    /// <summary>The synchronous half, for a caller that already holds the page's rights — the visibility
+    /// filter (ADR 0765) resolves them to decide what to list, and re-resolving to stamp what it kept would
+    /// repeat the page's whole rights walk.</summary>
+    public static void Stamp<TRow>(
+        IReadOnlyCollection<TRow> rows,
+        Func<TRow, Guid> documentIdOf,
+        Func<TRow, bool> admitsPlainChild,
+        IReadOnlyDictionary<Guid, Application.Abstractions.EffectiveRights> rights)
+        where TRow : ICarriesRowCapabilities
+    {
         foreach (var row in rows)
         {
             if (!rights.TryGetValue(documentIdOf(row), out var r))

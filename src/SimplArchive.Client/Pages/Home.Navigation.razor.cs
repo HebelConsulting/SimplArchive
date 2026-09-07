@@ -40,10 +40,19 @@ public partial class Home
     // order"). A tree-child load wants the rows only, and calls the service directly.
     private async Task<List<BrowseNode>> OpenFolderContentsAsync(BrowseNode folder)
     {
-        var contents = await Browse.LoadContentsAsync(folder.Id, folder.RepositoryId, BrowseService.ChildrenHrefOf(folder), BrowseService.ReferencesHrefOf(folder));
-        _folderSortOrder = contents.SortOrder ?? _folderSortOrder;
-        _listPane?.ResetHeaderSort();
-        return contents.Nodes;
+        try
+        {
+            var contents = await Browse.LoadContentsAsync(folder.Id, folder.RepositoryId, BrowseService.ChildrenHrefOf(folder), BrowseService.ReferencesHrefOf(folder));
+            _folderSortOrder = contents.SortOrder ?? _folderSortOrder;
+            _listPane?.ResetHeaderSort();
+            return contents.Nodes;
+        }
+        catch (HttpRequestException)
+        {
+            // Same window as SelectFolderAsync's catch: a refused open is a message, not a crash.
+            Snackbar.Add(Strings.Get("FolderNoAccess"), Severity.Warning);
+            return [];
+        }
     }
 
     // Selecting a folder (tree click or drilling into a folder row) lists its contents in the middle pane.
@@ -81,7 +90,21 @@ public partial class Home
         // the row-drill path has always done this via OpenFolderContentsAsync; the tree-click path silently
         // did not, so a sort or filter set in one folder kept narrowing the next one's rows.
         _listPane?.ResetHeaderSort();
-        _folderContents = folder is null ? [] : (await Browse.LoadContentsAsync(folder.Id, folder.RepositoryId, BrowseService.ChildrenHrefOf(folder), BrowseService.ReferencesHrefOf(folder))).Nodes;
+        try
+        {
+            _folderContents = folder is null ? [] : (await Browse.LoadContentsAsync(folder.Id, folder.RepositoryId, BrowseService.ChildrenHrefOf(folder), BrowseService.ReferencesHrefOf(folder))).Nodes;
+        }
+        catch (HttpRequestException)
+        {
+            // A 403 here is the ADR 0559 window from the server's side: the listing offered the row, and the
+            // rights were gone by the click (revoked, or an inheritance break landing in between). Before
+            // ADR 0765 hid unseeable rows this was a CLICK AWAY on every isolated dossier — and it threw out
+            // of the event handler into the framework's error banner, taking the whole workbench down for a
+            // condition that means nothing more than "not yours to open".
+            _folderContents = [];
+            Snackbar.Add(Strings.Get("FolderNoAccess"), Severity.Warning);
+            return;
+        }
 
         // A row selected WHILE this load was in flight survives it.
         //

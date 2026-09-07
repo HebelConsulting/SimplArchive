@@ -261,14 +261,56 @@ public class DocumentChildrenController : ControllerBase
             query = query.Where(d => d.CreatedAt > cursorCreatedAt || (d.CreatedAt == cursorCreatedAt && d.Id > cursorId));
         }
 
+        // Per-row visibility (ADR 0765): a child the caller cannot SEE is not listed — a name is data too,
+        // and WebDAV has filtered this way since its hardening, so listing what the mount hides was a
+        // standing ADR 0509 parity violation. Pagination is walk-and-collect (the repositories listing's
+        // shape): fetch batches, drop invisible rows, until the page fills and one more visible row proves
+        // hasMore. The rights batch is the SAME one the capability flags need, so the filter costs no extra
+        // queries — the flags are stamped from it below instead of re-resolving.
         // HasChildren/HasVersions are computed in SQL (two .Any() subqueries per row) — never stored. See
         // ADR "Blazor repository/document browsing".
-        var fetched = await query
-            .OrderBy(d => d.CreatedAt).ThenBy(d => d.Id)
-            .Take(pageSize + 1)
-            .AsSummaryRows(_dbContext)
-            .ToListAsync(cancellationToken);
-        var (page, hasMore) = Cursor.Split(fetched, pageSize);
+        var page = new List<DocumentSummaryRow>(pageSize);
+        var rightsByRow = new Dictionary<Guid, Application.Abstractions.EffectiveRights>(pageSize);
+        var hasMore = false;
+        var scan = query;
+        while (true)
+        {
+            var batch = await scan
+                .OrderBy(d => d.CreatedAt).ThenBy(d => d.Id)
+                .Take(pageSize + 1)
+                .AsSummaryRows(_dbContext)
+                .ToListAsync(cancellationToken);
+            if (batch.Count == 0)
+            {
+                break;
+            }
+
+            var batchRights = await _access.GetCallerRightsForManyAsync([.. batch.Select(b => b.Id)], cancellationToken);
+            foreach (var row in batch)
+            {
+                if (!batchRights.TryGetValue(row.Id, out var r) || !r.CanSee)
+                {
+                    continue;
+                }
+
+                if (page.Count == pageSize)
+                {
+                    hasMore = true;
+                    break;
+                }
+
+                page.Add(row);
+                rightsByRow[row.Id] = r;
+            }
+
+            if (hasMore || batch.Count <= pageSize)
+            {
+                break; // the page is proven full, or the folder is exhausted
+            }
+
+            var last = batch[^1];
+            scan = query.Where(d => d.CreatedAt > last.CreatedAt || (d.CreatedAt == last.CreatedAt && d.Id > last.Id));
+        }
 
         // Tags per row (ADR "List-row columns and sorting") — a single batched query over the page's ids.
         var tagsByDoc = await DocumentSummaryQueries.TagsForAsync(_dbContext, page.Select(p => p.Id).ToList(), cancellationToken);
@@ -368,8 +410,9 @@ public class DocumentChildrenController : ControllerBase
             d => d.Id,
             d => ChildCreationPolicy.AdmitsPlainChild(d.MaskId, parentIsPersonalRoot: false));
 
-        await Hypermedia.RowCapabilities.StampAsync(
-            children, r => r.Id, r => admitsPlainChild[r.Id], _access, cancellationToken);
+        // Stamped from the SAME rights batch the visibility filter read (ADR 0765) — a second resolution
+        // would repeat the page's whole rights walk for an answer already in hand.
+        Hypermedia.RowCapabilities.Stamp(children, r => r.Id, r => admitsPlainChild[r.Id], rightsByRow);
 
         // The FOLDER's own rights, which the per-row batch above does not cover — it answers the children, and
         // this answers their parent. One document's worth of work on a read that already does several queries,

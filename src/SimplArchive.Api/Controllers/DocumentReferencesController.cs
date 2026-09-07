@@ -153,24 +153,62 @@ public class DocumentReferencesController : ControllerBase
 
         // The presentation booleans are computed against the TARGET (a reference to a folder shows the
         // folder icon and drills into the folder's children), mirroring DocumentsController.ListChildren.
-        var fetched = await query
-            .OrderBy(r => r.CreatedAt).ThenBy(r => r.Id)
-            .Take(pageSize + 1)
-            .Select(r => new ReferenceRow(
-                r.Id,
-                r.CreatedAt,
-                r.TargetDocumentId,
-                _dbContext.Documents.Where(d => d.Id == r.TargetDocumentId).Select(d => d.Name).FirstOrDefault()!,
-                // Anything filed here at all: a child document/subfolder, or a REFERENCE filed into it (issue
-                // #376). A folder holding only shortcuts still has contents the list shows.
-                _dbContext.Documents.Any(c => c.ParentId == r.TargetDocumentId)
-                    || _dbContext.DocumentReferences.Any(x => x.ParentFolderId == r.TargetDocumentId),
-                _dbContext.DocumentVersions.Any(v => v.DocumentId == r.TargetDocumentId),
-                _dbContext.Documents.Any(c => c.ParentId == r.TargetDocumentId && !_dbContext.DocumentVersions.Any(v => v.DocumentId == c.Id)),
-                _dbContext.DocumentReferences.Any(other => other.TargetDocumentId == r.TargetDocumentId),
-                _dbContext.Documents.Where(d => d.Id == r.TargetDocumentId).Select(d => d.ParentId).FirstOrDefault()))
-            .ToListAsync(cancellationToken);
-        var (page, hasMore) = Cursor.Split(fetched, pageSize);
+        //
+        // Per-row visibility (ADR 0765): a reference whose TARGET the caller cannot see is not listed — the
+        // row's display name IS the target's name, the same leak one level removed. Walk-and-collect, like
+        // the children listing: batches, drop invisible, until the page fills and one extra proves hasMore.
+        var page = new List<ReferenceRow>(pageSize);
+        var hasMore = false;
+        var scan = query;
+        while (true)
+        {
+            var batch = await scan
+                .OrderBy(r => r.CreatedAt).ThenBy(r => r.Id)
+                .Take(pageSize + 1)
+                .Select(r => new ReferenceRow(
+                    r.Id,
+                    r.CreatedAt,
+                    r.TargetDocumentId,
+                    _dbContext.Documents.Where(d => d.Id == r.TargetDocumentId).Select(d => d.Name).FirstOrDefault()!,
+                    // Anything filed here at all: a child document/subfolder, or a REFERENCE filed into it (issue
+                    // #376). A folder holding only shortcuts still has contents the list shows.
+                    _dbContext.Documents.Any(c => c.ParentId == r.TargetDocumentId)
+                        || _dbContext.DocumentReferences.Any(x => x.ParentFolderId == r.TargetDocumentId),
+                    _dbContext.DocumentVersions.Any(v => v.DocumentId == r.TargetDocumentId),
+                    _dbContext.Documents.Any(c => c.ParentId == r.TargetDocumentId && !_dbContext.DocumentVersions.Any(v => v.DocumentId == c.Id)),
+                    _dbContext.DocumentReferences.Any(other => other.TargetDocumentId == r.TargetDocumentId),
+                    _dbContext.Documents.Where(d => d.Id == r.TargetDocumentId).Select(d => d.ParentId).FirstOrDefault()))
+                .ToListAsync(cancellationToken);
+            if (batch.Count == 0)
+            {
+                break;
+            }
+
+            var targetRights = await _access.GetCallerRightsForManyAsync([.. batch.Select(b => b.TargetId)], cancellationToken);
+            foreach (var row in batch)
+            {
+                if (!targetRights.TryGetValue(row.TargetId, out var r) || !r.CanSee)
+                {
+                    continue;
+                }
+
+                if (page.Count == pageSize)
+                {
+                    hasMore = true;
+                    break;
+                }
+
+                page.Add(row);
+            }
+
+            if (hasMore || batch.Count <= pageSize)
+            {
+                break;
+            }
+
+            var last = batch[^1];
+            scan = query.Where(r => r.CreatedAt > last.CreatedAt || (r.CreatedAt == last.CreatedAt && r.Id > last.ReferenceId));
+        }
 
         var links = new List<Link> { new("self", Url.Action(nameof(List), new { folderId, cursor, limit = pageSize })!, "GET") };
 

@@ -4722,6 +4722,9 @@
   <data name="DeepLinkCopied" xml:space="preserve">
     <value>Link copied — anyone with access can open it.</value>
   </data>
+  <data name="FolderNoAccess" xml:space="preserve">
+    <value>You do not have access to this folder.</value>
+  </data>
   <data name="DeepLinkNoAccess" xml:space="preserve">
     <value>You do not have access to this document. Ask the sender to grant you access.</value>
   </data>
