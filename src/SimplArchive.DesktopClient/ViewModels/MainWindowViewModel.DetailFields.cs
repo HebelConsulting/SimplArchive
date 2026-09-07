@@ -23,6 +23,7 @@ public sealed partial class MainWindowViewModel
         // Cleared with everything else on subject change (ADR 0559): an inherited action would execute
         // against the wrong document.
         SetDetailGenericActions(null);
+        SetDetailMachineStatuses(null);
         _detailLinks = null;
         OnPropertyChanged(nameof(CanOpenBookings)); // the affordance must not outlive its subject (ADR 0559)
         SysDocumentDate = null;
@@ -59,6 +60,7 @@ public sealed partial class MainWindowViewModel
             // them from the id (ADR 0543, issue #416). Captured here because `detail` is scoped to this try.
             _detailLinks = detail.Links;
             SetDetailGenericActions(detail.GenericActions);
+            SetDetailMachineStatuses(detail.MachineStatuses);
             OnPropertyChanged(nameof(CanOpenBookings));
             _detailDocumentName = detail.Name;
             CanShareDocument = detail.ExternalLinksHref is not null;

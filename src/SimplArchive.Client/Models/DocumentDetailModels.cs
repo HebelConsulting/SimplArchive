@@ -140,4 +140,29 @@ public record DocumentDetailResponse
     public bool BreaksInheritance { get; set; }
 
     public FolderContentsSortOrder ContentsSortOrder { get; set; }
+
+    /// <summary>The module state machines' derived statuses (#1062): satisfied or not, with the server's
+    /// per-condition diagnoses — what the detail pane's Status section renders. Empty for maskless
+    /// documents and masks with no machine.</summary>
+    public List<MachineStatusDto> MachineStatuses { get; set; } = [];
+}
+
+public record MachineStatusDto
+{
+    public string MachineId { get; set; } = string.Empty;
+
+    public string Name { get; set; } = string.Empty;
+
+    public bool Satisfied { get; set; }
+
+    public List<MachineStatusFailureDto> Failures { get; set; } = [];
+}
+
+public record MachineStatusFailureDto
+{
+    public string Code { get; set; } = string.Empty;
+
+    public string? Value { get; set; }
+
+    public string Text { get; set; } = string.Empty;
 }

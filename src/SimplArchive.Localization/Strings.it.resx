@@ -4722,6 +4722,9 @@
   <data name="DeepLinkCopied" xml:space="preserve">
     <value>Collegamento copiato — chiunque abbia accesso può aprirlo.</value>
   </data>
+  <data name="StatusSection" xml:space="preserve">
+    <value>Stato</value>
+  </data>
   <data name="FolderNoAccess" xml:space="preserve">
     <value>Non hai accesso a questa cartella.</value>
   </data>

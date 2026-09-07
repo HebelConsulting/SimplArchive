@@ -342,6 +342,31 @@
                 <MudButton Size="Size.Small" Variant="Variant.Outlined" Class="mt-3"
                            OnClick="@(() => OpenBookings.InvokeAsync())">@Strings.Get("BookingsButton")</MudButton>
             }
+            @* The Status section (#1062): the machine-derived statuses — currency, training windows, the
+               check-in verdict — with the server's per-condition diagnoses under each unmet one. A dispatcher
+               sees WHY, not just that; nothing renders for a document with no machine. Diagnosis texts are
+               module-composed pending the ABI localization seam (core ADR 0766's follow-up). *@
+            @if (Detail.MachineStatuses is { Count: > 0 } statuses)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-3">@Strings.Get("StatusSection")</MudText>
+                @foreach (var status in statuses)
+                {
+                    <div class="mt-1" style="display:flex; align-items:flex-start; gap:6px;">
+                        <MudIcon Icon="@(status.Satisfied ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Cancel)"
+                                 Color="@(status.Satisfied ? Color.Success : Color.Error)" Size="Size.Small" Style="margin-top:1px;" />
+                        <div style="min-width:0;">
+                            <MudText Typo="Typo.body2">@MachineStatusDisplay.Pretty(status.Name)</MudText>
+                            @if (!status.Satisfied)
+                            {
+                                @foreach (var failure in status.Failures)
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@failure.Text</MudText>
+                                }
+                            }
+                        </div>
+                    </div>
+                }
+            }
             @* The generic action surface (ADR 0743): server-labeled links render as buttons with no client
                knowledge of the rel — a module's actions arrive here without a build. Real buttons, not ribbon
                chips: a form-side surface (the ADR 0491 boundary), and the label is the server's, localized. *@

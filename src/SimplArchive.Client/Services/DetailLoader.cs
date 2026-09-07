@@ -79,6 +79,7 @@ public sealed class DetailLoader(
                     && !string.Equals(l.Method, "GET", StringComparison.OrdinalIgnoreCase)
                     && !(l.Rel?.StartsWith("machine-auto-refresh:", StringComparison.Ordinal) ?? false))
                 .ToList() ?? [];
+            detail.MachineStatuses = document?.MachineStatuses ?? [];
             detail.MaskId = null;
 
             // mask + index-data come from the ROW's own rels — the listing advertises them, so no second fetch.

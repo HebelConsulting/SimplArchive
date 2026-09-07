@@ -44,6 +44,11 @@ public sealed class DetailState
     /// </summary>
     public IReadOnlyList<Hypermedia.LinkResponse> GenericActions { get; set; } = [];
 
+    /// <summary>The machine statuses the detail pane's Status section renders (#1062) — currency, training
+    /// windows, later the check-in verdict. Cleared with the rest on subject change (ADR 0559): during a
+    /// load, inherited statuses would be claims about the wrong document.</summary>
+    public IReadOnlyList<Models.MachineStatusDto> MachineStatuses { get; set; } = [];
+
     /// <summary>True while a load or save is in flight, which disables the pane's commit controls.</summary>
     public bool Busy { get; set; }
 

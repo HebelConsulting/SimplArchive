@@ -15,6 +15,28 @@ public partial class MainWindowViewModel
 
     public bool HasDetailGenericActions => DetailGenericActions.Count > 0;
 
+    /// <summary>One Status row for the pane (#1062): the pretty name and, when unmet, the diagnoses. The
+    /// display split lives in SimplArchive.Presentation so both clients answer identically (ADR 0650).</summary>
+    public sealed record MachineStatusRow(string DisplayName, bool Satisfied, IReadOnlyList<string> Failures);
+
+    public ObservableCollection<MachineStatusRow> DetailMachineStatuses { get; } = [];
+
+    public bool HasDetailMachineStatuses => DetailMachineStatuses.Count > 0;
+
+    // Same rebuild-and-clear rule as the actions (ADR 0559): a status inherited from the previous subject
+    // is a claim about the wrong document.
+    internal void SetDetailMachineStatuses(IReadOnlyList<DocumentsClient.MachineStatusInfo>? statuses)
+    {
+        DetailMachineStatuses.Clear();
+        foreach (var status in statuses ?? [])
+        {
+            DetailMachineStatuses.Add(new MachineStatusRow(
+                SimplArchive.Presentation.MachineStatusDisplay.Pretty(status.Name), status.Satisfied, status.Failures));
+        }
+
+        OnPropertyChanged(nameof(HasDetailMachineStatuses));
+    }
+
     // Rebuild rather than mutate, and CLEARED when the subject changes (ADR 0559): an action inherited from
     // the previously selected document would execute against the wrong subject.
     internal void SetDetailGenericActions(IReadOnlyList<DocumentsClient.GenericActionInfo>? actions)
@@ -96,6 +118,7 @@ public partial class MainWindowViewModel
             {
                 var detail = await _api.Documents.GetDocumentDetailAsync(selfHref);
                 SetDetailGenericActions(detail.GenericActions);
+                SetDetailMachineStatuses(detail.MachineStatuses);
             }
         }
         catch (ApiActionException e)

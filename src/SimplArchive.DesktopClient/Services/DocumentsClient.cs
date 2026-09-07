@@ -160,7 +160,8 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
     // instead of composing a path (ADR 0543, issue #416). ExternalLinksHref predates this and stays: its ABSENCE
     // is meaningful (tenant switch off, or a folder), which is a different question from "what is its address".
     public sealed record DocumentDetailInfo(string Name, DocumentSensitivityInfo Sensitivity, string? ExternalLinksHref, int ContentsSortOrder,
-        IReadOnlyDictionary<string, string>? Links = null, IReadOnlyList<GenericActionInfo>? GenericActions = null)
+        IReadOnlyDictionary<string, string>? Links = null, IReadOnlyList<GenericActionInfo>? GenericActions = null,
+        IReadOnlyList<MachineStatusInfo>? MachineStatuses = null)
     {
         /// <summary>The advertised href for <paramref name="rel"/>; throws rather than composing one.</summary>
         public string Href(string rel) =>
@@ -188,7 +189,39 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
             ApiCore.RelHref(json, "external-links"),
             json.TryGetProperty("contentsSortOrder", out var so) && so.ValueKind == JsonValueKind.Number ? so.GetInt32() : 0,
             ApiCore.ParseLinks(json),
-            ParseGenericActions(json));
+            ParseGenericActions(json),
+            ParseMachineStatuses(json));
+    }
+
+    /// <summary>A machine-derived status with its diagnoses (#1062) — what the detail pane's Status section
+    /// renders. Empty for documents with no machine.</summary>
+    public sealed record MachineStatusInfo(string Name, bool Satisfied, IReadOnlyList<string> Failures);
+
+    internal static IReadOnlyList<MachineStatusInfo> ParseMachineStatuses(JsonElement json)
+    {
+        if (!json.TryGetProperty("machineStatuses", out var statuses) || statuses.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var result = new List<MachineStatusInfo>();
+        foreach (var status in statuses.EnumerateArray())
+        {
+            var failures = new List<string>();
+            if (status.TryGetProperty("failures", out var fs) && fs.ValueKind == JsonValueKind.Array)
+            {
+                failures.AddRange(fs.EnumerateArray()
+                    .Select(f => f.TryGetProperty("text", out var t) ? t.GetString() ?? string.Empty : string.Empty)
+                    .Where(t => t.Length > 0));
+            }
+
+            result.Add(new MachineStatusInfo(
+                status.TryGetProperty("name", out var n) ? n.GetString() ?? string.Empty : string.Empty,
+                status.TryGetProperty("satisfied", out var sat) && sat.ValueKind == JsonValueKind.True,
+                failures));
+        }
+
+        return result;
     }
 
     public async Task SetSensitivityAsync(string sensitivityHref, Guid? labelId, CancellationToken cancellationToken = default)

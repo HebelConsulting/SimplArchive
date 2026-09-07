@@ -208,6 +208,34 @@
                          no client knowledge of the rel — a module's actions arrive here without a build.
                          Real-looking buttons, not ribbon ghosts: this is a form-side surface (ADR 0491's
                          boundary), and the label is the server's, already localized. -->
+                    <!-- The Status section (#1062): machine-derived statuses with the server's diagnoses
+                         under each unmet one — currency, training windows, the check-in verdict. -->
+                    <StackPanel IsVisible="{Binding HasDetailMachineStatuses}" Margin="0,8,0,0" Spacing="2">
+                        <TextBlock Text="{loc:Tr StatusSection}" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                        <ItemsControl ItemsSource="{Binding DetailMachineStatuses}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:CompileBindings="False">
+                                    <StackPanel Orientation="Vertical" Margin="0,2,0,0">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <!-- Avalonia's binding negation spares a one-off converter. -->
+                                            <TextBlock Text="✓" Foreground="#2E7D32" FontWeight="Bold" IsVisible="{Binding Satisfied}" />
+                                            <TextBlock Text="✗" Foreground="#C62828" FontWeight="Bold" IsVisible="{Binding !Satisfied}" />
+                                            <TextBlock Text="{Binding DisplayName}" />
+                                        </StackPanel>
+                                        <ItemsControl ItemsSource="{Binding Failures}" Margin="18,0,0,0">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:CompileBindings="False">
+                                                    <TextBlock Text="{Binding}" Foreground="{DynamicResource WbMuted}"
+                                                               FontSize="12" TextWrapping="Wrap" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
                     <ItemsControl IsVisible="{Binding HasDetailGenericActions}" ItemsSource="{Binding DetailGenericActions}" Margin="0,8,0,0">
                         <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
