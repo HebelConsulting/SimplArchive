@@ -217,7 +217,12 @@ public class ExternalLinkApiTests
     {
         var (api, _, docId) = await SeedShareableDocumentAsync();
 
-        var localExpiry = new DateTimeOffset(2026, 9, 6, 23, 59, 0, TimeSpan.FromHours(2));
+        // Tomorrow at 23:59 in the +02:00 offset — RELATIVE to now, never a literal date: the first draft
+        // hardcoded "today 23:59 +02:00", which is 21:59 UTC, so the moment UTC midnight passed the expiry
+        // was in the past, the API rightly refused it, and every e2e-2 leg went red until someone read the
+        // TRX. A fixed date in a test that must be in the future is a date bomb with a fuse nobody sees.
+        var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        var localExpiry = new DateTimeOffset(tomorrow.Year, tomorrow.Month, tomorrow.Day, 23, 59, 0, TimeSpan.FromHours(2));
         var created = await PostJson(api, $"/api/documents/{docId}/external-links", new { expiresAt = localExpiry });
 
         Assert.Equal(localExpiry.ToUniversalTime(), created.GetProperty("expiresAt").GetDateTimeOffset());
