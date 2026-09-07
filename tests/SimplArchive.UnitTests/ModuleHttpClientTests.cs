@@ -83,4 +83,50 @@ public class ModuleHttpClientTests
         Assert.Equal("application/json", result.ContentType);
         Assert.Equal("METAR LSZH", Encoding.UTF8.GetString(result.Content));
     }
+
+    // ---- ABI 0.9: authenticated outbound (ADR 0766) ----
+
+    [Fact]
+    public async Task An_authorized_get_carries_the_bearer_and_a_form_post_sends_urlencoded()
+    {
+        var seen = new List<HttpRequestMessage>();
+        var handler = new CapturingHandler(seen);
+        var client = ClientFor("fs", ["api.autorouter.aero"], handler);
+
+        await client.GetAsync("https://api.autorouter.aero/v1.0/notam",
+            new Dictionary<string, string> { ["Authorization"] = "Bearer tok123" });
+        Assert.Equal("Bearer tok123", seen[0].Headers.Authorization?.ToString());
+
+        await client.PostFormAsync("https://api.autorouter.aero/v1.0/oauth2/token",
+            new Dictionary<string, string> { ["grant_type"] = "client_credentials", ["client_id"] = "a@b" });
+        Assert.Equal(HttpMethod.Post, seen[1].Method);
+        Assert.Equal("application/x-www-form-urlencoded", seen[1].Content?.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task A_header_outside_the_safe_set_is_refused_before_the_request_leaves()
+    {
+        var client = ClientFor("fs", ["api.autorouter.aero"]);
+
+        var refused = await Assert.ThrowsAsync<ModuleOutboundRefusedException>(() =>
+            client.GetAsync("https://api.autorouter.aero/", new Dictionary<string, string> { ["Host"] = "evil.example" }));
+        Assert.Contains("Host", refused.Message);
+    }
+
+    [Fact]
+    public async Task The_form_post_respects_the_same_host_gate()
+    {
+        var client = ClientFor("fs", ["aviationweather.gov"]);
+        await Assert.ThrowsAsync<ModuleOutboundRefusedException>(() =>
+            client.PostFormAsync("https://api.autorouter.aero/v1.0/oauth2/token", new Dictionary<string, string>()));
+    }
+
+    private sealed class CapturingHandler(List<HttpRequestMessage> seen) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            seen.Add(request);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent([]) });
+        }
+    }
 }

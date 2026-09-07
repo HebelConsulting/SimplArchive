@@ -29,7 +29,22 @@ public sealed class ModuleHttpClient : IModuleHttpClient
     public Task<ModuleHttpResponse> HeadAsync(string url, CancellationToken cancellationToken = default) =>
         SendAsync(HttpMethod.Head, url, cancellationToken);
 
-    private async Task<ModuleHttpResponse> SendAsync(HttpMethod method, string url, CancellationToken cancellationToken)
+    public Task<ModuleHttpResponse> GetAsync(string url, IReadOnlyDictionary<string, string> headers, CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Get, url, cancellationToken, headers);
+
+    public Task<ModuleHttpResponse> PostFormAsync(string url, IReadOnlyDictionary<string, string> form,
+        IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Post, url, cancellationToken, headers, form);
+
+    // The header names a module may send (ABI 0.9, ADR 0766) — a WHITELIST, not a blocklist: enumerating
+    // what is safe is the only rule shape that survives new headers being invented (the open-set lesson).
+    // Host stays refused above all — it would aim a request at one virtual host while the allowlist and the
+    // SSRF address check look at another.
+    private static readonly HashSet<string> AllowedHeaders =
+        new(StringComparer.OrdinalIgnoreCase) { "Authorization", "Accept", "Accept-Language", "If-None-Match" };
+
+    private async Task<ModuleHttpResponse> SendAsync(HttpMethod method, string url, CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string>? headers = null, IReadOnlyDictionary<string, string>? form = null)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
             || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
@@ -47,6 +62,21 @@ public sealed class ModuleHttpClient : IModuleHttpClient
         }
 
         using var request = new HttpRequestMessage(method, uri);
+        foreach (var (name, value) in headers ?? new Dictionary<string, string>())
+        {
+            if (!AllowedHeaders.Contains(name))
+            {
+                throw new ModuleOutboundRefusedException(url, $"request header '{name}' is not in the safe set");
+            }
+
+            request.Headers.TryAddWithoutValidation(name, value);
+        }
+
+        if (form is not null)
+        {
+            request.Content = new FormUrlEncodedContent(form);
+        }
+
         using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         var body = method == HttpMethod.Head

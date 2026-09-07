@@ -17,8 +17,21 @@ public interface IModuleHttpClient
 
     /// <summary>HEADs a declared-host URL — the response headers without the body, for a cheap "did it
     /// change?" probe (the DABS <c>ETag</c>/<c>Content-Length</c> check before re-downloading a chart that
-    /// has not moved). Same allowlist gate as <see cref="GetAsync"/>.</summary>
+    /// has not moved). Same allowlist gate as <see cref="GetAsync(string,System.Threading.CancellationToken)"/>.</summary>
     Task<ModuleHttpResponse> HeadAsync(string url, CancellationToken cancellationToken = default);
+
+    /// <summary>GETs a declared-host URL with request headers — the authenticated read (ABI 0.9, ADR 0766):
+    /// a NOTAM query carries its <c>Authorization: Bearer</c> this way. Only a small safe set of header
+    /// names is accepted (<c>Authorization</c>, <c>Accept</c>, <c>Accept-Language</c>, <c>If-None-Match</c>);
+    /// anything else — above all <c>Host</c> — is refused before the request leaves, because a module's
+    /// egress must stay as enumerable as its allowlist. Same host gate as <see cref="GetAsync(string,System.Threading.CancellationToken)"/>.</summary>
+    Task<ModuleHttpResponse> GetAsync(string url, IReadOnlyDictionary<string, string> headers, CancellationToken cancellationToken = default);
+
+    /// <summary>POSTs a form (<c>application/x-www-form-urlencoded</c>) to a declared-host URL — what an
+    /// OAuth token exchange is (ABI 0.9, ADR 0766). Same host gate and header whitelist as the
+    /// authenticated GET; the form values are the module's business and are never logged by the host.</summary>
+    Task<ModuleHttpResponse> PostFormAsync(string url, IReadOnlyDictionary<string, string> form,
+        IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
