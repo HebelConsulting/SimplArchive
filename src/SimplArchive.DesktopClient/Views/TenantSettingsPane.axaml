@@ -152,7 +152,11 @@
                          the projection can never show anything the ACL would refuse, and existing users keep
                          their own self-service choice. -->
                     <StackPanel Orientation="Horizontal" Spacing="4">
-                        <CheckBox IsChecked="{Binding TenantImapShowAllDocumentsDefault}" IsEnabled="{Binding IsEditingTenantMail}" Content="{loc:Tr TenantImapShowAllDefault}" />
+                        <!-- #996: no IMAP listener on this server → the preference stays visible but never
+                             active, and the note says why (the account dialog's own sentence). -->
+                        <TextBlock Text="{loc:Tr ImUnavailable}" Foreground="{DynamicResource WbMuted}" FontSize="12"
+                                   IsVisible="{Binding !TenantImapServerAvailable}" />
+                        <CheckBox IsChecked="{Binding TenantImapShowAllDocumentsDefault}" IsEnabled="{Binding CanEditTenantImapDefault}" Content="{loc:Tr TenantImapShowAllDefault}" />
                         <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
                                 ToolTip.Tip="{loc:Tr TenantImapShowAllDefaultInfo}" />
                     </StackPanel>

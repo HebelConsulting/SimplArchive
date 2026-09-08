@@ -242,6 +242,7 @@ public sealed partial class MainWindowViewModel
         OnPropertyChanged(nameof(IsEditingTenantCheckout));
         OnPropertyChanged(nameof(IsEditingTenantStorage));
         OnPropertyChanged(nameof(IsEditingTenantMail));
+        OnPropertyChanged(nameof(CanEditTenantImapDefault)); // computed from BOTH inputs (#996; the wrong-hook trap)
         OnPropertyChanged(nameof(IsEditingTenantExternalLinks));
         OnPropertyChanged(nameof(IsEditingTenantAuditStreaming));
         OnPropertyChanged(nameof(NoTenantGroupEditing));

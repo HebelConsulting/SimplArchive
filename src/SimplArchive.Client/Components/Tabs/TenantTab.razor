@@ -155,8 +155,15 @@
 
         @* ---- Mail (#793) --------------------------------------------------------------------------- *@
         @GroupHeader("mail", Strings.Get("TenantGroupMail"))
+        @if (!_tenant.ImapServerAvailable)
+        {
+            @* #996: on a deployment with no IMAP listener, an active IMAP-labelled switch read as "IMAP is
+               enabled here" while the account dialog said the opposite. The preference stays visible (it is
+               real tenant data, and the account dialog's own sentence explains the greyness) but never active. *@
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mb-1">@Strings.Get("ImUnavailable")</MudText>
+        }
         <div class="wb-setting-row mb-4">
-            <MudSwitch T="bool" @bind-Value="_tenantEdit.ImapShowAllDocumentsDefault" Disabled="@(!Editing("mail"))" Color="Color.Primary" Class="flex-grow-1"
+            <MudSwitch T="bool" @bind-Value="_tenantEdit.ImapShowAllDocumentsDefault" Disabled="@(!_tenant.ImapServerAvailable || !Editing("mail"))" Color="Color.Primary" Class="flex-grow-1"
                        Label="@Strings.Get("TenantImapShowAllDefault")" />
             <InfoButton Text="@(Strings.Get("TenantImapShowAllDefaultInfo"))" />
         </div>
@@ -532,6 +539,10 @@
 
         // External links (ADR 0546) — the tenant master switch plus its two caps.
         public bool ImapShowAllDocumentsDefault { get; set; }
+
+        // Read-only server fact (#996): whether an IMAP listener runs at all — the context that stops the
+        // IMAP-labelled preference from claiming a capability this deployment does not have (ADR 0543's spirit).
+        public bool ImapServerAvailable { get; set; }
         public bool AllowExternalLinks { get; set; }
 
         public bool ShowExternalLinkUrl { get; set; }

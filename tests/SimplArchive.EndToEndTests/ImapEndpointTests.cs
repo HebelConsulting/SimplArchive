@@ -740,6 +740,11 @@ public class ImapEndpointTests
         var settings = await TestJson.Get(admin, "/api/tenant-settings");
         Assert.True(settings.GetProperty("imapShowAllDocumentsDefault").GetBoolean());
 
+        // And the resource says whether the SERVER runs a listener at all (#996) — this host does, so the
+        // flag is true; a listener-less deployment answers false and both clients grey the preference with
+        // the account dialog's own sentence instead of presenting a capability the server cannot provide.
+        Assert.True(settings.GetProperty("imapServerAvailable").GetBoolean());
+
         // A user created now is seeded ON…
         var seededOn = await TestJson.Post(admin, "/api/users",
             new { email = $"on-{Guid.NewGuid():N}@e2e.local", displayName = "Seeded On", password = "seed-1234" });

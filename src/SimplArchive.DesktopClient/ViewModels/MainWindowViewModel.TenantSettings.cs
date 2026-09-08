@@ -35,6 +35,14 @@ public sealed partial class MainWindowViewModel
     // The tenant default a NEW user's IMAP show-all preference seeds from (#793) — not a permission.
     [ObservableProperty] private bool _tenantImapShowAllDocumentsDefault;
 
+    /// <summary>Read-only server fact (#996): whether an IMAP listener runs here at all — gates the
+    /// IMAP-labelled preference so it never claims a capability the deployment lacks.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanEditTenantImapDefault))]
+    private bool _tenantImapServerAvailable;
+
+    public bool CanEditTenantImapDefault => TenantImapServerAvailable && IsEditingTenantMail;
+
     [ObservableProperty] private bool _tenantAllowExternalLinks;
 
     // Whether an existing link's URL may be revealed again (issue #412). Threaded through EVERY site below:
@@ -121,6 +129,7 @@ public sealed partial class MainWindowViewModel
         TenantRestrictTagsToCatalog = s.RestrictTagsToCatalog;
         TenantEnforceClearance = s.EnforceClearance;
         TenantImapShowAllDocumentsDefault = s.ImapShowAllDocumentsDefault;
+        TenantImapServerAvailable = s.ImapServerAvailable;
         TenantAllowExternalLinks = s.AllowExternalLinks;
         TenantShowExternalLinkUrl = s.ShowExternalLinkUrl;
         TenantExternalLinkMaxDays = s.ExternalLinkMaxDays;

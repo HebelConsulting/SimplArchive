@@ -193,7 +193,7 @@ public sealed class AdminClient(ApiCore core)
 
     // ---- Tenant-admin settings (ADR "Tenant-admin settings tab") -----------------------------------
 
-    public sealed record TenantSettingsInfo(Guid Id, string Name, string Status, DateTimeOffset CreatedAt, string DefaultOcrLanguages, int AuditRetentionDays, int CheckoutTtlDays, int CheckoutWarningDays, int WormLockMode, bool RequireMfa, bool AllowPasskeyLogin, bool RequireDispositionReview, bool RestrictTagsToCatalog, bool EnforceClearance, bool ImapShowAllDocumentsDefault, bool AllowExternalLinks, int ExternalLinkMaxDays, int ExternalLinkDefaultAccesses, bool ShowExternalLinkUrl, long? StorageQuotaBytes, long StorageUsedBytes, int IncompleteUploadCleanupDays, string? AuditWebhookUrl, bool AuditWebhookConfigured, int AuditWebhookConsecutiveFailures, DateTimeOffset? AuditWebhookLastSuccessAt, DateTimeOffset? AuditWebhookLastFailureAt, DateTimeOffset? AuditWebhookNextAttemptAt, string? AuditWebhookLastError,
+    public sealed record TenantSettingsInfo(Guid Id, string Name, string Status, DateTimeOffset CreatedAt, string DefaultOcrLanguages, int AuditRetentionDays, int CheckoutTtlDays, int CheckoutWarningDays, int WormLockMode, bool RequireMfa, bool AllowPasskeyLogin, bool RequireDispositionReview, bool RestrictTagsToCatalog, bool EnforceClearance, bool ImapShowAllDocumentsDefault, bool ImapServerAvailable, bool AllowExternalLinks, int ExternalLinkMaxDays, int ExternalLinkDefaultAccesses, bool ShowExternalLinkUrl, long? StorageQuotaBytes, long StorageUsedBytes, int IncompleteUploadCleanupDays, string? AuditWebhookUrl, bool AuditWebhookConfigured, int AuditWebhookConsecutiveFailures, DateTimeOffset? AuditWebhookLastSuccessAt, DateTimeOffset? AuditWebhookLastFailureAt, DateTimeOffset? AuditWebhookNextAttemptAt, string? AuditWebhookLastError,
         IReadOnlyDictionary<string, string>? Links = null);
 
     public async Task<TenantSettingsInfo> GetTenantSettingsAsync(CancellationToken cancellationToken = default)
@@ -608,6 +608,7 @@ public sealed class AdminClient(ApiCore core)
         j.TryGetProperty("restrictTagsToCatalog", out var rt) && rt.ValueKind == JsonValueKind.True,
         j.TryGetProperty("enforceClearance", out var ec) && ec.ValueKind == JsonValueKind.True,
         j.TryGetProperty("imapShowAllDocumentsDefault", out var im) && im.ValueKind == JsonValueKind.True,
+        j.TryGetProperty("imapServerAvailable", out var ia) && ia.ValueKind == JsonValueKind.True,
         j.TryGetProperty("allowExternalLinks", out var xl) && xl.ValueKind == JsonValueKind.True,
         j.TryGetProperty("externalLinkMaxDays", out var xd) ? xd.GetInt32() : 180,
         j.TryGetProperty("externalLinkDefaultAccesses", out var xa) ? xa.GetInt32() : 5,

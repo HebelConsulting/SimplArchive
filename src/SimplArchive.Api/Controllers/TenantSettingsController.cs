@@ -35,6 +35,7 @@ public class TenantSettingsController : ControllerBase
     private readonly IAuditWebhookSender _webhookSender;
     private readonly IOutboundAddressPolicy _outbound;
     private readonly IAuditRecorder _audit;
+    private readonly Microsoft.Extensions.Options.IOptions<Imap.ImapOptions> _imapOptions;
 
     public TenantSettingsController(
         SimplArchiveDbContext dbContext,
@@ -45,7 +46,8 @@ public class TenantSettingsController : ControllerBase
         IObjectStorageClient objectStorage,
         IAuditWebhookSender webhookSender,
         IOutboundAddressPolicy outbound,
-        IAuditRecorder audit)
+        IAuditRecorder audit,
+        Microsoft.Extensions.Options.IOptions<Imap.ImapOptions> imapOptions)
     {
         _dbContext = dbContext;
         _currentTenantAccessor = currentTenantAccessor;
@@ -56,6 +58,7 @@ public class TenantSettingsController : ControllerBase
         _webhookSender = webhookSender;
         _outbound = outbound;
         _audit = audit;
+        _imapOptions = imapOptions;
     }
 
     public class TenantSettingsResource : HypermediaResource
@@ -76,6 +79,11 @@ public class TenantSettingsController : ControllerBase
         // the projection grants nothing the ACL does not — just the tenant's starting position for a
         // self-service knob. Existing users keep their own value.
         public bool ImapShowAllDocumentsDefault { get; set; }
+
+        /// <summary>Whether the SERVER runs an IMAP listener at all (Imap:Enabled) — read-only context for
+        /// the tenant preference above (#996): without it, an IMAP-labelled switch on a listener-less
+        /// deployment reads as "IMAP is enabled here", and the account dialog then contradicts it.</summary>
+        public bool ImapServerAvailable { get; set; }
 
         // External links (ADR 0546). AllowExternalLinks is the tenant's master switch for sharing a document with
         // people who have no account — read at ACCESS time, so turning it off stops links already in the wild.
@@ -605,6 +613,7 @@ public class TenantSettingsController : ControllerBase
         RestrictTagsToCatalog = tenant.RestrictTagsToCatalog,
         RequireDispositionReview = tenant.RequireDispositionReview,
         ImapShowAllDocumentsDefault = tenant.ImapShowAllDocumentsDefault,
+        ImapServerAvailable = _imapOptions.Value.Enabled,
         AllowExternalLinks = tenant.AllowExternalLinks,
         ExternalLinkMaxDays = tenant.ExternalLinkMaxDays,
         ExternalLinkDefaultAccesses = tenant.ExternalLinkDefaultAccesses,
