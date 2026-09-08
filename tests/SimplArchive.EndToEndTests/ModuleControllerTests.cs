@@ -207,6 +207,20 @@ public class ModuleControllerTests
             Assert.Equal("MACHINE_TRANSITION_REFUSED", problem.GetProperty("errorCode").GetString());
             Assert.Equal("test-module", problem.GetProperty("module").GetString());
             Assert.Contains("abgelaufen", problem.GetProperty("detail").GetString());
+
+            // The OTHER refusal path (found live 2026-09-08): an exception thrown INSIDE a handler reaches
+            // ApiExceptionHandler after the localization middleware's scope has unwound, so the ambient
+            // culture is the default — the handler must resolve the REQUEST's culture feature instead.
+            // Before the fix this returned the English template while stamping the module marker beside it.
+            using var handlerRefusal = new HttpRequestMessage(HttpMethod.Post,
+                $"/api/documents/{dossierId}/machine/test-pilot/transitions/refuse");
+            handlerRefusal.Headers.AcceptLanguage.ParseAdd("de");
+            var handlerResponse = await rig.Admin.SendAsync(handlerRefusal);
+            Assert.Equal(HttpStatusCode.Conflict, handlerResponse.StatusCode);
+            var handlerProblem = await handlerResponse.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal("TEST_HANDLER_REFUSED", handlerProblem.GetProperty("errorCode").GetString());
+            Assert.Equal("test-module", handlerProblem.GetProperty("module").GetString());
+            Assert.Equal("Der Testschritt wurde abgelehnt.", handlerProblem.GetProperty("detail").GetString());
         }
         finally
         {

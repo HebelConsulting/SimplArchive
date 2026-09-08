@@ -38,9 +38,16 @@ public class ApiExceptionHandler : IExceptionHandler
         {
             var modules = httpContext.RequestServices.GetService<IReadOnlyList<Infrastructure.Modules.ModuleLoader.LoadedModule>>() ?? [];
             var actingModule = httpContext.RequestServices.GetService<Infrastructure.Modules.ModuleIdentityAccessor>()?.ModuleId;
+            // The REQUEST's culture, from the feature — never CurrentUICulture: the exception unwound out
+            // of the localization middleware's async scope before the handler ran, so the ambient culture
+            // has reverted to the default and every handler-thrown refusal resolved to English while the
+            // module marker claimed it was localized (found live 2026-09-08; the engine-composed
+            // refusals never hit this because they localize in-request).
+            var culture = httpContext.Features.Get<Microsoft.AspNetCore.Localization.IRequestCultureFeature>()
+                ?.RequestCulture.UICulture ?? System.Globalization.CultureInfo.CurrentUICulture;
             if (Infrastructure.Modules.ModuleTextResolver.Resolve(
                     modules, actingModule, m.ErrorCode, m.Args.Count > 0 ? m.Args[0] : null,
-                    System.Globalization.CultureInfo.CurrentUICulture) is { } resolved)
+                    culture) is { } resolved)
             {
                 detail = Infrastructure.Modules.ModuleTextResolver.Format(resolved.Template, m.Args);
                 localizedByModule = resolved.ModuleId;

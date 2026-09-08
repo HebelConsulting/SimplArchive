@@ -42,6 +42,7 @@ public sealed class TestModule : IIndustryModule
             ["de"] = new Dictionary<string, string>
             {
                 ["test.certificate-expired"] = "Das Zertifikat ist am {value} abgelaufen.",
+                ["TEST_HANDLER_REFUSED"] = "Der Testschritt wurde abgelehnt.",
             },
         };
 
@@ -153,6 +154,12 @@ public sealed class TestModule : IIndustryModule
             .Transition("certify", "Certify",
                 [StateCondition.FactAtLeast("testLandings", 3, "test.recency", "{value} recent landings; 3 required.")],
                 _ => Task.CompletedTask)
+            // The handler-thrown refusal fixture (ADR 0767's OTHER path): a ModuleApiException from inside
+            // a handler reaches ApiExceptionHandler where the ambient culture has already unwound — the
+            // catalog must still resolve for the REQUEST culture (the bug found live 2026-09-08).
+            .Transition("refuse", "Refuse", [],
+                _ => throw new SimplArchive.ModuleAbi.ModuleApiException(
+                    "TEST_HANDLER_REFUSED", 409, "The test step was refused."))
             // The rollback fixture (ADR 0737): a handler that WRITES and then throws — what it wrote must
             // never be seen, because the engine owns the transaction and a throw rolls the act back.
             .Transition("explode", "Explode", [],
