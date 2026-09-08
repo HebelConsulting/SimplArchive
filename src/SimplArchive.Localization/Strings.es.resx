@@ -4864,7 +4864,7 @@
     <value>Documento de licencia</value>
   </data>
   <data name="ModDialogNone" xml:space="preserve">
-    <value>No se encontraron documentos de licencia. Archive el archivo de licencia del proveedor y asígnele la máscara “Licencia de módulo”.</value>
+    <value>No se encontraron documentos de licencia. Archive el archivo de licencia del proveedor y asígnele la máscara “License”.</value>
   </data>
   <data name="StModuleActivated" xml:space="preserve">
     <value>Módulo activado.</value>

@@ -4864,7 +4864,7 @@
     <value>Documento di licenza</value>
   </data>
   <data name="ModDialogNone" xml:space="preserve">
-    <value>Nessun documento di licenza trovato. Archiviare il file di licenza del fornitore e assegnargli la maschera “Licenza modulo”.</value>
+    <value>Nessun documento di licenza trovato. Archiviare il file di licenza del fornitore e assegnargli la maschera “License”.</value>
   </data>
   <data name="StModuleActivated" xml:space="preserve">
     <value>Modulo attivato.</value>

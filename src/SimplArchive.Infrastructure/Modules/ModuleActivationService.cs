@@ -81,26 +81,33 @@ public sealed class ModuleActivationService
     /// <summary>
     /// Projects the VERIFIED claims onto the license document's index fields (Module, Valid until) so a
     /// listing self-describes — the booking→appointment lockstep shape: the signed JSON stays the only
-    /// truth, the fields are its projection. A maskless document is dressed in the well-known
-    /// Module-license mask first; one deliberately wearing something ELSE is left alone — the projection
-    /// must not fight the administrator's own typing choice.
+    /// truth, the fields are its projection. The document is dressed in the well-known License mask unless
+    /// it deliberately wears a REAL third mask — and "deliberate" excludes the two DEFAULTS the filing
+    /// path assigns on its own: Basic Entry (what finalize stamps on every content upload) and Folder
+    /// (what a bare create stamps). The original rule respected any worn mask, which made the stamp
+    /// unreachable outside a unit test: no real filing ends maskless, so both demos' licenses sat as
+    /// unstamped Basic Entry (found 2026-09-08). The projection must still not fight an administrator's
+    /// own typing choice — a license typed as, say, an eMail stays what they made it.
     /// </summary>
     private async Task StampLicenseDocumentAsync(Guid licenseDocumentId, ModuleLicense license, CancellationToken cancellationToken)
     {
         var document = await _dbContext.Documents.SingleAsync(d => d.Id == licenseDocumentId, cancellationToken);
-        if (document.MaskVersionId is { } wornVersionId)
+        var wornMaskId = document.MaskVersionId is { } wornVersionId
+            ? await _dbContext.MaskVersions
+                .Where(v => v.Id == wornVersionId)
+                .Select(v => (Guid?)v.MaskId)
+                .SingleAsync(cancellationToken)
+            : null;
+        if (wornMaskId is { } worn && worn != WellKnownMaskIds.License
+            && worn != WellKnownMaskIds.BasicEntry && worn != WellKnownMaskIds.Folder)
         {
-            var wearsLicenseMask = await _dbContext.MaskVersions
-                .AnyAsync(v => v.Id == wornVersionId && v.MaskId == WellKnownMaskIds.ModuleLicense, cancellationToken);
-            if (!wearsLicenseMask)
-            {
-                return;
-            }
+            return; // a deliberately chosen mask stands
         }
-        else
+
+        if (wornMaskId != WellKnownMaskIds.License)
         {
             var currentVersionId = await _dbContext.MaskVersions
-                .Where(v => v.MaskId == WellKnownMaskIds.ModuleLicense && v.IsCurrent)
+                .Where(v => v.MaskId == WellKnownMaskIds.License && v.IsCurrent)
                 .Select(v => (Guid?)v.Id)
                 .SingleOrDefaultAsync(cancellationToken);
             if (currentVersionId is null)

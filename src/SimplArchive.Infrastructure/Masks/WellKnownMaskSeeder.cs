@@ -202,10 +202,11 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         // The room's booking calendar (ADR 0744): a calendar kind, so it carries the calendar's one field.
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.Schedule, "Schedule", [ColourField], cancellationToken);
 
-        // The module-license artefact (ADRs 0740/0743). Both fields are a server-stamped projection of the
+        // The license artefact (ADRs 0740/0743) — generic "License", not "Module license" (owner decision
+        // 2026-09-08): support licences will wear it too. Both fields are a server-stamped projection of the
         // VERIFIED claims — optional, so an admin can file the raw .json with nothing to type, and a license
-        // that never verified simply shows them empty.
-        await EnsureMaskAsync(tenantId, WellKnownMaskIds.ModuleLicense, "Module license",
+        // that never verified simply shows them empty. RenameIfNeededAsync heals existing tenants' name.
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.License, "License",
         [
             new FieldSpec("Module", FieldDataType.Text, IsRequired: false),
             new FieldSpec("Valid until", FieldDataType.Date, IsRequired: false),

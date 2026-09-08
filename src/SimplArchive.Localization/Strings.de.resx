@@ -4864,7 +4864,7 @@
     <value>Lizenzdokument</value>
   </data>
   <data name="ModDialogNone" xml:space="preserve">
-    <value>Keine Lizenzdokumente gefunden. Legen Sie die Lizenzdatei des Anbieters ab und weisen Sie ihr die Maske „Modullizenz“ zu.</value>
+    <value>Keine Lizenzdokumente gefunden. Legen Sie die Lizenzdatei des Anbieters ab und weisen Sie ihr die Maske „License“ zu.</value>
   </data>
   <data name="StModuleActivated" xml:space="preserve">
     <value>Modul aktiviert.</value>

@@ -65,14 +65,14 @@ public class MaskAssignabilityListingTests
             .Order()
             .ToList();
 
-        // Today that is Basic Entry plus Module license: every other well-known mask either types a folder or
-        // is claimed by an extension. Module license MUST be freely assignable — the Activate dialog's dropdown
+        // Today that is Basic Entry plus License: every other well-known mask either types a folder or
+        // is claimed by an extension. License MUST be freely assignable — the Activate dialog's dropdown
         // lists documents wearing it, so before a tenant's first activation the administrator has to be able to
         // dress the filed .json by hand or the dropdown starts empty (ADRs 0740/0743; the server re-stamps its
         // fields from the verified claims at activation). Asserted as the whole SET rather than as "contains",
         // because the bug being guarded is one of over-offering — a test that only checks what is present
         // cannot see it.
-        Assert.Equal(["Basic Entry", "Module license"], assignable);
+        Assert.Equal(["Basic Entry", "License"], assignable);
 
         // And the ones that must never be offered, named individually so a regression says which.
         // Meeting room types a folder; the Booking mask is placement-constrained to rooms AND created by the

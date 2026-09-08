@@ -109,10 +109,10 @@ public class ModuleActivationTests
         // The seeder ran: the module's masks are planted (activated in name only would be a lie).
         Assert.NotNull(await check.Masks.SingleOrDefaultAsync(m => m.Id == TestModule.TestModule.CertificateMaskId));
 
-        // The maskless artefact was dressed in the Module-license mask and stamped with the VERIFIED
+        // The maskless artefact was dressed in the License mask and stamped with the VERIFIED
         // claims — the projection that lets a listing self-describe (the JSON stays the only truth).
         var stamped = await check.Documents.SingleAsync(d => d.Id == licenseDocumentId);
-        Assert.True(await check.MaskVersions.AnyAsync(v => v.Id == stamped.MaskVersionId && v.MaskId == WellKnownMaskIds.ModuleLicense));
+        Assert.True(await check.MaskVersions.AnyAsync(v => v.Id == stamped.MaskVersionId && v.MaskId == WellKnownMaskIds.License));
         var values = await check.FieldValues
             .Where(v => v.DocumentId == licenseDocumentId)
             .Join(check.FieldDefinitions, v => v.FieldDefinitionId, f => f.Id, (v, f) => new { f.Name, v.Value })
@@ -122,8 +122,14 @@ public class ModuleActivationTests
     }
 
     [Fact]
-    public async Task A_license_document_wearing_another_mask_is_not_redressed()
+    public async Task A_license_wearing_a_default_mask_is_redressed_and_stamped()
     {
+        // The REAL filing path never ends maskless: finalize stamps Basic Entry on every content upload
+        // (and a bare create stamps Folder). The original rule respected any worn mask, which made the
+        // stamp unreachable in practice — both demos' license documents sat as unstamped Basic Entry
+        // while the maskless-only unit test stayed green (found 2026-09-08). The predecessor of THIS
+        // test enshrined that assumption: it used Basic Entry as its example of "the administrator's own
+        // typing choice".
         using var connection = new SqliteConnection("Filename=:memory:");
         await connection.OpenAsync();
         var (tenantId, userId) = await SeedTenantAsync(connection);
@@ -141,12 +147,63 @@ public class ModuleActivationTests
         await service.ActivateAsync(
             testModule, LicenseJson(vendorKey, tenantId, new DateOnly(2027, 3, 1)), documentId, tenantId, userId);
 
-        // The administrator's own typing choice stands: the mask is untouched and nothing was stamped —
-        // but the ACTIVATION itself succeeded regardless, because the projection is best-effort.
         var document = await context.Documents.SingleAsync(d => d.Id == documentId);
-        Assert.Equal(basicVersionId, document.MaskVersionId);
-        Assert.Empty(await context.FieldValues.Where(v => v.DocumentId == documentId).ToListAsync());
-        Assert.Single(await context.ModuleActivations.ToListAsync());
+        Assert.True(await context.MaskVersions.AnyAsync(v => v.Id == document.MaskVersionId && v.MaskId == WellKnownMaskIds.License));
+        var values = await context.FieldValues
+            .Where(v => v.DocumentId == documentId)
+            .Join(context.FieldDefinitions, v => v.FieldDefinitionId, f => f.Id, (v, f) => new { f.Name, v.Value })
+            .ToListAsync();
+        Assert.Equal("test-module", values.Single(v => v.Name == "Module").Value);
+        Assert.Equal("2027-03-01", values.Single(v => v.Name == "Valid until").Value);
+    }
+
+    [Fact]
+    public async Task A_license_deliberately_wearing_a_third_mask_is_not_redressed()
+    {
+        // The projection still must not fight a mask someone actually CHOSE — the eMail mask can only be
+        // on this document because a person or a rule put it there, unlike the two filing-path defaults.
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var (tenantId, userId) = await SeedTenantAsync(connection);
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        TestModule.TestModule.VerifyKeyPem = vendorKey.ExportSubjectPublicKeyInfoPem();
+        var testModule = new TestModule.TestModule();
+
+        using var context = CreateContext(connection, tenantId);
+        await new WellKnownMaskSeeder(context, NullLogger<WellKnownMaskSeeder>.Instance).EnsureWellKnownMasksAsync(tenantId);
+        var emailVersionId = (await context.MaskVersions
+            .SingleAsync(v => v.MaskId == WellKnownMaskIds.EMail && v.IsCurrent)).Id;
+        // eMail has required fields (ADR 0176 fires on assignment), so type the document the way a
+        // person would: values first, mask second — every required field, so the test does not chase
+        // the mask's field list.
+        var documentId = await FileDocumentAsync(context, tenantId, userId, "license-typed-as-email.json");
+        var requiredFieldIds = await context.FieldDefinitions
+            .Where(f => f.MaskVersionId == emailVersionId && f.IsRequired)
+            .Select(f => f.Id)
+            .ToListAsync();
+        foreach (var fieldId in requiredFieldIds)
+        {
+            context.FieldValues.Add(new FieldValue
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                DocumentId = documentId,
+                FieldDefinitionId = fieldId,
+                Value = "deliberately typed as mail",
+            });
+        }
+
+        (await context.Documents.SingleAsync(d => d.Id == documentId)).MaskVersionId = emailVersionId;
+        await context.SaveChangesAsync();
+
+        var service = CreateService(context, userId);
+        await service.ActivateAsync(
+            testModule, LicenseJson(vendorKey, tenantId, new DateOnly(2027, 3, 1)), documentId, tenantId, userId);
+
+        var document = await context.Documents.SingleAsync(d => d.Id == documentId);
+        Assert.Equal(emailVersionId, document.MaskVersionId);
+        Assert.Equal(requiredFieldIds.Count, await context.FieldValues.CountAsync(v => v.DocumentId == documentId)); // nothing stamped on top
+        Assert.Single(await context.ModuleActivations.ToListAsync()); // activation itself is never gated on the projection
     }
 
     [Fact]

@@ -232,7 +232,7 @@ public class ModulesController : ControllerBase
         // worn mask version belongs to the well-known Module-license mask.
         var documents = await _dbContext.Documents
             .Where(d => d.MaskVersionId != null && _dbContext.MaskVersions
-                .Any(v => v.Id == d.MaskVersionId && v.MaskId == WellKnownMaskIds.ModuleLicense))
+                .Any(v => v.Id == d.MaskVersionId && v.MaskId == WellKnownMaskIds.License))
             .OrderByDescending(d => d.CreatedAt).ThenByDescending(d => d.Id)
             .Take(50)
             .Select(d => new { d.Id, d.Name, d.CreatedAt })

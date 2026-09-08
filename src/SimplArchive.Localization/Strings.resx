@@ -4864,7 +4864,7 @@
     <value>License document</value>
   </data>
   <data name="ModDialogNone" xml:space="preserve">
-    <value>No license documents found. File the vendor's license file and assign it the “Module license” mask.</value>
+    <value>No license documents found. File the vendor's license file and assign it the “License” mask.</value>
   </data>
   <data name="StModuleActivated" xml:space="preserve">
     <value>Module activated.</value>

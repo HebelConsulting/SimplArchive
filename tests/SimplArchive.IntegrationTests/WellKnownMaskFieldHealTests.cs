@@ -126,7 +126,7 @@ public class WellKnownMaskFieldHealTests
             // 13 → 14 with IMAP Special (#596) — the mask that marks a mailbox's standing folders ephemeral.
             // 15 → 16 with IMAP Folder (#802) — the user-created mail folder inside the staging tier.
             // 16 → 18 with Meeting room + Room booking (ADR 0735) — the booking primitive's thin core proof.
-            // 18 → 19 with Module license (ADRs 0740/0743) — the filed license artefact's core mask.
+            // 18 → 19 with License (ADRs 0740/0743) — the filed license artefact's core mask.
             // 19 → 20 with Schedule (ADR 0744) — the room's booking calendar, a calendar kind of its own so
             // its containment (only Bookings, only inside a room) stays non-contextual.
             var maskCount = await db.Masks.IgnoreQueryFilters().CountAsync(m => m.TenantId == _tenantId);
