@@ -28,9 +28,50 @@ public sealed partial class AppointmentEditViewModel : StructuredEditFormViewMod
     /// (ADR 0631 decision 5).
     /// </summary>
     [ObservableProperty] private DateTime? _startDate;
+    // The TIME the user edits is typed, not spun (#1057, the typed-not-picked principle): a person setting
+    // an appointment knows the time, and four keystrokes beat hunting a spinner. StartTime/EndTime stay the
+    // model values every caller composes from; the Entry strings are what the dialog binds, parsed on commit.
+    [ObservableProperty] private string _startTimeEntry = string.Empty;
+
+    [ObservableProperty] private string _endTimeEntry = string.Empty;
+
+    /// <summary>The inline refusal for an unparseable time — empty when there is nothing to say.</summary>
+    [ObservableProperty] private string _timeError = string.Empty;
+
     [ObservableProperty] private TimeSpan? _startTime;
     [ObservableProperty] private DateTime? _endDate;
     [ObservableProperty] private TimeSpan? _endTime;
+
+    // Keep the typed surface showing whatever the model holds — loading an appointment, or the New default.
+    partial void OnStartTimeChanged(TimeSpan? value) => StartTimeEntry = Typed(value);
+
+    partial void OnEndTimeChanged(TimeSpan? value) => EndTimeEntry = Typed(value);
+
+    private static string Typed(TimeSpan? value) =>
+        value is { } v ? TimeOnly.FromTimeSpan(v).ToString("HH:mm", CultureInfo.InvariantCulture) : string.Empty;
+
+    /// <summary>
+    /// Parses what was typed into the model's times. False (with <see cref="TimeError"/> set) when a value is
+    /// not a time — the dialog stays open and says so, rather than closing on a silently dropped entry.
+    /// </summary>
+    /// <remarks>
+    /// An EMPTY entry is not an error: an appointment with no time is the all-day/floating case the form
+    /// already supports, and clearing the box is how a user says that.
+    /// </remarks>
+    public bool TryCommitTimes()
+    {
+        if (!SimplArchive.Presentation.DocumentDateFormat.TryParseTypedTime(StartTimeEntry, out var start)
+            || !SimplArchive.Presentation.DocumentDateFormat.TryParseTypedTime(EndTimeEntry, out var end))
+        {
+            TimeError = Strings.Get("TimeEntryInvalid");
+            return false;
+        }
+
+        TimeError = string.Empty;
+        StartTime = start?.ToTimeSpan();
+        EndTime = end?.ToTimeSpan();
+        return true;
+    }
 
     /// <summary>
     /// The zone the START is written in, chosen here rather than only displayed (ADR 0690). Nothing on this

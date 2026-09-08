@@ -76,7 +76,7 @@ public partial class BookingDialogViewModel : ObservableObject
             || !SimplArchive.Presentation.DocumentDateFormat.TryParseTypedTime(EndEntry, out var endParsed)
             || startParsed is not { } startTime || endParsed is not { } endTime)
         {
-            Status = Strings.Get("BookTimeInvalid");
+            Status = Strings.Get("TimeEntryInvalid");
             return;
         }
 

@@ -45,16 +45,17 @@
              choosing one re-labels the same wall clock, which is what keeps a weekly meeting from drifting
              across a daylight-saving change. The empty entry means a floating time, which stays floating. -->
         <!-- Explicit widths, not Auto: a DatePicker's natural width varies with the locale's date format and
-             a TimePicker's with whether the culture uses a 12-hour clock (which adds an AM/PM column), so Auto
-             let the time run off the right edge. Both were clipped mid-value before this was LOOKED at. -->
+             a time entry's with the font, so Auto let the value run off the right edge. Both were clipped
+             mid-value before this was LOOKED at. The time is TYPED, not spun (#1057): a person setting an
+             appointment knows the time, and a spinner made them hunt for what four keystrokes say. -->
         <!-- The zone sits UNDER its endpoint rather than beside it: the date and time pickers already fill the
              dialog's width (their own widths vary with the locale, which is why those are explicit), so a
              fourth column got none and the picker rendered as a two-pixel sliver. Found by capturing it. -->
         <Grid ColumnDefinitions="110,270,8,210,*" RowDefinitions="Auto,Auto,Auto,Auto">
           <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr ApptStart}" VerticalAlignment="Center" />
           <CalendarDatePicker Grid.Row="0" Grid.Column="1" SelectedDate="{Binding StartDate}" Watermark="yyyy-MM-dd" />
-          <TimePicker Grid.Row="0" Grid.Column="3" SelectedTime="{Binding StartTime}"
-                      IsVisible="{Binding !IsAllDay}" />
+          <TextBox Grid.Row="0" Grid.Column="3" Text="{Binding StartTimeEntry}" Watermark="HH:mm"
+                   IsVisible="{Binding !IsAllDay}" AutomationProperties.Name="{loc:Tr ApptStart}" />
           <ComboBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" ItemsSource="{Binding ZoneChoices}"
                     SelectedItem="{Binding StartTimeZoneId}" Margin="0,4,0,8"
                     HorizontalAlignment="Stretch" IsVisible="{Binding !IsAllDay}"
@@ -63,8 +64,8 @@
 
           <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr ApptEnd}" VerticalAlignment="Center" />
           <CalendarDatePicker Grid.Row="2" Grid.Column="1" SelectedDate="{Binding EndDate}" Watermark="yyyy-MM-dd" />
-          <TimePicker Grid.Row="2" Grid.Column="3" SelectedTime="{Binding EndTime}"
-                      IsVisible="{Binding !IsAllDay}" />
+          <TextBox Grid.Row="2" Grid.Column="3" Text="{Binding EndTimeEntry}" Watermark="HH:mm"
+                   IsVisible="{Binding !IsAllDay}" AutomationProperties.Name="{loc:Tr ApptEnd}" />
           <ComboBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="4" ItemsSource="{Binding ZoneChoices}"
                     SelectedItem="{Binding EndTimeZoneId}" Margin="0,4,0,0"
                     HorizontalAlignment="Stretch" IsVisible="{Binding !IsAllDay}"

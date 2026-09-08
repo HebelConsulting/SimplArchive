@@ -29,7 +29,9 @@ public partial class ReminderDialogViewModel : ObservableObject
     public string[] RecurrenceOptions { get; } = ["Doesn't repeat", "Daily", "Weekly", "Monthly"];
 
     [ObservableProperty] private DateTime? _reminderDate = DateTime.Now.AddDays(1);
-    [ObservableProperty] private TimeSpan? _reminderTime = new(9, 0, 0);
+    // Typed, not spun (#1057): the reminder's time is something the user already knows. Seeded from the
+    // 09:00 default the spinner used to show.
+    [ObservableProperty] private string _reminderTimeEntry = "09:00";
     [ObservableProperty] private string _note = string.Empty;
     [ObservableProperty] private int _recurrenceIndex;
     [ObservableProperty] private UserOptionInfo? _selectedTarget;
@@ -110,7 +112,13 @@ public partial class ReminderDialogViewModel : ObservableObject
 
         try
         {
-            var local = date.Date + (ReminderTime ?? TimeSpan.Zero);
+            if (!SimplArchive.Presentation.DocumentDateFormat.TryParseTypedTime(ReminderTimeEntry, out var typed))
+            {
+                Status = Strings.Get("TimeEntryInvalid");
+                return;
+            }
+
+            var local = date.Date + (typed?.ToTimeSpan() ?? TimeSpan.Zero);
             var when = new DateTimeOffset(local, TimeZoneInfo.Local.GetUtcOffset(local));
             var targetId = SelectedTarget is { } t && t.Id != Guid.Empty ? t.Id : (Guid?)null;
             await _api.Documents.CreateReminderAsync(_remindersHref, when, string.IsNullOrWhiteSpace(Note) ? null : Note, RecurrenceIndex, targetId);

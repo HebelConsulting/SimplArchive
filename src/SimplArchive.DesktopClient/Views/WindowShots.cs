@@ -381,6 +381,26 @@ public static class WindowShots
 
         // Headless render of the connection-lost dialog (admin variant, details expanded) — catches XAML load
         // crashes: `--connlost-screenshot <out.png>`.
+        // The reminder dialog (#1057): its time is TYPED now, and this is the only way to look at it without a
+        // display. `--reminderdialog-screenshot <out.png>`.
+        var reminderShotIndex = Array.IndexOf(args, "--reminderdialog-screenshot");
+        if (reminderShotIndex >= 0 && reminderShotIndex + 1 < args.Length)
+        {
+            AppBuilder.Configure<App>()
+                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .UseSkia()
+                .WithInterFont()
+                .SetupWithoutStarting();
+            // Deliberately NOT an api/-shaped address: nothing here is ever fetched, and a composed api URL in
+            // client code is what ADR 0543's guard exists to catch — a screenshot is no reason to weaken it.
+            var reminderDialog = new ReminderDialog(new ViewModels.ReminderDialogViewModel(
+                new Services.SimplArchiveApiClient("screenshot"), "never-fetched-in-a-screenshot", "Quarterly Report.pdf"));
+            reminderDialog.Show();
+            Dispatcher.UIThread.RunJobs();
+            reminderDialog.CaptureRenderedFrame()?.Save(args[reminderShotIndex + 1]);
+            return true;
+        }
+
         var connLostShotIndex = Array.IndexOf(args, "--connlost-screenshot");
         if (connLostShotIndex >= 0 && connLostShotIndex + 1 < args.Length)
         {

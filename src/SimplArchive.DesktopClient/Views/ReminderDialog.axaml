@@ -33,7 +33,8 @@
             <CalendarDatePicker Grid.Row="0" Grid.Column="1" SelectedDate="{Binding ReminderDate}" HorizontalAlignment="Stretch" Watermark="yyyy-MM-dd" />
 
             <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr RemTime}" VerticalAlignment="Center" />
-            <TimePicker Grid.Row="1" Grid.Column="1" SelectedTime="{Binding ReminderTime}" ClockIdentifier="24HourClock" HorizontalAlignment="Left" />
+            <!-- Typed, not spun (#1057): four keystrokes beat hunting a spinner for a time you know. -->
+            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding ReminderTimeEntry}" Watermark="HH:mm" Width="110" HorizontalAlignment="Left" />
 
             <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr AnnTitle}" VerticalAlignment="Center" />
             <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Note}" Watermark="{loc:Tr OptionalPlaceholder}" />

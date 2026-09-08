@@ -4785,7 +4785,7 @@
   <data name="BookTitle" xml:space="preserve">
     <value>Prenotazioni</value>
   </data>
-  <data name="BookTimeInvalid" xml:space="preserve">
+  <data name="TimeEntryInvalid" xml:space="preserve">
     <value>Inserire gli orari come HH:mm (ad es. 09:00).</value>
   </data>
   <data name="BookDate" xml:space="preserve">

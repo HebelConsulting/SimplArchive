@@ -52,7 +52,26 @@ public partial class AppointmentDialog : Window
             }
         });
 
-    private void OnSave(object? sender, RoutedEventArgs e) => Close(DataContext as AppointmentEditViewModel);
+    // Commit the TYPED times before closing (#1057): an unparseable entry keeps the dialog open and says so
+    // in the row's error slot, rather than closing on a value the form silently dropped.
+    private void OnSave(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not AppointmentEditViewModel model)
+        {
+            Close(null);
+            return;
+        }
+
+        if (!model.TryCommitTimes())
+        {
+            ErrorText.Text = model.TimeError;
+            ErrorText.IsVisible = true;
+            return;
+        }
+
+        ErrorText.IsVisible = false;
+        Close(model);
+    }
 
     private void OnCancel(object? sender, RoutedEventArgs e) => Close(null);
 }
