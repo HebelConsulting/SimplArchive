@@ -679,8 +679,17 @@ public partial class MainWindowViewModel
             new AdminClient.SystemRightsData(true, false, false, false, false, false, true, true, true, true, true, true, true)));
         Principals.Add(new PrincipalRowViewModel(true, Guid.NewGuid(), "Editors", true,
             new AdminClient.SystemRightsData(false, false, false, false, false, false, true, false, false, false, false, false, false)));
-        Principals.Add(new PrincipalRowViewModel(false, Guid.NewGuid(), "Demo Admin", true,
-            new AdminClient.SystemRightsData(true, false, false, false, false, false, true, true, true, true, true, true, true)));
+        // A SOURCE row, not a bare one: the e-mail and its `email` rel ride there (#465), so the screenshot
+        // shows the address and its pencil rather than the empty half of the pane.
+        var adminId = Guid.NewGuid();
+        Principals.Add(new PrincipalRowViewModel(false, adminId, "Demo Admin", true,
+            new AdminClient.SystemRightsData(true, false, false, false, false, false, true, true, true, true, true, true, true),
+            source: new AdminClient.PrincipalInfo(false, adminId, "Demo Admin", true,
+                new AdminClient.SystemRightsData(true, false, false, false, false, false, true, true, true, true, true, true, true),
+                // A stand-in address, deliberately not an api/ path: the demo never follows it, and a composed
+                // URL here would be a real violation of ADR 0543 sitting in a fixture where nobody reads it.
+                Links: new Dictionary<string, string> { ["email"] = "demo://advertised-by-the-server" },
+                Email: "demo@simplarchive.local")));
         Principals.Add(new PrincipalRowViewModel(false, Guid.NewGuid(), "Jane Doe", false,
             new AdminClient.SystemRightsData(false, false, false, false, false, false, false, false, false, false, false, false, false)));
         // Select the Administrators group so the rights matrix + Members section show (mock members, no API).

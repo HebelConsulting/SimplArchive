@@ -76,6 +76,9 @@ public sealed partial class MainWindowViewModel
     {
         UgEditingRights = false; // selecting a principal exits edit mode
         PrincipalRights.Clear();
+        CancelPrincipalEmailEdit(); // a half-typed address must not survive the subject changing (ADR 0559)
+        SelectedPrincipalEmail = value?.Source?.Email ?? string.Empty;
+        OnPropertyChanged(nameof(CanEditPrincipalEmail));
         if (value is null)
         {
             PrincipalRightsHeader = string.Empty;
@@ -94,6 +97,77 @@ public sealed partial class MainWindowViewModel
 
         await LoadSelectedPrincipalPhotoAsync(value);
         await LoadGroupMembersAsync(value);
+    }
+
+    // ---- The user's e-mail: their login identifier (#465) --------------------------------------------
+    //
+    // Read-only text with a pencil, and the pencil appears only where the server advertised the `email` rel
+    // — absent on a kiosk, where everyone signs in as the same demo administrator and one visitor could
+    // change the identifier the next one needs. A missing rel already means "not available to you, here,
+    // now" (ADR 0543), so nothing here reads a deployment flag; and per ADR 0550 the commit controls live in
+    // the row the pencil started the edit in, not at the far end of the pane.
+
+    [ObservableProperty] private string _selectedPrincipalEmail = string.Empty;
+
+    [ObservableProperty] private bool _isEditingPrincipalEmail;
+
+    [ObservableProperty] private string _principalEmailEntry = string.Empty;
+
+    /// <summary>Whether THIS principal's address may be changed — the row's own answer, not a guess.</summary>
+    public bool CanEditPrincipalEmail =>
+        SelectedPrincipal is { IsGroup: false, Source: { } source } && source.Href("email") is not null;
+
+    [RelayCommand]
+    private void BeginPrincipalEmailEdit()
+    {
+        if (!CanEditPrincipalEmail)
+        {
+            return;
+        }
+
+        PrincipalEmailEntry = SelectedPrincipalEmail;
+        IsEditingPrincipalEmail = true;
+    }
+
+    [RelayCommand]
+    private void CancelPrincipalEmailEdit()
+    {
+        IsEditingPrincipalEmail = false;
+        PrincipalEmailEntry = string.Empty;
+    }
+
+    [RelayCommand]
+    private async Task SavePrincipalEmailAsync()
+    {
+        // Addressed from the ROW the user clicked, never from pane state (ADR 0559): the pane loads
+        // asynchronously while its buttons stay clickable, which is how an action lands on the previous
+        // subject.
+        if (_api is null || SelectedPrincipal is not { Source: { } source } row
+            || source.Href("email") is not { } href)
+        {
+            return;
+        }
+
+        try
+        {
+            var updated = await _api.Admin.SetUserEmailAsync(href, PrincipalEmailEntry.Trim());
+            SelectedPrincipalEmail = updated.Email;
+            IsEditingPrincipalEmail = false;
+            Status = Strings.Get("StUserEmailChanged");
+
+            // The listing row carries the address too — refresh it so a re-select shows the new value.
+            var index = Principals.IndexOf(row);
+            if (index >= 0)
+            {
+                Principals[index] = new PrincipalRowViewModel(false, updated.Id, updated.Name, updated.IsActive,
+                    updated.Rights, updated.MfaEnabled, updated);
+                SelectedPrincipal = Principals[index];
+            }
+        }
+        catch (ApiActionException e)
+        {
+            ReportError(e.Message);
+        }
     }
 
     // ---- Group membership (ADR "Group membership editing") ------------------------------------------

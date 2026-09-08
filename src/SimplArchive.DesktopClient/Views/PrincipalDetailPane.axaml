@@ -54,6 +54,41 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </StackPanel>
+        <!-- The user's e-mail: their login identifier (#465). Read-only text with a pencil, and the commit
+             controls (✓/✕, ADR 0550's vocabulary) sit in the SAME row the pencil started the edit in — not at
+             the far end of the pane. The pencil is bound to CanEditPrincipalEmail, which is the server's own
+             answer (the row's `email` rel): where a deployment forbids the change, the address simply reads
+             as text and no inert control is left behind (ADR 0550 again — a control that cannot act is noise
+             that hides the one that can). -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="0,0,0,10"
+                    IsVisible="{Binding SelectedPrincipalIsUser}">
+            <TextBlock Text="{loc:Tr UgEmail}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Width="110" />
+            <SelectableTextBlock Text="{Binding SelectedPrincipalEmail}" VerticalAlignment="Center"
+                                 IsVisible="{Binding !IsEditingPrincipalEmail}" />
+            <!-- The tooltip is the shared Edit/Save/Cancel vocabulary; the ACCESSIBLE name is more specific,
+                 because the rights matrix in this same pane has its own three, and a screen reader announcing
+                 two identical "Edit"s cannot tell them apart. -->
+            <Button Padding="5,0" Height="24" ToolTip.Tip="{loc:Tr Edit}"
+                    AutomationProperties.Name="{loc:Tr UgEditEmail}"
+                    Command="{Binding BeginPrincipalEmailEditCommand}"
+                    IsVisible="{Binding CanEditPrincipalEmail}">
+                <i:Icon Value="mdi-pencil" FontSize="13" />
+            </Button>
+            <TextBox Text="{Binding PrincipalEmailEntry}" Width="260" Height="26" Padding="4,2"
+                     VerticalContentAlignment="Center" KeyDown="OnEmailKeyDown"
+                     IsVisible="{Binding IsEditingPrincipalEmail}" />
+            <Button Padding="5,0" Height="24" ToolTip.Tip="{loc:Tr Save}" IsVisible="{Binding IsEditingPrincipalEmail}"
+                    AutomationProperties.Name="{loc:Tr UgSaveEmail}"
+                    Command="{Binding SavePrincipalEmailCommand}">
+                <i:Icon Value="mdi-check" FontSize="13" />
+            </Button>
+            <Button Padding="5,0" Height="24" ToolTip.Tip="{loc:Tr Cancel}" IsVisible="{Binding IsEditingPrincipalEmail}"
+                    AutomationProperties.Name="{loc:Tr UgCancelEmail}"
+                    Command="{Binding CancelPrincipalEmailEditCommand}">
+                <i:Icon Value="mdi-close" FontSize="13" />
+            </Button>
+        </StackPanel>
+
         <!-- Profile photo (users only) — ADR "User profile photo". -->
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12" Margin="0,0,0,12"
                     IsVisible="{Binding SelectedPrincipalIsUser}">

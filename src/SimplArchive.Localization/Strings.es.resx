@@ -4878,4 +4878,25 @@
   <data name="ProposalNone" xml:space="preserve">
     <value>Sin propuestas.</value>
   </data>
+  <data name="StUserEmailInvalid" xml:space="preserve">
+    <value>Eso no es una dirección de correo electrónico.</value>
+  </data>
+  <data name="StUserEmailNotAllowed" xml:space="preserve">
+    <value>La modificación de direcciones de correo está desactivada en esta instalación.</value>
+  </data>
+  <data name="UgEmail" xml:space="preserve">
+    <value>Correo electrónico</value>
+  </data>
+  <data name="StUserEmailChanged" xml:space="preserve">
+    <value>Dirección de correo modificada.</value>
+  </data>
+  <data name="UgEditEmail" xml:space="preserve">
+    <value>Cambiar la dirección de correo</value>
+  </data>
+  <data name="UgSaveEmail" xml:space="preserve">
+    <value>Guardar la dirección de correo</value>
+  </data>
+  <data name="UgCancelEmail" xml:space="preserve">
+    <value>Descartar el cambio de dirección</value>
+  </data>
 </root>

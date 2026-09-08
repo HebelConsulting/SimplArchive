@@ -56,8 +56,10 @@ public class UsersController : ControllerBase
         INotificationService notifications,
         Authentication.MfaService mfa,
         ITransitEncryptor transit,
+        IConfiguration configuration,
         Documents.PersonalRepositoryProvisioner personalSpaces)
     {
+        _emailEditable = !configuration.GetValue<bool>("App:IsKiosk");
         _personalSpaces = personalSpaces;
         _dbContext = dbContext;
         _currentTenantAccessor = currentTenantAccessor;
@@ -72,6 +74,22 @@ public class UsersController : ControllerBase
     }
 
     private readonly ITransitEncryptor _transit;
+
+    /// <summary>
+    /// Whether this DEPLOYMENT allows an administrator to change a user's e-mail (#465).
+    /// </summary>
+    /// <remarks>
+    /// False on the public kiosk (<c>App:IsKiosk</c>), where everyone signs in as the same demo administrator
+    /// and one visitor could change the login identifier the next one needs. A property of the INSTALLATION,
+    /// not of a tenant — which is why it is app configuration rather than a tenant setting.
+    /// <para>
+    /// The clients never read this flag: the user row simply does not advertise its <c>email</c> rel where
+    /// editing is refused, and a missing rel already means "not available to you, here, now" (ADR 0543). A
+    /// whoami field would be a second way to say the same thing, and the one the clients would have to keep
+    /// in step with the endpoint's own answer.
+    /// </para>
+    /// </remarks>
+    private readonly bool _emailEditable;
     private readonly IClearanceResolver _clearanceResolver;
 
     // Plain mutable classes, not records — System.Xml.Serialization.XmlSerializer (ADR "JSON/XML content
@@ -119,6 +137,12 @@ public class UsersController : ControllerBase
     public class UsersListResource : HypermediaResource
     {
         public List<UserResource> Users { get; set; } = [];
+    }
+
+    /// <summary>The intended address (#465) — a full replacement, per the PUT.</summary>
+    public class SetEmailRequest
+    {
+        public string Email { get; set; } = string.Empty;
     }
 
     public class CreateUserRequest
@@ -202,7 +226,7 @@ public class UsersController : ControllerBase
 
         await _audit.RecordAsync(AuditActions.UserCreated, "User", user.Id, user.DisplayName, cancellationToken: cancellationToken);
 
-        var resource = BuildResource(user);
+        var resource = BuildResource(user, _emailEditable);
 
         return CreatedAtAction(nameof(Get), new { userId = user.Id }, resource);
     }
@@ -265,7 +289,7 @@ public class UsersController : ControllerBase
                     user,
                     await _userSystemRights.GetEffectiveSystemRightsAsync(user.Id, cancellationToken));
 
-            users.Add(BuildResource(user, mayImpersonate));
+            users.Add(BuildResource(user, _emailEditable, mayImpersonate));
         }
 
         return Ok(new UsersListResource
@@ -303,7 +327,7 @@ public class UsersController : ControllerBase
             return NotFound();
         }
 
-        return Ok(BuildResource(user));
+        return Ok(BuildResource(user, _emailEditable));
     }
 
     // Standing convention: every GET action gets a companion HEAD action — a separate action, not relying
@@ -341,7 +365,7 @@ public class UsersController : ControllerBase
         user.DisplayName = request.DisplayName;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        return Ok(BuildResource(user));
+        return Ok(BuildResource(user, _emailEditable));
     }
 
     // Deactivates: sets IsActive = false in place, row not deleted. Reversible (unlike ServiceAccount's
@@ -452,7 +476,7 @@ public class UsersController : ControllerBase
         await _dbContext.SaveChangesAsync(cancellationToken);
         await _audit.RecordAsync(AuditActions.UserReactivated, "User", user.Id, user.DisplayName, cancellationToken: cancellationToken);
 
-        return Ok(BuildResource(user));
+        return Ok(BuildResource(user, _emailEditable));
     }
 
     // Sets the user's full system-rights bundle — see ADR "Users & groups administration tab". Gated on
@@ -485,7 +509,73 @@ public class UsersController : ControllerBase
         await _dbContext.SaveChangesAsync(cancellationToken);
         await _audit.RecordAsync(AuditActions.UserRightsChanged, "User", user.Id, user.DisplayName, Users.SystemRightsMapping.Describe(request), cancellationToken: cancellationToken);
 
-        return Ok(BuildResource(user));
+        return Ok(BuildResource(user, _emailEditable));
+    }
+
+    /// <summary>Changes a user's e-mail — the address they sign in with (#465).</summary>
+    /// <remarks>
+    /// <para>
+    /// A sub-resource, not a verb: <c>PUT /users/{id}/email</c> replaces the address with the intended value.
+    /// Gated on <c>CanManageUsers</c> like its siblings here, and additionally on the deployment allowing it
+    /// at all (see <see cref="_emailEditable"/>) — a direct call on a kiosk is refused even though no rel
+    /// invites it, because a rel's absence is an affordance rule, never an authorisation one.
+    /// </para>
+    /// <para>
+    /// Sets <c>Email</c> and NEVER <c>NormalizedEmail</c>: the setter derives the normalized column, and the
+    /// unique index is on <c>(TenantId, NormalizedEmail)</c> — so a collision inside the tenant is a 409, and
+    /// the same address may legitimately exist in another tenant (ADR 0150/0208).
+    /// </para>
+    /// <para>
+    /// No <c>If-Match</c>, deliberately and unlike most mutations: <c>User</c> is not
+    /// <c>IConcurrencyTracked</c>, so there is no token to send — the sibling rights/photo/reset endpoints
+    /// have none either. Giving this one endpoint a token would need a schema change and would leave the
+    /// rest of the controller inconsistent; #465 assumed the tokens existed, and they do not.
+    /// </para>
+    /// <para>
+    /// Sessions are NOT ended and the old address is NOT notified (owner decision 2026-09-09): a session's
+    /// identity is the user id, not the address, so a corrected typo must not lock someone out mid-work. The
+    /// audit event is the record — who changed whose address, and to what.
+    /// </para>
+    /// </remarks>
+    [HttpPut("{userId:guid}/email")]
+    public async Task<IActionResult> SetEmail(Guid userId, [FromBody] SetEmailRequest request, CancellationToken cancellationToken)
+    {
+        if (!await CanManageUsersAsync(cancellationToken) || !_emailEditable)
+        {
+            return Forbid();
+        }
+
+        var email = request.Email?.Trim() ?? string.Empty;
+        if (email.Length == 0 || !email.Contains('@', StringComparison.Ordinal))
+        {
+            throw new Errors.Exceptions.Principals.InvalidUserEmailException(email);
+        }
+
+        var user = await _dbContext.Users.SingleOrDefaultAsync(u => u.Id == userId, cancellationToken);
+        if (user is null)
+        {
+            return NotFound();
+        }
+
+        var previous = user.Email;
+        if (string.Equals(previous, email, StringComparison.OrdinalIgnoreCase))
+        {
+            return Ok(BuildResource(user, _emailEditable)); // nothing to record
+        }
+
+        // Looked up on the NORMALIZED column, which is what the unique index covers (ADR 0150).
+        var normalized = email.ToUpperInvariant();
+        if (await _dbContext.Users.AnyAsync(u => u.Id != userId && u.NormalizedEmail == normalized, cancellationToken))
+        {
+            throw new Errors.Exceptions.Principals.UserEmailConflictException();
+        }
+
+        user.Email = email; // the setter derives NormalizedEmail — never assign that column here
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _audit.RecordAsync(AuditActions.UserEmailChanged, "User", user.Id, user.DisplayName,
+            $"{previous} → {email}", cancellationToken: cancellationToken);
+
+        return Ok(BuildResource(user, _emailEditable));
     }
 
     // Self-service — requires being logged in as a User (ICurrentUserAccessor.UserId set), not gated on
@@ -723,7 +813,12 @@ public class UsersController : ControllerBase
         return NoContent();
     }
 
-    private static UserResource BuildResource(User user, bool mayImpersonate = false)
+    /// <param name="emailEditable">
+    /// Whether this deployment lets an administrator change a user's e-mail (#465). REQUIRED rather than
+    /// defaulted on purpose: a defaulted capability is one a new call site silently gets wrong, and the
+    /// wrong answer here is invisible — the pencil simply never appears (the #858 lesson).
+    /// </param>
+    private static UserResource BuildResource(User user, bool emailEditable, bool mayImpersonate = false)
     {
         return new UserResource
         {
@@ -746,6 +841,13 @@ public class UsersController : ControllerBase
                 // enforces, so anyone holding this row may use it. Its absence elsewhere is what kept the
                 // profile-photo dialog composing /users/{id}/photo for the admin case.
                 new Link("photo", $"/api/users/{user.Id}/photo", "PUT"),
+                // The user's e-mail — their login identifier (#465). Conditional where its siblings are not:
+                // this deployment may forbid the change entirely (the public kiosk does), and a rel that is
+                // absent is how the clients learn to render the address as plain text instead of offering a
+                // pencil that would be refused (ADR 0543).
+                .. emailEditable
+                    ? new[] { new Link("email", $"/api/users/{user.Id}/email", "PUT") }
+                    : [],
                 // The remaining administrative actions on this user (issue #416). All are gated by the same
                 // CanManageUsers right that gates the listing itself, so anyone holding this row may use them —
                 // which is why they are unconditional here rather than recomputed per row.

@@ -34,6 +34,8 @@ public class StringEmptyRatchetTests
         // readonly field, not a constant expression. Two LINES, three literals: this guard counts lines that
         // contain a match, not matches, so `string CreatedBy = "", string SensitivityLabelName = ""` scores 1.
         ["src/SimplArchive.DesktopClient/Services/ReferencesClient.cs"] = 2,
+        // PrincipalInfo's positional `string Email = ""` (#465) — the same CS1736 case as the records above.
+        ["src/SimplArchive.DesktopClient/Services/AdminClient.cs"] = 1,
         ["src/SimplArchive.DesktopClient/Services/DragOutStager.cs"] = 1,
         ["src/SimplArchive.DesktopClient/Services/IntrayApi.cs"] = 1,
         ["src/SimplArchive.DesktopClient/Services/SharedRecords.cs"] = 3,

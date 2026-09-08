@@ -1,0 +1,143 @@
+@using System.Net
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+@* A user's e-mail — their login identifier (#465) — as text with a pencil, and ✓/✕ taking the pencil's own
+   slot for the edit's duration (ADR 0550: the transition does not hide its own actions, and they sit where the
+   control that started it was).
+
+   Its own component rather than another block in UsersGroupsTab, because that tab reached the 1000-line limit
+   and this is a cohesive responsibility: one field, its edit state, and its commit.
+
+   The parent passes the ADDRESS, never an id (ADRs 0543/0555/0559): `EmailHref` is the `email` rel the LISTING
+   advertised for that row, and a null one means the deployment forbids the change — the address then simply
+   reads as text and no inert pencil is left behind. Both parameters change when the selection does, so this
+   component re-renders from its own inputs rather than only from callbacks (the frozen-component trap). *@
+
+<div class="wb-ug-email d-flex align-center gap-1 mb-2">
+    <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="width:110px;">@Strings.Get("UgEmail")</MudText>
+    @if (_editing)
+    {
+        <MudTextField T="string" @bind-Value="_entry" Immediate="true" Margin="Margin.Dense"
+                      Variant="Variant.Outlined" Style="max-width:260px;" Class="wb-ug-email-entry"
+                      aria-label="@Strings.Get("UgEmail")" AutoFocus="true" OnKeyDown="OnKeyDown" />
+        @* The tooltips are the shared Edit/Save/Cancel vocabulary; the ACCESSIBLE names are more specific,
+           because the rights matrix in the same pane has its own three, and two controls sharing a name are
+           ambiguous to a screen reader and to a test locator alike. *@
+        <MudTooltip Text="@Strings.Get("Save")">
+            <MudIconButton Size="Size.Small" aria-label="@Strings.Get("UgSaveEmail")" Color="Color.Primary"
+                           Icon="@Icons.Material.Filled.Check" OnClick="SaveAsync" Disabled="_busy" />
+        </MudTooltip>
+        <MudTooltip Text="@Strings.Get("Cancel")">
+            <MudIconButton Size="Size.Small" aria-label="@Strings.Get("UgCancelEmail")"
+                           Icon="@Icons.Material.Filled.Close" OnClick="Cancel" Disabled="_busy" />
+        </MudTooltip>
+    }
+    else
+    {
+        <MudText Typo="Typo.body2">@Email</MudText>
+        @if (EmailHref is not null)
+        {
+            <MudTooltip Text="@Strings.Get("Edit")">
+                <MudIconButton Size="Size.Small" aria-label="@Strings.Get("UgEditEmail")"
+                               Icon="@Icons.Material.Filled.Edit" OnClick="Begin" />
+            </MudTooltip>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>The address as the server last reported it.</summary>
+    [Parameter, EditorRequired]
+    public string Email { get; set; } = string.Empty;
+
+    /// <summary>The row's `email` rel — null where this deployment forbids the change.</summary>
+    [Parameter]
+    public string? EmailHref { get; set; }
+
+    /// <summary>Raised after a successful change, so the parent reloads from the server's answer.</summary>
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private bool _editing;
+    private bool _busy;
+    private string _entry = string.Empty;
+
+    /// <summary>The address the open edit belongs to — a keystroke does not change it, a new selection does.</summary>
+    private string _editingFor = string.Empty;
+
+    // A new subject never inherits the previous one's half-typed entry (ADR 0559). The parent re-parameterises
+    // this component on every selection, which is the moment that matters.
+    protected override void OnParametersSet()
+    {
+        if (_editing && !string.Equals(_editingFor, Email, StringComparison.Ordinal))
+        {
+            Cancel();
+        }
+    }
+
+    private void Begin()
+    {
+        _entry = Email;
+        _editingFor = Email;
+        _editing = true;
+    }
+
+    private void Cancel()
+    {
+        _editing = false;
+        _entry = string.Empty;
+    }
+
+    // Esc cancels, Enter commits — ADR 0550's keyboard equivalents. (⌘/Ctrl+S is the desktop's alone: Blazor's
+    // preventDefault is per-render rather than per-key, so suppressing the browser's Save dialog would suppress
+    // every keystroke in the field.)
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            Cancel();
+        }
+        else if (e.Key == "Enter")
+        {
+            await SaveAsync();
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (EmailHref is not { } href)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            using var response = await Http.PutAsJsonAsync(href, new { email = _entry.Trim() });
+            if (!response.IsSuccessStatusCode)
+            {
+                Snackbar.Add(Strings.Get(response.StatusCode switch
+                {
+                    HttpStatusCode.Conflict => "StUserEmailExists",
+                    HttpStatusCode.BadRequest => "StUserEmailInvalid",
+                    HttpStatusCode.Forbidden => "StUserEmailNotAllowed",
+                    _ => "StErrSaveRights",
+                }), Severity.Warning);
+                return;  // the field stays open, so the typo is fixable rather than lost
+            }
+
+            Cancel();
+            Snackbar.Add(Strings.Get("StUserEmailChanged"), Severity.Success);
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("StErrSaveRights"), Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

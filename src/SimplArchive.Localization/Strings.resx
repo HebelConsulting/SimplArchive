@@ -4878,4 +4878,25 @@
   <data name="ProposalNone" xml:space="preserve">
     <value>No candidates.</value>
   </data>
+  <data name="StUserEmailInvalid" xml:space="preserve">
+    <value>That is not an e-mail address.</value>
+  </data>
+  <data name="StUserEmailNotAllowed" xml:space="preserve">
+    <value>Changing e-mail addresses is disabled on this installation.</value>
+  </data>
+  <data name="UgEmail" xml:space="preserve">
+    <value>E-mail</value>
+  </data>
+  <data name="StUserEmailChanged" xml:space="preserve">
+    <value>E-mail address changed.</value>
+  </data>
+  <data name="UgEditEmail" xml:space="preserve">
+    <value>Change e-mail address</value>
+  </data>
+  <data name="UgSaveEmail" xml:space="preserve">
+    <value>Save the e-mail address</value>
+  </data>
+  <data name="UgCancelEmail" xml:space="preserve">
+    <value>Discard the e-mail change</value>
+  </data>
 </root>

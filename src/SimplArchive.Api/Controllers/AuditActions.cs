@@ -117,6 +117,7 @@ public static class AuditActions
     public const string UserDeactivated = "User.Deactivated";
     public const string UserReactivated = "User.Reactivated";
     public const string UserRightsChanged = "User.RightsChanged";
+    public const string UserEmailChanged = "User.EmailChanged";
     public const string UserPasswordChanged = "User.PasswordChanged";
     public const string UserPasswordReset = "User.PasswordReset";
     public const string UserMfaEnabled = "User.MfaEnabled";

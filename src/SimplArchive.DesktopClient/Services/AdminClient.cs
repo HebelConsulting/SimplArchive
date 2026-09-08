@@ -43,7 +43,7 @@ public sealed class AdminClient(ApiCore core)
     // deactivate for a user; rights, members, delete for a group. The client's methods take this row and follow
     // one of them, instead of rebuilding /users/{id}/… and /groups/{id}/… paths from an id.
     public sealed record PrincipalInfo(bool IsGroup, Guid Id, string Name, bool IsActive, SystemRightsData Rights, bool MfaEnabled = false, bool ImapShowAllDocuments = false,
-        IReadOnlyDictionary<string, string>? Links = null)
+        IReadOnlyDictionary<string, string>? Links = null, string Email = "")
     {
         public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
     }
@@ -354,6 +354,36 @@ public sealed class AdminClient(ApiCore core)
         return ParseUser(await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken));
     }
 
+    /// <summary>
+    /// Changes a user's e-mail — their login identifier (#465) — at the address the ROW advertised.
+    /// </summary>
+    /// <remarks>
+    /// Takes the href, never an id: the rel is the affordance AND the address (ADRs 0543/0555), and its
+    /// absence is how a deployment that forbids the change (the kiosk) says so. Returns the updated row so
+    /// the caller refreshes from the server's answer rather than from what it hoped it wrote.
+    /// </remarks>
+    public async Task<PrincipalInfo> SetUserEmailAsync(string emailHref, string email, CancellationToken cancellationToken = default)
+    {
+        using var response = await _core.Http.PutAsJsonAsync(emailHref, new { email }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ApiActionException(Strings.Get("StUserEmailExists"));
+        }
+
+        if (response.StatusCode == HttpStatusCode.BadRequest)
+        {
+            throw new ApiActionException(Strings.Get("StUserEmailInvalid"));
+        }
+
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException(Strings.Get("StUserEmailNotAllowed"));
+        }
+
+        response.EnsureSuccessStatusCode();
+        return ParseUser(await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken));
+    }
+
     public async Task<PrincipalInfo> CreateGroupAsync(string name, CancellationToken cancellationToken = default)
     {
         using var response = await _core.Http.PostAsJsonAsync(await _core.RootHrefAsync("groups", cancellationToken), new { name }, cancellationToken);
@@ -651,7 +681,8 @@ public sealed class AdminClient(ApiCore core)
         ParseRights(e),
         e.TryGetProperty("mfaEnabled", out var mfa) && mfa.ValueKind == JsonValueKind.True,
         e.TryGetProperty("imapShowAllDocuments", out var im) && im.ValueKind == JsonValueKind.True,
-        ApiCore.ParseLinks(e));
+        ApiCore.ParseLinks(e),
+        e.TryGetProperty("email", out var mail) ? mail.GetString() ?? "" : "");
 
     private static PrincipalInfo ParseGroup(JsonElement e) => new(
         true,
