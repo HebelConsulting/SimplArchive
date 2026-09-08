@@ -198,7 +198,14 @@ internal static partial class Ui
         await Assertions.Expect(page.GetByText("You are logged out")).ToBeVisibleAsync();
 
         await serverSignOut;
-        await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+
+        // DOMContentLoaded, not NetworkIdle — the same lesson the login helper above records, which this
+        // method contradicted (#1081). A Blazor WASM SPA keeps making background requests (WASM boot, the
+        // OIDC silent-renew iframe), so "500 ms of network silence" is a condition this app may simply never
+        // meet: on a loaded 2-core runner the wait burned its full 60 s and failed a test whose subject had
+        // already succeeded. What this line needs to guarantee is only that logout's SECOND navigation has
+        // landed — the request itself is already awaited above — and that is what DOMContentLoaded says.
+        await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
     }
 
     private static string Base64Url(byte[] bytes) =>
