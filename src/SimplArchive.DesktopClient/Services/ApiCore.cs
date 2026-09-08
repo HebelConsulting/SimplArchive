@@ -111,24 +111,57 @@ public sealed class ApiCore
         using var response = await Http.GetAsync("api", cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            return links;
+            // NEVER an empty link set on a failed read (#1077). An empty set is indistinguishable from a root
+            // that advertises nothing, so RootHrefAsync then blamed the CONTRACT — "the API root does not
+            // advertise the 'repositories' rel" — for what was a 500. A wrong diagnosis is worse than a plain
+            // failure (the serving-something-else rule): it sent the reader looking at hypermedia while the
+            // server was broken. Found live when a corrupted module assembly made GET /api throw and the
+            // desktop answered a SUCCESSFUL sign-in with a silent "Not logged in.".
+            //
+            // HttpRequestException carrying the status: AppExceptions classifies it as a connectivity failure,
+            // which is the recoverable modal that retries — the honest offer when the server is answering badly.
+            throw new HttpRequestException(
+                $"The API root answered {(int)response.StatusCode} {response.ReasonPhrase}.", null, response.StatusCode);
         }
 
-        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-        if (doc.RootElement.TryGetProperty("links", out var items) && items.ValueKind == JsonValueKind.Array)
+        // A 200 is not yet an API root (#1077). An address pointing at the SPA host — a mistyped server entry,
+        // the commonest way to get here — answers 200 with index.html, and parsing that raised a raw
+        // JsonReaderException ("'<' is an invalid start of a value") from deep inside the client. Same rule as
+        // the branch above: say what is wrong with the ADDRESS, not what a parser found in byte 0.
+        JsonDocument doc;
+        try
         {
-            foreach (var link in items.EnumerateArray())
+            doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        }
+        catch (JsonException e)
+        {
+            throw new HttpRequestException(
+                $"The address answered {(int)response.StatusCode} but not with an API root (its body is not JSON).", e);
+        }
+
+        using (doc)
+        {
+            if (doc.RootElement.TryGetProperty("links", out var items) && items.ValueKind == JsonValueKind.Array)
             {
-                if (link.TryGetProperty("rel", out var rel) && rel.GetString() is { Length: > 0 } name
-                    && link.TryGetProperty("href", out var href) && href.GetString() is { Length: > 0 } value)
+                foreach (var link in items.EnumerateArray())
                 {
-                    // Trimmed here rather than at each caller: the href is absolute-from-root ("/api/tags") and
-                    // this HttpClient has a BaseAddress, so a leading slash escapes any path prefix it carries.
-                    // The second copy of this method trimmed and this one did not — harmless only while the
-                    // base address has no prefix, which is exactly the kind of agreement two copies stop keeping.
-                    links[name] = value.TrimStart('/');
+                    if (link.TryGetProperty("rel", out var rel) && rel.GetString() is { Length: > 0 } name
+                        && link.TryGetProperty("href", out var href) && href.GetString() is { Length: > 0 } value)
+                    {
+                        // Trimmed here rather than at each caller: the href is absolute-from-root ("/api/tags") and
+                        // this HttpClient has a BaseAddress, so a leading slash escapes any path prefix it carries.
+                        // The second copy of this method trimmed and this one did not — harmless only while the
+                        // base address has no prefix, which is exactly the kind of agreement two copies stop keeping.
+                        links[name] = value.TrimStart('/');
+                    }
                 }
             }
+        }
+
+        // A JSON body with no links is not an API root either — the same wrong-diagnosis trap one step later.
+        if (links.Count == 0)
+        {
+            throw new HttpRequestException("The address answered with JSON that carries no API-root links.");
         }
 
         return links;

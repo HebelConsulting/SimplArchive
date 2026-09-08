@@ -85,7 +85,10 @@ public partial class App : Application
             desktop.MainWindow = window; // the main window is the app's main window before we drop the logon
             window.Show();
             logon.Close();
-            _ = viewModel.InitializeSessionAsync(api, email);
+            // Safe.Fire, never a bare `_ =` (ADR 0275's discipline, #1077): the bootstrap reports its own
+            // failures, and this wrapper is what catches anything it cannot — an async void that throws past
+            // both is an app-killer, and a swallowed one is a workbench that silently says "Not logged in.".
+            Services.Safe.Fire(() => viewModel.InitializeSessionAsync(api, email));
         };
 
         desktop.MainWindow = logon;

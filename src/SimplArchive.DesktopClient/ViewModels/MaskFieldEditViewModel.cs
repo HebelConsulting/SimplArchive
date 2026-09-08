@@ -36,7 +36,13 @@ public sealed partial class MaskFieldEditViewModel : ObservableObject
     public bool Locked { get; init; }
 
     [ObservableProperty] private string _textValue = string.Empty;
-    [ObservableProperty] private System.DateTimeOffset? _dateValue;
+    // DateTime?, NOT DateTimeOffset? — Avalonia ships TWO date controls with DIFFERENT property types, and
+    // this one binds a CalendarDatePicker, whose SelectedDate is DateTime? (DatePicker's is DateTimeOffset?).
+    // The mismatch does not fail the build or any C# test: it fails at BINDING time with "Could not cast
+    // DateTimeOffset to DateTime?", leaving every Date and DateTime mask field silently uneditable — the
+    // owner met it on the Enrollment mask. Every other date-bearing view-model here is DateTime? for exactly
+    // this reason; this one was the outlier. (Same family as the NumericUpDown/decimal? trap.)
+    [ObservableProperty] private System.DateTime? _dateValue;
     [ObservableProperty] private System.TimeSpan? _timeValue;
     [ObservableProperty] private bool _boolValue;
 
@@ -116,12 +122,12 @@ public sealed partial class MaskFieldEditViewModel : ObservableObject
         switch (definition.DataType)
         {
             case "Date":
-                field.DateValue = values.Count > 0 && System.DateTimeOffset.TryParse(values[0], out var d)
-                    ? new System.DateTimeOffset(d.Date, System.TimeSpan.Zero) : null;
+                field.DateValue = values.Count > 0 && System.DateTime.TryParse(values[0], out var d)
+                    ? d.Date : null;
                 break;
             case "DateTime":
                 var (day, time) = SimplArchive.Presentation.IndexInstant.Split(values.Count > 0 ? values[0] : null);
-                field.DateValue = day is { } dd ? new System.DateTimeOffset(dd, System.TimeSpan.Zero) : null;
+                field.DateValue = day;
                 field.TimeValue = time;
                 break;
             case "Boolean":

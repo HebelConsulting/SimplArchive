@@ -677,8 +677,23 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         UseApi(api);
         UserEmail = email;
         IsLoggedIn = true;
-        await SetupUserContextAsync();
-        await LoadRootAsync();
+        try
+        {
+            await SetupUserContextAsync();
+            await LoadRootAsync();
+        }
+        catch (Exception e)
+        {
+            // The bootstrap owns its failure (#1077). Its one caller fires and forgets, so an exception
+            // escaping here reached nothing but the finalizer's unobserved-task log: after a SUCCESSFUL
+            // sign-in the workbench sat at its default "Not logged in." with no error, no modal, and no clue.
+            // Reported HERE because this is where we know what failed — the status line carries the sentence
+            // for the user already looking at it, and AppExceptions decides between the reconnect modal (a
+            // server unreachable or answering badly) and the crash dialog. The session stays signed IN:
+            // authentication genuinely succeeded, and the reconnect modal is the path back.
+            ReportError(string.Format(Strings.Get("StErrSignIn"), e.Message));
+            Services.AppExceptions.Report(e);
+        }
     }
 
     // ---- Contents / breadcrumb ------------------------------------------------------------------------
