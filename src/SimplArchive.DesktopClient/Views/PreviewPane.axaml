@@ -152,8 +152,10 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
-            <ScrollViewer IsVisible="{Binding PreviewText, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
-                <SelectableTextBlock Text="{Binding PreviewText}" FontFamily="Menlo,Consolas,monospace" FontSize="12" Padding="10" />
+            <!-- Text content is rendered by the code-behind (find highlights need styled runs, which no
+                 binding can express); it stays a SelectableTextBlock so copy-out keeps working. -->
+            <ScrollViewer x:Name="TextScroll" IsVisible="{Binding PreviewText, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
+                <SelectableTextBlock x:Name="TextPreview" FontFamily="Menlo,Consolas,monospace" FontSize="12" Padding="10" />
             </ScrollViewer>
             <SelectableTextBlock Text="{Binding PreviewPlaceholder}" Foreground="{DynamicResource WbFaint}" TextWrapping="Wrap" MaxWidth="280"
                        HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"

@@ -43,6 +43,7 @@ public class DesktopHookFamilyTests
     [InlineData("--reset-layout-test")]
     [InlineData("--searchclear-test")]
     [InlineData("--shortcut-test")]
+    [InlineData("--textfind-test")]
     [InlineData("--zoom-test")]
     public async Task The_hook_runs_and_does_not_report_failure(string flag)
     {

@@ -1,4 +1,5 @@
 using SimplArchive.Client.Pages;
+using SimplArchive.Presentation;
 
 namespace SimplArchive.UnitTests;
 
@@ -95,11 +96,11 @@ public class PreviewPaneStateTests
     [Fact]
     public void ApplyTextFind_caps_the_matches_against_degenerate_queries()
     {
-        var state = TextState(new string('a', PreviewPaneState.MaxTextMatches * 3));
+        var state = TextState(new string('a', TextFind.MaxMatches * 3));
         state.FindQuery = "a";
         state.ApplyTextFind();
 
-        Assert.Equal(PreviewPaneState.MaxTextMatches, state.Count);
+        Assert.Equal(TextFind.MaxMatches, state.Count);
     }
 
     [Fact]

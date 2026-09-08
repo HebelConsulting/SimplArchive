@@ -147,7 +147,44 @@ public sealed partial class PreviewViewModel : ObservableObject
 
     public bool CanFindNavigate => FindCount > 0;
 
-    partial void OnFindQueryChanged(string value) => ApplyFindToPages();
+    partial void OnFindQueryChanged(string value)
+    {
+        if (PreviewText is not null)
+        {
+            ApplyFindToText();
+        }
+        else
+        {
+            ApplyFindToPages();
+        }
+    }
+
+    // ---- Find in a TEXT preview (#1063, the web pattern promoted per ADR 0511) -------------------------
+    // Pages find via the word-box overlay; a text preview has no boxes, so the matches come from the shared
+    // arithmetic (SimplArchive.Presentation.TextFind) — the same code the web pane renders from, which is
+    // what keeps the two finds from disagreeing.
+
+    private IReadOnlyList<int> _textMatches = [];
+
+    /// <summary>Bumped whenever the text-find result or the active match changes — the view listens and
+    /// rebuilds the highlighted runs (a render concern the view model cannot draw).</summary>
+    [ObservableProperty] private int _textFindStamp;
+
+    /// <summary>Character offset of the active match, -1 for none — what the view scrolls to.</summary>
+    public int ActiveTextMatchOffset =>
+        FindIndex >= 0 && FindIndex < _textMatches.Count ? _textMatches[FindIndex] : -1;
+
+    /// <summary>The text split into render segments (plain / hit / active hit), from the shared arithmetic.</summary>
+    public IEnumerable<(string Segment, bool IsHit, bool IsActive)> TextFindSegments() =>
+        Presentation.TextFind.Segments(PreviewText, _textMatches, FindQuery.Length, FindIndex + 1);
+
+    private void ApplyFindToText()
+    {
+        _textMatches = Presentation.TextFind.Matches(PreviewText, FindQuery);
+        FindCount = _textMatches.Count;
+        FindIndex = FindCount > 0 ? 0 : -1;
+        TextFindStamp++;
+    }
 
     [RelayCommand]
     private void FindNext()
@@ -158,7 +195,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         }
 
         FindIndex = (FindIndex + 1) % FindCount;
-        ActivateCurrentMatch();
+        ActivateCurrentFind();
     }
 
     [RelayCommand]
@@ -170,7 +207,19 @@ public sealed partial class PreviewViewModel : ObservableObject
         }
 
         FindIndex = (FindIndex - 1 + FindCount) % FindCount;
-        ActivateCurrentMatch();
+        ActivateCurrentFind();
+    }
+
+    private void ActivateCurrentFind()
+    {
+        if (PreviewText is not null)
+        {
+            TextFindStamp++;
+        }
+        else
+        {
+            ActivateCurrentMatch();
+        }
     }
 
     // Marks the current match active on its page (and clears it on every other page), which the overlay draws
@@ -760,6 +809,8 @@ public sealed partial class PreviewViewModel : ObservableObject
             case PreviewMediaKind.Text:
                 Reset(null);
                 PreviewText = Encoding.UTF8.GetString(bytes);
+                CanFindInDocument = true; // the find bar works on text too (#1063)
+                ApplyFindToText();        // a search-seeded or persisted query applies immediately
                 break;
 
             default:
@@ -868,6 +919,11 @@ public sealed partial class PreviewViewModel : ObservableObject
         PreviewPages.Clear();
         HasPreviewPages = false;
         PreviewText = null;
+        CanFindInDocument = false;
+        _findMatches.Clear();
+        _textMatches = [];
+        FindCount = 0;
+        FindIndex = -1;
         PreviewPlaceholder = placeholder;
         AnnotationsAvailable = false;
         CanAddNote = false;

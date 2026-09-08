@@ -1,5 +1,7 @@
 namespace SimplArchive.Client.Pages;
 
+using SimplArchive.Presentation;
+
 // The preview pane's display state (ADR "Preview pdf.js hit-overlay", 0294) — one instance per PreviewPane.
 //
 // It used to be a single SHARED object: the Repositories and Intray tabs took turns with one JS-owned host, so
@@ -24,39 +26,21 @@ public sealed class PreviewPaneState
     public int Index { get; set; }
 
     // ---- Find in a TEXT preview (#1063) ----------------------------------------------------------------
-    // Pages delegate find to preview.js (word overlays); a text preview has no pages, so the matches are
-    // computed here, purely, against the decoded text — which is what makes this testable without a browser.
+    // Pages delegate find to preview.js (word overlays); a text preview has no pages, so the matches come
+    // from the shared arithmetic (SimplArchive.Presentation.TextFind) — the desktop preview answers the
+    // same questions from the same code, which is what keeps the two finds from disagreeing.
 
-    /// <summary>Match start offsets into <see cref="Text"/>, case-insensitive. Capped: a degenerate query
-    /// (one letter against a huge document) must not mint tens of thousands of DOM marks.</summary>
+    /// <summary>Match start offsets into <see cref="Text"/>, case-insensitive, capped
+    /// (<see cref="TextFind.MaxMatches"/>).</summary>
     public IReadOnlyList<int> TextMatches { get; private set; } = [];
-
-    public const int MaxTextMatches = 500;
 
     /// <summary>Recomputes the text matches for <see cref="FindQuery"/> and resets Count/Index. No-op
     /// (clears) when the kind is not text, the query is empty, or there is no text.</summary>
     public void ApplyTextFind()
     {
-        if (Kind != "text" || string.IsNullOrEmpty(FindQuery) || string.IsNullOrEmpty(Text))
-        {
-            TextMatches = [];
-            Count = 0;
-            Index = 0;
-            return;
-        }
-
-        var matches = new List<int>();
-        var at = 0;
-        while (matches.Count < MaxTextMatches
-               && (at = Text.IndexOf(FindQuery, at, StringComparison.OrdinalIgnoreCase)) >= 0)
-        {
-            matches.Add(at);
-            at += FindQuery.Length;
-        }
-
-        TextMatches = matches;
-        Count = matches.Count;
-        Index = matches.Count > 0 ? 1 : 0;
+        TextMatches = Kind == "text" ? TextFind.Matches(Text, FindQuery) : [];
+        Count = TextMatches.Count;
+        Index = TextMatches.Count > 0 ? 1 : 0;
     }
 
     /// <summary>Advances the active text match by <paramref name="delta"/> (±1), wrapping.</summary>
@@ -64,43 +48,14 @@ public sealed class PreviewPaneState
     {
         if (Count > 0)
         {
-            Index = ((Index - 1 + delta) % Count + Count) % Count + 1;
+            Index = TextFind.Cycle(Index, Count, delta);
         }
     }
 
     /// <summary>The text split into render segments: plain runs and matches (with the active one marked) —
-    /// what the pane's text branch renders, kept pure so the split logic is unit-tested.</summary>
-    public IEnumerable<(string Segment, bool IsHit, bool IsActive)> TextSegments()
-    {
-        if (Text is null)
-        {
-            yield break;
-        }
-
-        if (TextMatches.Count == 0)
-        {
-            yield return (Text, false, false);
-            yield break;
-        }
-
-        var pos = 0;
-        for (var i = 0; i < TextMatches.Count; i++)
-        {
-            var start = TextMatches[i];
-            if (start > pos)
-            {
-                yield return (Text[pos..start], false, false);
-            }
-
-            yield return (Text.Substring(start, FindQuery.Length), true, i + 1 == Index);
-            pos = start + FindQuery.Length;
-        }
-
-        if (pos < Text.Length)
-        {
-            yield return (Text[pos..], false, false);
-        }
-    }
+    /// what the pane's text branch renders.</summary>
+    public IEnumerable<(string Segment, bool IsHit, bool IsActive)> TextSegments() =>
+        TextFind.Segments(Text, TextMatches, FindQuery.Length, Index);
 
     // True when the preview is a server-generated rendition (drives the "Converted preview" badge).
     public bool Converted { get; set; }

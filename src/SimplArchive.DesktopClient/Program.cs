@@ -447,6 +447,50 @@ internal static class Program
             return;
         }
 
+        // Find in a TEXT preview (#1063's desktop half, ADR 0511): `--textfind-test`. Renders the real
+        // PreviewPane headlessly over a long text, types a query, and checks what only the VIEW does: the
+        // highlighted runs exist (all hits marked, exactly one active), and stepping to a far-down match
+        // moves the text ScrollViewer — the two behaviours no VM test can see.
+        if (args.Contains("--textfind-test"))
+        {
+            AppBuilder.Configure<App>()
+                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .UseSkia()
+                .SetupWithoutStarting();
+
+            var vm = new PreviewViewModel(new NoStatusLine());
+            var pane = new PreviewPane { DataContext = vm };
+            var window = new Avalonia.Controls.Window { Width = 420, Height = 300, Content = pane };
+            window.Show();
+
+            // "LSPG" near the top and far down — finding the second must scroll.
+            vm.PreviewText = string.Join('\n', Enumerable.Range(0, 300)
+                .Select(i => i is 5 or 250 ? $"line {i} LSPG Kaegiswil" : $"line {i}"));
+            vm.CanFindInDocument = true;
+            vm.FindQuery = "lspg";
+            window.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+
+            var block = pane.GetVisualDescendants().OfType<Avalonia.Controls.SelectableTextBlock>().First(b => b.Name == "TextPreview");
+            var scroll = pane.GetVisualDescendants().OfType<Avalonia.Controls.ScrollViewer>().First(v => v.Name == "TextScroll");
+            var runs = block.Inlines!.OfType<Avalonia.Controls.Documents.Run>().ToList();
+            var hits = runs.Count(r => r.Background is not null);
+            var actives = runs.Count(r => r.Background is Avalonia.Media.SolidColorBrush { Color.R: 0xf6 });
+            var positionReads = vm.FindPosition == "1 / 2";
+            var offsetBefore = scroll.Offset.Y;
+
+            vm.FindNextCommand.Execute(null);
+            window.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+            var scrolledDown = scroll.Offset.Y > offsetBefore;
+            var secondActive = vm.ActiveTextMatchOffset > 0 && vm.FindPosition == "2 / 2";
+
+            Console.WriteLine($"hits={hits} actives={actives} positionReads={positionReads} "
+                + $"scrolledDown={scrolledDown} (offset {offsetBefore:0.#} -> {scroll.Offset.Y:0.#}) secondActive={secondActive}");
+            Console.WriteLine(hits == 2 && actives == 1 && positionReads && scrolledDown && secondActive ? "OK" : "FAILED");
+            return;
+        }
+
         // The Open shortcut (#482, ADR "One shortcut for opening a document"): `--shortcut-test`, in
         // OpenShortcutCheck.
         if (args.Contains("--shortcut-test"))
