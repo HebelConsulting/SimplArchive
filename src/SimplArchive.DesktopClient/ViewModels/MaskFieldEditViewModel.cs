@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using SimplArchive.DesktopClient.Services;
 
@@ -53,6 +54,33 @@ public sealed partial class MaskFieldEditViewModel : ObservableObject
     public bool IsMultiLine => !Locked && (IsList || DataType == "MultiSelect");
     public bool IsSingleLine => Locked || (!IsDate && !IsDateTime && !IsBoolean && !IsMultiLine);
     public string Label => IsRequired ? $"{Name} *" : Name;
+
+    // ---- Machine proposals (ABI 0.11, ADR 0769) --------------------------------------------------------
+    // A picker beside this field's editor, offered when a machine proposal fills it. Typing stays primary
+    // (the typed-not-picked rule); each choice carries its own apply command so the flyout's menu items
+    // need no cross-tree binding back to this view model.
+
+    public ObservableCollection<ProposalChoice> Proposals { get; } = [];
+
+    [ObservableProperty] private bool _hasProposals;
+
+    [ObservableProperty] private string _proposalLabel = string.Empty;
+
+    public sealed record ProposalChoice(string Display, System.Windows.Input.ICommand ApplyCommand, string Value);
+
+    public void OfferProposals(string label, IEnumerable<(string Value, string Label, string? Detail)> items)
+    {
+        Proposals.Clear();
+        foreach (var (value, itemLabel, detail) in items)
+        {
+            var display = string.IsNullOrEmpty(detail) ? itemLabel : $"{itemLabel} — {detail}";
+            Proposals.Add(new ProposalChoice(display,
+                new CommunityToolkit.Mvvm.Input.RelayCommand(() => TextValue = value), value));
+        }
+
+        ProposalLabel = label;
+        HasProposals = Proposals.Count > 0;
+    }
 
     public static MaskFieldEditViewModel Create(MasksClient.MaskFieldInfo definition, IReadOnlyList<string> values, bool mayRouteMail = true)
     {

@@ -96,6 +96,21 @@ public sealed partial class MainWindowViewModel
             _originalMaskId = SelectedMaskChoice.MaskId; // Select always answers the document's own mask
             await LoadMaskEditFieldsAsync(SelectedMaskChoice.Mask, withCurrentValues: true);
 
+            // Machine proposals (ABI 0.11, ADR 0769): the rels rode in with the document; the items are
+            // fetched NOW so the candidate list is as fresh as the form. Best-effort like the tag catalog —
+            // a failed fetch costs the picker, never the edit.
+            foreach (var link in (_detailLinks ?? new Dictionary<string, string>())
+                .Where(l => l.Key.StartsWith("machine-proposal:", StringComparison.Ordinal)))
+            {
+                try
+                {
+                    var proposal = await _api.Documents.GetProposalAsync(link.Value);
+                    MaskEditFields.FirstOrDefault(f => f.Name == proposal.FillsField)
+                        ?.OfferProposals(proposal.Label, proposal.Items.Select(i => (i.Value, i.Label, i.Detail)));
+                }
+                catch (Exception) { /* optional affordance */ }
+            }
+
             IsEditing = true;
         }
         catch (Exception e)

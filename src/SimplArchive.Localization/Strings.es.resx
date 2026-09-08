@@ -4875,4 +4875,7 @@
   <data name="ApiErrModuleNotInstalled" xml:space="preserve">
     <value>Este módulo no está instalado en el servidor.</value>
   </data>
+  <data name="ProposalNone" xml:space="preserve">
+    <value>Sin propuestas.</value>
+  </data>
 </root>

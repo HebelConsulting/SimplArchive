@@ -144,6 +144,33 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         return fields;
     }
 
+    /// <summary>A machine proposal's answer (ABI 0.11, ADR 0769): which field it fills, its label, and the
+    /// already-filtered candidates the picker offers.</summary>
+    public sealed record ProposalAnswer(string Label, string FillsField, IReadOnlyList<ProposalCandidate> Items);
+
+    public sealed record ProposalCandidate(string Value, string Label, string? Detail);
+
+    public async Task<ProposalAnswer> GetProposalAsync(string proposalHref, CancellationToken cancellationToken = default)
+    {
+        var json = await _core.Http.GetFromJsonAsync<JsonElement>(proposalHref, cancellationToken);
+        var items = new List<ProposalCandidate>();
+        if (json.TryGetProperty("items", out var rows) && rows.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var row in rows.EnumerateArray())
+            {
+                items.Add(new ProposalCandidate(
+                    row.GetProperty("value").GetString() ?? string.Empty,
+                    row.GetProperty("label").GetString() ?? string.Empty,
+                    row.TryGetProperty("detail", out var d) ? d.GetString() : null));
+            }
+        }
+
+        return new ProposalAnswer(
+            json.TryGetProperty("label", out var l) ? l.GetString() ?? string.Empty : string.Empty,
+            json.TryGetProperty("fillsField", out var f) ? f.GetString() ?? string.Empty : string.Empty,
+            items);
+    }
+
     // Data-classification / sensitivity label (ADR "Configurable sensitivity labels + upload defaults") — the
     // per-tenant label on the document (id/name/colour + whether it watermarks), read from the document resource.
     public sealed record DocumentSensitivityInfo(Guid? LabelId, string Name, string? Color, bool Watermark);

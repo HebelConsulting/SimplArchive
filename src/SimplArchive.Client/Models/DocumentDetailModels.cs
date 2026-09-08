@@ -28,6 +28,25 @@ public record IndexDataResponse
     public List<FieldGroup> Fields { get; set; } = [];
 }
 
+/// <summary>A machine proposal's answer (ABI 0.11, ADR 0769): which field it fills, and the candidates.</summary>
+public record ProposalResponse
+{
+    public string? Label { get; set; }
+
+    public string? FillsField { get; set; }
+
+    public List<ProposalItemDto> Items { get; set; } = [];
+}
+
+public record ProposalItemDto
+{
+    public string? Value { get; set; }
+
+    public string? Label { get; set; }
+
+    public string? Detail { get; set; }
+}
+
 public record VersionListResponse
 {
     public List<VersionResponse> Versions { get; set; } = [];

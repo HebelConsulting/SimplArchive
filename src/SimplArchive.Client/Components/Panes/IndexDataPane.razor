@@ -264,6 +264,28 @@
                         {
                             <MudTextField @bind-Value="f.TextValue" Lines="3" Placeholder="@Strings.Get("OneValuePerLine")" Margin="Margin.Dense" Variant="Variant.Outlined" />
                         }
+                        else if (Detail.Proposals.TryGetValue(f.Label, out var offer))
+                        {
+                            @* A machine proposal fills this field (ABI 0.11, ADR 0769): the picker writes a
+                               candidate's value into the editor; typing stays primary (the typed-not-picked
+                               rule) — the menu is the discovery aid beside it. *@
+                            <div style="display:flex; gap:4px; align-items:center; flex:1;">
+                                <MudTextField @bind-Value="f.TextValue" Margin="Margin.Dense" Variant="Variant.Outlined" Style="flex:1;" />
+                                <MudMenu Icon="@Icons.Material.Filled.PersonSearch" Size="Size.Small" Dense="true"
+                                         AriaLabel="@offer.Label" title="@offer.Label">
+                                    @if (offer.Items.Count == 0)
+                                    {
+                                        <MudMenuItem Disabled="true">@Strings.Get("ProposalNone")</MudMenuItem>
+                                    }
+                                    @foreach (var item in offer.Items)
+                                    {
+                                        <MudMenuItem OnClick="@(() => f.TextValue = item.Value)">
+                                            @item.Label@(item.Detail is { Length: > 0 } ? $" — {item.Detail}" : string.Empty)
+                                        </MudMenuItem>
+                                    }
+                                </MudMenu>
+                            </div>
+                        }
                         else
                         {
                             <MudTextField @bind-Value="f.TextValue" Margin="Margin.Dense" Variant="Variant.Outlined" />

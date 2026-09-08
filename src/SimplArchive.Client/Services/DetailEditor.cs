@@ -123,6 +123,22 @@ public sealed class DetailEditor(HttpClient http, DetailState detail, DetailCata
 
             await catalogs.EnsureForEditAsync(needsOcr: detail.SysOcrCandidate);
             await LoadFieldsAsync(detail.EditMaskId, useCurrentValues: true);
+
+            // Machine proposals (ABI 0.11, ADR 0769): the rels rode in with the document; the items are
+            // fetched NOW, so the candidate list is as fresh as the form it serves. Keyed by the field
+            // each fills — the pane's picker renders beside that field's editor.
+            detail.Proposals = [];
+            foreach (var link in detail.Links?.Where(l => l.Key.StartsWith("machine-proposal:", StringComparison.Ordinal)) ?? [])
+            {
+                var proposal = await http.GetFromJsonAsync<ProposalResponse>(link.Value);
+                if (proposal?.FillsField is { Length: > 0 } field)
+                {
+                    detail.Proposals[field] = new DetailState.ProposalOffer(
+                        proposal.Label ?? string.Empty,
+                        [.. (proposal.Items ?? []).Select(i => new DetailState.ProposalOfferItem(i.Value ?? string.Empty, i.Label ?? string.Empty, i.Detail))]);
+                }
+            }
+
             detail.IsEditing = true;
         }
         finally

@@ -24,14 +24,26 @@ public partial class NoServerDetailInClientsTests
     [GeneratedRegex(@"\.Detail\b")]
     private static partial Regex TypedDetailAccess();
 
-    // The ONE licensed read (ADR 0767): a problem carrying a "module" extension has a detail the module's
+    // The licensed reads, counted per file exactly (the ApiRoot way): a new read must either flow through
+    // these or argue its own license here.
+    //
+    // Two licenses exist. (1) ADR 0767: a problem carrying a "module" extension has a detail the module's
     // own catalog composed for the REQUEST CULTURE — localized by construction, which is the very property
-    // this guard exists to protect. The sites are counted per file, exactly, the ApiRoot way: a new read
-    // must either flow through these or argue its own license here.
+    // this guard protects. (2) ADR 0769: a proposal ITEM's `Detail` is not an RFC 7807 problem detail at
+    // all — it is module-supplied domain text ("Examiner certificate valid to …"), with exactly the
+    // standing of a transition button's label: English today, covered by ADR 0737's recorded widening
+    // trigger (the per-culture label factory), and rendered beside data the module also names. Renaming
+    // the property to dodge this guard was rejected as dishonest — the concern is real and recorded, not
+    // absent.
     private static readonly Dictionary<string, int> LicensedModuleDetailReads = new(StringComparer.Ordinal)
     {
         ["src/SimplArchive.Client/Pages/Home.Navigation.razor.cs"] = 2,
         ["src/SimplArchive.DesktopClient/Services/ApiCore.cs"] = 1,
+        // ADR 0769's proposal-item Detail (the second license above):
+        ["src/SimplArchive.Client/Services/DetailEditor.cs"] = 1,
+        ["src/SimplArchive.Client/Components/Panes/IndexDataPane.razor"] = 1,
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.DetailEdit.cs"] = 1,
+        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1,
     };
 
     [Fact]

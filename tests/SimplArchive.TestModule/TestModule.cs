@@ -56,6 +56,8 @@ public sealed class TestModule : IIndustryModule
             // The escalation's own idempotency marker (ABI 0.5): the handler stores the certificate date it
             // warned about, so it warns once and re-arms only when that date moves.
             new ModuleFieldSeed("Reminder sent for", "Text", IsRequired: false),
+            // The proposal fixture's target (ABI 0.11, ADR 0769): the field the "mentors" proposal fills.
+            new ModuleFieldSeed("Mentor", "Text", IsRequired: false),
         ]),
         new ModuleMaskSeed(CertificateMaskId, "Test Certificate", IsFolderMask: false, IsBookable: false,
         [
@@ -154,6 +156,15 @@ public sealed class TestModule : IIndustryModule
             .Transition("certify", "Certify",
                 [StateCondition.FactAtLeast("testLandings", 3, "test.recency", "{value} recent landings; 3 required.")],
                 _ => Task.CompletedTask)
+            // The proposal fixture (ABI 0.11, ADR 0769): every OTHER dossier is a proposable mentor —
+            // deterministic, and the self-exclusion is the one rule worth pinning over the wire.
+            .Proposal("mentors", "Propose mentor", "Mentor", async context =>
+            {
+                var dossiers = await context.Archive.GetByMaskAsync(DossierMaskId);
+                return [.. dossiers
+                    .Where(d => d.Id != context.SubjectDocumentId)
+                    .Select(d => new ProposalItem(d.Name, d.Name, "a test mentor"))];
+            })
             // The handler-thrown refusal fixture (ADR 0767's OTHER path): a ModuleApiException from inside
             // a handler reaches ApiExceptionHandler where the ambient culture has already unwound — the
             // catalog must still resolve for the REQUEST culture (the bug found live 2026-09-08).

@@ -21,6 +21,10 @@ public sealed class StateMachineCatalog : IStateMachineDefinitions
     // it with the marker so the clients know which action to auto-run.
     public sealed record TransitionDefinition(string Label, IReadOnlyList<StateCondition> Guard, Func<TransitionContext, Task> Handler, bool AutoRefreshOnOpen = false);
 
+    /// <summary>A declared proposal query (ABI 0.11, ADR 0769): label for the picker affordance, the field
+    /// its answers fill, and the module's handler — run under the module principal, read-only.</summary>
+    public sealed record ProposalDefinition(string Label, string FillsField, Func<TransitionContext, Task<IReadOnlyList<ProposalItem>>> Handler);
+
     /// <summary>One declared machine: whose it is, its subject mask, its statuses, its transitions.</summary>
     /// <remarks><see cref="ModuleId"/> is what the wire surface gates activation on (ADR 0737): a
     /// machine's transitions exist for a tenant exactly when its declaring module is active there. Null
@@ -33,7 +37,9 @@ public sealed class StateMachineCatalog : IStateMachineDefinitions
         Dictionary<string, TransitionDefinition> Transitions,
         // statusName → the module's escalation handler (ABI 0.5): what the background sweep invokes while that
         // status holds to learn who to remind and what to say.
-        Dictionary<string, Func<TransitionContext, Task<IReadOnlyList<EscalationNotice>>>> Escalations);
+        Dictionary<string, Func<TransitionContext, Task<IReadOnlyList<EscalationNotice>>>> Escalations,
+        // name → the declared proposal query (ABI 0.11, ADR 0769).
+        Dictionary<string, ProposalDefinition> Proposals);
 
     public IReadOnlyDictionary<string, MachineDefinition> Machines => _machines;
 
@@ -48,7 +54,8 @@ public sealed class StateMachineCatalog : IStateMachineDefinitions
         var definition = new MachineDefinition(machineId, moduleId, subjectMaskId,
             new Dictionary<string, IReadOnlyList<StateCondition>>(StringComparer.Ordinal),
             new Dictionary<string, TransitionDefinition>(StringComparer.Ordinal),
-            new Dictionary<string, Func<TransitionContext, Task<IReadOnlyList<EscalationNotice>>>>(StringComparer.Ordinal));
+            new Dictionary<string, Func<TransitionContext, Task<IReadOnlyList<EscalationNotice>>>>(StringComparer.Ordinal),
+            new Dictionary<string, ProposalDefinition>(StringComparer.Ordinal));
         _machines[machineId] = definition;
         return new Builder(definition);
     }
@@ -84,6 +91,12 @@ public sealed class StateMachineCatalog : IStateMachineDefinitions
             // A transition like any other (executable, refusable, listed) but flagged auto-invoke-on-open —
             // ungated, because a populate has nothing to refuse (ABI 0.6).
             definition.Transitions[name] = new TransitionDefinition(label, [], handler, AutoRefreshOnOpen: true);
+            return this;
+        }
+
+        public IStateMachineBuilder Proposal(string name, string label, string fillsFieldName, Func<TransitionContext, Task<IReadOnlyList<ProposalItem>>> handler)
+        {
+            definition.Proposals[name] = new ProposalDefinition(label, fillsFieldName, handler);
             return this;
         }
     }
@@ -171,6 +184,22 @@ public sealed class StateMachineEngine
         }, cancellationToken);
 
         return verdict;
+    }
+
+    /// <summary>Runs a proposal (ABI 0.11, ADR 0769): act-as-the-module, READ-ONLY — no engine
+    /// transaction, because a proposal that writes is a bug the contract forbids. Returns the module's
+    /// already-filtered items; the controller shapes the wire.</summary>
+    public async Task<(StateMachineCatalog.ProposalDefinition Definition, IReadOnlyList<ProposalItem> Items)> ExecuteProposalAsync(
+        string machineId, string proposalName, Guid subjectDocumentId, CancellationToken cancellationToken = default)
+    {
+        var machine = Require(machineId);
+        ActAs(machine);
+        if (!machine.Proposals.TryGetValue(proposalName, out var proposal))
+        {
+            throw new ArgumentException($"Machine '{machineId}' declares no proposal '{proposalName}'.", nameof(proposalName));
+        }
+
+        return (proposal, await proposal.Handler(new TransitionContext(subjectDocumentId, _archive, _services)));
     }
 
     /// <summary>

@@ -163,6 +163,22 @@ public sealed class DocumentResourceLinks
                         "POST",
                         transition.Label));
                 }
+
+                // Proposal queries (ABI 0.11, ADR 0769): a labeled GET beside the transitions. Gated on
+                // CanEditIndexData — a proposal exists to fill an index field, so a caller who cannot
+                // write the field gets no affordance (ADR 0543's absence-means-no; the picker gates on
+                // this rel's presence, and the response says which field it fills).
+                if (rights.CanEditIndexData)
+                {
+                    foreach (var (proposalName, proposal) in machine.Proposals)
+                    {
+                        links.Add(new Link(
+                            $"machine-proposal:{machine.MachineId}:{proposalName}",
+                            $"/api/documents/{documentId}/machine/{machine.MachineId}/proposals/{proposalName}",
+                            "GET",
+                            proposal.Label));
+                    }
+                }
             }
         }
 

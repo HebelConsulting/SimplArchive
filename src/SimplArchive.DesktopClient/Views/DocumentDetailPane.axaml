@@ -283,7 +283,27 @@
                                         </StackPanel>
                                         <CheckBox IsVisible="{Binding IsBoolean}" IsChecked="{Binding BoolValue}" />
                                         <TextBox IsVisible="{Binding IsMultiLine}" Text="{Binding TextValue}" IsReadOnly="{Binding Locked}" AcceptsReturn="True" Height="60" Watermark="{loc:Tr OneValuePerLine}" />
-                                        <TextBox IsVisible="{Binding IsSingleLine}" Text="{Binding TextValue}" IsReadOnly="{Binding Locked}" Height="28" Padding="4,2" VerticalContentAlignment="Center" />
+                                        <Grid IsVisible="{Binding IsSingleLine}" ColumnDefinitions="*,Auto">
+                                            <TextBox Text="{Binding TextValue}" IsReadOnly="{Binding Locked}" Height="28" Padding="4,2" VerticalContentAlignment="Center" />
+                                            <!-- A machine proposal fills this field (ABI 0.11, ADR 0769): the picker
+                                                 writes a candidate into the editor; typing stays primary. Each choice
+                                                 carries its own command, so the menu items bind locally. -->
+                                            <Button Grid.Column="1" IsVisible="{Binding HasProposals}" Margin="4,0,0,0" Height="28" Padding="5,0" MinWidth="0"
+                                                    ToolTip.Tip="{Binding ProposalLabel}">
+                                                <i:Icon Value="mdi-account-search" FontSize="14" />
+                                                <Button.Flyout>
+                                                    <MenuFlyout ItemsSource="{Binding Proposals}">
+                                                        <MenuFlyout.ItemContainerTheme>
+                                                            <ControlTheme TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}"
+                                                                          x:DataType="vm:MaskFieldEditViewModel+ProposalChoice">
+                                                                <Setter Property="Header" Value="{Binding Display}" />
+                                                                <Setter Property="Command" Value="{Binding ApplyCommand}" />
+                                                            </ControlTheme>
+                                                        </MenuFlyout.ItemContainerTheme>
+                                                    </MenuFlyout>
+                                                </Button.Flyout>
+                                            </Button>
+                                        </Grid>
                                     </Panel>
                                 </Grid>
                             </DataTemplate>

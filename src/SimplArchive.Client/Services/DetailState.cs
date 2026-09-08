@@ -212,6 +212,18 @@ public sealed class DetailState
     /// </summary>
     public bool IsEditing { get; set; }
 
+    /// <summary>
+    /// The machine proposals fetched at edit entry (ABI 0.11, ADR 0769), keyed by the FIELD each fills:
+    /// the picker beside that field's editor writes a chosen item's Value into it. Fetched when editing
+    /// begins — the rels ride the loaded document (one read, ADR 0557), the items are fetched fresh so a
+    /// stale candidate list never outlives the form it serves. Cleared with the subject (ADR 0559).
+    /// </summary>
+    public Dictionary<string, ProposalOffer> Proposals { get; set; } = [];
+
+    public sealed record ProposalOffer(string Label, IReadOnlyList<ProposalOfferItem> Items);
+
+    public sealed record ProposalOfferItem(string Value, string Label, string? Detail);
+
     public string EditName { get; set; } = string.Empty;
     public DateTime? EditDocumentDate { get; set; }
 

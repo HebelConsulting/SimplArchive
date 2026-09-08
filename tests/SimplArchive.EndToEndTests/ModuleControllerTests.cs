@@ -221,6 +221,27 @@ public class ModuleControllerTests
             Assert.Equal("TEST_HANDLER_REFUSED", handlerProblem.GetProperty("errorCode").GetString());
             Assert.Equal("test-module", handlerProblem.GetProperty("module").GetString());
             Assert.Equal("Der Testschritt wurde abgelehnt.", handlerProblem.GetProperty("detail").GetString());
+
+            // The proposal surface (ABI 0.11, ADR 0769), end to end: the document advertises the labeled
+            // GET rel; following it answers with the field it fills and the already-filtered items — every
+            // OTHER dossier, never the asker (the fixture's one rule). The picker's whole contract.
+            var mentorId = (await TestJson.Post(rig.Owner, $"/api/documents/{rig.RepoId}/children",
+                new { name = $"Mentor {Guid.NewGuid():N}", maskId = SimplArchive.TestModule.TestModule.DossierMaskId }))
+                .GetProperty("id").GetGuid();
+            var withProposal = await TestJson.Get(rig.Admin, $"/api/documents/{dossierId}");
+            var proposalLink = withProposal.GetProperty("links").EnumerateArray()
+                .Single(l => l.GetProperty("rel").GetString() == "machine-proposal:test-pilot:mentors");
+            Assert.Equal("Propose mentor", proposalLink.GetProperty("label").GetString());
+
+            var proposal = await TestJson.Get(rig.Admin, proposalLink.GetProperty("href").GetString()!);
+            Assert.Equal("Mentor", proposal.GetProperty("fillsField").GetString());
+            Assert.Equal("Propose mentor", proposal.GetProperty("label").GetString());
+            var mentorNames = proposal.GetProperty("items").EnumerateArray()
+                .Select(i => i.GetProperty("value").GetString()).ToList();
+            Assert.Contains(mentorNames, n => n!.StartsWith("Mentor "));
+            Assert.DoesNotContain(mentorNames, n => n!.StartsWith("Dossier ")); // the asker proposes others, never itself
+            Assert.All(proposal.GetProperty("items").EnumerateArray(),
+                i => Assert.Equal("a test mentor", i.GetProperty("detail").GetString()));
         }
         finally
         {

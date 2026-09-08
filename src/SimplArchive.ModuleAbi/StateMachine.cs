@@ -61,7 +61,25 @@ public interface IStateMachineBuilder
     /// Ungated by design (empty guard): a populate has nothing to refuse; it either finds new data or does not.
     /// </summary>
     IStateMachineBuilder AutoRefreshOnOpen(string name, string label, Func<TransitionContext, Task> handler);
+
+    /// <summary>
+    /// A proposal query (ABI 0.11, ADRs 0736/0769): the machine answers "who/what could fill this field?"
+    /// for its subject — the epic's signature feature ("propose instructors who hold a valid Examiner
+    /// Certificate"). The handler runs UNDER THE MODULE PRINCIPAL, because a proposal must read what the
+    /// asking caller cannot (other pilots' dossiers) — and what it returns IS the filtering: only the
+    /// items' value/label/detail leave the server, never the documents they were derived from. The host
+    /// advertises it on the subject as a labeled GET rel, gated on the right to edit index data (it
+    /// exists to fill <paramref name="fillsFieldName"/>), and both clients surface it as a picker beside
+    /// that field's editor. Read-only by contract: no engine transaction, and a handler that writes is a
+    /// bug (use a transition for acts).
+    /// </summary>
+    IStateMachineBuilder Proposal(string name, string label, string fillsFieldName, Func<TransitionContext, Task<IReadOnlyList<ProposalItem>>> handler);
 }
+
+/// <summary>One proposable answer (ABI 0.11): <paramref name="Value"/> is what the picker writes into the
+/// field, <paramref name="Label"/> who or what it is, <paramref name="Detail"/> why it qualifies — already
+/// filtered to what the answer needs (ADR 0736's rule).</summary>
+public sealed record ProposalItem(string Value, string Label, string? Detail = null);
 
 /// <summary>One reminder the sweep should deliver (ABI 0.5): a recipient e-mail the core resolves to a tenant
 /// user, and the already-localized title and body the module composed. The module returns these from its

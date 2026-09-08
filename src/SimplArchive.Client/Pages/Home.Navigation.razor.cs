@@ -563,6 +563,7 @@ public partial class Home
         Detail.Tags = null;
         Detail.GenericActions = []; // an action must not outlive its subject (ADR 0559)
         Detail.MachineStatuses = []; // nor a status claim (#1062, same rule)
+        Detail.Proposals = []; // nor a candidate list (ADR 0769, same rule)
         _downloadUrl = null;
         ClearPreviewPane();
         _selectedNode = null;
