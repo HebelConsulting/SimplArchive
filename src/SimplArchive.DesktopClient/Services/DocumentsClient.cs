@@ -60,8 +60,6 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
 
 
 
-    public sealed record IndexField(string FieldName, IReadOnlyList<string> Values, string DataType = "Text");
-
     public sealed record MentionableUser(Guid Id, string DisplayName);
 
 
@@ -121,27 +119,6 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         }
 
         return entries;
-    }
-
-    public async Task<List<IndexField>> GetIndexDataAsync(string indexDataHref, CancellationToken cancellationToken = default)
-    {
-        var response = await _core.Http.GetFromJsonAsync<JsonElement>(indexDataHref, cancellationToken);
-        var fields = new List<IndexField>();
-        if (response.TryGetProperty("fields", out var items))
-        {
-            foreach (var field in items.EnumerateArray())
-            {
-                var values = field.TryGetProperty("values", out var vs) && vs.ValueKind == JsonValueKind.Array
-                    ? vs.EnumerateArray().Select(x => x.GetString() ?? "").ToList()
-                    : [];
-                fields.Add(new IndexField(
-                    field.GetProperty("fieldName").GetString() ?? "",
-                    values,
-                    field.TryGetProperty("dataType", out var dt) ? dt.GetString() ?? "Text" : "Text"));
-            }
-        }
-
-        return fields;
     }
 
     /// <summary>A machine proposal's answer (ABI 0.11, ADR 0769): which field it fills, its label, and the

@@ -4716,6 +4716,9 @@
   <data name="UgImapMailOnly" xml:space="preserve">
     <value>solo correos</value>
   </data>
+  <data name="IdxTargetUnavailable" xml:space="preserve">
+    <value>No disponible para ti</value>
+  </data>
   <data name="CtxCopyLink" xml:space="preserve">
     <value>Copiar enlace</value>
   </data>

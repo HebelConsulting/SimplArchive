@@ -49,12 +49,12 @@ public class DesktopDateTimeFieldTests
     [Fact]
     public void The_read_row_renders_a_datetime_value_as_a_local_wall_clock()
     {
-        var row = IndexFieldViewModel.From(new DocumentsClient.IndexField("Start", ["2026-09-04T12:30:00+00:00"], "DateTime"));
+        var row = IndexFieldViewModel.From(new DocumentsClient.IndexField("Start", ["2026-09-04T12:30:00+00:00"], "DateTime"), openDocument: null);
 
         Assert.DoesNotContain("T", row.Values);
         Assert.Matches(@"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$", row.Values);
 
         // A text field is left exactly as stored — display never reinterprets somebody's words.
-        Assert.Equal("2026-09-04T12:30", IndexFieldViewModel.From(new DocumentsClient.IndexField("Note", ["2026-09-04T12:30"], "Text")).Values);
+        Assert.Equal("2026-09-04T12:30", IndexFieldViewModel.From(new DocumentsClient.IndexField("Note", ["2026-09-04T12:30"], "Text"), openDocument: null).Values);
     }
 }

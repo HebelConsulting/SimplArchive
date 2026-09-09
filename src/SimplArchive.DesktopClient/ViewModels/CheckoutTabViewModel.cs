@@ -252,7 +252,10 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
             {
                 foreach (var field in await _api.Documents.GetIndexDataAsync(indexHref))
                 {
-                    IndexFields.Add(IndexFieldViewModel.From(field));
+                    // No navigation from here on purpose: the Check-out tab has no tree to reveal into,
+                    // so a DocumentReference target shows its name without offering a link that could not
+                    // go anywhere (the affordance-that-lies rule, ADR 0543).
+                    IndexFields.Add(IndexFieldViewModel.From(field, openDocument: null));
                 }
             }
 

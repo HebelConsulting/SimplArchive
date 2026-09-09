@@ -105,6 +105,19 @@ internal static class FieldValueValidation
 
                 break;
 
+            // A document reference is validated for SHAPE here — it must be a well-formed id — and for
+            // EXISTENCE in SimplArchiveDbContext, which is where an invariant needing a query belongs (the
+            // cycle and sibling-name checks are its neighbours). Splitting it keeps this function pure, which
+            // is the reason it could move out of the 1000-line DbContext at all.
+            case FieldDataType.DocumentReference:
+                if (!Guid.TryParse(fieldValue.Value, out _))
+                {
+                    throw new InvalidOperationException(
+                        $"Field value '{fieldValue.Value}' for '{fieldDefinition.Name}' is not a document id.");
+                }
+
+                break;
+
             case FieldDataType.Boolean:
             case FieldDataType.SingleSelect:
             case FieldDataType.MultiSelect:

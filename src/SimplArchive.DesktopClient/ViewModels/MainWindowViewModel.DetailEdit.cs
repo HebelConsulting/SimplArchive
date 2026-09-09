@@ -360,7 +360,7 @@ public sealed partial class MainWindowViewModel
         IndexFields.Clear();
         foreach (var field in await _api.Documents.GetIndexDataAsync(DetailHref("index-data")))
         {
-            IndexFields.Add(IndexFieldViewModel.From(field));
+            IndexFields.Add(IndexFieldViewModel.From(field, OpenDocumentByIdAsync));
         }
     }
 

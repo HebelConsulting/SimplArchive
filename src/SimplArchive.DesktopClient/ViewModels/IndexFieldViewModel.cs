@@ -19,6 +19,33 @@ public sealed partial class IndexFieldViewModel
     /// be clicked apart).</summary>
     public IReadOnlyList<string> UrlValues { get; init; } = [];
 
+    /// <summary>A DocumentReference-typed field names other documents (ADR 0773) and renders them as
+    /// openable rows — the workbench reveals the target, rather than the OS opening anything.</summary>
+    public bool IsDocumentReference { get; init; }
+
+    /// <summary>Whether the plain joined-text row is the right rendering — false for every type that draws
+    /// its own. Stated once here rather than as a negation per type in the template, because a template that
+    /// hides on <c>!IsUrl</c> alone silently prints raw GUIDs the day a second special type arrives.</summary>
+    public bool ShowPlainText => !IsUrl && !IsDocumentReference;
+
+    /// <summary>The resolved targets, for the reference template. Server-resolved, so a target the caller
+    /// may not open arrives already stripped of its name and address.</summary>
+    public IReadOnlyList<IndexFieldTargetViewModel> Targets { get; init; } = [];
+
+    /// <summary>How to reveal a target in the workbench. Null where the pane showing this field cannot
+    /// navigate — the check-out tab has no tree to reveal into — which the template honours by leaving the
+    /// row as plain text rather than offering a link that would do nothing.</summary>
+    public Func<Guid, Task>? OpenDocument { get; init; }
+
+    [RelayCommand]
+    private async Task OpenTarget(IndexFieldTargetViewModel? target)
+    {
+        if (target is { CanOpen: true } && OpenDocument is { } open)
+        {
+            await open(target.Id);
+        }
+    }
+
     [RelayCommand]
     private void OpenUrl(string? url)
     {
@@ -38,12 +65,41 @@ public sealed partial class IndexFieldViewModel
     /// (<c>2026-09-04T12:30:00+00:00</c>), and shown raw it reads as a date with debris — the pane bug the
     /// owner reported. Rendered as the local wall clock via the shared Presentation arithmetic.
     /// </remarks>
-    public static IndexFieldViewModel From(Services.DocumentsClient.IndexField field) => new()
+    /// <param name="openDocument">How to reveal a DocumentReference target, or null where this pane cannot
+    /// navigate. REQUIRED rather than settable, so the compiler enumerates the call sites: a forgotten
+    /// callback disables a visible link, and #854's lesson is that nothing else enumerates them for you.</param>
+    public static IndexFieldViewModel From(Services.DocumentsClient.IndexField field, Func<Guid, Task>? openDocument) => new()
     {
         FieldName = field.FieldName,
         Values = string.Join(", ", field.Values.Select(v =>
             field.DataType == "DateTime" ? SimplArchive.Presentation.IndexInstant.Display(v) : v)),
         IsUrl = field.DataType == "Url",
         UrlValues = field.DataType == "Url" ? field.Values : [],
+        IsDocumentReference = field.DataType == "DocumentReference",
+        Targets = field.DataType == "DocumentReference"
+            // Openable means BOTH halves: the server advertised the address, and this pane can navigate. A
+            // link drawn on the first alone would be an affordance that does nothing when clicked.
+            ? field.Targets.Select(t => new IndexFieldTargetViewModel(t, openDocument is not null)).ToList()
+            : [],
+        OpenDocument = openDocument,
     };
+}
+
+/// <summary>One target row of a DocumentReference field.</summary>
+/// <remarks>
+/// The unavailable case is drawn from the SERVER's answer, not re-derived here: no name and no address means
+/// the reader may not open it (ADR 0543), and the id it still carries is not something to show a person.
+/// </remarks>
+public sealed class IndexFieldTargetViewModel(Services.DocumentsClient.IndexFieldTarget target, bool paneCanNavigate)
+{
+    public Guid Id { get; } = target.Id;
+
+    public bool CanOpen { get; } = target.CanOpen && paneCanNavigate;
+
+    /// <summary>The name where the server gave one, the unavailable text where it did not. Note this reads
+    /// the SERVER's answer (<c>target.CanOpen</c>), not <see cref="CanOpen"/>: a pane that cannot navigate
+    /// still shows the name it was given — it just does not offer to open it.</summary>
+    public string Display { get; } = target.CanOpen && target.Name is { Length: > 0 }
+        ? target.Name
+        : SimplArchive.Localization.Strings.Get("IdxTargetUnavailable");
 }

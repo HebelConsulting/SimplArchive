@@ -23,6 +23,32 @@ public record FieldGroup
 
     /// <summary>A Url field's values render as LINKS (ADR 0763) — the read row swaps the text for anchors.</summary>
     public bool IsUrl => DataType == "Url";
+
+    /// <summary>A DocumentReference field's values name other documents (ADR 0773) — the row renders the
+    /// resolved <see cref="Targets"/> rather than the raw ids in <see cref="Values"/>.</summary>
+    public bool IsDocumentReference => DataType == "DocumentReference";
+
+    /// <summary>The resolved targets, index-aligned with <see cref="Values"/>. Server-resolved, so the pane
+    /// never fetches per value and never composes an address (ADRs 0543/0557).</summary>
+    public List<FieldTarget> Targets { get; set; } = [];
+}
+
+/// <summary>One resolved target of a DocumentReference value (ADR 0773).</summary>
+/// <remarks>
+/// A target the caller may not open arrives with no name and no link, and is drawn as unavailable — the
+/// server has already decided that, and the client must not try to improve on it by showing the id.
+/// </remarks>
+public record FieldTarget
+{
+    public Guid Id { get; set; }
+
+    public string? Name { get; set; }
+
+    public List<LinkResponse> Links { get; set; } = [];
+
+    /// <summary>Whether this target can be opened — the `document` rel's presence, which is the server
+    /// saying "available to you, here, now" (ADR 0543).</summary>
+    public bool CanOpen => Links.Any(l => l.Rel == "document");
 }
 
 /// <summary>One message in a document's chat thread, with the addresses its row advertised (ADR 0543).</summary>

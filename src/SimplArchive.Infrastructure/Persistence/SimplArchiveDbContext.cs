@@ -762,6 +762,7 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
         }
 
         var trackedFieldDefinitions = ChangeTracker.Entries<FieldDefinition>().ToDictionary(e => e.Entity.Id, e => e.Entity);
+        var referenced = new Dictionary<Guid, string>();
 
         foreach (var fieldValue in changedFieldValues)
         {
@@ -771,6 +772,46 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
             }
 
             FieldValueValidation.EnsureValid(fieldValue, fieldDefinition);
+
+            if (fieldDefinition.DataType == FieldDataType.DocumentReference)
+            {
+                // Indexer, not Add: the same target may legitimately appear twice — two fields naming one
+                // document, or a list field repeating it — and Add would throw on the duplicate key, turning
+                // an ordinary write into an invariant failure.
+                referenced[Guid.Parse(fieldValue.Value)] = fieldDefinition.Name;
+            }
+        }
+
+        await ValidateDocumentReferencesAsync(referenced, cancellationToken);
+    }
+
+    // A DocumentReference value must name a document that EXISTS, in this tenant, not in the recycle bin —
+    // checked here rather than in the pure FieldValueValidation because it needs a query.
+    //
+    // Enforcing it at write is deliberately asymmetric with what happens later: a target purged afterwards
+    // leaves a value pointing at nothing, and the read side renders that as unavailable rather than refusing.
+    // The two are different facts. A typo or a stale pick is wrong AT THE MOMENT someone can still fix it; a
+    // target that was valid and then disposed of is the world changing under a correct value, and refusing
+    // the purge instead would let a pointer veto a retention act.
+    //
+    // Both query filters do real work here: the TENANT filter is what stops a value from naming a document in
+    // another tenant, and the SOFT-DELETE filter is what stops one naming a document in the recycle bin.
+    private async Task ValidateDocumentReferencesAsync(
+        Dictionary<Guid, string> referenced, CancellationToken cancellationToken)
+    {
+        if (referenced.Count == 0)
+        {
+            return;
+        }
+
+        var ids = referenced.Keys.ToList();
+        var found = await Documents.Where(d => ids.Contains(d.Id)).Select(d => d.Id).ToListAsync(cancellationToken);
+
+        var missing = ids.Except(found).ToList();
+        if (missing.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Field value '{missing[0]}' for '{referenced[missing[0]]}' does not name a document in this tenant.");
         }
     }
 

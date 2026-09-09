@@ -338,6 +338,26 @@
                                             <a href="@url" target="_blank" rel="noopener noreferrer" class="mr-2">@url</a>
                                         }
                                     }
+                                    else if (field.IsDocumentReference)
+                                    {
+                                        @* A DocumentReference names another document (ADR 0773). It opens IN the
+                                           workbench — revealing the target the way a notification or a deep link
+                                           does — rather than in a new tab, because the target is not elsewhere. *@
+                                        @foreach (var target in field.Targets)
+                                        {
+                                            @if (target.CanOpen)
+                                            {
+                                                <MudLink Class="mr-2" Typo="Typo.body2" @onclick="@(() => OpenDocument.InvokeAsync(target.Id))">@target.Name</MudLink>
+                                            }
+                                            else
+                                            {
+                                                @* No name and no link came back: the server says this is not
+                                                   available to this reader (ADR 0543), and the id it does hold
+                                                   is not something to show a person. *@
+                                                <MudText Class="mr-2" Typo="Typo.body2" Style="opacity:.6">@Strings.Get("IdxTargetUnavailable")</MudText>
+                                            }
+                                        }
+                                    }
                                     else
                                     {
                                         @field.Display
@@ -502,6 +522,10 @@
 
     /// <summary>Clicking a tag chip searches for it, which is a workbench-level navigation.</summary>
     [Parameter, EditorRequired] public EventCallback<string> SearchByTag { get; set; }
+
+    /// <summary>Reveal a DocumentReference field's target in the workbench (ADR 0773) — the shell owns the
+    /// selection (#686), so the pane asks rather than navigating.</summary>
+    [Parameter, EditorRequired] public EventCallback<Guid> OpenDocument { get; set; }
 
     /// <summary>A generic action's button was clicked (ADR 0743) — the shell executes it (ADR 0730's rule:
     /// what the shell supplies is a parameter, and the pane only renders).</summary>

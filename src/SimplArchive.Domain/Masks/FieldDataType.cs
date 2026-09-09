@@ -53,4 +53,31 @@ public enum FieldDataType
     /// rather than with a pattern a tenant could edit away.
     /// </remarks>
     Url,
+
+    /// <summary>
+    /// Another document in this tenant, stored as its id — the typed relationship a mask names
+    /// ("Flight", "Syllabus", "Aircraft") rather than a generic association between two documents.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Appended last, and every future value must be too</b> — the ordinal is persisted in
+    /// <c>FieldDefinitions.DataType</c>, so inserting anywhere but the end silently re-types every stored
+    /// field. The same reasoning as <see cref="EmailAddress"/> and <see cref="Url"/> puts this in the type
+    /// rather than in a <see cref="Text"/> field's <c>FormatPattern</c>: what the type adds is that the
+    /// value IS a document — so it is validated against one existing, resolved to a name and an address the
+    /// client can follow, and rendered as something to open rather than a raw GUID.
+    /// </para>
+    /// <para>
+    /// It stays index data on purpose, which is what a generic document-to-document link could not be: the
+    /// relationship is named by its field, appears in the index pane, is exportable and searchable, can be
+    /// <c>Required</c>, and — the deciding one for industry modules — is readable by the state-machine
+    /// condition grammar, which sees fields and nothing else.
+    /// </para>
+    /// <para>
+    /// WHICH documents may be chosen is deliberately NOT declared here. A module expresses that through its
+    /// machine's <c>Proposal</c> (ABI 0.11, ADR 0769), whose query is strictly more expressive than a
+    /// mask-or-folder rule could be — "dossiers whose newest examiner certificate is valid" is not a folder.
+    /// </para>
+    /// </remarks>
+    DocumentReference,
 }

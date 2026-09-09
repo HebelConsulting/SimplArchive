@@ -426,6 +426,42 @@ public class DocumentMetadataController : ControllerBase
         public string DataType { get; set; } = string.Empty;
 
         public List<string> Values { get; set; } = [];
+
+        /// <summary>
+        /// For a <c>DocumentReference</c> field only: the targets its <see cref="Values"/> name, resolved
+        /// server-side and index-aligned with them. Empty for every other type.
+        /// </summary>
+        /// <remarks>
+        /// Resolved HERE rather than by the client, because the client resolving each id would be one request
+        /// per value on every detail open — the per-rel round trip ADR 0557 forbids — and it would have to
+        /// compose the address from an id, which ADR 0543 forbids outright.
+        /// </remarks>
+        public List<DocumentReferenceTarget> Targets { get; set; } = [];
+    }
+
+    /// <summary>One resolved target of a <c>DocumentReference</c> value.</summary>
+    /// <remarks>
+    /// A target the caller may not open carries NO name and NO link — only the id it already holds, since the
+    /// value is in a field they can read. The name is what would leak: a person's name, a case number, is
+    /// usually the sensitive part of the document the ACL is protecting.
+    ///
+    /// Unavailable is ONE state on purpose. "You may not see it" and "it no longer exists" are not
+    /// distinguished, because telling them apart tells a caller that a document they cannot see exists — and
+    /// neither answer changes what they can do about it. The cost is real and accepted: a value whose target
+    /// was purged looks, to someone without rights on it, like a value they simply cannot follow. Anyone who
+    /// CAN see the target sees it resolve normally, so a genuinely dangling value is visible to exactly the
+    /// people positioned to fix it.
+    /// </remarks>
+    public class DocumentReferenceTarget
+    {
+        public Guid Id { get; set; }
+
+        /// <summary>The target's name, or null when the caller may not open it.</summary>
+        public string? Name { get; set; }
+
+        /// <summary>The <c>document</c> rel, or empty when the caller may not open it — absence means
+        /// "not available to you, here, now" (ADR 0543), which is exactly true in both unavailable cases.</summary>
+        public List<Link> Links { get; set; } = [];
     }
 
     public class IndexDataResource : HypermediaResource
@@ -635,11 +671,59 @@ public class DocumentMetadataController : ControllerBase
             })
             .ToList();
 
+        await ResolveDocumentReferencesAsync(fields, cancellationToken);
+
         return new IndexDataResource
         {
             Fields = fields,
             Links = [new Link("self", $"/api/documents/{documentId}/index-data", "GET")],
         };
+    }
+
+    /// <summary>Fills in <see cref="FieldValueGroup.Targets"/> for every DocumentReference field.</summary>
+    /// <remarks>
+    /// Two batched queries for the whole resource, not two per value: the names in one read, the rights in
+    /// one <c>GetCallerRightsForManyAsync</c> — which prices a page at roughly what a single document used to
+    /// (#858), and is what makes resolving-on-read affordable at all.
+    /// </remarks>
+    private async Task ResolveDocumentReferencesAsync(List<FieldValueGroup> fields, CancellationToken cancellationToken)
+    {
+        var groups = fields.Where(f => f.DataType == nameof(FieldDataType.DocumentReference)).ToList();
+        if (groups.Count == 0)
+        {
+            return;
+        }
+
+        var ids = groups.SelectMany(g => g.Values)
+            .Select(v => Guid.TryParse(v, out var id) ? id : (Guid?)null)
+            .Where(id => id.HasValue).Select(id => id!.Value).Distinct().ToList();
+
+        // The tenant and soft-delete filters do the first half of the work: a target that was purged, or is
+        // in the recycle bin, simply does not come back and therefore resolves to unavailable.
+        var names = await _dbContext.Documents.Where(d => ids.Contains(d.Id))
+            .Select(d => new { d.Id, d.Name }).ToDictionaryAsync(d => d.Id, d => d.Name, cancellationToken);
+        var rights = await _access.GetCallerRightsForManyAsync(names.Keys.ToList(), cancellationToken);
+
+        foreach (var group in groups)
+        {
+            group.Targets = group.Values.Select(value =>
+            {
+                var target = new DocumentReferenceTarget();
+                if (!Guid.TryParse(value, out var id))
+                {
+                    return target;   // not an id at all — shape is enforced on write, but a read must not throw
+                }
+
+                target.Id = id;
+                if (names.TryGetValue(id, out var name) && rights.TryGetValue(id, out var right) && right.CanSee)
+                {
+                    target.Name = name;
+                    target.Links = [new Link("document", $"/api/documents/{id}", "GET")];
+                }
+
+                return target;
+            }).ToList();
+        }
     }
 
     private void SetETag(Guid concurrencyToken)

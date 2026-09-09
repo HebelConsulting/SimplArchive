@@ -184,7 +184,23 @@
                             <DataTemplate x:DataType="vm:IndexFieldViewModel">
                                 <Grid ColumnDefinitions="180,*" Margin="0,2">
                                     <SelectableTextBlock Grid.Column="0" Text="{Binding FieldName}" Foreground="{DynamicResource WbMuted}" />
-                                    <SelectableTextBlock Grid.Column="1" Text="{Binding Values}" TextWrapping="Wrap" IsVisible="{Binding !IsUrl}" />
+                                    <SelectableTextBlock Grid.Column="1" Text="{Binding Values}" TextWrapping="Wrap" IsVisible="{Binding ShowPlainText}" />
+                                    <!-- A DocumentReference names another document (ADR 0773): each target opens
+                                         IN the workbench. An unavailable one is drawn as plain text — the server
+                                         withheld its name and address, so there is nothing to click. -->
+                                    <ItemsControl Grid.Column="1" ItemsSource="{Binding Targets}" IsVisible="{Binding IsDocumentReference}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:IndexFieldTargetViewModel">
+                                                <Panel>
+                                                    <HyperlinkButton Content="{Binding Display}" Padding="0" IsVisible="{Binding CanOpen}"
+                                                                     Command="{Binding $parent[ItemsControl].((vm:IndexFieldViewModel)DataContext).OpenTargetCommand}"
+                                                                     CommandParameter="{Binding}" />
+                                                    <SelectableTextBlock Text="{Binding Display}" IsVisible="{Binding !CanOpen}"
+                                                                         Foreground="{DynamicResource WbMuted}" />
+                                                </Panel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
                                     <!-- A Url field's values are LINKS (ADR 0763): each opens the OS browser. -->
                                     <ItemsControl Grid.Column="1" ItemsSource="{Binding UrlValues}" IsVisible="{Binding IsUrl}">
                                         <ItemsControl.ItemTemplate>

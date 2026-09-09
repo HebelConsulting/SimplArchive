@@ -35,6 +35,23 @@ public partial class MainWindowViewModel
             return false;
         }
 
+        return await OpenDocumentByIdAsync(id);
+    }
+
+    /// <summary>Reveals a document the caller holds only the ID of — the deep link's second half, shared
+    /// with the DocumentReference index field (ADR 0773), whose targets are ids too.</summary>
+    /// <remarks>
+    /// The id→resource turn is ONE fetch, and every address then comes from what it advertised (ADR 0557):
+    /// self and parent are read off that response rather than composed, which is also what decides between
+    /// revealing a document in its folder and opening a repository root.
+    /// </remarks>
+    public async Task<bool> OpenDocumentByIdAsync(Guid id)
+    {
+        if (_api is null)
+        {
+            return false;
+        }
+
         var template = await _api.Core.RootHrefAsync("document");
         using var response = await _api.Core.Http.GetAsync(template.Replace("{id}", id.ToString()));
         if (!response.IsSuccessStatusCode)
