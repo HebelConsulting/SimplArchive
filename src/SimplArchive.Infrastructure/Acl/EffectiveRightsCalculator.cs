@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Acl;
+using SimplArchive.Domain.Booking;
 using SimplArchive.Domain.Groups;
 using SimplArchive.Domain.Tenants;
 using SimplArchive.Infrastructure.Persistence;
@@ -185,6 +186,7 @@ public class EffectiveRightsCalculator : IEffectiveRightsCalculator
         // Per-principal, so it is resolved at most once for the page — and only if some row actually lacks
         // CanSee, preserving the single-document path's "don't ask unless it matters".
         bool? holdsAccessWithoutGrant = null;
+        HashSet<Guid>? claimedByCaller = null;
 
         foreach (var id in remaining)
         {
@@ -202,11 +204,56 @@ public class EffectiveRightsCalculator : IEffectiveRightsCalculator
                 }
             }
 
+            // A CLAIMANT reads the booking they are part of (ADR 0775). The document is the record of a
+            // commitment this person made — denying them sight of it would be absurd, and their own calendar
+            // has to serve it. Same shape as the right above: a floor applied only where CanSee is missing,
+            // never a top-up of rights somebody deliberately granted narrowly.
+            if (!rights.CanSee)
+            {
+                claimedByCaller ??= await ClaimedByCallerAsync(userId, remaining, cancellationToken);
+                if (claimedByCaller.Contains(id))
+                {
+                    rights = rights with { CanSee = true, CanReadContent = true };
+                }
+            }
+
             results[id] = rights;
         }
 
         return results;
     }
+
+    /// <summary>
+    /// Which of these documents the caller holds an ACTIVE claim on (ADR 0775) — one query for the page.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The caller is a claimant when a booking on one of THEIR resource documents points at the document in
+    /// question. `ResourcePrincipal` is what makes that expressible: a claim names a resource, and only this
+    /// table says which resource is whose person. `BookedByUserId` deliberately does not serve here — it is
+    /// the BOOKER, so a student booked by their instructor would not match, which is precisely the case that
+    /// matters.
+    /// </para>
+    /// <para>
+    /// Active claims only. A cancelled claim is history: the flight is off, and reading a document the ACL
+    /// otherwise withholds is not something a withdrawn commitment should keep buying.
+    /// </para>
+    /// <para>
+    /// Note where this sits: AFTER the clearance check, which has already removed blocked ids from
+    /// <paramref name="candidates"/>. Being a participant must not lift a clearance bar — a floor over the
+    /// ACL is one thing, a hole in the classification system is another.
+    /// </para>
+    /// </remarks>
+    private async Task<HashSet<Guid>> ClaimedByCallerAsync(
+        Guid userId, List<Guid> candidates, CancellationToken cancellationToken) =>
+        [.. await _dbContext.ResourceBookings
+            .Where(b => b.Status == BookingStatus.Active
+                && candidates.Contains(b.BookingDocumentId)
+                && _dbContext.ResourcePrincipals.Any(p =>
+                    p.ResourceDocumentId == b.ResourceDocumentId && p.UserId == userId))
+            .Select(b => b.BookingDocumentId)
+            .Distinct()
+            .ToListAsync(cancellationToken)];
 
     // Deliberately conditioned on "lacks CanSee" rather than topping every right up: a caller granted CanSee
     // without CanReadContent keeps exactly that. A real grant is somebody's decision, and a blanket right that

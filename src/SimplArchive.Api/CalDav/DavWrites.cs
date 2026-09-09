@@ -41,6 +41,22 @@ internal static class DavWrites
             return new ForbidResult(Authentication.DavAuthenticationDefaults.Scheme);
         }
 
+        // A person's schedule is read-only by design, not by omission (ADR 0775): a booking is made by
+        // writing into the resource's Schedule, where the conflict check and the ATTENDEE expansion live. A
+        // write accepted here would be a second entrance to creating one, and a rule enforced at one
+        // entrance is not a rule. Refused explicitly for the same reason as the feed above — falling through
+        // would hand the ACL calculator an id with no document behind it, and that walk throws.
+        if (protocol == DavProtocol.CalDav
+            && await PersonSchedules.ResourceForAsync(context.Db, context.UserId, folderId, context.Cancellation) is not null)
+        {
+            context.Log?.LogWarning(
+                "Refused a {Method} on a read-only person schedule for {UserId}. This collection is composed "
+                + "from booking claims and stores nothing — book through the resource's own Schedule; enable "
+                + "Trace on this source to see the exchange",
+                context.Request.Method, context.UserId);
+            return new ForbidResult(Authentication.DavAuthenticationDefaults.Scheme);
+        }
+
         var folder = await db.Documents.FirstOrDefaultAsync(d => d.Id == folderId, context.Cancellation);
         if (folder is null)
         {
@@ -210,6 +226,22 @@ internal static class DavWrites
                 "Refused a {Method} on the read-only {Feed} feed for {UserId}. This feed is generated from "
                 + "workflow state and stores nothing; enable Trace on this source to see the exchange",
                 context.Request.Method, feed, context.UserId);
+            return new ForbidResult(Authentication.DavAuthenticationDefaults.Scheme);
+        }
+
+        // A person's schedule is read-only by design, not by omission (ADR 0775): a booking is made by
+        // writing into the resource's Schedule, where the conflict check and the ATTENDEE expansion live. A
+        // write accepted here would be a second entrance to creating one, and a rule enforced at one
+        // entrance is not a rule. Refused explicitly for the same reason as the feed above — falling through
+        // would hand the ACL calculator an id with no document behind it, and that walk throws.
+        if (protocol == DavProtocol.CalDav
+            && await PersonSchedules.ResourceForAsync(context.Db, context.UserId, folderId, context.Cancellation) is not null)
+        {
+            context.Log?.LogWarning(
+                "Refused a {Method} on a read-only person schedule for {UserId}. This collection is composed "
+                + "from booking claims and stores nothing — book through the resource's own Schedule; enable "
+                + "Trace on this source to see the exchange",
+                context.Request.Method, context.UserId);
             return new ForbidResult(Authentication.DavAuthenticationDefaults.Scheme);
         }
 

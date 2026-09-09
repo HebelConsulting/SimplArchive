@@ -85,6 +85,11 @@ internal static class DavTree
         if (protocol == DavProtocol.CalDav)
         {
             ordered.AddRange(TaskFeeds.CollectionsFor(userId));
+
+            // The caller's own time (ADR 0775): one collection per resource document that represents them.
+            // Appended for the same reason the task feeds are — they are not folders and have no tree
+            // position to sort by.
+            ordered.AddRange(await PersonSchedules.CollectionsForAsync(db, userId, cancellationToken));
         }
 
         return ordered;
@@ -102,6 +107,15 @@ internal static class DavTree
         if (protocol == DavProtocol.CalDav && TaskFeeds.KindOf(userId, folderId) is not null)
         {
             return TaskFeeds.CollectionsFor(userId).First(c => c.FolderId == folderId);
+        }
+
+        // A person's schedule, for the same reason: its id belongs to no document, so the ACL walk below
+        // would not merely miss it — it would throw, resolving the ancestors of a document that is not there.
+        if (protocol == DavProtocol.CalDav
+            && await PersonSchedules.ResourceForAsync(db, userId, folderId, cancellationToken) is not null)
+        {
+            return (await PersonSchedules.CollectionsForAsync(db, userId, cancellationToken))
+                .FirstOrDefault(c => c.FolderId == folderId);
         }
 
         var folder = await FolderQuery(db, protocol)
@@ -143,10 +157,41 @@ internal static class DavTree
             return await TaskFeeds.ItemsAsync(db, userId, folderId, feed, cancellationToken);
         }
 
+        // A person's schedule (ADR 0775): its members are real booking documents that live in some OTHER
+        // resource's Schedule, so they are loaded by id rather than by parent — and then go through exactly
+        // the same UID naming and item composition as any collection's children, because they ARE ordinary
+        // documents. A client cannot tell a claimed flight here from the same flight in the aircraft's
+        // Schedule, which is the point: it is one booking seen from two sides.
+        if (protocol == DavProtocol.CalDav
+            && await PersonSchedules.ResourceForAsync(db, userId, folderId, cancellationToken) is { } resourceId)
+        {
+            var claimed = await PersonSchedules.BookingDocumentIdsAsync(db, resourceId, cancellationToken);
+            var claimedDocuments = await db.Documents
+                .Where(d => claimed.Contains(d.Id))
+                .Select(d => new ItemRow(d.Id, d.CurrentVersionId, d.ConcurrencyToken))
+                .ToListAsync(cancellationToken);
+
+            return await ComposeItemsAsync(db, protocol, folderId, claimedDocuments, cancellationToken, logger);
+        }
+
         var documents = await ItemQuery(db, protocol, folderId)
             .Select(d => new ItemRow(d.Id, d.CurrentVersionId, d.ConcurrencyToken))
             .ToListAsync(cancellationToken);
 
+        return await ComposeItemsAsync(db, protocol, folderId, documents, cancellationToken, logger);
+    }
+
+    /// <summary>Documents to DAV items: their UID names in one query, then one item each.</summary>
+    /// <remarks>
+    /// Shared by the ordinary child listing and by a person's schedule (ADR 0775). The two differ only in
+    /// WHICH documents they hold — one asks by parent, the other by claim — and everything after that must
+    /// stay identical, or the same flight would be named one way in the aircraft's Schedule and another in
+    /// the pilot's, and a syncing client would treat them as two events.
+    /// </remarks>
+    private static async Task<List<DavItem>> ComposeItemsAsync(
+        SimplArchiveDbContext db, DavProtocol protocol, Guid folderId, List<ItemRow> documents,
+        CancellationToken cancellationToken, ILogger? logger)
+    {
         // The UID values for the whole collection in one query — the resource name comes from them.
         var uidFieldIds = await UidFieldIdsAsync(db, protocol, cancellationToken);
         var documentIds = documents.Select(d => d.Id).ToList();
@@ -175,6 +220,18 @@ internal static class DavTree
     internal static async Task<DavItem?> ItemAsync(
         SimplArchiveDbContext db, DavProtocol protocol, Guid userId, Guid folderId, string resourceName, CancellationToken cancellationToken)
     {
+        // A person's schedule (ADR 0775) resolves one item by listing and matching, rather than with a
+        // targeted query. A person holds tens of flights, not thousands, and composing the list is the same
+        // work the collection listing already does — where a second, narrower lookup would be a second way to
+        // name an item, and the two disagreeing is exactly how a client ends up seeing a member the listing
+        // never offered.
+        if (protocol == DavProtocol.CalDav
+            && await PersonSchedules.ResourceForAsync(db, userId, folderId, cancellationToken) is not null)
+        {
+            return (await ItemsAsync(db, protocol, userId, folderId, cancellationToken))
+                .FirstOrDefault(i => string.Equals(i.ResourceName, resourceName, StringComparison.OrdinalIgnoreCase));
+        }
+
         if (protocol == DavProtocol.CalDav && TaskFeeds.KindOf(userId, folderId) is { } feed)
         {
             return await TaskFeeds.ItemAsync(db, userId, folderId, feed, resourceName, cancellationToken);

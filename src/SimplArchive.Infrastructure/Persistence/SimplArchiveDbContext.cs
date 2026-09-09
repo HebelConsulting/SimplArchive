@@ -141,6 +141,8 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
     // The inventory-booking primitive's claims (ADR 0735).
     public DbSet<ResourceBooking> ResourceBookings => Set<ResourceBooking>();
 
+    public DbSet<ResourcePrincipal> ResourcePrincipals => Set<ResourcePrincipal>();
+
     // Per-tenant industry-module activations (ADR 0740) — the row a verified license upserts.
     public DbSet<ModuleActivation> ModuleActivations => Set<ModuleActivation>();
 

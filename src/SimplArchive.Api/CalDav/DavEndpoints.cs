@@ -80,10 +80,23 @@ internal static class DavEndpoints
     /// the governing ACL scope. Handed an id with no row it does not return "no rights", it THROWS — so this
     /// branch is not tidiness, it is the difference between a listed collection and a 500 (#650).
     /// </remarks>
-    private static async Task<EffectiveRights> RightsForAsync(DavControllerContext context, Guid folderId) =>
-        context.Protocol == DavProtocol.CalDav && TaskFeeds.KindOf(context.UserId, folderId) is not null
-            ? TaskFeeds.Rights
-            : await context.Rights.GetEffectiveRightsAsync(context.UserId, folderId);
+    private static async Task<EffectiveRights> RightsForAsync(DavControllerContext context, Guid folderId)
+    {
+        if (context.Protocol == DavProtocol.CalDav && TaskFeeds.KindOf(context.UserId, folderId) is not null)
+        {
+            return TaskFeeds.Rights;
+        }
+
+        // A person's schedule (ADR 0775) is a computed collection too — same reason, same treatment: its id
+        // belongs to no document, so the ACL walk would throw rather than answer.
+        if (context.Protocol == DavProtocol.CalDav
+            && await PersonSchedules.ResourceForAsync(context.Db, context.UserId, folderId, context.Cancellation) is not null)
+        {
+            return PersonSchedules.Rights;
+        }
+
+        return await context.Rights.GetEffectiveRightsAsync(context.UserId, folderId);
+    }
 
     /// <summary>The CTag / sync-token — computed from the caller's tasks for a feed, from the change log otherwise.</summary>
     private static async Task<long> SequenceForAsync(DavControllerContext context, Guid folderId)
@@ -91,6 +104,15 @@ internal static class DavEndpoints
         if (context.Protocol == DavProtocol.CalDav && TaskFeeds.KindOf(context.UserId, folderId) is not null)
         {
             return await TaskFeeds.ChangeSequenceAsync(context.Db, context.UserId, context.Cancellation);
+        }
+
+        // A person's schedule changes when their CLAIMS do, which no change log records — so it is computed
+        // from the claims, count included, or a flight vanishing would move nothing and a polling client
+        // would be told there was nothing new (ADR 0775).
+        if (context.Protocol == DavProtocol.CalDav
+            && await PersonSchedules.ResourceForAsync(context.Db, context.UserId, folderId, context.Cancellation) is { } resourceId)
+        {
+            return await PersonSchedules.ChangeSequenceAsync(context.Db, resourceId, context.Cancellation);
         }
 
         // Healed before it is read (#806): a CTag computed from a log the workbench outran would tell a
