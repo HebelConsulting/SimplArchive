@@ -79,7 +79,7 @@ public class ModuleStatusEscalationTests
 
         var facade = new ModuleArchiveFacade(db, new UserAccessor { UserId = actingUserId }, new ServiceAccountAccessor());
         var engine = new StateMachineEngine(db, catalog, facade, new ServiceCollection().BuildServiceProvider());
-        var notifications = new NotificationService(db, tenantAccessor, new UserAccessor { UserId = actingUserId });
+        var notifications = new NotificationService(db, tenantAccessor, new UserAccessor { UserId = actingUserId }, NullLogger<NotificationService>.Instance);
         var sweep = new ModuleStatusEscalationService(db, tenantAccessor, engine, catalog, notifications,
             NullLogger<ModuleStatusEscalationService>.Instance);
 

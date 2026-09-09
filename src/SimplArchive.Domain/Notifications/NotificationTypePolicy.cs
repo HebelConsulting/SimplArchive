@@ -49,6 +49,14 @@ public static class NotificationTypePolicy
             // precisely because sitting in it silently is the failure — a training window nobody is warned is
             // closing. Like the other escalations, not mutable, so it is always emailed and cannot be muted.
             NotificationType.ModuleStatusEscalation => false,
+
+            // Neither is mutable, and the PAIR is the reason (ADR 0778). A grounded aircraft is an
+            // operational fact its pilots cannot be allowed to miss quietly — the checkout-expiry argument
+            // exactly. And muting only the revival would be worse than muting both: the pilot keeps the
+            // suspension they were told about and never learns it was lifted, which leaves them acting on a
+            // fact that stopped being true. The two only work together.
+            NotificationType.BookingSuspended => false,
+            NotificationType.BookingRevived => false,
         };
 #pragma warning restore CS8524
 

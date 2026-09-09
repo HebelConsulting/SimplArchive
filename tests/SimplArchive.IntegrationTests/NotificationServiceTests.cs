@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using SimplArchive.Domain.Notifications;
 using SimplArchive.Domain.Tenants;
 using SimplArchive.Domain.Users;
@@ -16,7 +17,7 @@ public class NotificationServiceTests
         new(new DbContextOptionsBuilder<SimplArchiveDbContext>().UseSqlite(connection).Options, tenant);
 
     private static NotificationService CreateService(SimplArchiveDbContext db, CurrentTenantAccessor tenant, CurrentUserAccessor user) =>
-        new(db, tenant, user);
+        new(db, tenant, user, NullLogger<NotificationService>.Instance);
 
     [Fact]
     public async Task Writes_a_notification_for_the_recipient_but_not_for_the_actor()
@@ -49,6 +50,40 @@ public class NotificationServiceTests
         Assert.Equal(NotificationType.ReviewAssigned, single.Type);
         Assert.Null(single.ReadAt);
         Assert.DoesNotContain(notifications, n => n.RecipientUserId == actor.Id);
+    }
+
+    // The other half of that no-op (ADR 0778, slice 4b): a caller with no ambient tenant is not always a
+    // caller with nothing to say. A worker, a protocol edge, or a document finalized later has a tenant it
+    // knows perfectly well — it just is not in scope — and before this overload existed its notifications
+    // were dropped in silence, which is indistinguishable from nobody having sent one.
+    [Fact]
+    public async Task Notifies_in_an_explicitly_named_tenant_with_no_ambient_one()
+    {
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var tenantAccessor = new CurrentTenantAccessor();
+        var userAccessor = new CurrentUserAccessor();
+        using (var setup = CreateContext(connection, tenantAccessor)) await setup.Database.EnsureCreatedAsync();
+
+        var tenant = new Tenant { Id = Guid.NewGuid(), Name = "Acme", CreatedAt = DateTimeOffset.UtcNow };
+        var recipient = new User { Id = Guid.NewGuid(), TenantId = tenant.Id, Email = "rcpt@acme.test", DisplayName = "Recipient", CreatedAt = DateTimeOffset.UtcNow };
+        using (var seed = CreateContext(connection, tenantAccessor)) { seed.Tenants.Add(tenant); seed.Users.Add(recipient); await seed.SaveChangesAsync(); }
+
+        // Deliberately left unset — that is the whole point of the overload.
+        Assert.Null(tenantAccessor.TenantId);
+
+        using (var act = CreateContext(connection, tenantAccessor))
+        {
+            var service = CreateService(act, tenantAccessor, userAccessor);
+            await service.NotifyInTenantAsync(tenant.Id, recipient.Id, NotificationType.BookingSuspended,
+                "HB-XYZ is out of service", "Your booking is on hold.");
+        }
+
+        tenantAccessor.TenantId = tenant.Id;
+        using var read = CreateContext(connection, tenantAccessor);
+        var single = Assert.Single(await read.Notifications.ToListAsync());
+        Assert.Equal(recipient.Id, single.RecipientUserId);
+        Assert.Equal(NotificationType.BookingSuspended, single.Type);
     }
 
     [Fact]

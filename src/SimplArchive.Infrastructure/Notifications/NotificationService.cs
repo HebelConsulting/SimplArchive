@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Notifications;
 using SimplArchive.Infrastructure.Persistence;
@@ -7,22 +8,55 @@ namespace SimplArchive.Infrastructure.Notifications;
 
 // Writes an in-app notification for a recipient User (ADR "Notifications (in-app, first slice)"). Registered
 // scoped in AddInfrastructure. Best-effort in its own commit (after the triggering action has committed), so a
-// failure here doesn't break the action; no-ops when no tenant is set, and never notifies the actor about
-// their own action.
+// failure here doesn't break the action; never notifies the actor about their own action. A call with no
+// tenant in scope is dropped AND logged at Warning (ADR 0626) — NotifyInTenantAsync names one explicitly.
 public sealed class NotificationService : INotificationService
 {
     private readonly SimplArchiveDbContext _dbContext;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly ICurrentUserAccessor _currentUserAccessor;
+    private readonly ILogger<NotificationService> _logger;
 
     public NotificationService(
         SimplArchiveDbContext dbContext,
         ICurrentTenantAccessor currentTenantAccessor,
-        ICurrentUserAccessor currentUserAccessor)
+        ICurrentUserAccessor currentUserAccessor,
+        ILogger<NotificationService> logger)
     {
         _dbContext = dbContext;
         _currentTenantAccessor = currentTenantAccessor;
         _currentUserAccessor = currentUserAccessor;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Notifies in an explicitly named tenant — for callers with no ambient one (a worker, a protocol edge).
+    /// </summary>
+    public Task NotifyInTenantAsync(
+        Guid tenantId,
+        Guid recipientUserId,
+        NotificationType type,
+        string title,
+        string body,
+        Guid? documentId = null,
+        CancellationToken cancellationToken = default) =>
+        DeliverAsync(tenantId, recipientUserId, type, title, body, documentId, cancellationToken);
+
+    // The delivery both overloads share, so the actor-suppression and coalescing rules cannot differ between
+    // a request-scoped notification and a worker's.
+    private async Task DeliverAsync(
+        Guid tenantId, Guid recipientUserId, NotificationType type, string title, string body,
+        Guid? documentId, CancellationToken cancellationToken)
+    {
+        // Don't notify the actor about their own action (a ServiceAccount actor has no UserId, so it never
+        // matches — its notifications always go to a different User).
+        if (_currentUserAccessor.UserId == recipientUserId)
+        {
+            return;
+        }
+
+        await AddOrCoalesceAsync(tenantId, recipientUserId, type, title, body, documentId, DateTimeOffset.UtcNow, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     public async Task NotifyAsync(
@@ -35,18 +69,17 @@ public sealed class NotificationService : INotificationService
     {
         if (_currentTenantAccessor.TenantId is not { } tenantId)
         {
+            // Say so rather than vanishing (ADR 0626): a notification that silently fails to arrive is
+            // indistinguishable from one nobody sent, and the recipient has no way to discover either. Names
+            // the remedy, because the administrator reading this cannot be expected to know the seam.
+            _logger.LogWarning(
+                "Dropped a {NotificationType} notification for user {RecipientUserId}: no tenant is in scope. "
+                + "A caller outside a request (a worker, a protocol edge) must use NotifyInTenantAsync.",
+                type, recipientUserId);
             return;
         }
 
-        // Don't notify the actor about their own action (a ServiceAccount actor has no UserId, so it never
-        // matches — its notifications always go to a different User).
-        if (_currentUserAccessor.UserId == recipientUserId)
-        {
-            return;
-        }
-
-        await AddOrCoalesceAsync(tenantId, recipientUserId, type, title, body, documentId, DateTimeOffset.UtcNow, cancellationToken);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await DeliverAsync(tenantId, recipientUserId, type, title, body, documentId, cancellationToken);
     }
 
     // Notification digest / coalescing (ADR "Notification digest / coalescing"): a burst of activity on one
@@ -109,6 +142,9 @@ public sealed class NotificationService : INotificationService
     {
         if (_currentTenantAccessor.TenantId is not { } tenantId)
         {
+            _logger.LogWarning(
+                "Dropped {NotificationType} notifications to the subscribers of document {DocumentId}: "
+                + "no tenant is in scope.", type, documentId);
             return;
         }
 

@@ -57,6 +57,14 @@ public class StaleCheckoutServiceTests
             return Task.CompletedTask;
         }
 
+        // Recorded the same way as the ambient overload: a caller with no ambient tenant is still notifying
+        // somebody, and a fake that swallowed it would make this test blind to exactly the path ADR 0778 added.
+        public Task NotifyInTenantAsync(Guid tenantId, Guid recipientUserId, NotificationType type, string title, string body, Guid? documentId = null, CancellationToken cancellationToken = default)
+        {
+            Sent.Add((recipientUserId, type, documentId));
+            return Task.CompletedTask;
+        }
+
         public Task NotifyDocumentSubscribersAsync(Guid documentId, NotificationType type, string title, string body, IEnumerable<Guid>? excludeUserIds = null, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
     }

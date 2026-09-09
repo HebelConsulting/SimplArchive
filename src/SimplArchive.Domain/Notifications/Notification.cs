@@ -54,6 +54,18 @@ public enum NotificationType
     // named who to tell and what to say. Generic on purpose — the core owns delivery, the module owns the
     // meaning — so one type carries every module's status escalations. The status-sweep worker writes it.
     ModuleStatusEscalation = 16,
+
+    // A resource this person is booked on went out of service, so their booking cannot be taken (ADR 0778).
+    // Deliberately NOT coalescable, for the ChatMentioned reason: each suspended flight is a discrete thing
+    // this person now has to do something about, and folding three of them into "3 bookings affected" is how
+    // the one that mattered gets missed.
+    BookingSuspended = 17,
+
+    // ...and the resource is back in service, so the booking stands again. Its own type rather than a second
+    // BookingSuspended with different words: a pilot told their flight was suspended and never told it was
+    // restored is left worse off than one never told at all — they have already rebooked, or given up. The
+    // pair is also what lets a client style them as opposites.
+    BookingRevived = 18,
 }
 
 // A per-User in-app notification (ADR "Notifications (in-app, first slice)"). Written by INotificationService

@@ -7,6 +7,7 @@ using SimplArchive.Domain.Booking;
 using SimplArchive.Domain.CalDav;
 using SimplArchive.Domain.Documents;
 using SimplArchive.Domain.Masks;
+using SimplArchive.Domain.Notifications;
 using Microsoft.EntityFrameworkCore;
 using SimplArchive.Infrastructure.Persistence;
 
@@ -32,11 +33,12 @@ public sealed class CalendarContactClassifier
     private readonly ILogger<CalendarContactClassifier> _logger;
     private readonly IAuditRecorder _audit;
     private readonly IUserSystemRightsResolver _userSystemRights;
+    private readonly INotificationService _notifications;
 
     public CalendarContactClassifier(
         SimplArchiveDbContext dbContext, IObjectStorageClient objectStorageClient,
         IContactCardComposer contacts, ILogger<CalendarContactClassifier> logger, IAuditRecorder audit,
-        IUserSystemRightsResolver userSystemRights)
+        IUserSystemRightsResolver userSystemRights, INotificationService notifications)
     {
         _dbContext = dbContext;
         _objectStorageClient = objectStorageClient;
@@ -44,6 +46,7 @@ public sealed class CalendarContactClassifier
         _logger = logger;
         _audit = audit;
         _userSystemRights = userSystemRights;
+        _notifications = notifications;
     }
 
     /// <summary>The extensions this classifier owns.</summary>
@@ -269,6 +272,11 @@ public sealed class CalendarContactClassifier
         {
             await _audit.RecordAsync(audit.Action, "Document", document.Id, document.Name, audit.Details,
                 tenantId: document.TenantId, cancellationToken: cancellationToken);
+
+            if (audit.Notice is { } notice)
+            {
+                await NotifyAffectedAsync(notice, cancellationToken);
+            }
         }
 
         if (start is { } startDate)
@@ -430,7 +438,7 @@ public sealed class CalendarContactClassifier
         // The bookings this write affects, measured BEFORE the row changes — because suspension is derived,
         // the overlap is only observable while the block's state still says what it said. Afterwards the
         // question is unanswerable, which is exactly why the audit event has to carry the count.
-        var affected = await AffectedBookingCountAsync(resourceId, startsAt, endsAt, cancellationToken);
+        var affected = await AffectedBookingsAsync(resourceId, startsAt, endsAt, cancellationToken);
 
         if (block is null)
         {
@@ -473,8 +481,8 @@ public sealed class CalendarContactClassifier
 
         var effect = action switch
         {
-            Controllers.AuditActions.BookingSuspended when affected > 0 => $", suspending {affected} booking(s)",
-            Controllers.AuditActions.BookingRevived when affected > 0 => $", reviving {affected} booking(s)",
+            Controllers.AuditActions.BookingSuspended when affected.Count > 0 => $", suspending {affected.Count} booking(s)",
+            Controllers.AuditActions.BookingRevived when affected.Count > 0 => $", reviving {affected.Count} booking(s)",
             Controllers.AuditActions.BookingChanged => string.Empty,
             _ => " (no bookings affected)",
         };
@@ -482,16 +490,28 @@ public sealed class CalendarContactClassifier
         // The audit event is BUILT here and RECORDED by the caller, after the save — the same rule the
         // booking path learned the hard way (ADR 0777): IAuditRecorder.RecordAsync saves, so recording
         // inline would flush the staged row outside the try/catch that translates an invariant refusal.
-        return new PendingBookingAudit(action, $"{startsAt:u}-{endsAt:u} on {resourceName}{effect}");
+        // The people to tell, carried out to the caller with the audit event and delivered after the save for
+        // the same reason: INotificationService saves, so notifying inline would flush the staged block row
+        // outside the try/catch that translates an invariant refusal (ADR 0777's rule, second application).
+        var notice = action switch
+        {
+            Controllers.AuditActions.BookingSuspended =>
+                new PendingBlockNotice(NotificationType.BookingSuspended, document.TenantId, resourceName, startsAt, endsAt, affected),
+            Controllers.AuditActions.BookingRevived =>
+                new PendingBlockNotice(NotificationType.BookingRevived, document.TenantId, resourceName, startsAt, endsAt, affected),
+            _ => null,
+        };
+
+        return new PendingBookingAudit(action, $"{startsAt:u}-{endsAt:u} on {resourceName}{effect}", notice);
     }
 
-    /// <summary>How many Active bookings of the resource overlap this window (ADR 0778).</summary>
+    /// <summary>Which Active bookings of the resource overlap this window (ADR 0778).</summary>
     /// <remarks>
     /// The number the audit event carries. Suspension is derived and therefore true only while the block is
     /// Active, so this count is the ONLY durable record that those flights were ever stopped — which is why
     /// it is measured at the moment of the act rather than reconstructed later.
     /// </remarks>
-    private async Task<int> AffectedBookingCountAsync(
+    private async Task<List<Guid>> AffectedBookingsAsync(
         Guid resourceId, DateTimeOffset startsAt, DateTimeOffset endsAt, CancellationToken cancellationToken)
     {
         var from = startsAt.ToUniversalTime();
@@ -503,11 +523,10 @@ public sealed class CalendarContactClassifier
 
         // In memory for the reason every range test in this area is: the SQLite provider cannot translate
         // DateTimeOffset range predicates, and one resource's active bookings are few by nature.
-        return candidates
+        return [.. candidates
             .Where(b => b.StartsAtUtc < to && from < b.EndsAtUtc)
             .Select(b => b.BookingDocumentId)
-            .Distinct()
-            .Count();
+            .Distinct()];
     }
 
     /// <summary>
@@ -579,8 +598,99 @@ public sealed class CalendarContactClassifier
         return (false, false);
     }
 
+
+    /// <summary>
+    /// Tells the people on the affected bookings that their resource went out of service, or came back
+    /// (ADR 0778, slice 4b).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Filtered against the DERIVED state, after the save.</b> The candidates are the bookings whose window
+    /// this block overlaps, but overlap alone does not decide the message: a booking still caught by ANOTHER
+    /// active block is not revived when this one clears, and telling its pilot their flight is back on would
+    /// be worse than saying nothing. Suspension is derived, so the honest answer only exists once the row has
+    /// been written — which is also why this runs here rather than beside the row.
+    /// </para>
+    /// <para>
+    /// <b>Who counts as affected</b> is the claimants plus the booker. A claimant is found through
+    /// <c>ResourcePrincipal</c> (ADR 0775) — the table that says a resource document REPRESENTS a person —
+    /// because <c>BookedByUserId</c> is the booker, so a student booked by their instructor would not match,
+    /// and that is exactly the case that matters. The booker is included as well: they made a commitment on
+    /// somebody's behalf and are the one who will have to unmake it.
+    /// </para>
+    /// <para>
+    /// Best-effort, and deliberately last: a failure to notify must not undo a grounding. The block is already
+    /// committed and audited by the time this runs.
+    /// </para>
+    /// </remarks>
+    private async Task NotifyAffectedAsync(PendingBlockNotice notice, CancellationToken cancellationToken)
+    {
+        if (notice.CandidateBookingIds.Count == 0)
+        {
+            return;
+        }
+
+        var suspended = await BookingSuspension.SuspendedAmongAsync(_dbContext, notice.CandidateBookingIds, cancellationToken);
+        var subjects = notice.Type == NotificationType.BookingSuspended
+            ? notice.CandidateBookingIds.Where(suspended.Contains).ToList()
+            : notice.CandidateBookingIds.Where(id => !suspended.Contains(id)).ToList();
+        if (subjects.Count == 0)
+        {
+            return;
+        }
+
+        var claims = await _dbContext.ResourceBookings
+            .Where(b => subjects.Contains(b.BookingDocumentId) && b.Status == BookingStatus.Active)
+            .Select(b => new { b.BookingDocumentId, b.ResourceDocumentId, b.BookedByUserId })
+            .ToListAsync(cancellationToken);
+
+        var resourceIds = claims.Select(c => c.ResourceDocumentId).Distinct().ToList();
+        var principals = await _dbContext.ResourcePrincipals
+            .Where(p => resourceIds.Contains(p.ResourceDocumentId))
+            .Select(p => new { p.ResourceDocumentId, p.UserId })
+            .ToListAsync(cancellationToken);
+        var personOf = principals.ToDictionary(p => p.ResourceDocumentId, p => p.UserId);
+
+        // One notification per person per booking: two suspended flights are two things to deal with, and
+        // these types are non-coalescable for that reason.
+        var targets = new HashSet<(Guid UserId, Guid BookingDocumentId)>();
+        foreach (var claim in claims)
+        {
+            if (personOf.TryGetValue(claim.ResourceDocumentId, out var claimantId))
+            {
+                targets.Add((claimantId, claim.BookingDocumentId));
+            }
+
+            if (claim.BookedByUserId is { } bookerId)
+            {
+                targets.Add((bookerId, claim.BookingDocumentId));
+            }
+        }
+
+        var window = $"{notice.From:yyyy-MM-dd HH:mm}–{notice.To:HH:mm} UTC";
+        var (title, body) = notice.Type == NotificationType.BookingSuspended
+            ? ($"{notice.ResourceName} is out of service",
+               $"Your booking is on hold: {notice.ResourceName} is unavailable {window}.")
+            : ($"{notice.ResourceName} is back in service",
+               $"Your booking stands again: {notice.ResourceName} was unavailable {window}.");
+
+        foreach (var (userId, bookingDocumentId) in targets)
+        {
+            // The tenant is NAMED rather than taken from the ambient accessor: this door is reached from a
+            // worker and from protocol edges where none is set, and the ambient overload would drop the
+            // notification (loudly now, but still dropped).
+            await _notifications.NotifyInTenantAsync(
+                notice.TenantId, userId, notice.Type, title, body, bookingDocumentId, cancellationToken);
+        }
+    }
+
     /// <summary>What to record once the booking has actually been saved (#1092, ADR 0777).</summary>
-    private sealed record PendingBookingAudit(string Action, string Details);
+    private sealed record PendingBookingAudit(string Action, string Details, PendingBlockNotice? Notice = null);
+
+    /// <summary>Who to tell that a resource went out of service, or came back (ADR 0778, slice 4b).</summary>
+    private sealed record PendingBlockNotice(
+        NotificationType Type, Guid TenantId, string ResourceName,
+        DateTimeOffset From, DateTimeOffset To, IReadOnlyList<Guid> CandidateBookingIds);
 
     /// <summary>The resources claimed by this booking other than the holding one.</summary>
     private static HashSet<Guid> AttendeeResourceIds(List<ResourceBooking> claims, Guid holdingResourceId) =>
