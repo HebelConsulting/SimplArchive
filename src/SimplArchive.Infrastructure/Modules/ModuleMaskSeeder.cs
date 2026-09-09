@@ -50,6 +50,7 @@ public sealed class ModuleMaskSeeder
                 CreatedAt = DateTimeOffset.UtcNow,
                 IsFolderMask = seed.IsFolderMask,
                 IsBookable = seed.IsBookable,
+                RepresentsPrincipalField = seed.RepresentsPrincipalField,
                 AdmitsOnlyDeclaredChildren = seed.AdmitsOnlyDeclaredChildren,
             });
 
@@ -75,11 +76,16 @@ public sealed class ModuleMaskSeeder
         // carries it too). Structure facts are assigned unconditionally — the module's seed is the
         // authority for its own masks, exactly as the core's well-known table is for the core's.
         if (mask.IsFolderMask != seed.IsFolderMask || mask.IsBookable != seed.IsBookable
-            || mask.AdmitsOnlyDeclaredChildren != seed.AdmitsOnlyDeclaredChildren)
+            || mask.AdmitsOnlyDeclaredChildren != seed.AdmitsOnlyDeclaredChildren
+            // Healed like the rest (ADR 0757): a module that starts declaring whom its documents represent
+            // must take effect on tenants where the mask already exists, or the mapping only ever appears on
+            // tenants activated afterwards.
+            || mask.RepresentsPrincipalField != seed.RepresentsPrincipalField)
         {
             mask.IsFolderMask = seed.IsFolderMask;
             mask.IsBookable = seed.IsBookable;
             mask.AdmitsOnlyDeclaredChildren = seed.AdmitsOnlyDeclaredChildren;
+            mask.RepresentsPrincipalField = seed.RepresentsPrincipalField;
         }
 
         var current = await _dbContext.MaskVersions.IgnoreQueryFilters(["TenantFilter"])

@@ -24,5 +24,8 @@ public class MaskConfiguration : IEntityTypeConfiguration<Mask>
         // clients, so the vocabulary can grow without a migration, and a cosmetic unknown never becomes a
         // write error. See Mask.Icon.
         builder.Property(m => m.Icon).HasMaxLength(40);
+
+        // A FIELD NAME, so it is bounded by whatever a field may be called (ABI 0.13, ADR 0779).
+        builder.Property(m => m.RepresentsPrincipalField).HasMaxLength(200);
     }
 }

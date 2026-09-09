@@ -25,6 +25,22 @@ namespace SimplArchive.ModuleAbi;
 /// <param name="AllowedParents">Where documents wearing THIS mask may live — empty (the default) means
 /// anywhere. Note a declared list refuses a mask-less parent too (an unclassified folder), so declare it
 /// only for masks with a genuinely fixed home (a logbook lives in an aircraft or a dossier).</param>
+/// <param name="RepresentsPrincipalField">The name of THIS mask's own field that identifies the PERSON a
+/// document wearing it stands for (ABI 0.13, core ADR 0775) — a pilot dossier's e-mail address. The core
+/// maintains the resource-principal mapping from it, so a claim on this document becomes that person's.
+/// <para>
+/// Declarative rather than a facade call the module makes, deliberately. The mapping's whole purpose is that
+/// a booking of this document counts as that person's commitment; a call that can be forgotten fails
+/// SILENTLY and in the safe-looking direction — the person simply is not a claimant, their calendar is empty,
+/// and nothing errors. Declaring the field instead means the mapping follows the value the module already
+/// treats as the link, including when somebody edits it.
+/// </para>
+/// <para>
+/// The field must be one of this mask's <paramref name="Fields"/> and should hold an e-mail address that
+/// resolves to a user in the tenant. A value resolving to nobody leaves the document representing nobody —
+/// which is the honest answer for a dossier filed before its pilot has an account — and says so at Warning
+/// rather than failing the write.
+/// </para></param>
 public sealed record ModuleMaskSeed(
     Guid MaskId,
     string Name,
@@ -33,7 +49,8 @@ public sealed record ModuleMaskSeed(
     IReadOnlyList<ModuleFieldSeed> Fields,
     bool AdmitsOnlyDeclaredChildren = false,
     IReadOnlyList<Guid>? AdmittedChildren = null,
-    IReadOnlyList<Guid>? AllowedParents = null);
+    IReadOnlyList<Guid>? AllowedParents = null,
+    string? RepresentsPrincipalField = null);
 
 /// <summary>
 /// The handful of CORE mask ids the ABI promises to a module's containment declarations (ABI 0.8) — an
@@ -51,6 +68,12 @@ public static class CoreMaskIds
     /// <summary>The Schedule a bookable resource holds (core ADR 0744). Admitted implicitly by
     /// <see cref="ModuleMaskSeed.IsBookable"/>; named here for AllowedParents declarations.</summary>
     public static readonly Guid Schedule = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E45");
+
+    /// <summary>The Maintenance collection a bookable resource holds (core ADR 0778) — when it is
+    /// UNAVAILABLE, as against when it is spoken for. Admitted implicitly by
+    /// <see cref="ModuleMaskSeed.IsBookable"/> exactly as the Schedule is, so a module's bookable mask gets
+    /// both without declaring either.</summary>
+    public static readonly Guid Maintenance = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E46");
 }
 
 /// <summary>One field of a module mask. The type vocabulary mirrors the core's field catalog.</summary>

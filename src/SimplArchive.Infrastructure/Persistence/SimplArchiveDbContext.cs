@@ -264,6 +264,7 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
         SyncBlockDocumentsAsync(CancellationToken.None).GetAwaiter().GetResult();
         ValidateResourceBlocksAsync(CancellationToken.None).GetAwaiter().GetResult();
         ValidateResourceBookingsAsync(CancellationToken.None).GetAwaiter().GetResult();
+        SyncResourcePrincipalsAsync(CancellationToken.None).GetAwaiter().GetResult();
         PrepareMaskVersionsAsync(CancellationToken.None).GetAwaiter().GetResult();
         DavChangeRecorder.RecordAsync(this, CancellationToken.None).GetAwaiter().GetResult();
         RegenerateConcurrencyTokens();
@@ -281,6 +282,7 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
         await SyncBlockDocumentsAsync(cancellationToken);
         await ValidateResourceBlocksAsync(cancellationToken);
         await ValidateResourceBookingsAsync(cancellationToken);
+        await SyncResourcePrincipalsAsync(cancellationToken);
         await PrepareMaskVersionsAsync(cancellationToken);
 
         // DAV collection changes, recorded at the one door every write path uses (#806, DavChangeRecorder).

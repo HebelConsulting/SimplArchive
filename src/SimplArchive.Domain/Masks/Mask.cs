@@ -93,6 +93,20 @@ public class Mask : ITenantScoped
     /// </remarks>
     public bool IsBookable { get; set; }
 
+    /// <summary>
+    /// The NAME of this mask's own field that identifies the person a document wearing it represents
+    /// (ABI 0.13, ADR 0779) — a pilot dossier's e-mail address. Null for every mask that stands for nobody.
+    /// </summary>
+    /// <remarks>
+    /// On the MASK rather than the version, for the same reason <see cref="IsBookable"/> is: whom a dossier
+    /// represents is not a property that changes when a field is added, and a v2 contradicting v1 would leave
+    /// the question unanswerable while documents wear both.
+    ///
+    /// A NAME rather than a field id because that is what a module declares — it names its own fields by
+    /// name in <c>ModuleFieldSeed</c>, and the ids are the core's to mint.
+    /// </remarks>
+    public string? RepresentsPrincipalField { get; set; }
+
     /// <summary>What a client should DRAW for a document wearing this mask — a token, not a glyph name.</summary>
     /// <remarks>
     /// <para>
