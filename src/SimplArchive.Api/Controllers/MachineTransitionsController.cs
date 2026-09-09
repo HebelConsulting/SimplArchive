@@ -6,6 +6,7 @@ using SimplArchive.Api.Documents;
 using SimplArchive.Api.Errors.Exceptions.Modules;
 using SimplArchive.Infrastructure.Modules;
 using SimplArchive.Infrastructure.Persistence;
+using SimplArchive.Application.Abstractions;
 
 namespace SimplArchive.Api.Controllers;
 
@@ -36,14 +37,17 @@ public class MachineTransitionsController : ControllerBase
     private readonly DocumentAccessService _access;
     private readonly StateMachineCatalog _catalog;
     private readonly StateMachineEngine _engine;
+    private readonly IAuditRecorder _audit;
 
     public MachineTransitionsController(
-        SimplArchiveDbContext dbContext, DocumentAccessService access, StateMachineCatalog catalog, StateMachineEngine engine)
+        SimplArchiveDbContext dbContext, DocumentAccessService access, StateMachineCatalog catalog,
+        StateMachineEngine engine, IAuditRecorder audit)
     {
         _dbContext = dbContext;
         _access = access;
         _catalog = catalog;
         _engine = engine;
+        _audit = audit;
     }
 
     [HttpPost("{transitionName}")]
@@ -92,6 +96,26 @@ public class MachineTransitionsController : ControllerBase
             // The refusal IS the explanation (ADR 0742): the module's sentences as detail, the
             // machine-readable diagnosis as extensions.
             throw new MachineTransitionRefusedException(machineId, transitionName, verdict.Failed, machine.ModuleId);
+        }
+
+        // A transition is an ACT, and several are legal ones — signing a flight-log entry, signing a lesson
+        // record — which until now left no audit trace at all (#1092). Recorded after the engine commits, so
+        // an event exists exactly when the transition did; a refusal is not recorded here because it changed
+        // nothing, and the refusal already reaches the caller with its reason (ADR 0742).
+        //
+        // The AUTO-REFRESH hook is deliberately excluded: it fires on merely opening a folder, so recording it
+        // would bury every deliberate act under a stream of events that mean "somebody looked at something".
+        if (!machine.Transitions[transitionName].AutoRefreshOnOpen)
+        {
+            var subjectName = await _dbContext.Documents
+                .Where(d => d.Id == documentId)
+                .Select(d => d.Name)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            await _audit.RecordAsync(AuditActions.ModuleTransitionRan, "Document", documentId, subjectName,
+                $"{machineId}/{transitionName}"
+                    + (machine.ModuleId is { } id ? $" (module {id})" : string.Empty),
+                cancellationToken: cancellationToken);
         }
 
         return NoContent();

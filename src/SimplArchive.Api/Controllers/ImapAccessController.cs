@@ -32,6 +32,7 @@ public class ImapAccessController : ControllerBase
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly PersonalMailboxProvisioner _mailbox;
     private readonly PasswordHasher<User> _passwordHasher = new();
+    private readonly IAuditRecorder _audit;
 
     public ImapAccessController(
         SimplArchiveDbContext dbContext,
@@ -39,7 +40,8 @@ public class ImapAccessController : ControllerBase
         ICurrentTenantAccessor currentTenantAccessor,
         IOptions<ImapOptions> options,
         IConfiguration configuration,
-        PersonalMailboxProvisioner mailbox)
+        PersonalMailboxProvisioner mailbox,
+        IAuditRecorder audit)
     {
         _dbContext = dbContext;
         _currentUserAccessor = currentUserAccessor;
@@ -47,6 +49,7 @@ public class ImapAccessController : ControllerBase
         _options = options;
         _configuration = configuration;
         _mailbox = mailbox;
+        _audit = audit;
     }
 
     public class ImapStatusResource : HypermediaResource
@@ -101,6 +104,11 @@ public class ImapAccessController : ControllerBase
         user.ImapPasswordHash = _passwordHasher.HashPassword(user, password);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        // A long-lived credential that bypasses the interactive login and its MFA (#1092). The password is
+        // never logged — the event records that one was issued, to whom, and when.
+        await _audit.RecordAsync(AuditActions.ImapPasswordIssued, "User", user.Id, user.Email,
+            cancellationToken: cancellationToken);
+
         // The SECOND trigger for the mailbox (#562). The first is a delivered message, and on its own it leaves
         // a user who has just configured their mail client with nothing to subscribe to — from which they
         // conclude the feature is broken, when the archive is only waiting for mail that may be days away.
@@ -127,6 +135,9 @@ public class ImapAccessController : ControllerBase
 
         user.ImapPasswordHash = null;
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await _audit.RecordAsync(AuditActions.ImapPasswordIssued, "User", user.Id, user.Email,
+            "Revoked", cancellationToken: cancellationToken);
         return NoContent();
     }
 

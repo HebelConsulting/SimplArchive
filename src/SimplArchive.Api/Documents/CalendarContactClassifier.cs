@@ -29,15 +29,17 @@ public sealed class CalendarContactClassifier
     private readonly IObjectStorageClient _objectStorageClient;
     private readonly IContactCardComposer _contacts;
     private readonly ILogger<CalendarContactClassifier> _logger;
+    private readonly IAuditRecorder _audit;
 
     public CalendarContactClassifier(
         SimplArchiveDbContext dbContext, IObjectStorageClient objectStorageClient,
-        IContactCardComposer contacts, ILogger<CalendarContactClassifier> logger)
+        IContactCardComposer contacts, ILogger<CalendarContactClassifier> logger, IAuditRecorder audit)
     {
         _dbContext = dbContext;
         _objectStorageClient = objectStorageClient;
         _contacts = contacts;
         _logger = logger;
+        _audit = audit;
     }
 
     /// <summary>The extensions this classifier owns.</summary>
@@ -210,6 +212,7 @@ public sealed class CalendarContactClassifier
         var start = occurrence.DtStart?.Value;
         var end = occurrence.DtEnd?.Value;
 
+        PendingBookingAudit? pendingAudit = null;
         var values = new List<(string Field, string? Value)>
         {
             ("Event UID", Nonempty(occurrence.Uid) ?? document.Id.ToString()),
@@ -225,7 +228,7 @@ public sealed class CalendarContactClassifier
             // DbContext's overlap invariant judges them together — refusing a conflicting write on every
             // path (a CalDAV PUT, a drop-upload, the booking endpoint) at the one door they all use.
             values.Add(("Purpose", Nonempty(occurrence.Description)));
-            await UpsertBookingRowAsync(document, version, occurrence, cancellationToken);
+            pendingAudit = await UpsertBookingRowAsync(document, version, occurrence, cancellationToken);
         }
         else
         {
@@ -253,6 +256,14 @@ public sealed class CalendarContactClassifier
             };
         }
 
+        // Recorded only now: the booking survived the save, so the event describes something that happened.
+        // Recording before it would have written a trail entry for a booking the very next line refused.
+        if (pendingAudit is { } audit)
+        {
+            await _audit.RecordAsync(audit.Action, "Document", document.Id, document.Name, audit.Details,
+                tenantId: document.TenantId, cancellationToken: cancellationToken);
+        }
+
         if (start is { } startDate)
         {
             version.DocumentDate = DateOnly.FromDateTime(startDate);
@@ -270,7 +281,7 @@ public sealed class CalendarContactClassifier
     /// is the version's creator — on a CalDAV PUT that is the authenticated DAV user, on the booking
     /// endpoint the caller, so "who holds the slot" is right on every path.
     /// </remarks>
-    private async Task UpsertBookingRowAsync(
+    private async Task<PendingBookingAudit> UpsertBookingRowAsync(
         Document document, DocumentVersion version, Ical.Net.CalendarComponents.CalendarEvent occurrence, CancellationToken cancellationToken)
     {
         if (occurrence.RecurrenceRule is not null)
@@ -313,6 +324,11 @@ public sealed class CalendarContactClassifier
             // names the old room at this point, and there is exactly one non-attendee claim, so it is that one.
             ?? claims.FirstOrDefault(c => !AttendeeResourceIds(claims, resourceId).Contains(c.ResourceDocumentId));
 
+        // "First booking" is the DOCUMENT'S first version, not "no claim existed yet". The bookings endpoint
+        // creates the claim row itself before the finalizer runs, so a claim is already there on that path and
+        // every booking made in the app would otherwise be recorded as a change to something that never
+        // existed. The version number is the fact that means the same thing on every entrance.
+        var wasNew = version.VersionNumber is null or <= 1;
         if (holding is null)
         {
             holding = NewClaim(document, version, resourceId, startsAt, endsAt);
@@ -330,7 +346,24 @@ public sealed class CalendarContactClassifier
         }
 
         await ReconcileAttendeeClaimsAsync(document, version, occurrence, claims, holding, startsAt, endsAt, cancellationToken);
+
+        // The audit event is BUILT here and RECORDED by the caller, after the save that may still refuse this
+        // booking. IAuditRecorder.RecordAsync calls SaveChangesAsync itself, so recording inline would flush
+        // the staged claims early — outside the try/catch that translates a slot conflict into a 409 — and a
+        // conflicting PUT would answer 500 instead. Which is exactly what it did: the re-entrancy hazard
+        // written up for the CANCELLATION path, walked into on the create path.
+        var resourceNames = await _dbContext.Documents
+            .Where(d => claims.Select(c => c.ResourceDocumentId).Contains(d.Id))
+            .Select(d => d.Name)
+            .ToListAsync(cancellationToken);
+
+        return new PendingBookingAudit(
+            wasNew ? Controllers.AuditActions.BookingCreated : Controllers.AuditActions.BookingChanged,
+            $"{startsAt:u}–{endsAt:u} claiming {string.Join(", ", resourceNames.OrderBy(n => n, StringComparer.Ordinal))}");
     }
+
+    /// <summary>What to record once the booking has actually been saved (#1092, ADR 0777).</summary>
+    private sealed record PendingBookingAudit(string Action, string Details);
 
     /// <summary>The resources claimed by this booking other than the holding one.</summary>
     private static HashSet<Guid> AttendeeResourceIds(List<ResourceBooking> claims, Guid holdingResourceId) =>

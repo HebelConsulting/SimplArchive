@@ -27,12 +27,14 @@ public class WebDavAccessController : ControllerBase
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly IConfiguration _configuration;
     private readonly PasswordHasher<User> _passwordHasher = new();
+    private readonly IAuditRecorder _audit;
 
-    public WebDavAccessController(SimplArchiveDbContext dbContext, ICurrentUserAccessor currentUserAccessor, IConfiguration configuration)
+    public WebDavAccessController(SimplArchiveDbContext dbContext, ICurrentUserAccessor currentUserAccessor, IConfiguration configuration, IAuditRecorder audit)
     {
         _dbContext = dbContext;
         _currentUserAccessor = currentUserAccessor;
         _configuration = configuration;
+        _audit = audit;
     }
 
     public class WebDavStatusResource : HypermediaResource
@@ -77,6 +79,12 @@ public class WebDavAccessController : ControllerBase
         user.WebDavPasswordHash = _passwordHasher.HashPassword(user, password);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        // Issuing one hands out a long-lived password that bypasses the interactive login and every MFA
+        // policy attached to it (#1092) — precisely what a SIEM watches for, and until now unrecorded. The
+        // password itself is never logged: the event says that one was issued, to whom, and when.
+        await _audit.RecordAsync(AuditActions.WebDavPasswordIssued, "User", user.Id, user.Email,
+            cancellationToken: cancellationToken);
+
         return Ok(new WebDavPasswordResource { Enabled = true, Username = user.Email, Url = MountUrl(), Password = password });
     }
 
@@ -91,6 +99,11 @@ public class WebDavAccessController : ControllerBase
 
         user.WebDavPasswordHash = null;
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // The revocation matters as much as the issue: it is what an incident response does, and a trail
+        // showing the credential issued but never withdrawn tells the wrong story.
+        await _audit.RecordAsync(AuditActions.WebDavPasswordIssued, "User", user.Id, user.Email,
+            "Revoked", cancellationToken: cancellationToken);
         return NoContent();
     }
 

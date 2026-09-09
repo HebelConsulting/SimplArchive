@@ -182,6 +182,38 @@ public static class AuditActions
     // The KEYS whose values changed, never the values — a settings write can carry a credential (ADR 0772).
     public const string ModuleSettingsUpdated = "Module.SettingsUpdated";
 
+    // Booking (ADRs 0735/0744/0774, issue #1092). Recorded on every entrance, which is the whole point of
+    // adding these: a booking made over CalDAV was already recorded as a DOCUMENT write ("Filed over CalDAV")
+    // while the same booking made in the app was recorded nowhere, so absence of an event meant "it did not
+    // happen, OR it happened through the app" — a conclusion nobody can act on.
+    //
+    // A booking event rather than a document one, because the resource, the slot and who holds it are booking
+    // facts that a Document.Filed event does not carry. A multi-claim booking (ADR 0774) records ONE event
+    // naming every resource: it is one act, and three events would read as three bookings.
+    public const string BookingCreated = "Booking.Created";
+    public const string BookingChanged = "Booking.Changed";
+
+    // There is deliberately NO "Booking.Cancelled" yet. Every cancellation path converges in
+    // SimplArchiveDbContext.SyncBookingDocumentsAsync — inside SaveChanges — and IAuditRecorder.RecordAsync
+    // calls SaveChangesAsync itself, so recording there would be a nested save on a context mid-save.
+    // Recording at each entrance instead is exactly the per-door approach that produced the asymmetry this
+    // issue exists to fix, so it is not the answer either.
+    //
+    // A cancellation is not unrecorded meanwhile: deleting the .ics is a document delete, and
+    // Document.Deleted already fires on all six paths. What is missing is the booking DETAIL — which slot,
+    // which resources — and that is the gap a later slice closes, once there is a place to record it from
+    // that is neither inside SaveChanges nor per-entrance.
+
+    // A module state-machine transition ran (ADR 0737). Signing a flight-log entry and signing a lesson record
+    // are legal acts under the module's own ADRs, and until now they left no trace at all. Recorded inside the
+    // engine-owned transaction, so an event exists exactly when the transition committed.
+    public const string ModuleTransitionRan = "Module.TransitionRan";
+
+    // Protocol credentials (#1092). Issuing one hands out a long-lived password that bypasses the interactive
+    // login and every MFA policy attached to it, which is precisely the kind of act a SIEM is watching for.
+    public const string WebDavPasswordIssued = "Access.WebDavPasswordIssued";
+    public const string ImapPasswordIssued = "Access.ImapPasswordIssued";
+
     public const string LoggedIn = "Auth.LoggedIn";
     // Impersonation token issued (ADR "User impersonation") — actor = the impersonating admin, target = the user.
     public const string ImpersonationStarted = "Auth.ImpersonationStarted";
