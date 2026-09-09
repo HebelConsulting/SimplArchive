@@ -349,6 +349,45 @@ public class ExternalLinkApiTests
         Assert.Equal(JsonValueKind.Null, (await SingleLinkAsync(api, docId, linkId)).GetProperty("maxAccesses").ValueKind);
     }
 
+    // A share names the DOCUMENT, never its location — so filing it somewhere else must not reach the
+    // recipient at all. The link resolves token → DocumentId → current version, and none of those three
+    // mention a parent, so this is safe by construction; it is pinned because "safe by construction" is a
+    // claim about code that can be rewritten, and the recipient has no way to report a link that quietly
+    // stopped working. Moving to a DIFFERENT REPOSITORY is the interesting move: it changes the document's
+    // whole ancestry, which is the only thing a location-addressed implementation could have been leaning on.
+    [Fact]
+    public async Task Moving_the_document_does_not_break_a_live_link()
+    {
+        var (api, _, docId) = await SeedShareableDocumentAsync();
+        var url = RelativePath((await PostJson(api, $"/api/documents/{docId}/external-links", new { }))
+            .GetProperty("url").GetString()!);
+
+        using var anonymous = _factory.CreateClient();
+        var before = await GetJson(anonymous, url);
+
+        var elsewhere = (await PostJson(api, "/api/repositories", new { name = $"Elsewhere {Guid.NewGuid():N}" }))
+            .GetProperty("id").GetGuid();
+        var etag = (await api.GetAsync($"/api/documents/{docId}")).Headers.ETag!.Tag;
+        using var move = new HttpRequestMessage(HttpMethod.Put, $"/api/documents/{docId}/parent")
+        {
+            Content = JsonContent.Create(new { parentId = elsewhere }),
+        };
+        move.Headers.TryAddWithoutValidation("If-Match", etag);
+        (await api.SendAsync(move)).EnsureSuccessStatusCode();
+
+        // The move actually happened — otherwise this test passes by doing nothing, which is the failure mode
+        // a "still works afterwards" assertion cannot see on its own. Asked of the new parent's CHILDREN,
+        // since a document resource advertises its parent as a rel rather than carrying a parentId field.
+        var moved = (await GetJson(api, $"/api/documents/{elsewhere}/children")).GetProperty("children")
+            .EnumerateArray().Select(c => c.GetProperty("id").GetGuid());
+        Assert.Contains(docId, moved);
+
+        // Same token, same document, still served — and still the same file, not merely a 200.
+        var after = await GetJson(anonymous, url);
+        Assert.Equal(before.GetProperty("fileName").GetString(), after.GetProperty("fileName").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(after.GetProperty("downloadUrl").GetString()));
+    }
+
     // A caller without CanCreateExternalLink may read the document but not publish it to strangers.
     [Fact]
     public async Task Creating_requires_the_dedicated_right()
