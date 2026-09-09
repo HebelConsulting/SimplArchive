@@ -103,9 +103,18 @@ logdir="$(mktemp -d)"
 # there is no PID to test. Cleaning up on the normal path instead is the honest fix; an aborted run leaves a
 # directory under the system temp area, which the OS reclaims.
 
+# Held awake for the duration, where the platform can (macOS). A long run on a machine that idles into
+# 'Maintenance Sleep' does not merely take longer: the pauses land inside Playwright's timeouts and produce a
+# handful of scattered failures in tests the change never touched — which reads exactly like a regression and
+# is not one. Observed on 2026-09-09: three sleeps inside one run, E2E 41m against 15m, four unrelated ui-4
+# failures, every one of them passing on a re-run with the machine awake. This is very likely a contributor
+# to the residual flakiness #420 tracks.
+keepawake=""
+command -v caffeinate >/dev/null 2>&1 && keepawake="caffeinate -i"
+
 run_leg() {
     local i="$1" filter="$2"
-    dotnet test "$repo_root/tests/SimplArchive.UiEndToEndTests" --no-build -c Debug --filter "$filter" \
+    $keepawake dotnet test "$repo_root/tests/SimplArchive.UiEndToEndTests" --no-build -c Debug --filter "$filter" \
         > "$logdir/leg-$i.log" 2>&1
     printf '%s' "$?" > "$logdir/leg-$i.rc"
 }
@@ -140,6 +149,12 @@ for i in "${!filters[@]}"; do
         failed=1
         printf '%-46s %-9s %s\n' "${filters[$i]}" "FAIL" "$counts"
         grep -E '\[FAIL\]' "$logdir/leg-$i.log" | sed -E 's/^\[[^]]*\] *//; s/^/      /' | head -20
+
+        # The first error message, not just the failing NAMES. A leg that dies in the fixture fails every
+        # test in it with one cause, and the name list then says "54 things broke" when the truth is "the
+        # API did not start" — a wholesale collapse and a real regression look identical without this line.
+        grep -A1 'Error Message:' "$logdir/leg-$i.log" | grep -v 'Error Message:' | grep -v '^--' \
+            | sed -E 's/^ */      → /' | head -1
     fi
 done
 
@@ -151,8 +166,15 @@ if [ "$failed" -ne 0 ]; then
 Before assuming a regression: this suite still has residual flakiness (#420). Re-run the failing
 test on its own — if it passes in isolation it is noise, and the useful comparison is a baseline
 run with your change stashed, not another run with it.
+
+The full logs are KEPT for this run (they are deleted only when everything passes):
+
+    $logdir/leg-<n>.log
 EOF
-    rm -rf "$logdir"
+    # Deliberately NOT cleaned up on the failing path. It used to be, which deleted the evidence at exactly
+    # the moment the message above asked you to go and diagnose — twice in one session the identity of a
+    # failing leg was lost with its temp directory. A few megabytes under the system temp area, which the OS
+    # reclaims, is the cheaper end of that trade.
     exit 1
 fi
 
