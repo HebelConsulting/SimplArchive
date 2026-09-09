@@ -125,182 +125,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     public Task RefreshWebDavStateAsync() =>
         WebDav.RefreshAsync(Api is { } api ? async () => (await api.Profile.GetWebDavStatusAsync()).Enabled : null);
 
-    // ---- Resizable / collapsible panes (persisted, like the web client — ADR 0224/"Desktop collapsible
-    // panes") ------------------------------------------------------------------------------------------
-
-    // Two-way bound to the Grid definitions, so a GridSplitter drag updates these. Collapsing sets the size
-    // to 0 (content hidden) and remembers the pre-collapse size to restore.
-    [ObservableProperty] private GridLength _treeWidth;
-    [ObservableProperty] private GridLength _listWidth;
-    [ObservableProperty] private GridLength _indexHeight;
-    [ObservableProperty] private GridLength _chatWidth;
-
-    [ObservableProperty] private bool _treeCollapsed;
-    [ObservableProperty] private bool _listCollapsed;
-    [ObservableProperty] private bool _indexCollapsed;
-    [ObservableProperty] private bool _chatCollapsed;
-
-    private GridLength _treeSaved, _listSaved, _chatSaved;
-
-    // Default pane proportions (star units) — the reset target and the load-time fallback.
-    private const double DefaultTree = 1.4, DefaultList = 2, DefaultChat = 2;
-
-    // Caret glyph for each gutter's collapse toggle (points the way it collapses; flips when collapsed).
-    public string TreeCaret => TreeCollapsed ? "mdi-chevron-right" : "mdi-chevron-left";
-    public string ListCaret => ListCollapsed ? "mdi-chevron-right" : "mdi-chevron-left";
-    public string IndexCaret => IndexCollapsed ? "mdi-chevron-down" : "mdi-chevron-up";
-    public string ChatCaret => ChatCollapsed ? "mdi-chevron-left" : "mdi-chevron-right";
-
-    partial void OnTreeCollapsedChanged(bool value) => OnPropertyChanged(nameof(TreeCaret));
-    partial void OnListCollapsedChanged(bool value) => OnPropertyChanged(nameof(ListCaret));
-    partial void OnIndexCollapsedChanged(bool value) => OnPropertyChanged(nameof(IndexCaret));
-    partial void OnChatCollapsedChanged(bool value) => OnPropertyChanged(nameof(ChatCaret));
-
-    [RelayCommand]
-    private void ToggleTree()
-    {
-        if (TreeCollapsed) { TreeWidth = _treeSaved; TreeCollapsed = false; }
-        else { _treeSaved = TreeWidth; TreeWidth = new GridLength(0); TreeCollapsed = true; }
-        SaveLayout();
-    }
-
-    [RelayCommand]
-    private void ToggleList()
-    {
-        if (ListCollapsed) { ListWidth = _listSaved; ListCollapsed = false; }
-        else { _listSaved = ListWidth; ListWidth = new GridLength(0); ListCollapsed = true; }
-        SaveLayout();
-    }
-
-    [RelayCommand]
-    private void ToggleIndex()
-    {
-        // Expands to Auto, never to a remembered height — unlike every other pane here. A drag of this pane is a
-        // PEEK (ADR 0550), so there is nothing to remember: restoring a saved height would let one drag survive a
-        // collapse/expand cycle, and (via SaveLayout) the whole session after it. That is the same leak the web
-        // client had through localStorage (issue #413), just by a different route.
-        if (IndexCollapsed) { IndexHeight = GridLength.Auto; IndexCollapsed = false; }
-        else { IndexHeight = new GridLength(0); IndexCollapsed = true; }
-        SaveLayout();
-    }
-
-    [RelayCommand]
-    private void ToggleChat()
-    {
-        if (ChatCollapsed) { ChatWidth = _chatSaved; ChatCollapsed = false; }
-        else { _chatSaved = ChatWidth; ChatWidth = new GridLength(0); ChatCollapsed = true; }
-        SaveLayout();
-    }
-
-    // Restores the default pane proportions and expands every pane — an escape hatch when the persisted
-    // layout has drifted into an inconsistent state (GridSplitter drags can mix star and absolute sizes).
-    [RelayCommand]
-    private void ResetLayout()
-    {
-        _treeSaved = new GridLength(DefaultTree, GridUnitType.Star);
-        _listSaved = new GridLength(DefaultList, GridUnitType.Star);
-        _chatSaved = new GridLength(DefaultChat, GridUnitType.Star);
-
-        TreeCollapsed = ListCollapsed = IndexCollapsed = ChatCollapsed = false;
-
-        TreeWidth = _treeSaved;
-        ListWidth = _listSaved;
-        IndexHeight = GridLength.Auto; // fits its content — there is no default proportion to restore
-        ChatWidth = _chatSaved;
-
-        Intray.ResetLayout();
-        ResetPreviewLayout();
-
-        StoredColNameWidth = DefaultColName;
-        ColTypeWidth = DefaultColType;
-        ColDateWidth = DefaultColDate;
-        ColSizeWidth = DefaultColSize;
-        ColTagsWidth = DefaultColTags;
-        ColOwnerWidth = DefaultColOwner;
-
-        SaveLayout();
-        Status = Strings.Get("StLayoutReset");
-    }
-
-    private void LoadLayout()
-    {
-        var settings = LayoutSettingsStore.Load();
-        _treeSaved = GridLengths.ParseOrStar(settings.TreeWidth, DefaultTree);
-        _listSaved = GridLengths.ParseOrStar(settings.ListWidth, DefaultList);
-        _chatSaved = GridLengths.ParseOrStar(settings.ChatWidth, DefaultChat);
-
-        TreeCollapsed = settings.TreeCollapsed;
-        ListCollapsed = settings.ListCollapsed;
-        IndexCollapsed = settings.IndexCollapsed;
-        ChatCollapsed = settings.ChatCollapsed;
-
-        TreeWidth = TreeCollapsed ? new GridLength(0) : _treeSaved;
-        ListWidth = ListCollapsed ? new GridLength(0) : _listSaved;
-        // Auto, not a persisted value: this pane fits its content (ADR 0550), and a stored height would be the
-        // height of whatever happened to be selected when it was last dragged. Nothing reads a saved height for
-        // this pane any more — the collapse toggle expands to Auto too.
-        IndexHeight = IndexCollapsed ? new GridLength(0) : GridLength.Auto;
-        ChatWidth = ChatCollapsed ? new GridLength(0) : _chatSaved;
-
-        Intray.LoadLayout(settings);
-        LoadPreviewLayout(settings);
-
-        StoredColNameWidth = ParseDouble(settings.ColName, DefaultColName);
-        ColTypeWidth = ParseDouble(settings.ColType, DefaultColType);
-        ColDateWidth = ParseDouble(settings.ColDate, DefaultColDate);
-        ColSizeWidth = ParseDouble(settings.ColSize, DefaultColSize);
-        ColTagsWidth = ParseDouble(settings.ColTags, DefaultColTags);
-        ColOwnerWidth = ParseDouble(settings.ColOwner, DefaultColOwner);
-    }
-
-    // Persists the current sizes + collapsed state. Called on each toggle and when the window closes (to
-    // capture GridSplitter drag-resizes).
-    public void SaveLayout()
-    {
-        var settings = new LayoutSettings
-        {
-            TreeWidth = (TreeCollapsed ? _treeSaved : TreeWidth).ToString(),
-            ListWidth = (ListCollapsed ? _listSaved : ListWidth).ToString(),
-            // Always "Auto": a peek must not reach the settings file (issue #413). The field stays in the
-            // settings shape so an older file still loads; its value is simply never meaningful now.
-            IndexHeight = GridLength.Auto.ToString(),
-            ChatWidth = (ChatCollapsed ? _chatSaved : ChatWidth).ToString(),
-            TreeCollapsed = TreeCollapsed,
-            ListCollapsed = ListCollapsed,
-            IndexCollapsed = IndexCollapsed,
-            ChatCollapsed = ChatCollapsed,
-            // The STORED width, not the drawn one: persisting the computed value would bake one pane width
-            // into the layout file and make the next session open with a Name column sized for the last
-            // session's window (#786).
-            ColName = StoredColNameWidth.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ColType = ColTypeWidth.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ColDate = ColDateWidth.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ColSize = ColSizeWidth.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ColTags = ColTagsWidth.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ColOwner = ColOwnerWidth.ToString(System.Globalization.CultureInfo.InvariantCulture),
-        };
-
-        Intray.WriteLayout(settings);   // the tab's four panes are its own to describe
-        WritePreviewLayout(settings);
-        LayoutSettingsStore.Save(settings);
-    }
-
-    private static double ParseDouble(string value, double fallback) =>
-        double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) && v > 0 ? v : fallback;
-
-    // ---- Intray tab: four collapsible/resizable panes (ADR "Collapsible inbox panes") ------------------
-    // Same mechanism as the Repositories panes above — each pane's body row height is two-way bound, collapse
-    // sets it to 0, and a header caret toggles it. Persisted in the same LayoutSettings.
-
-
-
-
-
-
-
-
-
-
     // ---- Panes ----------------------------------------------------------------------------------------
 
     public ObservableCollection<TreeNodeViewModel> Tree { get; } = [];
@@ -1017,17 +841,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         }
     }
 
-
-
     // ---- Intray (ADR "S3-backed inbox", phase 2) -------------------------------------------------------
 
     // Still used by the Check-out tab (local working-copy folder) + native-open temp dir; the local INTRAY half
     // was removed in favour of the WebDAV mount (ADR "Desktop inbox via WebDAV").
     private LocalFolders? _localFolders;
-
-
-
-
 
     // After login: resolve the tenant/user display names and create the local ~/SimplArchive/{Tenant}/{User}/
     // {intray,temp} folders; point native-open at the temp folder.
@@ -1152,12 +970,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     // ---- Intray view filters (ADR 0532): own-items-only by default; a toggle reveals group intrays, and a
     // CanManageIntrays holder can open a specific user's intray via the picker (mutually exclusive with groups). ----
 
-
-
-
-
-
-
     // Upload OS files dropped onto the intray file-list straight into the S3-backed intray (ADR "Inbox file-list
     // drop-zone"). The view reads each dropped file into (name, bytes); this uploads them, then refreshes.
     // Drops onto the Personal ▸ Intray / Check-out tree launchers (#467). The work is in DropFiling — this class
@@ -1189,22 +1001,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     // ---- Intray item detail (right panes): a mask/index-data editor + the shared preview -------------------
     // The panes are driven by the focused server item; the mask edits are staged to a `{name}.mask.json`
     // sidecar (ADR "Inbox item classification + preview"). The mask pane is only editable for a server item.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     // 2+ server items are selected → the "File multiple items" button is offered (ADR "Bulk-file multiple
     // inbox items"). Set from the list's selection in code-behind.
@@ -1284,15 +1080,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
 
     // ---- Search (metadata, ADR "Metadata search (first slice)") ---------------------------------------
 
-
-
     // ---- Refinement panel (ADR "Search-refinement UI", phase 2) ---------------------------------------
-
-
-
-
-
-
 
     // Tab order: 0 Repositories · 1 Intray · 2 Check-out · 3 Search · 4 Recycle bin · 5 Tasks · 6 Users/Groups
     // · 7 Audit · 8 Legal holds · 9 Retention · 10 Tenant · 11 My work · 12 Tag catalog · 13 Contacts
@@ -1361,32 +1149,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
 
     // Entering the Recycle bin tab loads its tenant-wide list (ADR "Desktop recycle bin parity").
     private async Task LoadRecycleBinAsync() => await RecycleBin.LoadAsync();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     // ---- Tag chips (ADR "Document tags") -------------------------------------------------------------
     [RelayCommand]
@@ -1471,7 +1233,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         // The detail pane fits its CONTENT (ADR 0550): its right height is decided by what is selected — a few
         // rows for a folder, many for a long mask — so a height dragged for one document is wrong for the next.
         // A drag overrides it only until the selection changes, which is now; it is never persisted.
-        if (!IndexCollapsed)
+        //
+        // Not while the bottom half is collapsed, though: there the pane is meant to FILL what it is given, and
+        // resetting to Auto would quietly undo the collapse on the very next click.
+        if (!IndexCollapsed && !BottomCollapsed)
         {
             IndexHeight = GridLength.Auto;
         }
@@ -1739,11 +1504,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         try { await _api.Documents.MergeTagAsync(row.Source, target.Id); await LoadTagCatalogAsync(); }
         catch (Exception e) { Status = e is ApiActionException a ? a.Message : "Could not merge the tags."; }
     }
-
-
-
-
-
 
     private void ClearDetail()
     {

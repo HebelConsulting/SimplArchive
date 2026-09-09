@@ -22,15 +22,30 @@
         <Grid.RowDefinitions>
             <!-- Auto by default so the pane fits its content and the preview keeps the rest
                  (ADR 0550); a GridSplitter drag writes a pixel height into the same property,
-                 which the next selection resets back to Auto. MaxHeight caps a long mask so
-                 it cannot push the preview off the bottom. -->
-            <RowDefinition Height="{Binding IndexHeight, Mode=TwoWay}" MaxHeight="280" />
+                 which the next selection resets back to Auto. The cap that stops a long mask
+                 pushing the preview off the bottom lives on the ScrollViewer below, NOT here —
+                 see the comment there. -->
+            <RowDefinition Height="{Binding IndexHeight, Mode=TwoWay}" />
             <RowDefinition Height="10" />
-            <RowDefinition Height="3*" />
+            <RowDefinition Height="{Binding BottomHeight, Mode=TwoWay}" />
         </Grid.RowDefinitions>
 
-        <!-- Index-data -->
-        <ScrollViewer Grid.Row="0" AutomationProperties.AutomationId="tour:pane-index" IsVisible="{Binding !IndexCollapsed}">
+        <!-- Index-data.
+
+             MaxHeight is on the SCROLLVIEWER, and moving it here from the RowDefinition is what makes this
+             pane scroll at all. An Auto row measures its child with an INFINITE height, so a ScrollViewer in
+             one concludes it has all the room it needs — viewport = extent, nothing to scroll — and a
+             MaxHeight on the row then bites only at arrange, which merely CLIPS the overflow. The symptom was
+             exact: cut off, no scrollbar, and scrolling that started working only after dragging the splitter,
+             because a drag writes a pixel height and a pixel height constrains the measure. Capping the
+             ScrollViewer instead makes it report min(content, cap) as its desired height, so the Auto row still
+             fits short content AND the viewport is real. This is the house pattern already (ConnectionLostDialog,
+             RecycleBinTab, TitleBar all cap the ScrollViewer); this pane was the only one capping the row.
+
+             The cap is bound rather than fixed because it has no job when nothing is below it: collapsing the
+             bottom half lifts it so the index data fills the pane. -->
+        <ScrollViewer Grid.Row="0" AutomationProperties.AutomationId="tour:pane-index" IsVisible="{Binding !IndexCollapsed}"
+                      MaxHeight="{Binding IndexMaxHeight}">
             <StackPanel Margin="12,10" Spacing="4">
                 <!-- The row that owns this object's actions. While EDITING it swaps to Save + Cancel
                      in the SAME slots (ADR 0550): the pencil taught the user where this pane's
@@ -342,14 +357,22 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!-- gutter: resize + collapse the index-data pane -->
-        <GridSplitter Grid.Row="1" Background="{DynamicResource WbBorder}" ResizeDirection="Rows" HorizontalAlignment="Stretch" IsEnabled="{Binding !IndexCollapsed}" />
-        <Button Grid.Row="1" Command="{Binding ToggleIndexCommand}" Width="24" Height="10" Padding="0" MinHeight="0" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip.Tip="{loc:Tr MwCollapseExpand}">
-            <i:Icon Value="{Binding IndexCaret}" FontSize="11" />
-        </Button>
+        <!-- gutter: resize, plus BOTH collapses — the index-data pane's (upper caret) and the bottom half's
+             (lower caret), exactly like the preview|chat gutter below carries one per side. The lower one
+             collapses preview AND chat away so the index data has the whole pane, which is what a long mask
+             wants; the two can never both be collapsed, because each toggle expands the other. -->
+        <GridSplitter Grid.Row="1" Background="{DynamicResource WbBorder}" ResizeDirection="Rows" HorizontalAlignment="Stretch" IsEnabled="{Binding CanDragIndexGutter}" />
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Button Command="{Binding ToggleIndexCommand}" Width="24" Height="10" Padding="0" MinHeight="0" ToolTip.Tip="{loc:Tr MwCollapseExpand}">
+                <i:Icon Value="{Binding IndexCaret}" FontSize="11" />
+            </Button>
+            <Button Command="{Binding ToggleBottomCommand}" Width="24" Height="10" Padding="0" MinHeight="0" ToolTip.Tip="{loc:Tr MwCollapseExpand}">
+                <i:Icon Value="{Binding BottomCaret}" FontSize="11" />
+            </Button>
+        </StackPanel>
 
         <!-- preview | chat -->
-        <Grid Grid.Row="2">
+        <Grid Grid.Row="2" IsVisible="{Binding !BottomCollapsed}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="{Binding PreviewWidth, Mode=TwoWay}" />
                 <ColumnDefinition Width="10" />

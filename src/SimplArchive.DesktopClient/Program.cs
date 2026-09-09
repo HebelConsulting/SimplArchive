@@ -499,6 +499,14 @@ internal static class Program
             return;
         }
 
+        // The detail pane's index-data area really scrolls when its content is taller than its room, and the
+        // collapse of the bottom half lets it fill the pane: `--indexscroll-test`, in IndexScrollCheck. A
+        // screenshot cannot show scrollability, which is why the defect survived every capture we take.
+        if (args.Contains("--indexscroll-test"))
+        {
+            Environment.Exit(IndexScrollCheck.Run() ? 0 : 1);
+        }
+
         // The sort dialog's page pictures against the running Api (#522): `--sort-thumbs-test <token> <name>`,
         // in SortThumbnailsCheck — headless Avalonia, because the pipeline decodes into real bitmaps.
         var sortThumbsIndex = Array.IndexOf(args, "--sort-thumbs-test");

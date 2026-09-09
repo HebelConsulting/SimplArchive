@@ -246,7 +246,7 @@ public class OverLimitFileCeilingTests
         // badge under a "Workflow + tasks" heading, and ReloadTasksAsync/LoadTasksAsync/OpenTask a hundred
         // lines away at the tail of the notifications section. They now join the sort/filter state that was
         // already in MainWindowViewModel.Tasks.cs -- which is what actually reads Tasks (#941).
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 1811,
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 1554,
 
         // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
         // the one authenticated ApiCore. Four areas left it:

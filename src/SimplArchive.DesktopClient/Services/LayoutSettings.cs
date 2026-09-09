@@ -22,6 +22,10 @@ public sealed class LayoutSettings
     public bool IndexCollapsed { get; set; }
     public bool ChatCollapsed { get; set; }
 
+    // The detail pane's bottom half (preview + chat) collapsed DOWNWARD, so the index data has the whole pane.
+    // Only the flag is stored; the height restores to its default proportion, like IndexHeight's.
+    public bool BottomCollapsed { get; set; }
+
     // The Intray tab's four collapsible panes (ADR "Collapsible inbox panes").
     public string IntrayServerHeight { get; set; } = "1*";
     public string IntrayLocalHeight { get; set; } = "1*";
