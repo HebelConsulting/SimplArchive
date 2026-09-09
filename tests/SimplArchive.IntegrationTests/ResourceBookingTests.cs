@@ -187,8 +187,18 @@ public class ResourceBookingTests
         Assert.Contains("must have extent", ex.Message);
     }
 
+    // WAS "one booking row per booking document" — the rule that two rows would be "two claims wearing one
+    // justification". ADR 0774 overturned it: a booking may claim several resources at once, because a
+    // training flight occupies the aircraft, the student and the instructor for one window and there is no
+    // second document to write. Kept here, rewritten rather than deleted, because what it guarded did not
+    // disappear — it narrowed.
+    //
+    // What still holds, and is what this now pins: the claims of one document must name the SAME window.
+    // The old input (same document, a DIFFERENT slot) is refused exactly as before — by an invariant that
+    // names both windows instead of by a unique-index violation surfacing as a bare DbUpdateException.
+    // The multi-resource case is covered in MultiResourceBookingTests.
     [Fact]
-    public async Task One_booking_row_per_booking_document()
+    public async Task Claims_of_one_booking_document_must_name_the_same_window()
     {
         using var connection = new SqliteConnection("Filename=:memory:");
         await connection.OpenAsync();
@@ -201,12 +211,11 @@ public class ResourceBookingTests
             await first.SaveChangesAsync();
         }
 
-        // Same BookingDocumentId, non-overlapping slot: the unique (TenantId, BookingDocumentId) index
-        // refuses it — two claims wearing one justification.
         using var second = CreateContext(connection, f.TenantId);
         second.ResourceBookings.Add(Booking(f, f.RoomId, 14, 15));
 
-        await Assert.ThrowsAsync<DbUpdateException>(() => second.SaveChangesAsync());
+        var error = await Assert.ThrowsAsync<BookingInvariantException>(() => second.SaveChangesAsync());
+        Assert.Equal(BookingInvariantKind.ClaimsDisagreeOnSlot, error.Kind);
     }
 
     [Fact]

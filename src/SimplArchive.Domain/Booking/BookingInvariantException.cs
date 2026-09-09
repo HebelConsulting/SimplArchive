@@ -42,6 +42,20 @@ public sealed class BookingInvariantException : InvalidOperationException
     /// <summary>The slot has no extent: start must precede end.</summary>
     public static BookingInvariantException SlotWithoutExtent(DateTimeOffset start, DateTimeOffset end) =>
         new(BookingInvariantKind.SlotWithoutExtent, $"A booking's slot must have extent: start {start:u} does not precede end {end:u}.");
+
+    /// <summary>Two claims of the same booking document disagree about when the booking is.</summary>
+    /// <remarks>
+    /// A booking may now claim SEVERAL resources at once (ADR 0774) — a training flight occupies the
+    /// aircraft, the student and the instructor for one window — so the rule that a document carries one
+    /// claim is gone. What replaces it is this: every claim of one document names the SAME window, because
+    /// they are one event. Without it, three rows could drift apart and the document would describe a
+    /// booking none of its claims agreed with.
+    /// </remarks>
+    public static BookingInvariantException ClaimsDisagreeOnSlot(
+        Guid bookingDocumentId, DateTimeOffset start, DateTimeOffset end, DateTimeOffset otherStart, DateTimeOffset otherEnd) =>
+        new(BookingInvariantKind.ClaimsDisagreeOnSlot,
+            $"The claims of booking document {bookingDocumentId} disagree about its slot: {start:u}–{end:u} "
+            + $"against {otherStart:u}–{otherEnd:u}. Every claim of one booking names the same window (ADR 0774).");
 }
 
 /// <summary>The booking invariants a save can refuse on (one per factory above).</summary>
@@ -50,4 +64,5 @@ public enum BookingInvariantKind
     SlotTaken,
     NotBookable,
     SlotWithoutExtent,
+    ClaimsDisagreeOnSlot,
 }

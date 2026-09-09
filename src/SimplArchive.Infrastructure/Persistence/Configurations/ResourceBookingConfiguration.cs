@@ -19,9 +19,13 @@ public class ResourceBookingConfiguration : IEntityTypeConfiguration<ResourceBoo
         // exclusion constraint has no SQLite equivalent, ADR 0735), so it lives in SaveChanges.
         builder.HasIndex(b => new { b.TenantId, b.ResourceDocumentId, b.StartsAtUtc });
 
-        // One booking row per booking document — the document IS the booking's payload; two rows would be
-        // two claims wearing one justification.
-        builder.HasIndex(b => new { b.TenantId, b.BookingDocumentId }).IsUnique();
+        // One claim per (document, RESOURCE) — widened from the original "one row per booking document"
+        // (ADR 0774). That rule read "two rows would be two claims wearing one justification", and it held
+        // for as long as a booking meant one resource. A training flight is one justification for three
+        // claims: the same window occupies the aircraft, the student and the instructor, and there is no
+        // second document to write. What stays forbidden is the same resource claimed twice by one booking,
+        // which is a duplicate rather than a second participant.
+        builder.HasIndex(b => new { b.TenantId, b.BookingDocumentId, b.ResourceDocumentId }).IsUnique();
 
         // A slot must have extent: zero-length or inverted ranges would vacuously never overlap anything.
         builder.ToTable(t => t.HasCheckConstraint(

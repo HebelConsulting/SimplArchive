@@ -46,39 +46,104 @@ public partial class SimplArchiveDbContext
                 continue;
             }
 
-            var row = await ResourceBookings.IgnoreQueryFilters()
-                .FirstOrDefaultAsync(b => b.BookingDocumentId == document.Id, cancellationToken);
-            if (row is null)
+            // EVERY claim of this document, not the first (ADR 0774): a booking may hold several — a
+            // training flight claims the aircraft, the student and the instructor — and cancelling one
+            // while leaving the others Active would free the aircraft and keep two people committed to a
+            // flight that no longer exists.
+            var rows = await ResourceBookings.IgnoreQueryFilters()
+                .Where(b => b.BookingDocumentId == document.Id)
+                .ToListAsync(cancellationToken);
+            if (rows.Count == 0)
             {
                 continue; // no claim yet — the classifier creates the row when the bytes land
             }
 
             if (entry.State == EntityState.Deleted || document.DeletedAt is not null)
             {
-                if (row.Status == BookingStatus.Active)
+                foreach (var row in rows.Where(r => r.Status == BookingStatus.Active))
                 {
                     row.Status = BookingStatus.Cancelled;
                 }
             }
-            else if (entry.Property(d => d.DeletedAt).IsModified && document.DeletedAt is null
-                && row.Status == BookingStatus.Cancelled)
+            else if (entry.Property(d => d.DeletedAt).IsModified && document.DeletedAt is null)
             {
-                row.Status = BookingStatus.Active;
+                // Restore is a REBOOK for every claim, and each goes back through the overlap invariant —
+                // so a restore is refused if ANY of the three slots was taken in the meantime, which is
+                // right: the flight cannot come back for two of its participants.
+                foreach (var row in rows.Where(r => r.Status == BookingStatus.Cancelled))
+                {
+                    row.Status = BookingStatus.Active;
+                }
             }
 
             if (entry.State == EntityState.Modified
                 && entry.Property(d => d.ParentId).IsModified
                 && document.ParentId is { } newScheduleId)
             {
-                var newRoomId = await Documents.IgnoreQueryFilters()
-                    .Where(d => d.Id == newScheduleId)
-                    .Select(d => d.ParentId)
-                    .FirstOrDefaultAsync(cancellationToken);
-                if (newRoomId is { } roomId && row.ResourceDocumentId != roomId)
-                {
-                    row.ResourceDocumentId = roomId;
-                }
+                await RepointContainingClaimAsync(entry, rows, newScheduleId, cancellationToken);
             }
+        }
+    }
+
+    /// <summary>
+    /// Moving the booking document between two Schedules re-points the claim on the resource that HOLDS the
+    /// document — and only that one (ADR 0774).
+    /// </summary>
+    /// <remarks>
+    /// With one claim per booking this was unambiguous. With several it is not: moving a training flight
+    /// from one aircraft's Schedule to another changes which AIRCRAFT is flown and says nothing about who
+    /// is flying it, so re-pointing every claim would silently reassign the student and the instructor to
+    /// the new aircraft as if they were rooms.
+    ///
+    /// The claim to move is found from the parent's ORIGINAL value rather than by guessing which row looks
+    /// like a resource: the document was in the old Schedule, so exactly the claim whose resource owns that
+    /// Schedule is the containing one. A document with no such claim (a person's leg somehow moved on its
+    /// own) is left alone rather than repaired by assumption.
+    /// </remarks>
+    private async Task RepointContainingClaimAsync(
+        Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<Document> entry,
+        List<ResourceBooking> rows,
+        Guid newScheduleId,
+        CancellationToken cancellationToken)
+    {
+        var newResourceId = await Documents.IgnoreQueryFilters()
+            .Where(d => d.Id == newScheduleId)
+            .Select(d => d.ParentId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (newResourceId is not { } resourceId)
+        {
+            return;
+        }
+
+        if (rows.Count == 1)
+        {
+            // The single-claim case, unchanged: the one claim is the containing one by definition.
+            if (rows[0].ResourceDocumentId != resourceId)
+            {
+                rows[0].ResourceDocumentId = resourceId;
+            }
+
+            return;
+        }
+
+        if (entry.Property(d => d.ParentId).OriginalValue is not { } oldScheduleId)
+        {
+            return;
+        }
+
+        var oldResourceId = await Documents.IgnoreQueryFilters()
+            .Where(d => d.Id == oldScheduleId)
+            .Select(d => d.ParentId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (oldResourceId is not { } previous)
+        {
+            return;
+        }
+
+        var containing = rows.FirstOrDefault(r => r.ResourceDocumentId == previous);
+        if (containing is not null && containing.ResourceDocumentId != resourceId)
+        {
+            containing.ResourceDocumentId = resourceId;
         }
     }
 
@@ -161,6 +226,34 @@ public partial class SimplArchiveDbContext
             {
                 throw BookingInvariantException.SlotTaken(
                     booking.StartsAtUtc, booking.EndsAtUtc, clash.StartsAtUtc, clash.EndsAtUtc);
+            }
+
+            // Every claim of one document names the same window (ADR 0774) — what replaces the uniqueness
+            // that used to make this true by construction. Judged against tracked state as well as stored
+            // rows, so three claims added together are checked against each other and not only against what
+            // is already in the database.
+            if (booking.BookingDocumentId == Guid.Empty)
+            {
+                continue; // no document to be a claim OF — every such row would look like every other's sibling
+            }
+
+            var sibling = (await ResourceBookings.IgnoreQueryFilters()
+                    .Where(b => b.TenantId == booking.TenantId
+                        && b.BookingDocumentId == booking.BookingDocumentId
+                        && b.Status == BookingStatus.Active   // a Cancelled claim is history, not a disagreement
+                        && b.Id != booking.Id
+                        && !trackedIds.Contains(b.Id))
+                    .ToListAsync(cancellationToken))
+                .Concat(pendingActive.Where(b =>
+                    b.Id != booking.Id
+                    && b.TenantId == booking.TenantId
+                    && b.BookingDocumentId == booking.BookingDocumentId))
+                .FirstOrDefault(b => b.StartsAtUtc != booking.StartsAtUtc || b.EndsAtUtc != booking.EndsAtUtc);
+            if (sibling is not null)
+            {
+                throw BookingInvariantException.ClaimsDisagreeOnSlot(
+                    booking.BookingDocumentId, booking.StartsAtUtc, booking.EndsAtUtc,
+                    sibling.StartsAtUtc, sibling.EndsAtUtc);
             }
         }
     }
