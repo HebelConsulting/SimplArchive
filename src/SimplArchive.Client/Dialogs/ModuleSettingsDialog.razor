@@ -1,0 +1,137 @@
+@using System.Net.Http.Json
+@using SimplArchive.Localization
+@inject HttpClient Http
+
+@* A module's per-tenant configuration (ADR 0772), mirroring the desktop's (ADR 0511). The form is rendered
+   from what the MODULE declared — the core knows nothing about autorouter or weather subscriptions — and the
+   whole thing is reached by following the module row's `settings` rel (ADR 0543).
+
+   A SECRET is write-only: the server reports whether one is set, never its value, so the field shows a
+   "configured" note and an empty box that means "leave it alone". That is the audit-webhook secret's
+   precedent, and it is why the save is a MERGE — a full replacement would blank every secret the form could
+   not resend. *@
+
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 420px;">
+            <MudText Typo="Typo.subtitle2" Class="mb-3">@ModuleName</MudText>
+
+            @if (!_loaded)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("ModSettingsLoading")</MudText>
+            }
+            else if (_items.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("ModSettingsNone")</MudText>
+            }
+            else
+            {
+                @foreach (var item in _items)
+                {
+                    <MudTextField T="string" Label="@item.Label" @bind-Value="_entries[item.Key]"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2 wb-mod-setting"
+                                  InputType="@(item.IsSecret ? InputType.Password : InputType.Text)"
+                                  Placeholder="@(item.IsSecret && item.HasValue ? Strings.Get("ModSettingsSecretSet") : null)"
+                                  HelperText="@item.Description" />
+                }
+            }
+
+            @if (_error is not null)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Error" Class="mt-2">@_error</MudText>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => Dialog.Cancel()">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Disabled="@(!_loaded || _busy)" OnClick="SaveAsync">@Strings.Get("Save")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
+
+    /// <summary>The module row's advertised `settings` rel — GET reads, PUT writes, one address (ADR 0719).</summary>
+    [Parameter] public string SettingsHref { get; set; } = string.Empty;
+
+    [Parameter] public string ModuleName { get; set; } = string.Empty;
+
+    private readonly List<SettingDto> _items = [];
+
+    /// <summary>What the user typed, per key. Empty means "unchanged" for a secret, "clear" for the rest.</summary>
+    private readonly Dictionary<string, string> _entries = [];
+
+    private bool _loaded;
+    private bool _busy;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var resource = await Http.GetFromJsonAsync<SettingsDto>(SettingsHref);
+            _items.AddRange(resource?.Items ?? []);
+            foreach (var item in _items)
+            {
+                // A secret starts EMPTY even when set — its value never crossed the wire, so there is nothing
+                // to prefill and an empty box must not be read as "clear it".
+                _entries[item.Key] = item.IsSecret ? string.Empty : item.Value ?? string.Empty;
+            }
+        }
+        catch (Exception)
+        {
+            _error = ApiErrorText.For(null);
+        }
+
+        _loaded = true;
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            // The what-to-send rule is shared with the desktop (ADR 0772): an untouched secret is omitted,
+            // an emptied plain field is cleared. Two copies of that answer is how the two forms disagree.
+            var values = SimplArchive.Presentation.ModuleSettingsForm.ValuesToSend(
+                _items.Select(i => new SimplArchive.Presentation.ModuleSettingsForm.Field(
+                    i.Key, i.IsSecret, _entries.GetValueOrDefault(i.Key) ?? string.Empty)));
+
+            var response = await Http.PutAsJsonAsync(SettingsHref, new { values });
+            if (!response.IsSuccessStatusCode)
+            {
+                _error = ApiErrorText.For((await response.Content.ReadFromJsonAsync<ProblemResponse>())?.ErrorCode);
+                return;
+            }
+
+            Dialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception)
+        {
+            _error = ApiErrorText.For(null);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed record ProblemResponse { public string? ErrorCode { get; set; } }
+
+    private record SettingDto
+    {
+        public string Key { get; set; } = string.Empty;
+        public string Label { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public bool IsSecret { get; set; }
+        public bool HasValue { get; set; }
+        public string? Value { get; set; }
+    }
+
+    private record SettingsDto
+    {
+        public string ModuleId { get; set; } = string.Empty;
+        public List<SettingDto> Items { get; set; } = [];
+    }
+}

@@ -4899,4 +4899,22 @@
   <data name="UgCancelEmail" xml:space="preserve">
     <value>Annulla la modifica dell'indirizzo e-mail</value>
   </data>
+  <data name="ModConfigure" xml:space="preserve">
+    <value>Configura…</value>
+  </data>
+  <data name="ModSettingsNone" xml:space="preserve">
+    <value>Questo modulo non richiede configurazione.</value>
+  </data>
+  <data name="ModSettingsLoading" xml:space="preserve">
+    <value>Caricamento…</value>
+  </data>
+  <data name="ModSettingsSecretSet" xml:space="preserve">
+    <value>impostato — lasciare vuoto per mantenerlo</value>
+  </data>
+  <data name="StModuleSettingsSaved" xml:space="preserve">
+    <value>Configurazione del modulo salvata.</value>
+  </data>
+  <data name="StModuleSettingNotDeclared" xml:space="preserve">
+    <value>Questo modulo non dichiara tale impostazione.</value>
+  </data>
 </root>

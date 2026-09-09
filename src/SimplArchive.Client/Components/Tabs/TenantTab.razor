@@ -257,11 +257,21 @@
             @foreach (var m in _modules.Items)
             {
                 var licenseHref = Links.Href(m.Links, "license");
+                var settingsHref = Links.Href(m.Links, "settings");
                 <div class="wb-setting-row mb-2" style="align-items:center; gap:8px;">
                     <div class="flex-grow-1">
                         <MudText Typo="Typo.body2">@m.DisplayName</MudText>
                         <MudText Typo="Typo.caption" Color="@ModuleStatusColor(m)">@ModuleStatusText(m)</MudText>
                     </div>
+                    @* Only where the module DECLARED settings — the server withholds the rel otherwise, so
+                       no module is ever offered an empty form (ADR 0543/0772). *@
+                    @if (settingsHref is not null)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Text"
+                                   OnClick="() => ConfigureModuleAsync(m, settingsHref)">
+                            @Strings.Get("ModConfigure")
+                        </MudButton>
+                    }
                     @if (licenseHref is not null)
                     {
                         <MudButton Size="Size.Small" Variant="Variant.Text"
@@ -508,6 +518,23 @@
         if (result?.Canceled == false)
         {
             Snackbar.Add(Strings.Get("StModuleActivated"), Severity.Success);
+            await LoadModulesAsync();
+        }
+    }
+
+    /// <summary>The module's per-tenant configuration (ADR 0772), at the address its row advertised.</summary>
+    private async Task ConfigureModuleAsync(ModuleDto m, string settingsHref)
+    {
+        var parameters = new DialogParameters
+        {
+            [nameof(SimplArchive.Client.Dialogs.ModuleSettingsDialog.SettingsHref)] = settingsHref,
+            [nameof(SimplArchive.Client.Dialogs.ModuleSettingsDialog.ModuleName)] = m.DisplayName,
+        };
+        var result = await (await DialogService.ShowAsync<SimplArchive.Client.Dialogs.ModuleSettingsDialog>(
+            Strings.Get("ModConfigure"), parameters)).Result;
+        if (result is { Canceled: false })
+        {
+            Snackbar.Add(Strings.Get("StModuleSettingsSaved"), Severity.Success);
             await LoadModulesAsync();
         }
     }

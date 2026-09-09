@@ -232,8 +232,12 @@
                                         <SelectableTextBlock Text="{Binding DisplayName}" />
                                         <SelectableTextBlock Text="{Binding StatusText}" FontSize="11" Foreground="{Binding StatusBrush}" />
                                     </StackPanel>
-                                    <Button Grid.Column="1" Content="{Binding ActivateLabel}" FontSize="11" VerticalAlignment="Center"
-                                            IsVisible="{Binding CanActivate}" Click="OnActivateModule" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                        <Button Content="{loc:Tr ModConfigure}" FontSize="11"
+                                                IsVisible="{Binding CanConfigure}" Click="OnConfigureModule" />
+                                        <Button Content="{Binding ActivateLabel}" FontSize="11"
+                                                IsVisible="{Binding CanActivate}" Click="OnActivateModule" />
+                                    </StackPanel>
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>

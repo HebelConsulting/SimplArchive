@@ -36,6 +36,7 @@ public class ModulesController : ControllerBase
     private readonly IReadOnlyList<ModuleLoader.LoadedModule> _modules;
     private readonly ModuleActivationService _activation;
     private readonly IAuditRecorder _audit;
+    private readonly ITransitEncryptor _transit;
 
     public ModulesController(
         SimplArchiveDbContext dbContext,
@@ -45,7 +46,8 @@ public class ModulesController : ControllerBase
         IObjectStorageClient objectStorage,
         IReadOnlyList<ModuleLoader.LoadedModule> modules,
         ModuleActivationService activation,
-        IAuditRecorder audit)
+        IAuditRecorder audit,
+        ITransitEncryptor transit)
     {
         _dbContext = dbContext;
         _currentTenantAccessor = currentTenantAccessor;
@@ -55,6 +57,7 @@ public class ModulesController : ControllerBase
         _modules = modules;
         _activation = activation;
         _audit = audit;
+        _transit = transit;
     }
 
     public class ModuleResource : HypermediaResource
@@ -223,7 +226,188 @@ public class ModulesController : ControllerBase
             $"Support contract through {activation.SupportContractEndDate:yyyy-MM-dd}; license document {document.Id}",
             cancellationToken: cancellationToken);
 
-        return Ok(ToResource(module.ModuleId, module.DisplayName, module.AbiMajorVersion, installed: true, activation));
+        return Ok(ToResource(module.ModuleId, module.DisplayName, module.AbiMajorVersion, installed: true, activation,
+            hasSettings: module.Settings.Count > 0));
+    }
+
+    /// <summary>
+    /// What this module declared it needs configuring, plus what is configured (ADR 0772). A secret's VALUE
+    /// is never here — only whether one is set, which is the audit-webhook secret's precedent.
+    /// </summary>
+    [HttpGet("{moduleId}/settings")]
+    public async Task<IActionResult> GetSettings(string moduleId, CancellationToken cancellationToken)
+    {
+        if (!await IsTenantAdminAsync(cancellationToken))
+        {
+            return Forbid();
+        }
+
+        return Ok(await BuildSettingsAsync(moduleId, cancellationToken));
+    }
+
+    [HttpHead("{moduleId}/settings")]
+    public async Task<IActionResult> HeadSettings(string moduleId, CancellationToken cancellationToken)
+    {
+        if (!await IsTenantAdminAsync(cancellationToken))
+        {
+            return Forbid();
+        }
+
+        await BuildSettingsAsync(moduleId, cancellationToken);   // 404s for an uninstalled module, as GET does
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Writes the values present in the body — a MERGE, deliberately unlike the tenant-settings PUT.
+    /// </summary>
+    /// <remarks>
+    /// A full replacement is unusable here: a client cannot read a secret back, so it could not resend one,
+    /// and every unsent secret would be blanked by a form that only meant to change the endpoint beside it.
+    /// So an absent key is "leave it alone" and an explicit null is "clear it" — the two intentions a client
+    /// actually has.
+    /// </remarks>
+    [HttpPut("{moduleId}/settings")]
+    public async Task<IActionResult> PutSettings(
+        string moduleId, [FromBody] PutModuleSettingsRequest request, CancellationToken cancellationToken)
+    {
+        if (!await IsTenantAdminAsync(cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var declared = DeclaredSettings(moduleId);
+        var tenantId = _currentTenantAccessor.TenantId!.Value;
+        var existing = await _dbContext.ModuleSettingValues
+            .Where(v => v.ModuleId == moduleId)
+            .ToListAsync(cancellationToken);
+
+        var changed = new List<string>();
+        foreach (var (key, value) in request.Values ?? new Dictionary<string, string?>())
+        {
+            // An undeclared key is refused rather than stored: a store that accepts anything becomes the
+            // free-form bag this was designed not to be, and a typo would silently never be read back.
+            var setting = declared.FirstOrDefault(s => string.Equals(s.Key, key, StringComparison.Ordinal))
+                ?? throw new ModuleSettingNotDeclaredException(moduleId, key);
+
+            var row = existing.FirstOrDefault(v => string.Equals(v.Key, key, StringComparison.Ordinal));
+
+            if (string.IsNullOrEmpty(value))
+            {
+                if (row is not null)
+                {
+                    _dbContext.ModuleSettingValues.Remove(row);   // an explicit null clears
+                    changed.Add(key);
+                }
+
+                continue;
+            }
+
+            // Encrypt on the way in, and record on the ROW that it is encrypted (never re-derive that from
+            // the live declaration — see ModuleSettingValue's remarks).
+            var stored = setting.IsSecret ? await _transit.EncryptAsync(value, cancellationToken) : value;
+
+            if (row is null)
+            {
+                _dbContext.ModuleSettingValues.Add(new ModuleSettingValue
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    ModuleId = moduleId,
+                    Key = key,
+                    Value = stored,
+                    IsSecret = setting.IsSecret,
+                    UpdatedAt = DateTimeOffset.UtcNow,
+                    UpdatedByUserId = _currentUserAccessor.UserId,
+                });
+            }
+            else
+            {
+                row.Value = stored;
+                row.IsSecret = setting.IsSecret;
+                row.UpdatedAt = DateTimeOffset.UtcNow;
+                row.UpdatedByUserId = _currentUserAccessor.UserId;
+            }
+
+            changed.Add(key);
+        }
+
+        if (changed.Count > 0)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            // The KEYS that changed, never their values — an audit trail that leaked a credential would be
+            // worse than none, and it is the durable, exportable, webhook-streamed one.
+            await _audit.RecordAsync(AuditActions.ModuleSettingsUpdated, "Module", Guid.Empty, moduleId,
+                $"Changed: {string.Join(", ", changed.OrderBy(k => k, StringComparer.Ordinal))}",
+                cancellationToken: cancellationToken);
+        }
+
+        return Ok(await BuildSettingsAsync(moduleId, cancellationToken));
+    }
+
+    /// <summary>The module's declarations, or a 404 when nothing installed here answers to that id.</summary>
+    private IReadOnlyList<ModuleAbi.ModuleSetting> DeclaredSettings(string moduleId) =>
+        _modules.FirstOrDefault(m => string.Equals(m.Module.ModuleId, moduleId, StringComparison.Ordinal))?.Module.Settings
+            ?? throw new ModuleNotInstalledException(moduleId);
+
+    private async Task<ModuleSettingsResource> BuildSettingsAsync(string moduleId, CancellationToken cancellationToken)
+    {
+        var declared = DeclaredSettings(moduleId);
+        var configured = await _dbContext.ModuleSettingValues
+            .Where(v => v.ModuleId == moduleId)
+            .Select(v => new { v.Key, v.Value, v.IsSecret })
+            .ToListAsync(cancellationToken);
+
+        return new ModuleSettingsResource
+        {
+            ModuleId = moduleId,
+            Items = declared.Select(setting =>
+            {
+                var stored = configured.FirstOrDefault(v => string.Equals(v.Key, setting.Key, StringComparison.Ordinal));
+                return new ModuleSettingResource
+                {
+                    Key = setting.Key,
+                    Label = setting.Label,
+                    Description = setting.Description,
+                    IsSecret = setting.IsSecret,
+                    HasValue = stored is not null,
+                    // A secret's value never crosses the wire; a plain setting's does, or the form could not
+                    // show what it is about to change.
+                    Value = setting.IsSecret ? null : stored?.Value,
+                };
+            }).ToList(),
+            Links = [new Link("self", $"/api/modules/{moduleId}/settings", "GET")],
+        };
+    }
+
+    public class ModuleSettingsResource : HypermediaResource
+    {
+        public string ModuleId { get; set; } = string.Empty;
+
+        public List<ModuleSettingResource> Items { get; set; } = [];
+    }
+
+    public class ModuleSettingResource
+    {
+        public string Key { get; set; } = string.Empty;
+
+        public string Label { get; set; } = string.Empty;
+
+        public string? Description { get; set; }
+
+        public bool IsSecret { get; set; }
+
+        /// <summary>Whether a value is configured — the only thing reported for a secret.</summary>
+        public bool HasValue { get; set; }
+
+        /// <summary>The configured value, for a non-secret setting only.</summary>
+        public string? Value { get; set; }
+    }
+
+    public class PutModuleSettingsRequest
+    {
+        /// <summary>Key → value. An absent key is left alone; an explicit null or empty clears one.</summary>
+        public Dictionary<string, string?>? Values { get; set; }
     }
 
     private async Task<LicenseDocumentListResource> BuildLicenseDocumentListAsync(CancellationToken cancellationToken)
@@ -271,7 +455,7 @@ public class ModulesController : ControllerBase
         var items = _modules
             .Select(m => ToResource(
                 m.Module.ModuleId, m.Module.DisplayName, m.Module.AbiMajorVersion, installed: true,
-                byModuleId.GetValueOrDefault(m.Module.ModuleId)))
+                byModuleId.GetValueOrDefault(m.Module.ModuleId), hasSettings: m.Module.Settings.Count > 0))
             .ToList();
 
         // Activation rows whose module is no longer on disk: the data outlives the code (ADR 0740), and an
@@ -279,7 +463,8 @@ public class ModulesController : ControllerBase
         var loadedIds = _modules.Select(m => m.Module.ModuleId).ToHashSet(StringComparer.Ordinal);
         items.AddRange(activations
             .Where(a => !loadedIds.Contains(a.ModuleId))
-            .Select(a => ToResource(a.ModuleId, a.ModuleId, abiMajorVersion: 0, installed: false, a)));
+            // Not installed: no code here to declare settings, so no form to offer.
+            .Select(a => ToResource(a.ModuleId, a.ModuleId, abiMajorVersion: 0, installed: false, a, hasSettings: false)));
 
         return new ModuleListResource
         {
@@ -295,7 +480,8 @@ public class ModulesController : ControllerBase
     }
 
     private static ModuleResource ToResource(
-        string moduleId, string displayName, int abiMajorVersion, bool installed, ModuleActivation? activation)
+        string moduleId, string displayName, int abiMajorVersion, bool installed, ModuleActivation? activation,
+        bool hasSettings)
     {
         var now = DateTimeOffset.UtcNow;
         return new ModuleResource
@@ -313,7 +499,19 @@ public class ModulesController : ControllerBase
             ActivatedAt = activation?.ActivatedAt,
             // The activation act is only reachable where the code to activate exists; a not-installed row
             // has nothing to license (ADR 0543: a missing rel means "not available to you, here, now").
-            Links = installed ? [new Link("license", $"/api/modules/{moduleId}/license", "PUT")] : [],
+            // Both actions are only reachable where the code exists; a not-installed row has nothing to
+            // license and declares no settings (ADR 0543: a missing rel means "not available to you, here,
+            // now"). `settings` is ONE rel for GET and PUT on the same address (ADR 0719) — and it is
+            // withheld from a module that declares none, so no empty form is ever offered.
+            Links = installed
+                ?
+                [
+                    new Link("license", $"/api/modules/{moduleId}/license", "PUT"),
+                    .. hasSettings
+                        ? new[] { new Link("settings", $"/api/modules/{moduleId}/settings", "GET") }
+                        : [],
+                ]
+                : [],
         };
     }
 

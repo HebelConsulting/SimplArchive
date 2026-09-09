@@ -4899,4 +4899,22 @@
   <data name="UgCancelEmail" xml:space="preserve">
     <value>Änderung der E-Mail-Adresse verwerfen</value>
   </data>
+  <data name="ModConfigure" xml:space="preserve">
+    <value>Konfigurieren…</value>
+  </data>
+  <data name="ModSettingsNone" xml:space="preserve">
+    <value>Dieses Modul benötigt keine Konfiguration.</value>
+  </data>
+  <data name="ModSettingsLoading" xml:space="preserve">
+    <value>Wird geladen…</value>
+  </data>
+  <data name="ModSettingsSecretSet" xml:space="preserve">
+    <value>hinterlegt — leer lassen, um es zu behalten</value>
+  </data>
+  <data name="StModuleSettingsSaved" xml:space="preserve">
+    <value>Modulkonfiguration gespeichert.</value>
+  </data>
+  <data name="StModuleSettingNotDeclared" xml:space="preserve">
+    <value>Dieses Modul kennt diese Einstellung nicht.</value>
+  </data>
 </root>

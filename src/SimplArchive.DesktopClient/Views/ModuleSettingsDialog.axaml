@@ -1,0 +1,42 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+        x:Class="SimplArchive.DesktopClient.Views.ModuleSettingsDialog"
+        x:DataType="vm:ModuleSettingsDialogViewModel"
+        Title="{loc:Tr ModConfigure}" Width="460" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="10">
+        <SelectableTextBlock Text="{Binding ModuleName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+
+        <!-- The form is the MODULE's declarations; the core knows nothing about what these values mean.
+             A secret renders as a password box with a watermark saying one is already set, so an empty box
+             reads as "kept" rather than "missing" (ADR 0772). -->
+        <ItemsControl ItemsSource="{Binding Entries}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ModuleSettingEntryViewModel">
+                    <StackPanel Spacing="3" Margin="0,0,0,8">
+                        <TextBlock Text="{Binding Label}" FontSize="12" />
+                        <TextBox Text="{Binding Entry}" Watermark="{Binding Watermark}"
+                                 PasswordChar="{Binding PasswordChar}"
+                                 HorizontalAlignment="Stretch" />
+                        <TextBlock Text="{Binding Description}" FontSize="11" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource WbMuted}" IsVisible="{Binding HasDescription}" />
+                    </StackPanel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock Text="{loc:Tr ModSettingsNone}" FontSize="12" TextWrapping="Wrap"
+                   Foreground="{DynamicResource WbMuted}" IsVisible="{Binding NoSettings}" />
+
+        <!-- The refusal's home: beside the form, not in a toast that outlives the dialog (ADR 0550). -->
+        <SelectableTextBlock Text="{Binding Status}" Foreground="{DynamicResource SystemErrorTextColor}" FontSize="12"
+                             TextWrapping="Wrap" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Content="{loc:Tr Save}" Command="{Binding SaveCommand}" IsEnabled="{Binding Loaded}" />
+            <Button Content="{loc:Tr Cancel}" Click="OnClose" />
+        </StackPanel>
+    </StackPanel>
+</Window>

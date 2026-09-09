@@ -23,6 +23,7 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
     private readonly ModuleIdentityAccessor? _identity;
     private readonly IEffectiveRightsCalculator? _rights;
     private readonly IObjectStorageClient? _objectStorage;
+    private readonly ITransitEncryptor? _transit;
     private Guid? _principalId;
     private bool _principalResolved;
 
@@ -32,7 +33,8 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         ICurrentServiceAccountAccessor currentServiceAccount,
         ModuleIdentityAccessor? identity = null,
         IEffectiveRightsCalculator? rights = null,
-        IObjectStorageClient? objectStorage = null)
+        IObjectStorageClient? objectStorage = null,
+        ITransitEncryptor? transit = null)
     {
         _dbContext = dbContext;
         _currentUser = currentUser;
@@ -40,6 +42,7 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         _identity = identity;
         _rights = rights;
         _objectStorage = objectStorage;
+        _transit = transit;
     }
 
     /// <summary>
@@ -133,6 +136,46 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         using var buffer = new MemoryStream();
         await content.CopyToAsync(buffer, cancellationToken);
         return buffer.ToArray();
+    }
+
+    public async Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default)
+    {
+        // Scoped to the CALLING module (ADR 0772). This is the property that makes one settings table safe
+        // for many modules: the key is resolved within this module's own rows, so a module cannot read a
+        // neighbour's credential even knowing its key. A core-internal caller has no module identity and so
+        // reaches nothing — there is no "all modules" read by design.
+        if (_identity?.ModuleId is not { } moduleId)
+        {
+            return null;
+        }
+
+        // The tenant half needs no predicate: ModuleSettingValue is ITenantScoped, so the query filter is the
+        // sole tenant boundary (never filter TenantId by hand — TenantIsolationTests pins that).
+        var stored = await _dbContext.ModuleSettingValues
+            .Where(v => v.ModuleId == moduleId && v.Key == key)
+            .Select(v => new { v.Value, v.IsSecret })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (stored is null)
+        {
+            return null; // not configured is a normal state, not an error
+        }
+
+        if (!stored.IsSecret)
+        {
+            return stored.Value;
+        }
+
+        if (_transit is null)
+        {
+            throw new InvalidOperationException(
+                "Reading a secret setting needs a transit encryptor; the host wires one — a test facade that "
+                + "reads secrets must supply it.");
+        }
+
+        // The ONLY path that returns a secret in the clear; the admin surface reports whether one is set and
+        // never its value.
+        return await _transit.DecryptAsync(stored.Value, cancellationToken);
     }
 
     public async Task<IReadOnlyList<ModuleDocument>> GetChildrenAsync(Guid parentDocumentId, Guid maskId, CancellationToken cancellationToken = default)

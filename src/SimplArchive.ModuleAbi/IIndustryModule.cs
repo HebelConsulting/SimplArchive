@@ -94,6 +94,13 @@ public interface IIndustryModule
     /// </summary>
     IReadOnlyList<string> OutboundHosts => [];
 
+    /// <summary>The per-tenant configuration this module needs (ABI 0.12, core ADR 0772): the customer's own
+    /// account with an external service, an endpoint, a scheme identifier. Declared rather than free-form, so
+    /// the core renders and validates the admin form and owns the secret path; read a value back through
+    /// <see cref="IModuleArchiveFacade.GetSettingAsync"/>. Default: none — a module that needs no
+    /// configuration declares none, and no form appears for it.</summary>
+    IReadOnlyList<ModuleSetting> Settings => [];
+
     /// <summary>The module's localized refusal and status-diagnosis texts (ABI 0.10, core ADR 0767):
     /// culture → code → template. Refusal templates use {0}-style slots for the exception's Args; status
     /// templates use {value} for the condition's evaluated value. The host resolves the request culture

@@ -44,6 +44,9 @@ public static class ApiErrorText
         // Mail-domain registration (#667). The not-verified one is the interesting case: it is the EXPECTED
         // answer between publishing a record and DNS carrying it, so the sentence says what to do next rather
         // than reporting a fault.
+        // A settings write named a key the module never declared (ADR 0772) — a typo in a hand-built
+        // request, since the form is rendered from the declarations themselves.
+        "MODULE_SETTING_NOT_DECLARED" => Strings.Get("StModuleSettingNotDeclared"),
         "INVALID_MAIL_DOMAIN" => Strings.Get("ApiErrInvalidMailDomain"),
         "MAIL_DOMAIN_ALREADY_CLAIMED" => Strings.Get("ApiErrMailDomainAlreadyClaimed"),
         "MAIL_DOMAIN_NOT_VERIFIED" => Strings.Get("ApiErrMailDomainNotVerified"),

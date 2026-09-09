@@ -84,4 +84,8 @@ public sealed class ModuleRowViewModel(AdminClient.ModuleInfo module)
     public string ActivateLabel => Strings.Get(Module.Activated ? "ModRenew" : "ModActivate");
 
     public bool CanActivate => Module.LicenseHref is not null;
+
+    /// <summary>Only where the module DECLARED settings — the server withholds the rel otherwise, so no
+    /// module is ever offered an empty form (ADR 0543/0772).</summary>
+    public bool CanConfigure => Module.SettingsHref is not null;
 }

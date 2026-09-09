@@ -85,6 +85,14 @@ public sealed class TestModule : IIndustryModule
 
     public IReadOnlyList<ModuleReadModelSet> ReadModels { get; } = [new ModuleReadModelSet(typeof(TestReadModelContext))];
 
+    /// <summary>Per-tenant configuration (ABI 0.12, ADR 0772) — one plain value and one secret, which are
+    /// the two paths worth proving: what the admin surface may echo back, and what it must never.</summary>
+    public IReadOnlyList<ModuleSetting> Settings { get; } =
+    [
+        new ModuleSetting("endpoint", "Service endpoint", Description: "Where the fixture would call."),
+        new ModuleSetting("apiSecret", "API secret", IsSecret: true),
+    ];
+
     public void ConfigureServices(IServiceCollection services)
     {
         services.AddSingleton<TestModuleMarker>();

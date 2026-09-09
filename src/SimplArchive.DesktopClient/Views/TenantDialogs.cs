@@ -50,6 +50,24 @@ internal static class TenantDialogs
         }
     }
 
+    /// <summary>A module's per-tenant configuration (ADR 0772), at the address its row advertised.</summary>
+    public static async Task OpenModuleSettingsAsync(MainWindow window, MainWindowViewModel? viewModel, ModuleRowViewModel row)
+    {
+        var (admin, _) = viewModel?.TenantModuleActivationContext() ?? default;
+        if (viewModel is null || admin is null || row.Module.SettingsHref is not { } settingsHref)
+        {
+            return;
+        }
+
+        var dialog = new ModuleSettingsDialogViewModel(admin, settingsHref, row.DisplayName);
+        await new ModuleSettingsDialog(dialog).ShowDialog(window);
+        if (dialog.Saved)
+        {
+            viewModel.Status = SimplArchive.Localization.Strings.Get("StModuleSettingsSaved");
+            await viewModel.LoadTenantModulesAsync();
+        }
+    }
+
     public static async Task OpenSensitivityLabelsAsync(MainWindow window, MainWindowViewModel? viewModel)
     {
         if (viewModel?.CreateSensitivityLabelsViewModel() is not { } labels)

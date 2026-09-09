@@ -144,6 +144,8 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
     // Per-tenant industry-module activations (ADR 0740) — the row a verified license upserts.
     public DbSet<ModuleActivation> ModuleActivations => Set<ModuleActivation>();
 
+    public DbSet<ModuleSettingValue> ModuleSettingValues => Set<ModuleSettingValue>();
+
     // Shares of a document with people who have no account (ADR 0546).
     public DbSet<ExternalLink> ExternalLinks => Set<ExternalLink>();
 

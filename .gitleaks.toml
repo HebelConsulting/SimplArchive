@@ -40,4 +40,7 @@ regexes = [
   # (inboxocr1234) never tripped the generic-api-key heuristics; the Intray rename's spelling does, and the
   # old value lives on in the branch history either way — so the fixture is allowlisted by value, surgically.
   '''intrayocr1234''',
+  # The module-settings E2E fixture's login password (#1082). Same class as intrayocr1234 above: a
+  # throwaway value seeded into a Testcontainers database that lives for one test run.
+  '''modsettings1234''',
 ]

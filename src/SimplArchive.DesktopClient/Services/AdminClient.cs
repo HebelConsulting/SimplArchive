@@ -254,7 +254,15 @@ public sealed class AdminClient(ApiCore core)
     /// activation act's address (the `license` rel) — absent on a row whose code is not installed.</summary>
     public sealed record ModuleInfo(
         string ModuleId, string DisplayName, bool Installed, bool Activated, bool Active, bool InGrace,
-        DateTimeOffset? SupportContractEndDate, DateTimeOffset? DeactivatesAt, string? LicenseHref);
+        DateTimeOffset? SupportContractEndDate, DateTimeOffset? DeactivatesAt, string? LicenseHref,
+        // The module's per-tenant configuration (ADR 0772) — absent where it declares none, so no module is
+        // ever offered an empty form.
+        string? SettingsHref = null);
+
+    /// <summary>One declared setting plus what is configured. A SECRET's value is never here — only whether
+    /// one is set (ADR 0772); the module reads the plaintext, the administrator never does.</summary>
+    public sealed record ModuleSettingInfo(
+        string Key, string Label, string? Description, bool IsSecret, bool HasValue, string? Value);
 
     /// <summary>A filed license artefact the Activate dialog offers — the stamped fields are the verified
     /// claims' projection and stay empty until a license has been through a successful activation.</summary>
@@ -287,12 +295,56 @@ public sealed class AdminClient(ApiCore core)
                     m.GetProperty("inGrace").GetBoolean(),
                     m.TryGetProperty("supportContractEndDate", out var end) && end.ValueKind == JsonValueKind.String ? end.GetDateTimeOffset() : null,
                     m.TryGetProperty("deactivatesAt", out var de) && de.ValueKind == JsonValueKind.String ? de.GetDateTimeOffset() : null,
-                    links.GetValueOrDefault("license")));
+                    links.GetValueOrDefault("license"),
+                    links.GetValueOrDefault("settings")));
             }
         }
 
         var listLinks = ApiCore.ParseLinks(json);
         return new ModuleCatalog(items, listLinks?.GetValueOrDefault("license-documents"));
+    }
+
+    /// <summary>Reads a module's declared settings and their configured values, at the advertised address.</summary>
+    public async Task<IReadOnlyList<ModuleSettingInfo>> GetModuleSettingsAsync(
+        string settingsHref, CancellationToken cancellationToken = default)
+    {
+        var json = await _core.Http.GetFromJsonAsync<JsonElement>(settingsHref, cancellationToken);
+        var items = new List<ModuleSettingInfo>();
+        if (json.TryGetProperty("items", out var arr) && arr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var s in arr.EnumerateArray())
+            {
+                items.Add(new ModuleSettingInfo(
+                    s.GetProperty("key").GetString() ?? "",
+                    s.GetProperty("label").GetString() ?? "",
+                    s.TryGetProperty("description", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() : null,
+                    s.GetProperty("isSecret").GetBoolean(),
+                    s.GetProperty("hasValue").GetBoolean(),
+                    s.TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null));
+            }
+        }
+
+        return items;
+    }
+
+    /// <summary>
+    /// Writes the values given — a MERGE at the same address (ADR 0719: one rel, the method says which act).
+    /// </summary>
+    /// <remarks>
+    /// Only the keys the caller passes are written, because a client cannot read a secret back and so could
+    /// not resend one: a full replacement would blank every credential a form did not carry. A null value
+    /// clears a setting; an omitted key leaves it alone.
+    /// </remarks>
+    public async Task SetModuleSettingsAsync(
+        string settingsHref, IReadOnlyDictionary<string, string?> values, CancellationToken cancellationToken = default)
+    {
+        using var response = await _core.Http.PutAsJsonAsync(settingsHref, new { values }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.BadRequest)
+        {
+            throw new ApiActionException(Strings.Get("StModuleSettingNotDeclared"));
+        }
+
+        response.EnsureSuccessStatusCode();
     }
 
     public async Task<IReadOnlyList<LicenseDocumentInfo>> GetLicenseDocumentsAsync(string licenseDocumentsHref, CancellationToken cancellationToken = default)

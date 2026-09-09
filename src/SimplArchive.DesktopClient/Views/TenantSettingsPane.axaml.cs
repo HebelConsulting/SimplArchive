@@ -24,4 +24,14 @@ public partial class TenantSettingsPane : UserControl
             await TenantDialogs.OpenActivateModuleAsync(window, window.DataContext as ViewModels.MainWindowViewModel, row);
         }
     }
+
+    // Same forwarding: the settings dialog needs the window as its parent.
+    private async void OnConfigureModule(object? sender, RoutedEventArgs e)
+    {
+        if (TopLevel.GetTopLevel(this) is MainWindow window
+            && (sender as Avalonia.Controls.Button)?.DataContext is ViewModels.ModuleRowViewModel row)
+        {
+            await TenantDialogs.OpenModuleSettingsAsync(window, window.DataContext as ViewModels.MainWindowViewModel, row);
+        }
+    }
 }

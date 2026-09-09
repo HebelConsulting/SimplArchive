@@ -33,6 +33,25 @@ public interface IModuleArchiveFacade
     /// </summary>
     Task<byte[]?> GetDocumentContentAsync(Guid documentId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The value an administrator configured for one of this module's declared <see cref="ModuleSetting"/>s
+    /// (ABI 0.12, core ADR 0772), for the CURRENT tenant. Null when nothing is configured — which is a normal
+    /// state, not an error: the module degrades to whatever it does without that integration, and should say
+    /// so where the absence is otherwise invisible.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Scoped to the CALLING module: the key is resolved against this module's own settings, so one module
+    /// cannot read another's credential even knowing its key. Secrets are decrypted here — this is the only
+    /// path that returns one in the clear, and the admin surface never does.
+    /// </para>
+    /// <para>
+    /// Read it per use rather than caching it: an administrator who rotates a credential expects the next
+    /// call to use the new one, and a cached secret outlives the reason it was fetched.
+    /// </para>
+    /// </remarks>
+    Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default);
+
     /// <summary>The documents directly under a parent wearing a given module mask — a dossier's
     /// certificates, a fleet's aircraft. Paged the core way; order is CreatedAt then Id.</summary>
     Task<IReadOnlyList<ModuleDocument>> GetChildrenAsync(Guid parentDocumentId, Guid maskId, CancellationToken cancellationToken = default);

@@ -43,6 +43,38 @@ public sealed class TestModuleController : ControllerBase
         public bool CanEditContent { get; set; }
     }
 
+    /// <summary>What the module reads back for its own declared settings.</summary>
+    public sealed class ModuleSettingsSeenResource : HypermediaResource
+    {
+        /// <summary>The plain setting's value, as the facade answers it.</summary>
+        public string? Endpoint { get; set; }
+
+        /// <summary>The SECRET's plaintext — proof the module gets what the admin surface never returns.</summary>
+        public string? ApiSecret { get; set; }
+
+        /// <summary>A key this module never declared: must read as null, never another module's value.</summary>
+        public string? Undeclared { get; set; }
+    }
+
+    /// <summary>
+    /// The settings the module can actually see (ABI 0.12, ADR 0772) — the fixture's proof that
+    /// <c>GetSettingAsync</c> decrypts a secret for the module while the admin surface withholds it, and
+    /// that an undeclared key reads as nothing.
+    /// </summary>
+    [HttpGet("settings-seen")]
+    public async Task<IActionResult> SettingsSeen(
+        [FromServices] IModuleArchiveFacade facade, CancellationToken cancellationToken) =>
+        Ok(new ModuleSettingsSeenResource
+        {
+            Endpoint = await facade.GetSettingAsync("endpoint", cancellationToken),
+            ApiSecret = await facade.GetSettingAsync("apiSecret", cancellationToken),
+            Undeclared = await facade.GetSettingAsync("nothing-declares-this", cancellationToken),
+            Links = [new Link("self", "/api/test-module/settings-seen", "GET")],
+        });
+
+    [HttpHead("settings-seen")]
+    public IActionResult HeadSettingsSeen() => NoContent();
+
     [HttpGet("status")]
     public async Task<IActionResult> Status(
         [FromServices] IModuleCallerContext caller, CancellationToken cancellationToken)

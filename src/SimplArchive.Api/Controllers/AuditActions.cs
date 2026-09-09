@@ -179,6 +179,9 @@ public static class AuditActions
     // event — deactivation is derived from the license's end date at every ask, so no moment exists to record.
     public const string ModuleActivated = "Module.Activated";
 
+    // The KEYS whose values changed, never the values — a settings write can carry a credential (ADR 0772).
+    public const string ModuleSettingsUpdated = "Module.SettingsUpdated";
+
     public const string LoggedIn = "Auth.LoggedIn";
     // Impersonation token issued (ADR "User impersonation") — actor = the impersonating admin, target = the user.
     public const string ImpersonationStarted = "Auth.ImpersonationStarted";
