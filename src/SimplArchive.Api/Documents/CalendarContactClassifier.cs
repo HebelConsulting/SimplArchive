@@ -300,26 +300,151 @@ public sealed class CalendarContactClassifier
                 $"The Schedule holding document {document.Id} has no parent room to claim a slot on.");
         }
 
-        var row = await _dbContext.ResourceBookings
-            .FirstOrDefaultAsync(b => b.BookingDocumentId == document.Id, cancellationToken);
-        if (row is null)
+        // EVERY claim of this document, not the first (ADR 0774). Picking an arbitrary one and re-pointing it
+        // at the room would reassign a PERSON's claim to the aircraft — and moving one claim's slot while its
+        // siblings kept the old one would fail the same-window invariant, so an edit of a multi-claim booking
+        // would be refused outright. Unreachable before this slice, because nothing created a second claim.
+        var claims = await _dbContext.ResourceBookings
+            .Where(b => b.BookingDocumentId == document.Id)
+            .ToListAsync(cancellationToken);
+
+        var holding = claims.FirstOrDefault(c => c.ResourceDocumentId == resourceId)
+            // The holding claim is identified by its RESOURCE. On a move between two Schedules the row still
+            // names the old room at this point, and there is exactly one non-attendee claim, so it is that one.
+            ?? claims.FirstOrDefault(c => !AttendeeResourceIds(claims, resourceId).Contains(c.ResourceDocumentId));
+
+        if (holding is null)
         {
-            row = new ResourceBooking
-            {
-                Id = Guid.NewGuid(),
-                TenantId = document.TenantId,
-                BookingDocumentId = document.Id,
-                Status = BookingStatus.Active,
-                BookedByUserId = version.CreatedByUserId,
-                BookedByServiceAccountId = version.CreatedByServiceAccountId,
-                CreatedAt = DateTimeOffset.UtcNow,
-            };
-            _dbContext.ResourceBookings.Add(row);
+            holding = NewClaim(document, version, resourceId, startsAt, endsAt);
+            _dbContext.ResourceBookings.Add(holding);
+            claims.Add(holding);
         }
 
-        row.ResourceDocumentId = resourceId;
-        row.StartsAtUtc = startsAt.ToUniversalTime();
-        row.EndsAtUtc = endsAt.ToUniversalTime();
+        holding.ResourceDocumentId = resourceId;
+
+        // The slot moves on EVERY claim: they are one event, and the invariant requires them to agree.
+        foreach (var claim in claims)
+        {
+            claim.StartsAtUtc = startsAt.ToUniversalTime();
+            claim.EndsAtUtc = endsAt.ToUniversalTime();
+        }
+
+        await ReconcileAttendeeClaimsAsync(document, version, occurrence, claims, holding, startsAt, endsAt, cancellationToken);
+    }
+
+    /// <summary>The resources claimed by this booking other than the holding one.</summary>
+    private static HashSet<Guid> AttendeeResourceIds(List<ResourceBooking> claims, Guid holdingResourceId) =>
+        [.. claims.Select(c => c.ResourceDocumentId).Where(id => id != holdingResourceId)];
+
+    private static ResourceBooking NewClaim(
+        Document document, DocumentVersion version, Guid resourceId, DateTimeOffset startsAt, DateTimeOffset endsAt) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            TenantId = document.TenantId,
+            ResourceDocumentId = resourceId,
+            BookingDocumentId = document.Id,
+            StartsAtUtc = startsAt.ToUniversalTime(),
+            EndsAtUtc = endsAt.ToUniversalTime(),
+            Status = BookingStatus.Active,
+            BookedByUserId = version.CreatedByUserId,
+            BookedByServiceAccountId = version.CreatedByServiceAccountId,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+    /// <summary>
+    /// The event's <c>ATTENDEE</c>s become claims of their own (ADR 0776) — a training flight occupies the
+    /// aircraft, the student and the instructor, from one PUT by any calendar client.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Here rather than in a controller, because ADR 0744's rule is that EVERY path writing the `.ics` is a
+    /// booking act: the bookings endpoint, a drop-upload and a CalDAV PUT all arrive at this one method, and
+    /// an expansion living in one of them would be an expansion the other two do not do.
+    /// </para>
+    /// <para>
+    /// An attendee the archive cannot turn into a claim REFUSES the write. Dropping it would book the
+    /// resource alone while the author believes a second participant is coming — a booking that looks
+    /// complete to everyone and is not.
+    /// </para>
+    /// <para>
+    /// Deliberately NOT RFC 6638 scheduling: no iTIP inbox, no iMIP mail, no PARTSTAT round trip. The
+    /// attendee list is read as a statement of who is on the flight, and the conflict invariant answers it.
+    /// </para>
+    /// </remarks>
+    private async Task ReconcileAttendeeClaimsAsync(
+        Document document, DocumentVersion version, Ical.Net.CalendarComponents.CalendarEvent occurrence,
+        List<ResourceBooking> claims, ResourceBooking holding, DateTimeOffset startsAt, DateTimeOffset endsAt,
+        CancellationToken cancellationToken)
+    {
+        var addresses = occurrence.Attendees
+            .Select(a => a.Value?.ToString()?.Replace("mailto:", string.Empty, StringComparison.OrdinalIgnoreCase))
+            .Where(a => !string.IsNullOrWhiteSpace(a))
+            .Select(a => a!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var wanted = new HashSet<Guid>();
+        foreach (var address in addresses)
+        {
+            wanted.Add(await ResolveAttendeeResourceAsync(address, cancellationToken));
+        }
+
+        // An attendee resolving to the resource that already holds the booking is not a second claim — the
+        // organiser inviting the room itself is ordinary, and a duplicate claim would be refused as an overlap.
+        wanted.Remove(holding.ResourceDocumentId);
+
+        foreach (var resourceId in wanted.Where(id => claims.All(c => c.ResourceDocumentId != id)))
+        {
+            _dbContext.ResourceBookings.Add(NewClaim(document, version, resourceId, startsAt, endsAt));
+        }
+
+        // Removed from the attendee list means removed from the flight: the claim goes, freeing that person's
+        // slot. Cancelled rather than deleted, so the history of who was on it survives (ADR 0735).
+        foreach (var dropped in claims.Where(c => c != holding && !wanted.Contains(c.ResourceDocumentId)))
+        {
+            dropped.Status = BookingStatus.Cancelled;
+        }
+    }
+
+    /// <summary>The bookable resource standing for this address, or a refusal naming it.</summary>
+    /// <remarks>
+    /// Two lookups, and both must succeed: the address has to belong to a user of this tenant, and a
+    /// <c>ResourcePrincipal</c> has to say which document represents them. A user with no resource is not an
+    /// error in the archive — it is somebody nobody has made bookable — but it IS a refusal here, because the
+    /// alternative is a flight silently missing a participant.
+    ///
+    /// Matched on <c>NormalizedEmail</c>, which is what makes the comparison case-insensitive (ADR 0150): an
+    /// invitation addressed to Anna@school and a user stored as anna@school are the same person, and a client
+    /// composing the address from a display name will not match the stored casing.
+    /// </remarks>
+    private async Task<Guid> ResolveAttendeeResourceAsync(string address, CancellationToken cancellationToken)
+    {
+        var normalized = address.ToUpperInvariant();
+        var userId = await _dbContext.Users
+            .Where(u => u.NormalizedEmail == normalized)
+            .Select(u => (Guid?)u.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (userId is not { } id)
+        {
+            throw new BookingAttendeeUnknownException(address);
+        }
+
+        var resourceIds = await _dbContext.ResourcePrincipals
+            .Where(p => p.UserId == id)
+            .Select(p => p.ResourceDocumentId)
+            .ToListAsync(cancellationToken);
+
+        return resourceIds.Count switch
+        {
+            1 => resourceIds[0],
+            0 => throw new BookingAttendeeUnknownException(address),
+
+            // Two resources for one person is legal (the mapping is unique on the RESOURCE, not the user) and
+            // leaves this with no way to choose. Refused rather than guessed: booking the wrong one of
+            // somebody's two calendars is a mistake nobody would look for.
+            _ => throw new BookingAttendeeAmbiguousException(address, resourceIds.Count),
+        };
     }
 
     /// <summary>The instant a calendar time names — <see cref="Stamp"/>'s twin for the claim row.</summary>
