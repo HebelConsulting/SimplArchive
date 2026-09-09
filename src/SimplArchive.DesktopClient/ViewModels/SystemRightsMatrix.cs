@@ -27,6 +27,7 @@ public static class SystemRightsMatrix
         "Manage classification", "Reset MFA", "Manage repositories", "Manage masks",
         "Manage service accounts", "Manage users & groups", "View audit log", "Export", "Import",
         "Manage intrays", "Create external links", "Access without grant", "Manage mail routing",
+        "Block resources", "Release resources",
     ];
 
     /// <summary>The right at a checkbox position.</summary>
@@ -48,7 +49,9 @@ public static class SystemRightsMatrix
         13 => r.CanManageIntrays,
         14 => r.CanCreateExternalLink,
         15 => r.CanAccessWithoutGrant,
-        _ => r.CanManageMailRouting,
+        16 => r.CanManageMailRouting,
+        17 => r.CanBlockResources,
+        _ => r.CanReleaseResources,
     };
 
     /// <summary>The checkbox row read back as a rights bundle, with the clearance that rides alongside it.</summary>
@@ -57,6 +60,6 @@ public static class SystemRightsMatrix
         rights[4].IsChecked, rights[5].IsChecked, rights[6].IsChecked, rights[7].IsChecked,
         rights[8].IsChecked, rights[9].IsChecked, rights[10].IsChecked, rights[11].IsChecked,
         rights[12].IsChecked, rights[13].IsChecked, rights[14].IsChecked, rights[15].IsChecked,
-        rights[16].IsChecked,
+        rights[16].IsChecked, rights[17].IsChecked, rights[18].IsChecked,
         clearanceRank);
 }

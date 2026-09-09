@@ -28,9 +28,16 @@ public sealed record SystemRightsSet(
     bool CanAccessWithoutGrant,
 
     // May write a Mailbox's address list, and delete or restore a mailbox (#703).
-    bool CanManageMailRouting)
+    bool CanManageMailRouting,
+
+    // Maintenance blocks (ADR 0778). Two rights, not one, and deliberately asymmetric: noticing a defect and
+    // stopping a resource being used should be BROAD — you want that easy — while putting it back into
+    // service is a certifying act. In aviation terms, grounding an aircraft and releasing it to service are
+    // not the same authority, and one combined right could not express that.
+    bool CanBlockResources,
+    bool CanReleaseResources)
 {
-    public static readonly SystemRightsSet None = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false);
+    public static readonly SystemRightsSet None = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false);
 
     // Boolean OR of every right — the union of two bundles.
     public SystemRightsSet Union(SystemRightsSet other) => new(
@@ -50,5 +57,7 @@ public sealed record SystemRightsSet(
         CanManageIntrays || other.CanManageIntrays,
         CanCreateExternalLink || other.CanCreateExternalLink,
         CanAccessWithoutGrant || other.CanAccessWithoutGrant,
-        CanManageMailRouting || other.CanManageMailRouting);
+        CanManageMailRouting || other.CanManageMailRouting,
+        CanBlockResources || other.CanBlockResources,
+        CanReleaseResources || other.CanReleaseResources);
 }

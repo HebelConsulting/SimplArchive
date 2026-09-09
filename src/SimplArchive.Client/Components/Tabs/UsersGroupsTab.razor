@@ -305,6 +305,8 @@
         new("Create external links", r => r.CanCreateExternalLink, (r, v) => r.CanCreateExternalLink = v),
         new("Access without grant", r => r.CanAccessWithoutGrant, (r, v) => r.CanAccessWithoutGrant = v),
         new("Manage mail routing", r => r.CanManageMailRouting, (r, v) => r.CanManageMailRouting = v),
+        new("Block resources", r => r.CanBlockResources, (r, v) => r.CanBlockResources = v),
+        new("Release resources", r => r.CanReleaseResources, (r, v) => r.CanReleaseResources = v),
     ];
 
     private async Task LoadPrincipalsAsync()
@@ -889,6 +891,10 @@
         public bool CanCreateExternalLink { get; set; }
         public bool CanAccessWithoutGrant { get; set; }
         public bool CanManageMailRouting { get; set; }
+
+        public bool CanBlockResources { get; set; }
+
+        public bool CanReleaseResources { get; set; }
         public int ClearanceRank { get; set; }
     }
 

@@ -33,6 +33,10 @@ public sealed class AdminClient(ApiCore core)
         bool CanAccessWithoutGrant = false,
         // Write a Mailbox's address list, delete/restore a mailbox (#703). Defaulted for the same reason.
         bool CanManageMailRouting = false,
+        // Maintenance blocks (ADR 0778) — two rights, asymmetric on purpose: stopping a resource being used
+        // should be broad, putting it back is a certifying act. Defaulted for the same reason as the rest.
+        bool CanBlockResources = false,
+        bool CanReleaseResources = false,
         // Data-classification clearance (ADR "Sensitivity clearance enforcement"). Defaulted so existing
         // construction sites (e.g. a copied-rights bundle) keep compiling.
         int ClearanceRank = 0);
@@ -759,6 +763,7 @@ public sealed class AdminClient(ApiCore core)
             B("canManageClassification"), B("canResetMfa"), B("canManageRepositories"), B("canManageMasks"),
             B("canManageServiceAccounts"), B("canManageUsers"), B("canViewAuditLog"), B("canExport"), B("canImport"),
             B("canManageIntrays"), B("canCreateExternalLink"), B("canAccessWithoutGrant"), B("canManageMailRouting"),
+            B("canBlockResources"), B("canReleaseResources"),
             r.TryGetProperty("clearanceRank", out var cr) && cr.ValueKind == JsonValueKind.Number ? cr.GetInt32() : 0);
     }
 

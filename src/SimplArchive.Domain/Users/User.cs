@@ -98,6 +98,14 @@ public class User : ITenantScoped
     // Not backfilled for existing admins — it should be granted deliberately.
     public bool CanCreateExternalLink { get; set; }
 
+    /// <summary>May create or extend a maintenance block, suspending whatever it covers (ADR 0778).</summary>
+    /// <remarks>Deliberately separate from <see cref="CanReleaseResources"/>: stopping a resource being used
+    /// on suspicion of a defect should be widely held, while putting it back is a certifying act.</remarks>
+    public bool CanBlockResources { get; set; }
+
+    /// <summary>May remove or shorten a maintenance block, reviving what it covered (ADR 0778).</summary>
+    public bool CanReleaseResources { get; set; }
+
     // See + read any document the holder holds no CanSee grant on — and NOTHING else (ADR 0670). This is what
     // an administrator keeps once the tenant-admin bypass stops applying inside another user's personal space,
     // and it reads globally, so a non-admin auditor can hold it too. Clearance (ADR 0429) still applies, and

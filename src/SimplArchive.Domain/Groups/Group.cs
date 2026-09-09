@@ -57,6 +57,14 @@ public class Group : ITenantScoped
     // Not backfilled for existing admins — it should be granted deliberately.
     public bool CanCreateExternalLink { get; set; }
 
+    /// <summary>May create or extend a maintenance block, suspending whatever it covers (ADR 0778).</summary>
+    /// <remarks>Deliberately separate from <see cref="CanReleaseResources"/>: stopping a resource being used
+    /// on suspicion of a defect should be widely held, while putting it back is a certifying act.</remarks>
+    public bool CanBlockResources { get; set; }
+
+    /// <summary>May remove or shorten a maintenance block, reviving what it covered (ADR 0778).</summary>
+    public bool CanReleaseResources { get; set; }
+
     // See + read any document the holder holds no CanSee grant on, and nothing else (ADR 0670). Mirrors
     // User's; a member's effective rights are the union of their own and their groups', so a right held via a
     // group takes effect. NOT conferred by a group's own IsTenantAdmin — a group flagged admin already confers

@@ -51,6 +51,12 @@ public class SystemRights
     // distinct from editing index data and from administering users.
     public bool CanManageMailRouting { get; set; }
 
+    /// <summary>May create or extend a maintenance block (ADR 0778).</summary>
+    public bool CanBlockResources { get; set; }
+
+    /// <summary>May remove or shorten one — the certifying half, deliberately separate.</summary>
+    public bool CanReleaseResources { get; set; }
+
     // Data-classification clearance (ADR "Sensitivity clearance enforcement") — not a boolean right but carried
     // in the same bundle so the Users & groups tab sets it alongside the rights. 0 = lowest (unlabelled only).
     public int ClearanceRank { get; set; }
@@ -99,7 +105,9 @@ public static class SystemRightsPolicy
             && IsGrantAllowed(caller.CanManageIntrays, current.CanManageIntrays, proposed.CanManageIntrays)
             && IsGrantAllowed(caller.CanCreateExternalLink, current.CanCreateExternalLink, proposed.CanCreateExternalLink)
             && IsGrantAllowed(caller.CanAccessWithoutGrant, current.CanAccessWithoutGrant, proposed.CanAccessWithoutGrant)
-            && IsGrantAllowed(caller.CanManageMailRouting, current.CanManageMailRouting, proposed.CanManageMailRouting);
+            && IsGrantAllowed(caller.CanManageMailRouting, current.CanManageMailRouting, proposed.CanManageMailRouting)
+            && IsGrantAllowed(caller.CanBlockResources, current.CanBlockResources, proposed.CanBlockResources)
+            && IsGrantAllowed(caller.CanReleaseResources, current.CanReleaseResources, proposed.CanReleaseResources);
     }
 
     private static bool IsGrantAllowed(bool callerHolds, bool current, bool proposed)
