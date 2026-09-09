@@ -45,7 +45,12 @@ internal sealed record DavProtocol(
         NamespacePrefix: "C",
         HomeSetProperty: "calendar-home-set",
         CollectionResourceType: "calendar",
-        Kinds: [Domain.CalDav.DavCollectionKinds.Calendar, Domain.CalDav.DavCollectionKinds.Schedule],
+        // DERIVED from the kind table by extension, not listed by hand (ADR 0778). It was a hand-written
+        // list, and adding the Maintenance kind to DavCollectionKinds.All therefore did not reach it: the
+        // collection existed, wore its mask, and was simply invisible to every CalDAV client — the "a new
+        // entry must reach every listing" failure, where the thing that breaks is the one nobody edited.
+        // Every .ics kind is a calendar on the wire, which is exactly what this protocol serves.
+        Kinds: [.. Domain.CalDav.DavCollectionKinds.All.Where(k => k.Extension == ".ics")],
         Extension: Domain.CalDav.DavCollectionKinds.Calendar.Extension,
         ContentType: "text/calendar; charset=utf-8",
         UidFieldName: Domain.CalDav.DavCollectionKinds.Calendar.UidFieldName,
@@ -60,7 +65,7 @@ internal sealed record DavProtocol(
         NamespacePrefix: "CARD",
         HomeSetProperty: "addressbook-home-set",
         CollectionResourceType: "addressbook",
-        Kinds: [Domain.CalDav.DavCollectionKinds.Addressbook],
+        Kinds: [.. Domain.CalDav.DavCollectionKinds.All.Where(k => k.Extension == ".vcf")],
         Extension: Domain.CalDav.DavCollectionKinds.Addressbook.Extension,
         ContentType: "text/vcard; charset=utf-8",
         UidFieldName: Domain.CalDav.DavCollectionKinds.Addressbook.UidFieldName,

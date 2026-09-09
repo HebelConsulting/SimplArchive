@@ -202,6 +202,23 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         // The room's booking calendar (ADR 0744): a calendar kind, so it carries the calendar's one field.
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.Schedule, "Schedule", [ColourField], cancellationToken);
 
+        // The out-of-service window (ADR 0778), shaped like Booking on purpose: same calendar facts under the
+        // same field names, so the classifier and every calendar surface read both without a second code path.
+        // Reason rather than Purpose — a booking says what the resource is FOR, a block what is wrong with it.
+        // No Repeats, for the same reason Booking has none: a block models one window.
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.MaintenanceBlock, "Maintenance block",
+        [
+            new FieldSpec("Event UID", FieldDataType.Text, IsRequired: true),
+            new FieldSpec("Start", FieldDataType.DateTime, IsRequired: false),
+            new FieldSpec("End", FieldDataType.DateTime, IsRequired: false),
+            new FieldSpec("Location", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Reason", FieldDataType.Text, IsRequired: false),
+        ], cancellationToken);
+
+        // The resource's out-of-service calendar (ADR 0778): a calendar kind, so it carries the colour field
+        // the other two do — a client that subscribes to both wants to tell them apart at a glance.
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.Maintenance, "Maintenance", [ColourField], cancellationToken);
+
         // The license artefact (ADRs 0740/0743) — generic "License", not "Module license" (owner decision
         // 2026-09-08): support licences will wear it too. Both fields are a server-stamped projection of the
         // VERIFIED claims — optional, so an admin can file the raw .json with nothing to type, and a license

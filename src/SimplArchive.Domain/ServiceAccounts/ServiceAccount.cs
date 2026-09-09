@@ -63,6 +63,17 @@ public class ServiceAccount : ITenantScoped
     // migration automation importing from an external system can create departmental mailboxes with claims.
     public bool CanManageMailRouting { get; set; }
 
+    // Take a bookable resource OUT of service (ADR 0778) — mirrors User's, so a maintenance-tracking
+    // integration or an hours counter reaching an inspection limit can ground an aircraft automatically.
+    //
+    // There is deliberately NO CanReleaseResources here (owner decision 2026-09-09). Grounding on suspicion
+    // should be broad, and a false ground costs a cancelled flight; releasing to service is a CERTIFYING act,
+    // and "this aircraft is airworthy again" is the one claim in this feature that carries real-world weight.
+    // Nothing in the model could tell a considered release from a bug in an integration, so a machine does not
+    // get to make it — which means an automated block always needs a person to close it out. That asymmetry is
+    // the same one that made blocking and releasing two rights rather than one in the first place.
+    public bool CanBlockResources { get; set; }
+
     // Data-classification clearance (ADR "Sensitivity clearance enforcement"). A ServiceAccount can't belong to
     // a group, so its effective clearance is just this value. Default 0.
     public int ClearanceRank { get; set; }

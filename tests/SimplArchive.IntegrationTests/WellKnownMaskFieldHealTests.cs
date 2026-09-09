@@ -129,8 +129,11 @@ public class WellKnownMaskFieldHealTests
             // 18 → 19 with License (ADRs 0740/0743) — the filed license artefact's core mask.
             // 19 → 20 with Schedule (ADR 0744) — the room's booking calendar, a calendar kind of its own so
             // its containment (only Bookings, only inside a room) stays non-contextual.
+            // 20 → 22 with Maintenance + Maintenance block (ADR 0778) — the Schedule's counterpart: when a
+            // resource is UNAVAILABLE, as against when it is spoken for. Two masks for the same reason the
+            // booking pair is two: the collection types the folder, the item carries the window.
             var maskCount = await db.Masks.IgnoreQueryFilters().CountAsync(m => m.TenantId == _tenantId);
-            Assert.Equal(20, maskCount); // + Schedule (ADR 0744)
+            Assert.Equal(22, maskCount); // + Maintenance, Maintenance block (ADR 0778)
             Assert.Equal(maskCount, await db.MaskVersions.IgnoreQueryFilters().CountAsync(v => v.TenantId == _tenantId));
         }
     }

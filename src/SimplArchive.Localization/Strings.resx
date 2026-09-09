@@ -3393,6 +3393,9 @@
   <data name="SaRightImport" xml:space="preserve">
     <value>Import</value>
   </data>
+  <data name="SaRightBlockResources" xml:space="preserve">
+    <value>Block resources</value>
+  </data>
   <data name="SaRightRepositories" xml:space="preserve">
     <value>Manage repositories</value>
   </data>

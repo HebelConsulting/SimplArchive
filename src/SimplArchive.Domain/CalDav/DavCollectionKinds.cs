@@ -29,7 +29,16 @@ public static class DavCollectionKinds
     public static readonly DavCollectionKind Schedule =
         new(WellKnownMaskIds.Schedule, WellKnownMaskIds.Booking, ".ics", "Event UID");
 
-    public static readonly IReadOnlyList<DavCollectionKind> All = [Calendar, Addressbook, Schedule];
+    /// <summary>A resource's Maintenance collection (ADR 0778): calendar wire behaviour, block items.</summary>
+    /// <remarks>
+    /// Its own kind rather than a second use of <see cref="Schedule"/>, so that a client subscribing to an
+    /// aircraft sees two collections and can tell a flight from a grounding. Both serve <c>.ics</c> and index
+    /// the same UID field, which is what lets one classifier handle either.
+    /// </remarks>
+    public static readonly DavCollectionKind Maintenance =
+        new(WellKnownMaskIds.Maintenance, WellKnownMaskIds.MaintenanceBlock, ".ics", "Event UID");
+
+    public static readonly IReadOnlyList<DavCollectionKind> All = [Calendar, Addressbook, Schedule, Maintenance];
 
     /// <summary>The kind for a folder mask, or null when the folder is not a synced collection.</summary>
     public static DavCollectionKind? ForFolderMask(Guid? folderMaskId) =>

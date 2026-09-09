@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Documents;
+using SimplArchive.Api.Errors;
 using SimplArchive.Api.Errors.Exceptions.Booking;
 using SimplArchive.Api.Errors.Exceptions.Concurrency;
 using SimplArchive.Api.Hypermedia;
@@ -81,6 +82,19 @@ public class BookingsController : ControllerBase
 
         /// <summary>False when the caller may see but not cancel — the client disables the affordance.</summary>
         public bool CanCancel { get; set; }
+
+        /// <summary>
+        /// The resource is out of service for part or all of this slot, so the booking cannot be taken
+        /// (ADR 0778). Derived from the resource's active maintenance blocks and therefore never stale: it
+        /// becomes false again the moment the block is cleared, with nothing to update.
+        /// </summary>
+        /// <remarks>
+        /// A separate flag rather than a fourth <see cref="Status"/> value on purpose. The booking is still
+        /// Active — it holds its slot, and nobody else may take it — and collapsing "who has this slot" with
+        /// "may it be flown" into one field would mean a suspended booking looked to every existing caller
+        /// like a cancelled one, silently freeing an aircraft in each of their models.
+        /// </remarks>
+        public bool Suspended { get; set; }
 
         /// <summary>The row's concurrency token, for the cancel's If-Match — the ExternalLinks precedent:
         /// a row-level mutation needs the token to travel WITH the row, or every cancel costs a fetch
@@ -235,12 +249,16 @@ public class BookingsController : ControllerBase
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
-        catch (BookingInvariantException ex) when (ex.Kind == BookingInvariantKind.SlotTaken)
+        catch (BookingInvariantException ex)
         {
-            // Caught SPECIFICALLY — by the invariant's own Kind, not by matching message text — because
-            // left to a blanket InvalidOperationException catch, a slot conflict reports as whatever that
-            // catch assumes (the blanket-catch-false-cause lesson).
-            throw new BookingSlotConflictException(ex.Message);
+            // Translated by the invariant's own Kind, never by matching message text — because left to a
+            // blanket InvalidOperationException catch, a refusal reports as whatever that catch assumes
+            // (the blanket-catch-false-cause lesson).
+            //
+            // Catching EVERY kind, not just SlotTaken: the narrow `when (ex.Kind == SlotTaken)` this replaces
+            // did not fail when ADR 0778 added a second kind, it silently stopped matching — so a booking
+            // made into a maintenance block answered 500 while the same act over CalDAV answered 409.
+            throw BookingInvariantTranslation.Translate(ex);
         }
 
         // 2. The bytes: the booking IS the .ics (ADR 0744) — the slot, the room as LOCATION, the purpose
@@ -426,6 +444,10 @@ public class BookingsController : ControllerBase
             BookedBy = bookedBy ?? string.Empty,
             Purpose = purpose,
             CanCancel = row.Status == BookingStatus.Active && (isBooker || canCancelAny),
+            // Derived from the resource's active blocks, never stored (ADR 0778): the booking is suspended
+            // for exactly as long as the block stands, and comes back by itself when it is cleared.
+            Suspended = row.Status == BookingStatus.Active
+                && await Documents.BookingSuspension.IsSuspendedAsync(_dbContext, row.BookingDocumentId, cancellationToken),
             Etag = row.ConcurrencyToken.ToString(),
             Links =
             {

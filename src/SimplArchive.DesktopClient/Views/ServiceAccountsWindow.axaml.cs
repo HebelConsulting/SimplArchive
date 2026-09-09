@@ -53,12 +53,12 @@ public partial class ServiceAccountsWindow : Window
         }
 
         // The server's cap (#864) — read here rather than assumed, so the editor offers only what this caller
-        // may actually confer instead of collecting five rights and meeting a 403.
+        // may actually confer instead of collecting rights it cannot confer and meeting a 403.
         var grantable = await vm.GetGrantableRightsAsync();
 
         var result = await new ServiceAccountEditDialog(row.Name,
             row.Info.CanExport, row.Info.CanImport, row.Info.CanManageRepositories,
-            row.Info.CanManageMasks, row.Info.CanManageServiceAccounts,
+            row.Info.CanManageMasks, row.Info.CanManageServiceAccounts, row.Info.CanBlockResources,
             grantable).ShowDialog<ServiceAccountEditDialog.Result?>(this);
         if (result is null)
         {
@@ -70,7 +70,10 @@ public partial class ServiceAccountsWindow : Window
             var rights = new AdminClient.SystemRightsData(
                 false, false, false, false, false, false,
                 result.CanManageRepositories, result.CanManageMasks, result.CanManageServiceAccounts, false, false,
-                result.CanExport, result.CanImport);
+                result.CanExport, result.CanImport,
+                // Named rather than positional: the defaulted rights are a long tail, and counting commas to
+                // reach one is how the wrong flag gets set with nothing failing to build (ADR 0778).
+                CanBlockResources: result.CanBlockResources);
             await vm.Client.Admin.UpdateServiceAccountAsync(row.Info, result.Name, rights);
             await vm.LoadAsync();
         });

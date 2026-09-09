@@ -193,6 +193,18 @@ public static class AuditActions
     public const string BookingCreated = "Booking.Created";
     public const string BookingChanged = "Booking.Changed";
 
+    // Maintenance blocks (ADR 0778). SEPARATE actions for grounding and releasing, by owner decision: the
+    // person who takes an aircraft out of service and the person who returns it to service are not always the
+    // same, and a single "Booking.BlockChanged" could not answer who cleared it to fly — which is the one
+    // question an investigation asks. They carry their own rights for the same reason (CanBlockResources /
+    // CanReleaseResources): grounding on suspicion should be broad, releasing is a certifying act.
+    //
+    // Recorded against the BLOCK's act rather than per suspended booking, and the detail names how many
+    // bookings it caught. Suspension itself is DERIVED (#1091) — true only while the block is Active — so
+    // this event is the only durable record that those flights were ever stopped.
+    public const string BookingSuspended = "Booking.Suspended";
+    public const string BookingRevived = "Booking.Revived";
+
     // There is deliberately NO "Booking.Cancelled" yet. Every cancellation path converges in
     // SimplArchiveDbContext.SyncBookingDocumentsAsync — inside SaveChanges — and IAuditRecorder.RecordAsync
     // calls SaveChangesAsync itself, so recording there would be a nested save on a context mid-save.

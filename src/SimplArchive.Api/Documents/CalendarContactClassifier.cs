@@ -1,5 +1,6 @@
 using System.Globalization;
 using FolkerKinzel.VCards;
+using SimplArchive.Api.Errors;
 using SimplArchive.Api.Errors.Exceptions.Booking;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Booking;
@@ -30,16 +31,19 @@ public sealed class CalendarContactClassifier
     private readonly IContactCardComposer _contacts;
     private readonly ILogger<CalendarContactClassifier> _logger;
     private readonly IAuditRecorder _audit;
+    private readonly IUserSystemRightsResolver _userSystemRights;
 
     public CalendarContactClassifier(
         SimplArchiveDbContext dbContext, IObjectStorageClient objectStorageClient,
-        IContactCardComposer contacts, ILogger<CalendarContactClassifier> logger, IAuditRecorder audit)
+        IContactCardComposer contacts, ILogger<CalendarContactClassifier> logger, IAuditRecorder audit,
+        IUserSystemRightsResolver userSystemRights)
     {
         _dbContext = dbContext;
         _objectStorageClient = objectStorageClient;
         _contacts = contacts;
         _logger = logger;
         _audit = audit;
+        _userSystemRights = userSystemRights;
     }
 
     /// <summary>The extensions this classifier owns.</summary>
@@ -230,6 +234,14 @@ public sealed class CalendarContactClassifier
             values.Add(("Purpose", Nonempty(occurrence.Description)));
             pendingAudit = await UpsertBookingRowAsync(document, version, occurrence, cancellationToken);
         }
+        else if (maskId == WellKnownMaskIds.MaintenanceBlock)
+        {
+            // A block is written the same way a booking is (ADR 0778): the .ics in the resource's Maintenance
+            // collection IS the block, and the same pass that indexes the fields moves the row. Same door,
+            // same ordering — before ApplyAsync, so the row rides the save the invariants judge.
+            values.Add(("Reason", Nonempty(occurrence.Description)));
+            pendingAudit = await UpsertBlockRowAsync(document, version, occurrence, cancellationToken);
+        }
         else
         {
             // Indexed so a listing can SAY the entry repeats without opening the blob. The rule itself stays
@@ -246,14 +258,9 @@ public sealed class CalendarContactClassifier
         }
         catch (BookingInvariantException e)
         {
-            // Translated by FACT (the Kind), never by matching message text — so a slot conflict is a 409
-            // with its own code on every upload path, instead of whatever a blanket catch assumes.
-            throw e.Kind switch
-            {
-                BookingInvariantKind.SlotTaken => new BookingSlotConflictException(e.Message),
-                BookingInvariantKind.SlotWithoutExtent => new BookingSlotInvalidException(e.Message),
-                _ => new ResourceNotBookableException(e.Message),
-            };
+            // Translated by FACT (the Kind), never by matching message text — and through the SHARED
+            // translation, so this door and the bookings endpoint cannot answer differently for one act.
+            throw BookingInvariantTranslation.Translate(e);
         }
 
         // Recorded only now: the booking survived the save, so the event describes something that happened.
@@ -360,6 +367,216 @@ public sealed class CalendarContactClassifier
         return new PendingBookingAudit(
             wasNew ? Controllers.AuditActions.BookingCreated : Controllers.AuditActions.BookingChanged,
             $"{startsAt:u}–{endsAt:u} claiming {string.Join(", ", resourceNames.OrderBy(n => n, StringComparer.Ordinal))}");
+    }
+
+    /// <summary>Creates or moves the <see cref="ResourceBlock"/> behind a Maintenance collection's .ics (ADR 0778).</summary>
+    /// <remarks>
+    /// <para>
+    /// The mirror of <see cref="UpsertBookingRowAsync"/>, and short for the reasons a block is simpler than a
+    /// booking: it claims exactly one resource, so there is no attendee expansion and no set of sibling claims
+    /// to keep agreeing about the window; and it may overlap anything, so there is nothing to reconcile
+    /// against its neighbours.
+    /// </para>
+    /// <para>
+    /// It does NOT touch the bookings it catches. Suspension is derived from this row (#1091) — a booking is
+    /// suspended exactly while an Active block of its resource overlaps it — so writing a block is the whole
+    /// act, and clearing it is the whole revival. That is what keeps this method out of the re-entrancy trap
+    /// the booking path fell into: nothing here writes another document, so nothing re-enters the classifier.
+    /// </para>
+    /// </remarks>
+    private async Task<PendingBookingAudit> UpsertBlockRowAsync(
+        Document document, DocumentVersion version, Ical.Net.CalendarComponents.CalendarEvent occurrence, CancellationToken cancellationToken)
+    {
+        if (occurrence.RecurrenceRule is not null)
+        {
+            // Same refusal as a booking, for the same reason: the row models ONE window, and a rule the
+            // server does not expand would make the stored block and the displayed one disagree.
+            throw new BookingRecurrenceUnsupportedException();
+        }
+
+        if (Instant(occurrence.DtStart) is not { } startsAt)
+        {
+            throw new BookingSlotInvalidException("The event carries no DTSTART — a block must name a window.");
+        }
+
+        var endsAt = Instant(occurrence.DtEnd) ?? startsAt;
+
+        // The resource is the Maintenance collection's parent — containment guarantees the shape (a block
+        // lives only in a Maintenance collection, which lives only on a bookable resource).
+        var parentId = await _dbContext.Documents
+            .Where(d => d.Id == document.ParentId)
+            .Select(d => d.ParentId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (parentId is not { } resourceId)
+        {
+            throw new ResourceNotBookableException(
+                $"The Maintenance collection holding document {document.Id} has no parent resource to block.");
+        }
+
+        var block = await _dbContext.ResourceBlocks
+            .FirstOrDefaultAsync(b => b.BlockDocumentId == document.Id, cancellationToken);
+
+        // CLEARING IS A WRITE, not a delete (ADR 0778). STATUS:CANCELLED in the .ics ends the block, which
+        // puts the release back at this single door — the same one that placed it — where the right can be
+        // checked and the event recorded. Deleting the document still clears the row as a safety net
+        // (SyncBlockDocumentsAsync), but that happens inside SaveChanges, where an audit call would be a
+        // nested save; recording per-entrance instead is what ADR 0777 exists to reject.
+        var wantsCleared = string.Equals(occurrence.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase);
+        var wasActive = block is { Status: BlockStatus.Active };
+        var willBeActive = !wantsCleared;
+
+        await EnsureBlockRightsAsync(version, wasActive, willBeActive, cancellationToken);
+
+        // The bookings this write affects, measured BEFORE the row changes — because suspension is derived,
+        // the overlap is only observable while the block's state still says what it said. Afterwards the
+        // question is unanswerable, which is exactly why the audit event has to carry the count.
+        var affected = await AffectedBookingCountAsync(resourceId, startsAt, endsAt, cancellationToken);
+
+        if (block is null)
+        {
+            block = new ResourceBlock
+            {
+                Id = Guid.NewGuid(),
+                TenantId = document.TenantId,
+                ResourceDocumentId = resourceId,
+                BlockDocumentId = document.Id,
+                BlockedByUserId = version.CreatedByUserId,
+                BlockedByServiceAccountId = version.CreatedByServiceAccountId,
+                CreatedAt = DateTimeOffset.UtcNow,
+                StartsAtUtc = startsAt.ToUniversalTime(),
+                EndsAtUtc = endsAt.ToUniversalTime(),
+            };
+            _dbContext.ResourceBlocks.Add(block);
+        }
+
+        // A move between two resources' Maintenance collections re-points the block, exactly as a booking's
+        // holding claim follows its document. There is only ever one row, so no ambiguity arises.
+        block.ResourceDocumentId = resourceId;
+        block.StartsAtUtc = startsAt.ToUniversalTime();
+        block.EndsAtUtc = endsAt.ToUniversalTime();
+        block.Status = willBeActive ? BlockStatus.Active : BlockStatus.Cleared;
+
+        var resourceName = await _dbContext.Documents
+            .Where(d => d.Id == resourceId)
+            .Select(d => d.Name)
+            .FirstOrDefaultAsync(cancellationToken) ?? resourceId.ToString();
+
+        // Three facts, three actions — the pair the owner asked for, plus the ordinary edit. Which one this
+        // is depends on the TRANSITION, not on the new state alone: a block written again while already
+        // active is somebody adjusting a window, not a second grounding.
+        var action = (wasActive, willBeActive) switch
+        {
+            (false, true) => Controllers.AuditActions.BookingSuspended,
+            (true, false) => Controllers.AuditActions.BookingRevived,
+            _ => Controllers.AuditActions.BookingChanged,
+        };
+
+        var effect = action switch
+        {
+            Controllers.AuditActions.BookingSuspended when affected > 0 => $", suspending {affected} booking(s)",
+            Controllers.AuditActions.BookingRevived when affected > 0 => $", reviving {affected} booking(s)",
+            Controllers.AuditActions.BookingChanged => string.Empty,
+            _ => " (no bookings affected)",
+        };
+
+        // The audit event is BUILT here and RECORDED by the caller, after the save — the same rule the
+        // booking path learned the hard way (ADR 0777): IAuditRecorder.RecordAsync saves, so recording
+        // inline would flush the staged row outside the try/catch that translates an invariant refusal.
+        return new PendingBookingAudit(action, $"{startsAt:u}-{endsAt:u} on {resourceName}{effect}");
+    }
+
+    /// <summary>How many Active bookings of the resource overlap this window (ADR 0778).</summary>
+    /// <remarks>
+    /// The number the audit event carries. Suspension is derived and therefore true only while the block is
+    /// Active, so this count is the ONLY durable record that those flights were ever stopped — which is why
+    /// it is measured at the moment of the act rather than reconstructed later.
+    /// </remarks>
+    private async Task<int> AffectedBookingCountAsync(
+        Guid resourceId, DateTimeOffset startsAt, DateTimeOffset endsAt, CancellationToken cancellationToken)
+    {
+        var from = startsAt.ToUniversalTime();
+        var to = endsAt.ToUniversalTime();
+        var candidates = await _dbContext.ResourceBookings
+            .Where(b => b.ResourceDocumentId == resourceId && b.Status == BookingStatus.Active)
+            .Select(b => new { b.BookingDocumentId, b.StartsAtUtc, b.EndsAtUtc })
+            .ToListAsync(cancellationToken);
+
+        // In memory for the reason every range test in this area is: the SQLite provider cannot translate
+        // DateTimeOffset range predicates, and one resource's active bookings are few by nature.
+        return candidates
+            .Where(b => b.StartsAtUtc < to && from < b.EndsAtUtc)
+            .Select(b => b.BookingDocumentId)
+            .Distinct()
+            .Count();
+    }
+
+    /// <summary>
+    /// Whether whoever wrote this version may ground the resource, or return it to service (ADR 0778).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Resolved from the VERSION'S CREATOR rather than from an ambient principal accessor, because this door
+    /// is reached from paths that have no ambient principal — a worker, a protocol edge, a drop-upload
+    /// finalized later. The version records who wrote the bytes on every one of them, which is precisely the
+    /// question being asked, and it is the same source the booking path uses to decide who holds a slot.
+    /// </para>
+    /// <para>
+    /// A SERVICE ACCOUNT can ground but never release (owner decision): grounding on suspicion should be
+    /// broad — a maintenance integration or an hours counter reaching a limit ought to be able to stop an
+    /// aircraft being booked — while "airworthy again" is a certifying act, and nothing here could tell a
+    /// considered release from a bug in an integration.
+    /// </para>
+    /// </remarks>
+    private async Task EnsureBlockRightsAsync(
+        DocumentVersion version, bool wasActive, bool willBeActive, CancellationToken cancellationToken)
+    {
+        // Nothing is changing about the resource's availability — an edit to a cleared block's text, say.
+        if (wasActive == willBeActive && !willBeActive)
+        {
+            return;
+        }
+
+        var (canBlock, canRelease) = await BlockRightsOfAsync(version, cancellationToken);
+
+        if (willBeActive && !canBlock)
+        {
+            throw new ResourceBlockRightRequiredException(
+                "Taking a resource out of service requires the 'Block resources' right (ADR 0778).");
+        }
+
+        if (wasActive && !willBeActive && !canRelease)
+        {
+            throw new ResourceReleaseRightRequiredException(
+                "Returning a resource to service requires the 'Release resources' right (ADR 0778); "
+                + "a service account never holds it.");
+        }
+    }
+
+    private async Task<(bool CanBlock, bool CanRelease)> BlockRightsOfAsync(
+        DocumentVersion version, CancellationToken cancellationToken)
+    {
+        if (version.CreatedByUserId is { } userId)
+        {
+            // A tenant admin holds both implicitly, as they do every other system right — consistent rather
+            // than a new exception carved out for this one pair.
+            var rights = await _userSystemRights.GetEffectiveSystemRightsAsync(userId, cancellationToken);
+            return (rights.IsTenantAdmin || rights.CanBlockResources, rights.IsTenantAdmin || rights.CanReleaseResources);
+        }
+
+        if (version.CreatedByServiceAccountId is { } serviceAccountId)
+        {
+            var canBlock = await _dbContext.ServiceAccounts
+                .Where(s => s.Id == serviceAccountId)
+                .Select(s => s.CanBlockResources)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            // Release is deliberately unreachable for a machine — there is no column to grant.
+            return (canBlock, false);
+        }
+
+        // A version with neither creator cannot happen through an admitted write (a CHECK constraint
+        // enforces exactly one), so this is the defensive branch: no principal, no authority.
+        return (false, false);
     }
 
     /// <summary>What to record once the booking has actually been saved (#1092, ADR 0777).</summary>

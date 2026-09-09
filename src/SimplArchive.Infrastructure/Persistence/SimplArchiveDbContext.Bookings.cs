@@ -181,24 +181,27 @@ public partial class SimplArchiveDbContext
                 throw BookingInvariantException.SlotWithoutExtent(booking.StartsAtUtc, booking.EndsAtUtc);
             }
 
-            // The resource's mask must declare bookability. A document points at a MaskVersion; the
-            // capability lives on the Mask identity (it does not change when a version is cut), so the walk
-            // is document -> version -> mask. IgnoreQueryFilters because this must also hold for writers
-            // with no ambient tenant (seeders, workers) whose filter predicate would silently match nothing.
-            var isBookable = await Documents.IgnoreQueryFilters()
-                .Where(d => d.TenantId == booking.TenantId && d.Id == booking.ResourceDocumentId)
-                .Join(MaskVersions.IgnoreQueryFilters(),
-                    d => new { d.TenantId, Id = d.MaskVersionId ?? Guid.Empty },
-                    v => new { v.TenantId, v.Id },
-                    (d, v) => v)
-                .Join(Masks.IgnoreQueryFilters(),
-                    v => new { v.TenantId, Id = v.MaskId },
-                    m => new { m.TenantId, m.Id },
-                    (v, m) => m.IsBookable)
-                .FirstOrDefaultAsync(cancellationToken);
-            if (!isBookable)
+            // The resource's mask must declare bookability — the shared document -> version -> mask walk
+            // (see IsBookableAsync in the Blocks partial; the block invariant asks the same question, and
+            // two copies of it is how one of them ends up accepting a resource the other refuses).
+            if (!await IsBookableAsync(booking.TenantId, booking.ResourceDocumentId, cancellationToken))
             {
                 throw BookingInvariantException.NotBookable(booking.ResourceDocumentId);
+            }
+
+            // ...and it must not be out of service for any part of the slot (ADR 0778). Refused rather than
+            // suspended, because this booking does not exist yet: a booking made INTO a known grounding is a
+            // mistake to correct now, while one caught by a block placed later is a commitment to suspend and
+            // notify about. Same rule, opposite sides of the block's placement — and the reason the refusal
+            // is its own kind is that the remedies differ: another hour fixes a taken slot, and nothing fixes
+            // an aircraft that is not airworthy.
+            var blocked = (await OverlappingBlocksAsync(
+                booking.TenantId, booking.ResourceDocumentId, booking.StartsAtUtc, booking.EndsAtUtc, cancellationToken))
+                .FirstOrDefault();
+            if (blocked is not null)
+            {
+                throw BookingInvariantException.ResourceBlocked(
+                    booking.StartsAtUtc, booking.EndsAtUtc, blocked.StartsAtUtc, blocked.EndsAtUtc);
             }
 
             // Overlap against Active rows of the same resource ([start, end) semantics: touching slots are

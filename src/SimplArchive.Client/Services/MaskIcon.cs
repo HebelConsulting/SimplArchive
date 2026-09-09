@@ -51,6 +51,11 @@ public static class MaskIcon
         // A room's booking calendar (ADR 0744): a calendar with a check — bookings, not appointments —
         // because a month grid beside a month grid is two things the eye cannot separate.
         ["schedule"] = (Icons.Material.Filled.EventAvailable, Icons.Material.Outlined.EventAvailable),
+        // The out-of-service pair (ADR 0778). A wrench for the collection and a busy/blocked calendar
+        // for the window inside it: the Schedule beside it is an AVAILABLE calendar, and the two sit on
+        // one resource, so they have to read as opposites at a glance rather than as two calendars.
+        ["maintenance"] = (Icons.Material.Filled.Build, Icons.Material.Outlined.Build),
+        ["maintenance-block"] = (Icons.Material.Filled.EventBusy, Icons.Material.Outlined.EventBusy),
 
         // Item masks — the outline half is never read (an item is not a folder, so it is never empty).
         ["email"] = (Icons.Material.Filled.Email, Icons.Material.Outlined.Email),

@@ -85,15 +85,28 @@ internal sealed class DavControllerContext
             return generated;
         }
 
+        string text;
         try
         {
             await using var stream = await _storage.GetObjectAsync(item.ObjectKey, Cancellation);
             using var reader = new StreamReader(stream);
-            return await reader.ReadToEndAsync(Cancellation);
+            text = await reader.ReadToEndAsync(Cancellation);
         }
         catch (Exception)
         {
             return null;
         }
+
+        // A booking whose resource is out of service is served as TENTATIVE (ADR 0778, owner decision), so a
+        // pilot's calendar shows the flight as unconfirmed rather than looking entirely normal. Projected on
+        // the way OUT — the stored document is untouched, and suspension is derived from the block, so this
+        // reverts by itself the moment the block is cleared.
+        //
+        // Here because this is the ONE door every DAV item body passes through: GET, the multiget report and
+        // the calendar-query report all read through it, and a projection living in one of them would be a
+        // projection the other two do not do.
+        return await Documents.BookingSuspension.IsSuspendedAsync(Db, item.DocumentId, Cancellation)
+            ? Documents.BookingSuspension.ProjectSuspended(text)
+            : text;
     }
 }

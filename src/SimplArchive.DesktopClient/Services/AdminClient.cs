@@ -64,10 +64,14 @@ public sealed class AdminClient(ApiCore core)
     /// creating an account and for editing any of them.
     /// </remarks>
     public sealed record GrantableServiceAccountRights(
-        bool CanManageRepositories, bool CanManageMasks, bool CanManageServiceAccounts, bool CanImport, bool CanExport);
+        bool CanManageRepositories, bool CanManageMasks, bool CanManageServiceAccounts, bool CanImport, bool CanExport,
+        // Ground a bookable resource (ADR 0778). Defaulted so existing construction sites keep compiling —
+        // and note there is no release counterpart: a machine may ground, never certify airworthy again.
+        bool CanBlockResources = false);
 
     public sealed record ServiceAccountInfo(Guid Id, string Name, string ClientId, bool IsActive, bool CanManage,
         bool CanManageRepositories, bool CanManageMasks, bool CanManageServiceAccounts, bool CanImport, bool CanExport,
+        bool CanBlockResources = false,
         IReadOnlyDictionary<string, string>? Links = null)
     {
         public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
@@ -538,7 +542,8 @@ public sealed class AdminClient(ApiCore core)
 
         return new GrantableServiceAccountRights(
             Read(g, "canManageRepositories"), Read(g, "canManageMasks"),
-            Read(g, "canManageServiceAccounts"), Read(g, "canImport"), Read(g, "canExport"));
+            Read(g, "canManageServiceAccounts"), Read(g, "canImport"), Read(g, "canExport"),
+            Read(g, "canBlockResources"));
     }
 
     // Create a service account with its rights; returns the one-time client_id + client_secret (shown once).
@@ -614,6 +619,7 @@ public sealed class AdminClient(ApiCore core)
             !e.TryGetProperty("isActive", out var a) || a.ValueKind == JsonValueKind.True,
             B("canManage"),
             B("canManageRepositories"), B("canManageMasks"), B("canManageServiceAccounts"), B("canImport"), B("canExport"),
+            B("canBlockResources"),
             ApiCore.ParseLinks(e));
     }
 
@@ -777,6 +783,7 @@ public sealed class AdminClient(ApiCore core)
         canManageServiceAccounts = rights.CanManageServiceAccounts,
         canImport = rights.CanImport,
         canExport = rights.CanExport,
+        canBlockResources = rights.CanBlockResources,
     };
 
 

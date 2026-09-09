@@ -50,6 +50,10 @@ public static class MaskIcon
         // A room's booking calendar (ADR 0744): the check says "bookings", keeping it apart from the plain
         // calendar beside it — the same one-glyph-per-thing rule as the mail trays above.
         ["schedule"] = "mdi-calendar-check",
+        // The out-of-service pair (ADR 0778), matching the web client: a wrench for the collection, a
+        // blocked calendar for the window. Opposites of the schedule beside them, not variants of it.
+        ["maintenance"] = "mdi-wrench",
+        ["maintenance-block"] = "mdi-calendar-remove",
         ["email"] = "mdi-email",
         ["note"] = "mdi-note-text",
         ["contact"] = "mdi-card-account-details",

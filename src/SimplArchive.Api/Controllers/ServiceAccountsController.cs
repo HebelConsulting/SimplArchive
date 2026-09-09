@@ -88,6 +88,13 @@ public class ServiceAccountsController : ControllerBase
         public bool CanImport { get; set; }
 
         public bool CanExport { get; set; }
+
+        /// <summary>
+        /// May take a bookable resource out of service (ADR 0778) — a maintenance integration grounding an
+        /// aircraft. There is deliberately no release counterpart: a machine may ground, never certify
+        /// airworthy again (owner decision 2026-09-09).
+        /// </summary>
+        public bool CanBlockResources { get; set; }
     }
 
     public class CreateServiceAccountResource : ServiceAccountResource
@@ -140,6 +147,13 @@ public class ServiceAccountsController : ControllerBase
         public bool CanImport { get; set; }
 
         public bool CanExport { get; set; }
+
+        /// <summary>
+        /// May take a bookable resource out of service (ADR 0778) — a maintenance integration grounding an
+        /// aircraft. There is deliberately no release counterpart: a machine may ground, never certify
+        /// airworthy again (owner decision 2026-09-09).
+        /// </summary>
+        public bool CanBlockResources { get; set; }
     }
 
     public class CreateServiceAccountRequest
@@ -155,6 +169,13 @@ public class ServiceAccountsController : ControllerBase
         public bool CanImport { get; set; }
 
         public bool CanExport { get; set; }
+
+        /// <summary>
+        /// May take a bookable resource out of service (ADR 0778) — a maintenance integration grounding an
+        /// aircraft. There is deliberately no release counterpart: a machine may ground, never certify
+        /// airworthy again (owner decision 2026-09-09).
+        /// </summary>
+        public bool CanBlockResources { get; set; }
     }
 
     // Edit an existing account's name + rights (ADR 0534). Same shape as create minus the secret — a plain
@@ -172,6 +193,13 @@ public class ServiceAccountsController : ControllerBase
         public bool CanImport { get; set; }
 
         public bool CanExport { get; set; }
+
+        /// <summary>
+        /// May take a bookable resource out of service (ADR 0778) — a maintenance integration grounding an
+        /// aircraft. There is deliberately no release counterpart: a machine may ground, never certify
+        /// airworthy again (owner decision 2026-09-09).
+        /// </summary>
+        public bool CanBlockResources { get; set; }
     }
 
     public class RotateSecretResource : HypermediaResource
@@ -198,7 +226,8 @@ public class ServiceAccountsController : ControllerBase
             || (request.CanManageMasks && !caller.CanManageMasks)
             || (request.CanManageServiceAccounts && !caller.CanManageServiceAccounts)
             || (request.CanImport && !caller.CanImport)
-            || (request.CanExport && !caller.CanExport))
+            || (request.CanExport && !caller.CanExport)
+            || (request.CanBlockResources && !caller.CanBlockResources))
         {
             throw InsufficientRightsToGrantException.OnServiceAccount();
         }
@@ -219,6 +248,7 @@ public class ServiceAccountsController : ControllerBase
             CanManageServiceAccounts = request.CanManageServiceAccounts,
             CanImport = request.CanImport,
             CanExport = request.CanExport,
+            CanBlockResources = request.CanBlockResources,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -262,6 +292,7 @@ public class ServiceAccountsController : ControllerBase
             CanManageServiceAccounts = serviceAccount.CanManageServiceAccounts,
             CanImport = serviceAccount.CanImport,
             CanExport = serviceAccount.CanExport,
+            CanBlockResources = serviceAccount.CanBlockResources,
             Links = [new Link("self", $"/api/service-accounts/{serviceAccount.Id}", "GET")],
         };
 
@@ -314,6 +345,7 @@ public class ServiceAccountsController : ControllerBase
                 CanManageServiceAccounts = caller.CanManageServiceAccounts,
                 CanImport = caller.CanImport,
                 CanExport = caller.CanExport,
+                CanBlockResources = caller.CanBlockResources,
             },
             Links = links,
         });
@@ -407,6 +439,7 @@ public class ServiceAccountsController : ControllerBase
         serviceAccount.CanManageServiceAccounts = request.CanManageServiceAccounts;
         serviceAccount.CanImport = request.CanImport;
         serviceAccount.CanExport = request.CanExport;
+        serviceAccount.CanBlockResources = request.CanBlockResources;
 
         try
         {
@@ -512,6 +545,7 @@ public class ServiceAccountsController : ControllerBase
             CanManageServiceAccounts = serviceAccount.CanManageServiceAccounts,
             CanImport = serviceAccount.CanImport,
             CanExport = serviceAccount.CanExport,
+            CanBlockResources = serviceAccount.CanBlockResources,
 
             // ONE rel for this address; the method says which action (ADR 0719). `edit[PUT]` and
             // `revoke[DELETE]` sat beside `self[GET]` on the same URL and said nothing the method did not
@@ -540,7 +574,8 @@ public class ServiceAccountsController : ControllerBase
         bool CanManageMasks,
         bool CanManageServiceAccounts,
         bool CanImport,
-        bool CanExport);
+        bool CanExport,
+        bool CanBlockResources);
 
     private async Task<CallerRights?> GetCallerRightsAsync(CancellationToken cancellationToken)
     {
@@ -548,7 +583,8 @@ public class ServiceAccountsController : ControllerBase
         {
             return await _dbContext.ServiceAccounts
                 .Where(s => s.Id == serviceAccountId)
-                .Select(s => new CallerRights(s.CanManageRepositories, s.CanManageMasks, s.CanManageServiceAccounts, s.CanImport, s.CanExport))
+                .Select(s => new CallerRights(s.CanManageRepositories, s.CanManageMasks, s.CanManageServiceAccounts, s.CanImport, s.CanExport,
+                    s.CanBlockResources))
                 .SingleOrDefaultAsync(cancellationToken);
         }
 
@@ -557,7 +593,10 @@ public class ServiceAccountsController : ControllerBase
             // Effective rights (own ∪ groups) so a management right held via a group takes effect (and is
             // grantable by the escalation cap) — ADR "Enforce group system rights for members".
             var r = await _userSystemRights.GetEffectiveSystemRightsAsync(userId, cancellationToken);
-            return new CallerRights(r.CanManageRepositories, r.CanManageMasks, r.CanManageServiceAccounts, r.CanImport, r.CanExport);
+            // A tenant admin holds every system right implicitly, so the cap must read it that way here too —
+            // otherwise an admin could not grant a service account a right they themselves undeniably hold.
+            return new CallerRights(r.CanManageRepositories, r.CanManageMasks, r.CanManageServiceAccounts, r.CanImport, r.CanExport,
+                r.IsTenantAdmin || r.CanBlockResources);
         }
 
         return null;

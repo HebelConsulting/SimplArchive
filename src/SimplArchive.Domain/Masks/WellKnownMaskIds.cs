@@ -153,6 +153,24 @@ public static class WellKnownMaskIds
     /// </remarks>
     public static readonly Guid Schedule = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E45");
 
+    /// <summary>A bookable resource's out-of-service calendar (ADR 0778) — the Schedule's counterpart.</summary>
+    /// <remarks>
+    /// A second collection rather than blocks living in the Schedule beside the bookings, because the two
+    /// answer opposite questions: the Schedule says when the resource is SPOKEN FOR, this says when it is
+    /// UNAVAILABLE. Mixed into one calendar, a client subscribing to see when an aircraft is free could not
+    /// tell a flight from a grounding, and the conflict check would have to tell them apart by mask on every
+    /// row — the same reasoning that gave the Schedule its own mask rather than reusing Calendar.
+    /// </remarks>
+    public static readonly Guid Maintenance = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E46");
+
+    /// <summary>One out-of-service window — the <c>.ics</c> in a resource's Maintenance collection (ADR 0778).</summary>
+    /// <remarks>
+    /// Shaped like <see cref="Booking"/> deliberately: same calendar facts under the same field names, so the
+    /// classifier and every calendar surface read both without a second code path. Its domain field is Reason
+    /// rather than Purpose — a booking says what the resource is FOR, a block says what is wrong with it.
+    /// </remarks>
+    public static readonly Guid MaintenanceBlock = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E47");
+
     /// <summary>A filed license artefact — today the signed module-license JSON a vendor issues
     /// (ADRs 0740/0743); named the generic "License" (owner decision 2026-09-08) because support licences
     /// will wear it too.</summary>
@@ -198,8 +216,15 @@ public static class WellKnownMaskIds
         // booking calendar on nothing, a booking outside a Schedule a claim without a subject, and a plain
         // Appointment inside a Schedule would be visible time the conflict check cannot see. Rights still
         // flow from the room the normal way — see the room, see its schedule, see its bookings.
-        new(MeetingRoom, "Meeting room", [(Schedule, "Schedule")]),
+        new(MeetingRoom, "Meeting room", [(Schedule, "Schedule"), (Maintenance, "Maintenance")]),
         new(Schedule, "Schedule", [(Booking, "Booking")]),
+        // A Maintenance collection holds exactly its blocks (ADR 0778), two-directionally for the same reason
+        // the Schedule row is: a block outside a Maintenance collection is a grounding of nothing, and anything
+        // else inside one would be time the suspension rule cannot see. Which RESOURCES admit a Maintenance
+        // collection is DERIVED from IsBookable at rule-load (MaskContainmentRules), exactly as the Schedule
+        // is — the row above covers the core's own meeting room, and a module's bookable mask gets both
+        // collections without declaring either.
+        new(Maintenance, "Maintenance", [(MaintenanceBlock, "Maintenance block")]),
     ];
 
     /// <summary>How MANY children wearing a given mask a folder admits — a capacity rule, not an admission one.</summary>
@@ -236,6 +261,12 @@ public static class WellKnownMaskIds
         // while the schedule was a plain Calendar, whose cardinality the decided boundary left uncapped.
         new(MeetingRoom, "Meeting room", Schedule, "Schedule", 1),
 
+        // One Maintenance collection per room, for the same reason (ADR 0778): the block flow files into THE
+        // maintenance collection, so "which one?" must have exactly one answer. Like the Schedule row above,
+        // this caps the CORE's bookable mask; a module's bookable mask inherits the derived admission without
+        // a cardinality cap, which is the Schedule's existing gap rather than a new one.
+        new(MeetingRoom, "Meeting room", Maintenance, "Maintenance", 1),
+
     ];
 
     /// <summary>
@@ -254,7 +285,7 @@ public static class WellKnownMaskIds
     /// </para>
     /// </remarks>
     public static readonly IReadOnlySet<Guid> FolderMasks =
-        new HashSet<Guid> { Folder, Repository, UserFolder, MyDocuments, Mailbox, ImapSpecial, ImapFolder, Notebook, NotebookSection, Addressbook, Calendar, MeetingRoom, Schedule };
+        new HashSet<Guid> { Folder, Repository, UserFolder, MyDocuments, Mailbox, ImapSpecial, ImapFolder, Notebook, NotebookSection, Addressbook, Calendar, MeetingRoom, Schedule, Maintenance };
 
     /// <summary>
     /// The file extensions that make a well-known mask the automatic choice for an upload (#671).
@@ -327,6 +358,11 @@ public static class WellKnownMaskIds
             [Note] = "note",
             [Contact] = "contact",
             [Appointment] = "appointment",
+            // Its own token for the same reason Schedule has one: a maintenance calendar and a booking
+            // calendar sit side by side on one resource, and two masks drawn identically are two things
+            // the eye cannot separate.
+            [Maintenance] = "maintenance",
+            [MaintenanceBlock] = "maintenance-block",
         };
 
     /// <summary>
@@ -359,12 +395,12 @@ public static class WellKnownMaskIds
         // is filed — a hand-made second one would break the cardinality that makes "the schedule" singular.
         // Booking stays here for the PLAIN create paths only — any .ics WRITE into a Schedule is the
         // real creation path and is gated by rights on the Schedule, not by this set.
-        new HashSet<Guid> { Repository, UserFolder, MyDocuments, ImapSpecial, Notebook, Booking, Schedule };
+        new HashSet<Guid> { Repository, UserFolder, MyDocuments, ImapSpecial, Notebook, Booking, Schedule, Maintenance, MaintenanceBlock };
 
     /// <summary>The well-known masks an ITEM wears — the complement of <see cref="FolderMasks"/>.</summary>
     /// <remarks>Stated rather than derived, so the partition guard has two sides to compare instead of one.</remarks>
     public static readonly IReadOnlySet<Guid> ItemMasks =
-        new HashSet<Guid> { BasicEntry, EMail, Note, Contact, Appointment, Booking, License };
+        new HashSet<Guid> { BasicEntry, EMail, Note, Contact, Appointment, Booking, License, MaintenanceBlock };
 
     /// <summary>
     /// Typed folders that ALSO admit a plain <see cref="Folder"/>, so a user can make folders of their own

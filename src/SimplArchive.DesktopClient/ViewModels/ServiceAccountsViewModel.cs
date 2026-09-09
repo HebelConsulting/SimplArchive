@@ -33,13 +33,14 @@ public sealed partial class ServiceAccountsViewModel : ObservableObject
 
     public ObservableCollection<ServiceAccountRowViewModel> Accounts { get; } = [];
 
-    // The create form. Only the five grantable rights (the server caps them at the caller's own).
+    // The create form. Only the grantable rights (the server caps them at the caller's own).
     [ObservableProperty] private string _newName = string.Empty;
     [ObservableProperty] private bool _newCanExport;
     [ObservableProperty] private bool _newCanImport;
     [ObservableProperty] private bool _newCanManageRepositories;
     [ObservableProperty] private bool _newCanManageMasks;
     [ObservableProperty] private bool _newCanManageServiceAccounts;
+    [ObservableProperty] private bool _newCanBlockResources;
 
     [ObservableProperty] private string _status = string.Empty;
     [ObservableProperty] private bool _busy;
@@ -63,16 +64,19 @@ public sealed partial class ServiceAccountsViewModel : ObservableObject
         }
     }
 
-    // The create form's rights, folded into the shared SystemRightsData shape (only the five grantable fields set).
+    // The create form's rights, folded into the shared SystemRightsData shape (only the grantable fields set).
     public AdminClient.SystemRightsData NewRights() => new(
         false, false, false, false, false, false,
         NewCanManageRepositories, NewCanManageMasks, NewCanManageServiceAccounts, false, false,
-        NewCanExport, NewCanImport);
+        NewCanExport, NewCanImport,
+        // Named, not positional — see the note at the edit dialog's call site.
+        CanBlockResources: NewCanBlockResources);
 
     public void ResetNewForm()
     {
         NewName = string.Empty;
         NewCanExport = NewCanImport = NewCanManageRepositories = NewCanManageMasks = NewCanManageServiceAccounts = false;
+        NewCanBlockResources = false;
     }
 }
 
@@ -102,5 +106,6 @@ public sealed class ServiceAccountRowViewModel
         if (Info.CanManageRepositories) { yield return Strings.Get("SaRightRepositories"); }
         if (Info.CanManageMasks) { yield return Strings.Get("SaRightMasks"); }
         if (Info.CanManageServiceAccounts) { yield return Strings.Get("SaRightServiceAccounts"); }
+        if (Info.CanBlockResources) { yield return Strings.Get("SaRightBlockResources"); }
     }
 }

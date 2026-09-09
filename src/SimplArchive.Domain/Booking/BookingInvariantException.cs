@@ -43,6 +43,29 @@ public sealed class BookingInvariantException : InvalidOperationException
     public static BookingInvariantException SlotWithoutExtent(DateTimeOffset start, DateTimeOffset end) =>
         new(BookingInvariantKind.SlotWithoutExtent, $"A booking's slot must have extent: start {start:u} does not precede end {end:u}.");
 
+    /// <summary>The resource is out of service for part or all of the requested slot (ADR 0778).</summary>
+    /// <remarks>
+    /// Distinct from <see cref="SlotTaken"/> because the two are different facts with different remedies: a
+    /// taken slot means somebody else got there first and another time will do, while a blocked one means
+    /// the aircraft is not airworthy and no time inside the block will do. Reporting a block as a conflict
+    /// would send the caller hunting for a free hour that does not exist.
+    ///
+    /// Names the block's window for the same reason SlotTaken names the booking's — a refusal the caller can
+    /// act on beats a bare no.
+    /// </remarks>
+    public static BookingInvariantException ResourceBlocked(
+        DateTimeOffset requestedStart, DateTimeOffset requestedEnd, DateTimeOffset blockStart, DateTimeOffset blockEnd) =>
+        new(BookingInvariantKind.ResourceBlocked, $"The requested slot {requestedStart:u}–{requestedEnd:u} falls in a maintenance "
+            + $"block {blockStart:u}–{blockEnd:u}: the resource is out of service (ADR 0778).");
+
+    /// <summary>A block's window has no extent: start must precede end.</summary>
+    /// <remarks>
+    /// Its own kind rather than reusing <see cref="SlotWithoutExtent"/>: the message has to say which of the
+    /// two a caller got wrong, and a block and a booking are written through different surfaces.
+    /// </remarks>
+    public static BookingInvariantException BlockWithoutExtent(DateTimeOffset start, DateTimeOffset end) =>
+        new(BookingInvariantKind.BlockWithoutExtent, $"A block's window must have extent: start {start:u} does not precede end {end:u}.");
+
     /// <summary>Two claims of the same booking document disagree about when the booking is.</summary>
     /// <remarks>
     /// A booking may now claim SEVERAL resources at once (ADR 0774) — a training flight occupies the
@@ -65,4 +88,6 @@ public enum BookingInvariantKind
     NotBookable,
     SlotWithoutExtent,
     ClaimsDisagreeOnSlot,
+    ResourceBlocked,
+    BlockWithoutExtent,
 }

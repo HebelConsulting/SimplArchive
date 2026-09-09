@@ -23,6 +23,10 @@ public class ImmutableStructuralMaskTests
             // (the .ics inside stop being bookings), which is the "destroys the meaning of what is inside"
             // half of the boundary, unlike the plain Calendar that stays deliberately re-typeable below.
             WellKnownMaskIds.Schedule,
+            // ADR 0778: a resource's Maintenance collection is structural for exactly the Schedule's reason —
+            // re-type it and the .ics inside stop being blocks, so the ResourceBlock rows point at documents
+            // that no longer mean anything, and an aircraft silently comes back into service.
+            WellKnownMaskIds.Maintenance,
         ];
 
         Assert.Equal(
