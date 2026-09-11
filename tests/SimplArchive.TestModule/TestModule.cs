@@ -63,17 +63,33 @@ public sealed class TestModule : IIndustryModule
     /// Always non-null, so the seam is exercised on every booking written in a tenant where this module is
     /// active: a hook that only existed when a test asked for it would leave the wiring itself untested.
     /// </summary>
-    public Func<BookingAdmissionContext, Task>? ReviewBooking => context =>
-        Environment.GetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_BOOKING_REVIEW") switch
+    public Func<BookingAdmissionContext, Task>? ReviewBooking => async context =>
+    {
+        switch (Environment.GetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_BOOKING_REVIEW"))
         {
-            "refuse" => throw new ModuleApiException(
-                "TEST_BOOKING_REFUSED",
-                409,
-                $"The test module refused this booking ({Describe(context.Request)}).",
-                [Describe(context.Request)]),
-            "throw" => throw new InvalidOperationException("The test module's booking handler is broken."),
-            _ => Task.CompletedTask,
-        };
+            case "refuse":
+                throw new ModuleApiException(
+                    "TEST_BOOKING_REFUSED",
+                    409,
+                    $"The test module refused this booking ({Describe(context.Request)}).",
+                    [Describe(context.Request)]);
+
+            case "throw":
+                throw new InvalidOperationException("The test module's booking handler is broken.");
+
+            // Reports whether the module can READ a document named in an environment variable — the probe
+            // behind "the review runs as the module, not as the writer" (core ADR 0781). Pointed at a
+            // document only the module's principal is granted on, a refusal saying seen=True proves the
+            // reads behind a vetting rule do not depend on who is writing the booking.
+            case "probe":
+                var target = Guid.Parse(Environment.GetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_PROBE_DOCUMENT")!);
+                var seen = await context.Archive.GetDocumentAsync(target) is not null;
+                throw new ModuleApiException("TEST_BOOKING_PROBE", 409, $"seen={seen}", [$"seen={seen}"]);
+
+            default:
+                return;
+        }
+    };
 
     /// <summary>What the module was shown, rendered so a test can assert it over the wire: how many claims,
     /// how many of them stand for a person, and whether this is a first booking or a rebooking.</summary>
@@ -81,7 +97,9 @@ public sealed class TestModule : IIndustryModule
         $"claims={request.Claims.Count}"
         + $" persons={request.Claims.Count(c => c.RepresentsUserId is not null)}"
         + $" holding={request.Claims.Count(c => c.IsHolding)}"
-        + $" isNew={request.IsNew}";
+        + $" isNew={request.IsNew}"
+        + $" newClaims={request.Claims.Count(c => c.IsNewClaim)}"
+        + $" slotChanged={request.SlotChanged}";
 
     public IReadOnlyList<ModuleMaskSeed> Masks { get; } =
     [

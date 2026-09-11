@@ -1,8 +1,11 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using SimplArchive.Infrastructure.Persistence;
 using SimplArchive.ModuleAbi;
 
 namespace SimplArchive.EndToEndTests;
@@ -28,7 +31,9 @@ public class BookingAdmissionTests
 
     public BookingAdmissionTests(E2EApiFactory factory) => _factory = factory;
 
-    private sealed record Rig(HttpClient Admin, HttpClient Owner, Guid TenantId, Guid RepoId, Guid RoomId);
+    private sealed record Rig(
+        HttpClient Admin, HttpClient Owner, Guid TenantId, Guid RepoId, Guid RoomId,
+        Guid AdminUserId, string AdminEmail, string AdminPassword);
 
     /// <summary>A tenant with the module ACTIVE and a bookable room in it. The room is a core Meeting room,
     /// deliberately: the seam is asked about every booking, not only about a module's own resources, and
@@ -68,7 +73,7 @@ public class BookingAdmissionTests
         var roomId = (await TestJson.Post(owner, $"/api/documents/{repoId}/children",
             new { name = "Room 1", maskId = masks["Meeting room"] })).GetProperty("id").GetGuid();
 
-        return new Rig(admin, owner, tenantId, repoId, roomId);
+        return new Rig(admin, owner, tenantId, repoId, roomId, adminId, email, password);
     }
 
     private static object Slot(int startHour, int endHour) => new
@@ -158,6 +163,179 @@ public class BookingAdmissionTests
 
             // The module is NAMED, so an administrator knows where to look rather than suspecting the schedule.
             Assert.Contains("test-module", problem.GetProperty("detail").GetString()!, StringComparison.Ordinal);
+
+            rig.Admin.Dispose();
+            rig.Owner.Dispose();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(ReviewSwitch, null);
+        }
+    }
+
+    [Fact]
+    public async Task The_review_reads_as_the_module_not_as_whoever_is_writing()
+    {
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", vendorKey.ExportSubjectPublicKeyInfoPem());
+        try
+        {
+            var rig = await RigAsync(vendorKey);
+
+            // A document in a SEPARATE repository that the module's principal may see and the booking's
+            // writer may not. That asymmetry is the whole test: it is the only way to tell which identity
+            // the reads behind a vetting rule are running under.
+            //
+            // Created by the OWNER (the service account holding canManageRepositories), and the writer is a
+            // PLAIN user granted only on the room's repository — neither of the rig's other principals can
+            // play that part, since a tenant admin sees everything by bypass and would make seen=True
+            // meaningless.
+            var vaultId = (await TestJson.Post(rig.Owner, "/api/repositories", new { name = $"Vault {Guid.NewGuid():N}" }))
+                .GetProperty("id").GetGuid();
+            var secretId = (await TestJson.Post(rig.Owner, $"/api/documents/{vaultId}/children",
+                new { name = $"Module only {Guid.NewGuid():N}" })).GetProperty("id").GetGuid();
+
+            var pilotEmail = $"pilot-{Guid.NewGuid():N}@e2e.local";
+            const string pilotPassword = "modadmin-1234";
+            var pilotId = await _factory.SeedUserAsync(rig.TenantId, pilotEmail, pilotPassword, "Pilot");
+            await TestJson.Put(rig.Owner, $"/api/documents/{rig.RepoId}/acl-entries/users/{pilotId}",
+                new { canSee = true, canReadContent = true, canCreateSubItems = true, canEditContent = true });
+            using var writer = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(pilotEmail, pilotPassword));
+
+            var principalId = (await TestJson.Get(rig.Admin, "/api/service-accounts"))
+                .GetProperty("serviceAccounts").EnumerateArray()
+                .Single(sa => sa.GetProperty("name").GetString() == "Module: Test Module")
+                .GetProperty("id").GetGuid();
+            await TestJson.Put(rig.Admin, $"/api/documents/{vaultId}/acl-entries/service-accounts/{principalId}",
+                new { canSee = true, canReadContent = true });
+
+            // The writer was never granted anything on that repository, and confirms it: without this the
+            // test would pass just as well if BOTH identities could read the document.
+            var denied = await writer.GetAsync($"/api/documents/{secretId}");
+            Assert.False(denied.IsSuccessStatusCode,
+                $"The writer could read {secretId}, so seen=True below would prove nothing. "
+                + "This guard is what stops the test passing by accident.");
+
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_PROBE_DOCUMENT", secretId.ToString());
+            Environment.SetEnvironmentVariable(ReviewSwitch, "probe");
+
+            var response = await writer.PostAsJsonAsync($"/api/documents/{rig.RoomId}/bookings", Slot(18, 19));
+
+            var problem = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
+            Assert.Equal("TEST_BOOKING_PROBE", problem.GetProperty("errorCode").GetString());
+
+            // seen=True: the module read what only the MODULE may read, while the writer could not. Were the
+            // review running as the writer this would be seen=False — and the consent rule's verdict would
+            // then depend on who wrote the booking rather than on the booking.
+            Assert.Contains("seen=True", problem.GetProperty("detail").GetString()!, StringComparison.Ordinal);
+
+            rig.Admin.Dispose();
+            rig.Owner.Dispose();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(ReviewSwitch, null);
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_PROBE_DOCUMENT", null);
+        }
+    }
+
+    /// <summary>The href of a room's Schedule collection, from the CalDAV home set.</summary>
+    private static async Task<string> ScheduleHrefAsync(HttpClient dav, AuthenticationHeaderValue basic, string roomName)
+    {
+        using var request = new HttpRequestMessage(new HttpMethod("PROPFIND"), "/caldav/calendars/")
+        {
+            Headers = { Authorization = basic },
+            Content = new StringContent(
+                "<?xml version=\"1.0\"?><d:propfind xmlns:d=\"DAV:\"><d:allprop/></d:propfind>", Encoding.UTF8, "text/xml"),
+        };
+        request.Headers.Add("Depth", "1");
+        using var response = await dav.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.MultiStatus, response.StatusCode);
+
+        // Split case-insensitively: this server emits lowercase element names, so splitting on the
+        // upper-case spelling silently yields ONE block containing everything.
+        var blocks = System.Text.RegularExpressions.Regex.Split(
+            body, "</[a-zA-Z]+:response>", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var block = blocks.FirstOrDefault(b => b.Contains($"{roomName} / Schedule", StringComparison.Ordinal))
+            ?? throw new InvalidOperationException($"No '{roomName} / Schedule' in the home set. Body: {body}");
+        return System.Text.RegularExpressions.Regex.Match(block, "<[^>]*href[^>]*>([^<]+)</").Groups[1].Value;
+    }
+
+    [Fact]
+    public async Task Every_claim_is_shown_including_the_ones_an_attendee_added()
+    {
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", vendorKey.ExportSubjectPublicKeyInfoPem());
+        try
+        {
+            var rig = await RigAsync(vendorKey);
+
+            // A Schedule to PUT into: assigning the Meeting-room mask does not create one, and this rig has
+            // not booked through the endpoint that would (noted in ADR 0776).
+            var scheduleId = (await TestJson.Post(rig.Admin, $"/api/documents/{rig.RoomId}/children",
+                new { name = "Schedule" })).GetProperty("id").GetGuid();
+            await TestJson.Put(rig.Admin, $"/api/documents/{scheduleId}/mask",
+                new { maskId = SimplArchive.Domain.Masks.WellKnownMaskIds.Schedule });
+
+            // A second bookable document standing for the writer, so an ATTENDEE naming them becomes a claim.
+            var personId = (await TestJson.Post(rig.Admin, $"/api/documents/{rig.RepoId}/children",
+                new { name = $"Person {Guid.NewGuid():N}"[..16] })).GetProperty("id").GetGuid();
+            await TestJson.Put(rig.Admin, $"/api/documents/{personId}/mask",
+                new { maskId = SimplArchive.Domain.Masks.WellKnownMaskIds.MeetingRoom });
+            using (var scope = _factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+                db.ResourcePrincipals.Add(new SimplArchive.Domain.Booking.ResourcePrincipal
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = rig.TenantId,
+                    ResourceDocumentId = personId,
+                    UserId = rig.AdminUserId,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
+                await db.SaveChangesAsync();
+            }
+
+            var davPassword = (await TestJson.Post(rig.Admin, "/api/me/webdav-password", new { }))
+                .GetProperty("password").GetString()!;
+            var basic = new AuthenticationHeaderValue("Basic",
+                Convert.ToBase64String(Encoding.UTF8.GetBytes($"{rig.AdminEmail}:{davPassword}")));
+
+            Environment.SetEnvironmentVariable(ReviewSwitch, "refuse");
+
+            var uid = Guid.NewGuid().ToString();
+            var ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\n"
+                + $"UID:{uid}\r\nSUMMARY:Attendee booking\r\n"
+                + "DTSTART:20270512T200000Z\r\nDTEND:20270512T210000Z\r\n"
+                + $"ATTENDEE:mailto:{rig.AdminEmail}\r\n"
+                + "END:VEVENT\r\nEND:VCALENDAR\r\n";
+
+            using var dav = _factory.CreateClient();
+
+            // The collection's href is DISCOVERED, never composed: the server owns its URL space, and a
+            // guessed path answers with an empty body that reads exactly like "the module saw no claims".
+            var schedule = await ScheduleHrefAsync(dav, basic, "Room 1");
+
+            using var request = new HttpRequestMessage(HttpMethod.Put, $"{schedule}{uid}.ics")
+            {
+                Content = new StringContent(ics, Encoding.UTF8, "text/calendar"),
+            };
+            request.Headers.Authorization = basic;
+            var response = await dav.SendAsync(request);
+
+            var body = await response.Content.ReadAsStringAsync();
+
+            // TWO claims: the room that holds the .ics, and the person the ATTENDEE resolved to.
+            //
+            // This is the assertion that matters. The attendee's claim is added during reconciliation, and it
+            // was being added to the DbContext WITHOUT being added to the claim list the review is built
+            // from — so a module vetting a flight saw the aircraft and neither of the people on it, which is
+            // the one thing a consent rule exists to look at. The single-claim tests above passed throughout.
+            Assert.Contains("claims=2", body, StringComparison.Ordinal);
+            Assert.Contains("holding=1", body, StringComparison.Ordinal);
+            Assert.Contains("newClaims=2", body, StringComparison.Ordinal);
+            Assert.Contains("slotChanged=False", body, StringComparison.Ordinal);
 
             rig.Admin.Dispose();
             rig.Owner.Dispose();

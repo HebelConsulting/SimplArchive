@@ -27,6 +27,7 @@ public interface IBookingAdmissionReviewer
 /// <param name="IsNew">True on the booking's first version; false when an existing one is being rebooked.</param>
 /// <param name="WriterUserId">The interactive user writing it, when one is.</param>
 /// <param name="WriterServiceAccountId">The machine principal writing it, when one is.</param>
+/// <param name="SlotChanged">True when this write moves an existing booking to a different slot.</param>
 public sealed record BookingAdmissionFacts(
     Guid BookingDocumentId,
     DateTimeOffset StartsAtUtc,
@@ -34,15 +35,18 @@ public sealed record BookingAdmissionFacts(
     IReadOnlyList<BookingAdmissionClaimFacts> Claims,
     bool IsNew,
     Guid? WriterUserId,
-    Guid? WriterServiceAccountId);
+    Guid? WriterServiceAccountId,
+    bool SlotChanged = false);
 
 /// <summary>One claim within a reviewed booking.</summary>
 /// <param name="ResourceDocumentId">The claimed resource document.</param>
 /// <param name="MaskId">The mask it wears, so a module recognises its own resources.</param>
 /// <param name="IsHolding">True for the resource whose Schedule holds the document.</param>
 /// <param name="RepresentsUserId">The person the resource stands for (ADR 0779), when it stands for one.</param>
+/// <param name="IsNewClaim">True when this write adds the claim rather than carrying it forward.</param>
 public sealed record BookingAdmissionClaimFacts(
     Guid ResourceDocumentId,
     Guid? MaskId,
     bool IsHolding,
-    Guid? RepresentsUserId);
+    Guid? RepresentsUserId,
+    bool IsNewClaim = false);

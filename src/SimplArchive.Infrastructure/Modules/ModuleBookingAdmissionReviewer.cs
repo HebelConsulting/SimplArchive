@@ -50,10 +50,12 @@ public sealed class ModuleBookingAdmissionReviewer : IBookingAdmissionReviewer
             facts.BookingDocumentId,
             facts.StartsAtUtc,
             facts.EndsAtUtc,
-            [.. facts.Claims.Select(c => new BookingAdmissionClaim(c.ResourceDocumentId, c.MaskId, c.IsHolding, c.RepresentsUserId))],
+            [.. facts.Claims.Select(c => new BookingAdmissionClaim(
+                c.ResourceDocumentId, c.MaskId, c.IsHolding, c.RepresentsUserId, c.IsNewClaim))],
             facts.IsNew,
             facts.WriterUserId,
-            facts.WriterServiceAccountId);
+            facts.WriterServiceAccountId,
+            facts.SlotChanged);
 
         var now = DateTimeOffset.UtcNow;
         foreach (var loaded in modules)
@@ -67,6 +69,22 @@ public sealed class ModuleBookingAdmissionReviewer : IBookingAdmissionReviewer
             // (ADR 0781): this service sits on a path the facade can re-enter, and a constructor edge would
             // be a cycle the container resolves at startup rather than a re-entrancy the runtime handles.
             var archive = (IModuleArchiveFacade)_services.GetService(typeof(IModuleArchiveFacade))!;
+
+            // The review runs as the MODULE, exactly as fact providers and proposals do (ADR 0736) — not as
+            // whoever is writing the booking.
+            //
+            // This is correctness, not tidiness. A vetting rule is the module's own judgement about its own
+            // documents, and a module's documents are isolated from most callers: a student cannot read
+            // another pilot's dossier, which is precisely why the instructor proposal exists. Left running as
+            // the writer, the SAME booking would be admitted or refused depending on who wrote it, because
+            // the reads behind the rule would answer differently. A consent rule whose verdict depends on the
+            // reader is not a rule.
+            var identity = _services.GetService(typeof(ModuleIdentityAccessor)) as ModuleIdentityAccessor;
+            var restore = identity?.ModuleId;
+            if (identity is not null)
+            {
+                identity.ModuleId = loaded.Module.ModuleId;
+            }
 
             try
             {
@@ -90,6 +108,16 @@ public sealed class ModuleBookingAdmissionReviewer : IBookingAdmissionReviewer
                     "Module {ModuleId} failed to vet booking {BookingDocumentId}; the booking is refused. "
                     + "Trace carries the exchange (ADR 0626).", loaded.Module.ModuleId, facts.BookingDocumentId);
                 throw new BookingVettingFailedException(loaded.Module.ModuleId, ex);
+            }
+            finally
+            {
+                // Restored even when the review refused: a refusal unwinds through the booking path, which
+                // still has reads of its own to do, and leaving the scope impersonating a module would give
+                // them a different answer than they would get anywhere else.
+                if (identity is not null)
+                {
+                    identity.ModuleId = restore;
+                }
             }
         }
     }

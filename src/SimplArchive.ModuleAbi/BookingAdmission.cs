@@ -41,6 +41,17 @@ public sealed record BookingAdmissionContext(
 /// <param name="WriterUserId">The interactive user writing it, when one is.</param>
 /// <param name="WriterServiceAccountId">The machine principal writing it, when one is. A module's own
 /// per-tenant service principal appears here when the module itself is the writer.</param>
+/// <param name="SlotChanged">True when this write MOVES an existing booking — the slot differs from the one
+/// its claims held before (ABI 0.17, core ADR 0783). Always false on a booking's first version, where there
+/// is no previous slot to differ from.
+/// <para>
+/// What it is for: a rule asking somebody's consent needs to ask again when the thing they consented to
+/// changes, and NOT when it does not. Substituting one claimant for another leaves everyone else committed
+/// to exactly the time they already agreed to, so re-asking them would refuse an ordinary substitution;
+/// moving the booking re-commits all of them to a time nobody agreed to, so not asking would be a back door
+/// — book an hour somebody offered, then quietly move it to one they did not.
+/// </para>
+/// </param>
 public sealed record BookingAdmissionRequest(
     Guid BookingDocumentId,
     DateTimeOffset StartsAtUtc,
@@ -48,7 +59,8 @@ public sealed record BookingAdmissionRequest(
     IReadOnlyList<BookingAdmissionClaim> Claims,
     bool IsNew,
     Guid? WriterUserId,
-    Guid? WriterServiceAccountId);
+    Guid? WriterServiceAccountId,
+    bool SlotChanged = false);
 
 /// <summary>One resource a booking claims, with the two facts a module needs to recognise it.</summary>
 /// <param name="ResourceDocumentId">The resource document — an aircraft, a room, a pilot dossier.</param>
@@ -60,8 +72,18 @@ public sealed record BookingAdmissionRequest(
 /// <see cref="ModuleMaskSeed.RepresentsPrincipalField"/> (ABI 0.13) and the value resolved to a user. Null for
 /// a thing rather than a person — and also for a person-representing document whose address matches no user,
 /// which the core logs rather than refuses.</param>
+/// <param name="IsNewClaim">True when this write ADDS the claim — the resource was not on the booking
+/// before (ABI 0.17, core ADR 0783). Every claim of a booking's first version is new.
+/// <para>
+/// The companion to <see cref="BookingAdmissionRequest.SlotChanged"/>: together they say whether anything
+/// changed for THIS claimant. A claim that is neither new nor moved is a commitment already made and
+/// already agreed to, and asking for it again is how withdrawal-by-substitution would be refused in the
+/// ordinary case — the remaining participants are still on a flight they never left.
+/// </para>
+/// </param>
 public sealed record BookingAdmissionClaim(
     Guid ResourceDocumentId,
     Guid? MaskId,
     bool IsHolding,
-    Guid? RepresentsUserId);
+    Guid? RepresentsUserId,
+    bool IsNewClaim = false);

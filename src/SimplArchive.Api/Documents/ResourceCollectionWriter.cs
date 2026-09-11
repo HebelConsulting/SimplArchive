@@ -107,6 +107,13 @@ internal sealed class ResourceCollectionWriter
 
         holding.ResourceDocumentId = resourceId;
 
+        // Captured BEFORE the loop below overwrites it: "did this write MOVE the booking" is a question about
+        // the slot the claims held on arrival, and one line later there is no such thing left to compare to
+        // (ADR 0783). A brand-new claim has no previous slot, so a first booking never counts as moved.
+        var slotChanged = !wasNew
+            && _dbContext.Entry(holding).State != EntityState.Added
+            && (holding.StartsAtUtc != startsAt.ToUniversalTime() || holding.EndsAtUtc != endsAt.ToUniversalTime());
+
         // The slot moves on EVERY claim: they are one event, and the invariant requires them to agree.
         foreach (var claim in claims)
         {
@@ -120,7 +127,7 @@ internal sealed class ResourceCollectionWriter
         // claims are reconciled, because a module's question is about the whole claim set — "is the writer an
         // instructor on THIS flight?" is unanswerable from the holding claim alone — and BEFORE the save, so
         // a refusal costs nothing and leaves nothing behind.
-        await ReviewAsync(document, version, claims, holding, wasNew, startsAt, endsAt, cancellationToken);
+        await ReviewAsync(document, version, claims, holding, wasNew, slotChanged, startsAt, endsAt, cancellationToken);
 
         // The audit event is BUILT here and RECORDED by the caller, after the save that may still refuse this
         // booking. IAuditRecorder.RecordAsync calls SaveChangesAsync itself, so recording inline would flush
@@ -151,7 +158,7 @@ internal sealed class ResourceCollectionWriter
     /// </remarks>
     private async Task ReviewAsync(
         Document document, DocumentVersion version, List<ResourceBooking> claims, ResourceBooking holding,
-        bool wasNew, DateTimeOffset startsAt, DateTimeOffset endsAt, CancellationToken cancellationToken)
+        bool wasNew, bool slotChanged, DateTimeOffset startsAt, DateTimeOffset endsAt, CancellationToken cancellationToken)
     {
         if (_admission is null)
         {
@@ -178,10 +185,14 @@ internal sealed class ResourceCollectionWriter
                 c.ResourceDocumentId,
                 masks.FirstOrDefault(m => m.Id == c.ResourceDocumentId)?.MaskId,
                 c.ResourceDocumentId == holding.ResourceDocumentId,
-                principals.FirstOrDefault(p => p.ResourceDocumentId == c.ResourceDocumentId)?.UserId))],
+                principals.FirstOrDefault(p => p.ResourceDocumentId == c.ResourceDocumentId)?.UserId,
+                // Read HERE rather than captured earlier, because the attendee reconcile runs in between and
+                // is what adds most of them. Nothing has saved yet, so an added claim still says so.
+                _dbContext.Entry(c).State == EntityState.Added))],
             wasNew,
             version.CreatedByUserId,
-            version.CreatedByServiceAccountId);
+            version.CreatedByServiceAccountId,
+            slotChanged);
 
         try
         {
@@ -637,9 +648,16 @@ internal sealed class ResourceCollectionWriter
         // organiser inviting the room itself is ordinary, and a duplicate claim would be refused as an overlap.
         wanted.Remove(holding.ResourceDocumentId);
 
-        foreach (var resourceId in wanted.Where(id => claims.All(c => c.ResourceDocumentId != id)))
+        // Added to the CLAIMS list as well as to the context, and the distinction is not academic: everything
+        // downstream that reasons about "this booking's claims" reads this list, so a row added only to the
+        // context is a claimant the audit line does not name and — since ADR 0781 — a claimant no module is
+        // ever shown. The consent rule's whole subject is the attendees, so the seam would have been asking
+        // about the aircraft and nothing else.
+        foreach (var resourceId in wanted.Where(id => claims.All(c => c.ResourceDocumentId != id)).ToList())
         {
-            _dbContext.ResourceBookings.Add(NewClaim(document, version, resourceId, startsAt, endsAt));
+            var claim = NewClaim(document, version, resourceId, startsAt, endsAt);
+            _dbContext.ResourceBookings.Add(claim);
+            claims.Add(claim);
         }
 
         // Removed from the attendee list means removed from the flight: the claim goes, freeing that person's
