@@ -455,7 +455,12 @@ internal static class ImapFetch
             // section-number defect class #766 was. Unconditional by decision: this is a showcase product's
             // signature, and gating it becomes a feature the day a customer asks.
             new TextPart("plain") { Text = SyntheticText(message) },
-            new MimePart
+            // The media type is derived from the EXTENSION rather than left to default. A MimePart with no
+            // content type is application/octet-stream, so every attachment this server synthesised — a PDF,
+            // a JPEG, a Word document — arrived as an anonymous blob: a client cannot preview it, cannot pick
+            // an icon for it, and cannot offer "open with". The bytes were always right; what was missing was
+            // the one header that says what they are.
+            new MimePart(MimeTypes.GetMimeType(message.Name + message.Extension))
             {
                 Content = new MimeContent(new MemoryStream(content.ToArray())),
                 ContentDisposition = new ContentDisposition(ContentDisposition.Attachment) { FileName = message.Name + message.Extension },
@@ -636,6 +641,25 @@ internal static class ImapFetch
             : "(" + string.Concat(list.Select(a => $"({Quote(string.IsNullOrEmpty(a.Name) ? null : a.Name)} NIL {Quote(a.LocalPart)} {Quote(a.Domain)})")) + ")";
     }
 
+    /// <summary>
+    /// The <c>BODY</c> / <c>BODYSTRUCTURE</c> response for one entity (RFC 3501 §7.4.2).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b><paramref name="extended"/> is what tells the two apart</b>, and it used to be accepted and then
+    /// ignored — both forms returned the non-extensible <c>BODY</c> shape. The extension data it withholds is
+    /// not decoration: its second field is the <b>body disposition</b>, which is where
+    /// <c>("attachment" ("FILENAME" …))</c> lives, and that is how a client decides a part is an ATTACHMENT
+    /// rather than content to render.
+    /// </para>
+    /// <para>
+    /// Apple Mail asks <c>BODYSTRUCTURE</c>, saw no disposition, and rendered the base64 of a PDF as the
+    /// message text. The message itself was well-formed the whole time — correct boundaries, correct blank
+    /// lines, a proper <c>Content-Disposition</c> header in the part — so anything that read the MESSAGE was
+    /// satisfied and only a client that trusts BODYSTRUCTURE was wrong. MailKit fills missing extension data
+    /// with NIL and carried on, which is why our own tests never saw it: a tolerant client hides a wire defect.
+    /// </para>
+    /// </remarks>
     private static string BodyStructure(MimeEntity? entity, bool extended)
     {
         switch (entity)
@@ -643,16 +667,20 @@ internal static class ImapFetch
             case Multipart multipart:
                 {
                     var children = string.Concat(multipart.Select(c => BodyStructure(c, extended)));
-                    return $"({children} {Quote(multipart.ContentType.MediaSubtype.ToUpperInvariant())})";
+                    var subtype = Quote(multipart.ContentType.MediaSubtype.ToUpperInvariant());
+
+                    // A multipart's extension data is ordered differently from a part's: parameters first,
+                    // then disposition, language, location.
+                    var tail = extended
+                        ? $" {Parameters(multipart.ContentType)} {Disposition(multipart.ContentDisposition)} NIL NIL"
+                        : string.Empty;
+                    return $"({children} {subtype}{tail})";
                 }
             case MessagePart:
                 // A message/rfc822 part serves as an opaque leaf in this slice.
                 return "(\"MESSAGE\" \"RFC822\" NIL NIL NIL \"7BIT\" 0)";
             case MimePart part:
                 {
-                    var parameters = part.ContentType.Parameters.Count == 0
-                        ? "NIL"
-                        : "(" + string.Join(' ', part.ContentType.Parameters.Select(p => $"{Quote(p.Name.ToUpperInvariant())} {Quote(p.Value)}")) + ")";
                     var encoding = part.ContentTransferEncoding switch
                     {
                         ContentEncoding.Base64 => "BASE64",
@@ -662,11 +690,47 @@ internal static class ImapFetch
                     };
                     var size = part.Content?.Stream?.Length ?? 0;
                     var lineEstimate = part.ContentType.IsMimeType("text", "*") ? $" {Math.Max(1, size / 60)}" : string.Empty;
-                    return $"({Quote(part.ContentType.MediaType.ToUpperInvariant())} {Quote(part.ContentType.MediaSubtype.ToUpperInvariant())} {parameters} NIL NIL {Quote(encoding)} {size}{lineEstimate})";
+
+                    // MD5, disposition, language, location — in that order (RFC 3501). Only the disposition is
+                    // answered with anything; the other three are honestly NIL rather than omitted, because a
+                    // client counts fields positionally and a short list is not the same as a list of nulls.
+                    var tail = extended
+                        ? $" NIL {Disposition(part.ContentDisposition)} NIL NIL"
+                        : string.Empty;
+
+                    return $"({Quote(part.ContentType.MediaType.ToUpperInvariant())} {Quote(part.ContentType.MediaSubtype.ToUpperInvariant())} "
+                        + $"{Parameters(part.ContentType)} NIL NIL {Quote(encoding)} {size}{lineEstimate}{tail})";
                 }
             default:
                 return "(\"TEXT\" \"PLAIN\" (\"CHARSET\" \"US-ASCII\") NIL NIL \"7BIT\" 0 0)";
         }
+    }
+
+    /// <summary>A content type's parameters as the parenthesized list BODYSTRUCTURE wants, or NIL.</summary>
+    private static string Parameters(ContentType contentType) =>
+        contentType.Parameters.Count == 0
+            ? "NIL"
+            : "(" + string.Join(' ', contentType.Parameters.Select(p => $"{Quote(p.Name.ToUpperInvariant())} {Quote(p.Value)}")) + ")";
+
+    /// <summary>
+    /// The body-disposition field: <c>("ATTACHMENT" ("FILENAME" "invoice.pdf"))</c>, or NIL when the part
+    /// declares none.
+    /// </summary>
+    /// <remarks>
+    /// The field this whole method exists for. A part with no disposition is content a client renders; a part
+    /// disposed as an attachment is a file it offers to save, and nothing else in the response says which.
+    /// </remarks>
+    private static string Disposition(ContentDisposition? disposition)
+    {
+        if (disposition is null)
+        {
+            return "NIL";
+        }
+
+        var parameters = disposition.Parameters.Count == 0
+            ? "NIL"
+            : "(" + string.Join(' ', disposition.Parameters.Select(p => $"{Quote(p.Name.ToUpperInvariant())} {Quote(p.Value)}")) + ")";
+        return $"({Quote(disposition.Disposition.ToUpperInvariant())} {parameters})";
     }
 
     /// <remarks>
