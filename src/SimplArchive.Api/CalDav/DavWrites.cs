@@ -157,8 +157,17 @@ internal static class DavWrites
         {
             await services.GetRequiredService<DocumentFinalizer>().FinalizeAsync(version, context.Cancellation);
         }
-        catch (Errors.Exceptions.Booking.BookingException refusal)
+        // EVERY refusal, not just the core's own. This caught BookingException alone, so a MODULE's refusal
+        // (ADR 0781) — a ModuleApiException — did not match, and the husk this handler exists to prevent
+        // survived: a phantom entry in the resource's Schedule with no claim behind it, and a client retrying
+        // the same resource name met a sibling-name 409 instead of its answer. Precisely the failure mode a
+        // narrow catch has here: it does not break when a new refusal kind arrives, it stops matching.
+        //
+        // Measured rather than reasoned: a refused CalDAV booking left document aff22ca5 behind on the demo
+        // stack, with one version and no claim.
+        catch (Exception e) when (e is Errors.Exceptions.Booking.BookingException or ModuleAbi.ModuleApiException)
         {
+            var refusal = e;
             // A refused booking write must not strand its husk: a DAV client retries AT THE SAME resource
             // name (a different time, same event), and a lingering maskless document there would turn every
             // retry into a sibling-name 409 — the save-loop failure the WebDAV lessons warn about. So a
@@ -182,7 +191,19 @@ internal static class DavWrites
                 }
             }
 
-            return new StatusCodeResult(refusal.StatusCode);
+            // A MODULE's refusal is RETHROWN rather than answered here, so the global handler renders it as
+            // the RFC 7807 problem it already knows how to render — with the module's own code and its
+            // localized message. Swallowing it into a bare status was the first version of this fix, and it
+            // cost the client the one thing that tells a pilot what to do about the refusal.
+            //
+            // The core's own BookingException keeps answering as a bare status, which is what DAV clients
+            // have always had from this path.
+            if (refusal is ModuleAbi.ModuleApiException)
+            {
+                throw;
+            }
+
+            return new StatusCodeResult(((Errors.Exceptions.Booking.BookingException)refusal).StatusCode);
         }
 
         await services.GetRequiredService<IAuditRecorder>().RecordAsync(

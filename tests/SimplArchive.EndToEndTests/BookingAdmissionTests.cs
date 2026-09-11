@@ -378,6 +378,39 @@ public class BookingAdmissionTests
             Assert.Contains("dropped=1", dropBody, StringComparison.Ordinal);
             Assert.Contains("claims=2", dropBody, StringComparison.Ordinal);
 
+            // A REFUSED write leaves no husk. DavWrites purges the document a refused booking created, but
+            // caught only the core's BookingException — so a MODULE's refusal (a ModuleApiException) slipped
+            // past it and left a phantom entry in the resource's Schedule with no claim behind it, which a
+            // retrying calendar client then met as an unrelated sibling-name 409.
+            //
+            // Asserted on the COLLECTION rather than on the response, because the husk is invisible in the
+            // answer the client gets — it only shows up as an entry nobody made.
+            var ghostUid = Guid.NewGuid().ToString();
+            var ghostIcs = ics.Replace(uid, ghostUid, StringComparison.Ordinal)
+                .Replace("20270512T200000Z", "20270513T080000Z", StringComparison.Ordinal)
+                .Replace("20270512T210000Z", "20270513T090000Z", StringComparison.Ordinal);
+            using (var ghost = new HttpRequestMessage(HttpMethod.Put, $"{schedule}{ghostUid}.ics")
+            {
+                Content = new StringContent(ghostIcs, Encoding.UTF8, "text/calendar"),
+            })
+            {
+                ghost.Headers.Authorization = basic;
+                var ghostResponse = await dav.SendAsync(ghost);
+                Assert.Equal(HttpStatusCode.Conflict, ghostResponse.StatusCode);
+
+                // And the refusal still EXPLAINS itself: purging the husk must not swallow the module's
+                // message, which was the first version of that fix.
+                Assert.Contains("TEST_BOOKING_REFUSED",
+                    await ghostResponse.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+            }
+
+            var listing = await TestJson.Get(rig.Admin, $"/api/documents/{scheduleId}/children");
+            var remaining = listing.GetProperty(listing.TryGetProperty("items", out _) ? "items" : "children")
+                .EnumerateArray()
+                .Select(i => i.GetProperty("name").GetString()!)
+                .ToList();
+            Assert.DoesNotContain(remaining, n => n.Contains(ghostUid, StringComparison.Ordinal));
+
             rig.Admin.Dispose();
             rig.Owner.Dispose();
         }

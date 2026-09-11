@@ -791,6 +791,14 @@ public sealed partial class CalendarTabViewModel : ObservableObject
             // calendar is writable can never show that it works.
             ("Personal / My Calendar", "#1e88e5", true, true),
             ("Team / Releases", "#8e24aa", false, false),
+
+            // A bookable resource's THREE calendars (ADRs 0744/0778/0780). Here because they are the case
+            // this tab now has to make readable: a room or an aircraft contributes three collections at
+            // once, and a demo of two personal calendars never shows whether three overlaid meanings can be
+            // told apart. The colours are the shared per-kind fallbacks, not invented for the picture.
+            ("HB-PHG / Schedule", SimplArchive.Presentation.CollectionKindColours.Schedule, false, true),
+            ("HB-PHG / Maintenance", SimplArchive.Presentation.CollectionKindColours.Maintenance, false, true),
+            ("HB-PHG / Availability", SimplArchive.Presentation.CollectionKindColours.Availability, false, true),
         };
 
         Collections.Clear();

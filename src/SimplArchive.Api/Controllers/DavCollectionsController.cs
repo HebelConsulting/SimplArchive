@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Hypermedia;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Documents;
+using SimplArchive.Domain.CalDav;
 using SimplArchive.Domain.Masks;
 using SimplArchive.Infrastructure.Persistence;
 
@@ -85,13 +86,24 @@ public class DavCollectionsController : ControllerBase
             return Forbid();
         }
 
-        // A meeting room's Schedule is a calendar to every client of this listing (ADR 0744): it lists in
-        // the Calendar tab and subscribes over CalDAV like any other — what differs is what it admits.
+        // A resource's Schedule, Maintenance and Availability are calendars to every client of this listing
+        // (ADRs 0744/0778/0780): they list in the Calendar tab and subscribe over CalDAV like any other —
+        // what differs is what each admits.
+        //
+        // DERIVED from the kind table by extension, never hand-written. The list here used to name its masks
+        // one by one, so Maintenance and Availability — added to DavCollectionKinds.All when their slices
+        // landed — never reached it: both collections existed, were served over CalDAV, and were invisible in
+        // both clients' Calendar tabs. That is the SECOND place this exact trap fired; DavProtocol carries the
+        // first, with a comment saying so. A list that must be kept in step with a table is a list that will
+        // not be.
+        static Guid[] FolderMasksFor(string extension) =>
+            [.. DavCollectionKinds.All.Where(k => k.Extension == extension).Select(k => k.FolderMaskId)];
+
         var wanted = kind?.ToLowerInvariant() switch
         {
-            "addressbook" => new[] { WellKnownMaskIds.Addressbook },
-            "calendar" => [WellKnownMaskIds.Calendar, WellKnownMaskIds.Schedule],
-            _ => [WellKnownMaskIds.Addressbook, WellKnownMaskIds.Calendar, WellKnownMaskIds.Schedule],
+            "addressbook" => FolderMasksFor(".vcf"),
+            "calendar" => FolderMasksFor(".ics"),
+            _ => [.. DavCollectionKinds.All.Select(k => k.FolderMaskId)],
         };
 
         var maskVersions = await _dbContext.MaskVersions
@@ -127,6 +139,17 @@ public class DavCollectionsController : ControllerBase
 
         var kindByMaskVersion = maskVersions.ToDictionary(
             v => v.Id, v => v.MaskId == WellKnownMaskIds.Addressbook ? "addressbook" : "calendar");
+
+        // The per-KIND fallback colour (ADR 0650's shared-display-rule home). Without it a resource's three
+        // calendars all drew in the client's one default, so overlaying them produced an undifferentiated
+        // mass — an overlay nobody can read is an overlay nobody uses. A collection's own Colour and the
+        // caller's override both still win; this only answers "nobody has said".
+        var kindColourByMaskVersion = maskVersions.ToDictionary(
+            v => v.Id,
+            v => v.MaskId == WellKnownMaskIds.Schedule ? Presentation.CollectionKindColours.Schedule
+                : v.MaskId == WellKnownMaskIds.Maintenance ? Presentation.CollectionKindColours.Maintenance
+                : v.MaskId == WellKnownMaskIds.Availability ? Presentation.CollectionKindColours.Availability
+                : Presentation.CollectionKindColours.None);
 
         var resources = new List<(DavCollectionResource Resource, bool Personal)>();
         foreach (var candidate in candidates)
@@ -176,7 +199,9 @@ public class DavCollectionsController : ControllerBase
                 Name = candidate.Name,
                 DisplayName = parent is null ? candidate.Name : $"{parent.Name} / {candidate.Name}",
                 Kind = kindByMaskVersion.GetValueOrDefault(candidate.MaskVersionId!.Value, "calendar"),
-                Color = overrides.GetValueOrDefault(candidate.Id) ?? defaults.GetValueOrDefault(candidate.Id),
+                Color = overrides.GetValueOrDefault(candidate.Id)
+                    ?? defaults.GetValueOrDefault(candidate.Id)
+                    ?? kindColourByMaskVersion.GetValueOrDefault(candidate.MaskVersionId!.Value),
                 Writable = effective.CanEditContent,
                 CanCreateEntries = effective.CanCreateSubItems && (contacts || appointments),
                 IsPersonalDefault = personal,
