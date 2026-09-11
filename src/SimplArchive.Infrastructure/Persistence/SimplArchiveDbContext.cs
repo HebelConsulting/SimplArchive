@@ -257,6 +257,7 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
     {
         ValidateGroupsAsync(CancellationToken.None).GetAwaiter().GetResult();
         PersonalRootName.FollowDisplayNameAsync(this, CancellationToken.None).GetAwaiter().GetResult();
+        ProvisionBookableCollectionsAsync(CancellationToken.None).GetAwaiter().GetResult();
         ValidateDocumentsAsync(CancellationToken.None).GetAwaiter().GetResult();
         ValidateFieldValuesAsync(CancellationToken.None).GetAwaiter().GetResult();
         ValidateRequiredFieldsAsync(CancellationToken.None).GetAwaiter().GetResult();
@@ -279,6 +280,9 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
     {
         await ValidateGroupsAsync(cancellationToken);
         await PersonalRootName.FollowDisplayNameAsync(this, cancellationToken);
+        // BEFORE the document validations, so the collections it adds are judged by them like any other
+        // write — sibling names, containment, cycles (#1097).
+        await ProvisionBookableCollectionsAsync(cancellationToken);
         await ValidateDocumentsAsync(cancellationToken);
         await ValidateFieldValuesAsync(cancellationToken);
         await ValidateRequiredFieldsAsync(cancellationToken);

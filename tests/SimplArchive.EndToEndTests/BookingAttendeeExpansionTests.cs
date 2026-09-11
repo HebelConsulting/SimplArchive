@@ -50,9 +50,7 @@ public class BookingAttendeeExpansionTests
         // The Schedule is created explicitly, because assigning the MeetingRoom mask does NOT create it — the
         // bookings endpoint does, lazily, on the first booking. So a room booked only through calendar clients
         // has no collection to PUT into until somebody books it in the app once (noted in ADR 0776).
-        var scheduleId = (await TestJson.Post(api, $"/api/documents/{roomId}/children", new { name = "Schedule" }))
-            .GetProperty("id").GetGuid();
-        await TestJson.Put(api, $"/api/documents/{scheduleId}/mask", new { maskId = WellKnownMaskIds.Schedule });
+        var scheduleId = await ProvisionedCollectionAsync(api, roomId, "Schedule");
 
         var personId = (await TestJson.Post(api, $"/api/documents/{repositoryId}/children", new { name = $"Person {Guid.NewGuid():N}"[..16] }))
             .GetProperty("id").GetGuid();
@@ -245,14 +243,26 @@ public class BookingAttendeeExpansionTests
         var otherRoomId = (await TestJson.Post(w.Api, $"{repositoryId}/children", new { name = otherRoomName }))
             .GetProperty("id").GetGuid();
         await TestJson.Put(w.Api, $"/api/documents/{otherRoomId}/mask", new { maskId = WellKnownMaskIds.MeetingRoom });
-        var otherScheduleId = (await TestJson.Post(w.Api, $"/api/documents/{otherRoomId}/children", new { name = "Schedule" }))
-            .GetProperty("id").GetGuid();
-        await TestJson.Put(w.Api, $"/api/documents/{otherScheduleId}/mask", new { maskId = WellKnownMaskIds.Schedule });
-
         var otherSchedule = await ScheduleHrefAsync(w.Dav, w.Basic, otherRoomName);
         var second = Guid.NewGuid().ToString();
         var response = await PutAsync(w.Dav, w.Basic, $"{otherSchedule}{second}.ics", Ics(second, w.PersonEmail));
 
         Assert.False(response.IsSuccessStatusCode);
+    }
+
+    /// <summary>The collection a bookable resource was PROVISIONED with (#1097), found by name.</summary>
+    /// <remarks>
+    /// These tests used to create Schedule and Maintenance themselves, because nothing did. Assigning a
+    /// bookable mask now provisions all three, so creating one here would collide with the provisioned
+    /// folder on the sibling-name invariant — and, worse, a test that still made its own would be testing
+    /// its fixture rather than what a real resource looks like.
+    /// </remarks>
+    private static async Task<Guid> ProvisionedCollectionAsync(HttpClient api, Guid resourceId, string name)
+    {
+        var listing = await TestJson.Get(api, $"/api/documents/{resourceId}/children");
+        var key = listing.TryGetProperty("items", out _) ? "items" : "children";
+        return listing.GetProperty(key).EnumerateArray()
+            .First(c => c.GetProperty("name").GetString() == name)
+            .GetProperty("id").GetGuid();
     }
 }

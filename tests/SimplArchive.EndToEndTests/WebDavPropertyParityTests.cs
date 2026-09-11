@@ -65,6 +65,18 @@ public class WebDavPropertyParityTests
         var ctx = await SetupAsync();
         var intray = $"/SimplArchive/{Personal}/Intray";
 
+        // SEEDED FIRST, and that is the point of this line (#1101). A fresh user's Intray is empty, and
+        // WebDavReads.NewestOf deliberately answers an empty collection with the API process's UtcNow — a
+        // recorded decision, because falling back to a constant would make the mtime jump BACKWARDS when the
+        // last item is deleted, which a client reads as "no change" for the one event it most needs to see.
+        //
+        // Comparing that host clock against a timestamp SeaweedFS reports from its own container measured
+        // clock agreement between two machines rather than anything about the gateway: it failed
+        // intermittently on macOS, never on CI, and looked like a regression in whichever branch was running.
+        // With an item already present, both sides of the comparison come from the object store.
+        (await DavAsync(ctx, "PUT", $"{intray}/seed{Guid.NewGuid().ToString("N")[..8]}.txt", Encoding.UTF8.GetBytes("seed")))
+            .EnsureSuccessStatusCode();
+
         var before = await LastModifiedAsync(ctx, intray);
         Assert.NotEqual(DateTimeOffset.UnixEpoch, before);
 

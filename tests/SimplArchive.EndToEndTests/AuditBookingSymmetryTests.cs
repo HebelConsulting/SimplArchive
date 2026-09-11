@@ -41,9 +41,7 @@ public class AuditBookingSymmetryTests
             .GetProperty("id").GetGuid();
         await TestJson.Put(api, $"/api/documents/{roomId}/mask", new { maskId = WellKnownMaskIds.MeetingRoom });
 
-        var scheduleId = (await TestJson.Post(api, $"/api/documents/{roomId}/children", new { name = "Schedule" }))
-            .GetProperty("id").GetGuid();
-        await TestJson.Put(api, $"/api/documents/{scheduleId}/mask", new { maskId = WellKnownMaskIds.Schedule });
+        var scheduleId = await ProvisionedCollectionAsync(api, roomId, "Schedule");
 
         var davPassword = (await TestJson.Post(api, "/api/me/webdav-password", new { })).GetProperty("password").GetString()!;
         var basic = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{email}:{davPassword}")));
@@ -128,5 +126,21 @@ public class AuditBookingSymmetryTests
         }
 
         Assert.Contains("Booking.Changed", await ActionsAsync(w.Api));
+    }
+
+    /// <summary>The collection a bookable resource was PROVISIONED with (#1097), found by name.</summary>
+    /// <remarks>
+    /// These tests used to create Schedule and Maintenance themselves, because nothing did. Assigning a
+    /// bookable mask now provisions all three, so creating one here would collide with the provisioned
+    /// folder on the sibling-name invariant — and, worse, a test that still made its own would be testing
+    /// its fixture rather than what a real resource looks like.
+    /// </remarks>
+    private static async Task<Guid> ProvisionedCollectionAsync(HttpClient api, Guid resourceId, string name)
+    {
+        var listing = await TestJson.Get(api, $"/api/documents/{resourceId}/children");
+        var key = listing.TryGetProperty("items", out _) ? "items" : "children";
+        return listing.GetProperty(key).EnumerateArray()
+            .First(c => c.GetProperty("name").GetString() == name)
+            .GetProperty("id").GetGuid();
     }
 }

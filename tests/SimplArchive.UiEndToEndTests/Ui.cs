@@ -199,13 +199,21 @@ internal static partial class Ui
 
         await serverSignOut;
 
-        // DOMContentLoaded, not NetworkIdle — the same lesson the login helper above records, which this
-        // method contradicted (#1081). A Blazor WASM SPA keeps making background requests (WASM boot, the
-        // OIDC silent-renew iframe), so "500 ms of network silence" is a condition this app may simply never
-        // meet: on a loaded 2-core runner the wait burned its full 60 s and failed a test whose subject had
-        // already succeeded. What this line needs to guarantee is only that logout's SECOND navigation has
-        // landed — the request itself is already awaited above — and that is what DOMContentLoaded says.
-        await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
+        // The URL, not a load state. What this needs to guarantee is that logout's SECOND navigation has
+        // LANDED — the request itself is awaited above — and WaitForLoadStateAsync cannot say that: it
+        // answers for the page currently loaded, so it returns happily while the redirect to
+        // /authentication/logged-out is still to come. A caller navigating straight afterwards then races it
+        // and Playwright aborts with "interrupted by another navigation", which reads as the caller's bug.
+        //
+        // Measured on a loaded CI runner, in a PR that could not touch the login flow at all.
+        //
+        // Still DOMContentLoaded rather than NetworkIdle (#1081): a Blazor WASM SPA keeps making background
+        // requests — WASM boot, the OIDC silent-renew iframe — so "500 ms of network silence" is a condition
+        // this app may never meet, and that wait once burned its full 60 s on a test whose subject had
+        // already succeeded.
+        await page.WaitForURLAsync(
+            url => url.Contains("logged-out", StringComparison.OrdinalIgnoreCase),
+            new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
     }
 
     private static string Base64Url(byte[] bytes) =>

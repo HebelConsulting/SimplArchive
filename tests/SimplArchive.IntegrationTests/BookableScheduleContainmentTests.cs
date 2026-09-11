@@ -53,26 +53,12 @@ public class BookableScheduleContainmentTests
             await db.SaveChangesAsync();
         }
 
-        // First booking creates the Schedule under the aircraft — this is the exact write
-        // BookingsController.EnsureScheduleAsync makes, against the real invariant.
-        using (var db = Ctx(connection, new CurrentTenantAccessor { TenantId = tenantId }))
-        {
-            var scheduleVersion = await db.MaskVersions.IgnoreQueryFilters()
-                .SingleAsync(v => v.TenantId == tenantId && v.MaskId == WellKnownMaskIds.Schedule && v.IsCurrent);
-            db.Documents.Add(new Document
-            {
-                Id = Guid.NewGuid(),
-                TenantId = tenantId,
-                ParentId = aircraftId,
-                Name = "Schedule",
-                MaskVersionId = scheduleVersion.Id,
-                CreatedByUserId = userId,
-                CreatedAt = DateTimeOffset.UtcNow,
-            });
-            await db.SaveChangesAsync(); // must not refuse: the mask is BOOKABLE, and bookable holds a Schedule
-        }
-
+        // The Schedule is no longer created by the first booking: making the mask bookable PROVISIONS it,
+        // along with Maintenance and Availability (#1097). That is a stronger proof of this test's point
+        // than the write it replaces — the containment rule had to permit a Schedule under a module's own
+        // bookable mask for the save above to succeed at all, and before ADR 0762 it did not.
         using var check = Ctx(connection, new CurrentTenantAccessor { TenantId = tenantId });
-        Assert.Equal(1, await check.Documents.CountAsync(d => d.ParentId == aircraftId));
+        var held = await check.Documents.Where(d => d.ParentId == aircraftId).Select(d => d.Name).ToListAsync();
+        Assert.Equal(["Availability", "Maintenance", "Schedule"], held.OrderBy(n => n, StringComparer.Ordinal));
     }
 }

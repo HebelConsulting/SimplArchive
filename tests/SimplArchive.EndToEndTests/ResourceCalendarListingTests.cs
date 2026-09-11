@@ -45,15 +45,10 @@ public class ResourceCalendarListingTests
         var roomId = (await TestJson.Post(owner, $"/api/documents/{repoId}/children",
             new { name = roomName, maskId = masks["Meeting room"] })).GetProperty("id").GetGuid();
 
-        // The three collections are created explicitly: a bookable mask DERIVES what it admits, but the
-        // folders themselves are made when somebody first needs one (ADR 0776).
+        // NOT created here any more (#1097): assigning a bookable mask provisions all three, so a calendar
+        // client subscribing to a freshly created room finds something to PUT into without anybody booking
+        // in the app first — which is what ADR 0744 claimed and what was not true.
         var wanted = new[] { "Schedule", "Maintenance", "Availability" };
-        foreach (var name in wanted)
-        {
-            var id = (await TestJson.Post(owner, $"/api/documents/{roomId}/children", new { name }))
-                .GetProperty("id").GetGuid();
-            await TestJson.Put(owner, $"/api/documents/{id}/mask", new { maskId = masks[name] });
-        }
 
         var listed = (await TestJson.Get(api, "/api/dav-collections?kind=calendar"))
             .GetProperty("collections").EnumerateArray()

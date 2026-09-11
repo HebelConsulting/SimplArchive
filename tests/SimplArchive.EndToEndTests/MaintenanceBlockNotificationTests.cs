@@ -48,12 +48,8 @@ public class MaintenanceBlockNotificationTests
             .GetProperty("id").GetGuid();
         await TestJson.Put(pilot, $"/api/documents/{roomId}/mask", new { maskId = WellKnownMaskIds.MeetingRoom });
 
-        var scheduleId = (await TestJson.Post(pilot, $"/api/documents/{roomId}/children", new { name = "Schedule" }))
-            .GetProperty("id").GetGuid();
-        await TestJson.Put(pilot, $"/api/documents/{scheduleId}/mask", new { maskId = WellKnownMaskIds.Schedule });
-        var maintenanceId = (await TestJson.Post(pilot, $"/api/documents/{roomId}/children", new { name = "Maintenance" }))
-            .GetProperty("id").GetGuid();
-        await TestJson.Put(pilot, $"/api/documents/{maintenanceId}/mask", new { maskId = WellKnownMaskIds.Maintenance });
+        var scheduleId = await ProvisionedCollectionAsync(pilot, roomId, "Schedule");
+        var maintenanceId = await ProvisionedCollectionAsync(pilot, roomId, "Maintenance");
 
         // The engineer needs to be able to WRITE into the Maintenance collection; the repository was made by
         // the pilot, so a grant is required before the right is even reached.
@@ -153,5 +149,21 @@ public class MaintenanceBlockNotificationTests
         (await PutBlockAsync(w, Guid.NewGuid().ToString())).EnsureSuccessStatusCode();
 
         Assert.DoesNotContain("BookingSuspended", await PilotNotificationTypesAsync(w));
+    }
+
+    /// <summary>The collection a bookable resource was PROVISIONED with (#1097), found by name.</summary>
+    /// <remarks>
+    /// These tests used to create Schedule and Maintenance themselves, because nothing did. Assigning a
+    /// bookable mask now provisions all three, so creating one here would collide with the provisioned
+    /// folder on the sibling-name invariant — and, worse, a test that still made its own would be testing
+    /// its fixture rather than what a real resource looks like.
+    /// </remarks>
+    private static async Task<Guid> ProvisionedCollectionAsync(HttpClient api, Guid resourceId, string name)
+    {
+        var listing = await TestJson.Get(api, $"/api/documents/{resourceId}/children");
+        var key = listing.TryGetProperty("items", out _) ? "items" : "children";
+        return listing.GetProperty(key).EnumerateArray()
+            .First(c => c.GetProperty("name").GetString() == name)
+            .GetProperty("id").GetGuid();
     }
 }

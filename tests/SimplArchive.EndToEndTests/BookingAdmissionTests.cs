@@ -278,12 +278,13 @@ public class BookingAdmissionTests
         {
             var rig = await RigAsync(vendorKey);
 
-            // A Schedule to PUT into: assigning the Meeting-room mask does not create one, and this rig has
-            // not booked through the endpoint that would (noted in ADR 0776).
-            var scheduleId = (await TestJson.Post(rig.Admin, $"/api/documents/{rig.RoomId}/children",
-                new { name = "Schedule" })).GetProperty("id").GetGuid();
-            await TestJson.Put(rig.Admin, $"/api/documents/{scheduleId}/mask",
-                new { maskId = SimplArchive.Domain.Masks.WellKnownMaskIds.Schedule });
+            // The Schedule the room was PROVISIONED with (#1097): assigning a bookable mask now creates all
+            // three collections, so this looks the folder up rather than making a second one that would
+            // collide with it.
+            var listing0 = await TestJson.Get(rig.Admin, $"/api/documents/{rig.RoomId}/children");
+            var scheduleId = listing0.GetProperty(listing0.TryGetProperty("items", out _) ? "items" : "children")
+                .EnumerateArray().First(c => c.GetProperty("name").GetString() == "Schedule")
+                .GetProperty("id").GetGuid();
 
             // A second bookable document standing for the writer, so an ATTENDEE naming them becomes a claim.
             var personId = (await TestJson.Post(rig.Admin, $"/api/documents/{rig.RepoId}/children",

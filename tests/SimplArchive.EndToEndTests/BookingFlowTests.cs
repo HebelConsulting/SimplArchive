@@ -76,12 +76,21 @@ public class BookingFlowTests
         Assert.Contains(booking.GetProperty("links").EnumerateArray(),
             l => l.GetProperty("rel").GetString() == "cancel");
 
-        // ONE document (ADR 0744): the room holds only its Schedule, the Schedule holds only the .ics —
-        // which IS the booking, as the `document` rel confirms by pointing straight at it. The Purpose
-        // asserted above came back through the classifier (DESCRIPTION -> indexed field), proving the
-        // round trip through the same pass a CalDAV PUT takes.
+        // ONE document (ADR 0744): the booking is the .ics in the room's Schedule, as the `document` rel
+        // confirms by pointing straight at it. The Purpose asserted above came back through the classifier
+        // (DESCRIPTION -> indexed field), proving the round trip through the same pass a CalDAV PUT takes.
+        //
+        // The room holds THREE collections, not one (#1097): making a resource bookable provisions its
+        // Schedule, Maintenance and Availability, so a calendar client finds them without anybody booking in
+        // the app first. Asserted as the exact set rather than loosened to "contains Schedule", because what
+        // a bookable resource holds is a fact worth noticing when it changes.
         var children = await ChildrenByNameAsync(api, roomId);
-        Assert.Equal(["Schedule"], children.Keys);
+        Assert.Equal(["Schedule", "Maintenance", "Availability"], children.Keys.OrderBy(k => k switch
+        {
+            "Schedule" => 0,
+            "Maintenance" => 1,
+            _ => 2,
+        }));
 
         var scheduleChildren = await ChildrenByNameAsync(api, children["Schedule"]);
         var entry = Assert.Single(scheduleChildren);
