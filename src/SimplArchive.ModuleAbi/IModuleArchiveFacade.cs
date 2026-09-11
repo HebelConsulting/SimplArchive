@@ -167,6 +167,34 @@ public interface IModuleArchiveFacade
     /// <param name="content">The new bytes.</param>
     /// <param name="cancellationToken">Cancellation.</param>
     Task ReplaceContentAsync(Guid documentId, byte[] content, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Whether a resource's OFFERED time covers a slot (ABI 0.16, core ADR 0782) — the question a module asks
+    /// when somebody's published availability is what stands in for their consent.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Coverage, not overlap, and by a SINGLE window</b> — the semantic core ADR 0780 settled. A window
+    /// ending at 12:00 does not consent to a flight running to 13:00 merely because the two touch, and two
+    /// adjacent windows are not treated as one offer, because joining them would be an inference about
+    /// somebody's intent. A resource offering continuous time publishes it as one window.
+    /// </para>
+    /// <para>
+    /// Exposed rather than left to each module to compute from the window documents, because the rule above
+    /// is a DEFINITION and a second copy of it is a second answer: the first module to test overlap instead
+    /// of coverage would accept half an offer as consent for a whole booking, and nothing would say so.
+    /// </para>
+    /// <para>
+    /// Answers for the calling tenant. A resource nobody has offered time for answers false, which is the
+    /// honest answer and the safe one — absence of an offer is not consent.
+    /// </para>
+    /// </remarks>
+    /// <param name="resourceDocumentId">The bookable resource whose offered time is in question.</param>
+    /// <param name="startsAt">The slot's start.</param>
+    /// <param name="endsAt">The slot's end, exclusive.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<bool> IsOfferedAsync(
+        Guid resourceDocumentId, DateTimeOffset startsAt, DateTimeOffset endsAt, CancellationToken cancellationToken = default);
 }
 
 /// <summary>A document as the facade shows it: identity, mask, and its index fields by name.</summary>

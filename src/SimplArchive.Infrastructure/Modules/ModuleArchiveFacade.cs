@@ -394,6 +394,21 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
             keyFor: (tenantId, storageFolderId, versionId) => ObjectKeyBuilder.Build(tenantId, DateTimeOffset.UtcNow, storageFolderId, versionId, extension),
             expiresAt: null, fields, replaceDocumentId, documentDate, documentTime, cancellationToken);
 
+    public async Task<bool> IsOfferedAsync(
+        Guid resourceDocumentId, DateTimeOffset startsAt, DateTimeOffset endsAt, CancellationToken cancellationToken = default)
+    {
+        // The tenant comes from the RESOURCE rather than from an accessor, so this answers about the document
+        // it was asked about or about nothing at all — a module holding an id from another tenant gets false,
+        // not a cross-tenant answer.
+        var tenantId = await _dbContext.Documents
+            .Where(d => d.Id == resourceDocumentId)
+            .Select(d => (Guid?)d.TenantId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return tenantId is { } tenant
+            && (await _dbContext.WindowsCoveringAsync(tenant, resourceDocumentId, startsAt, endsAt, cancellationToken)).Count > 0;
+    }
+
     public async Task ReplaceContentAsync(Guid documentId, byte[] content, CancellationToken cancellationToken = default)
     {
         if (_objectStorage is null)
