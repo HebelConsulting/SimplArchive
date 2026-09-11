@@ -195,6 +195,36 @@ public interface IModuleArchiveFacade
     /// <param name="cancellationToken">Cancellation.</param>
     Task<bool> IsOfferedAsync(
         Guid resourceDocumentId, DateTimeOffset startsAt, DateTimeOffset endsAt, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Whether a resource could actually TAKE a booking for a slot (ABI 0.19, core ADR 0785) — nothing else
+    /// claims it, and it is not out of service.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The companion to <see cref="IsOfferedAsync"/>, and not the same question.</b> Offered is what
+    /// somebody SAID; free is what is still true. A person who published Thursday and was then booked by
+    /// somebody else is still offering it and can no longer take it — so a picker built on the offer alone
+    /// lists names the booking will refuse, which is the lying affordance core ADR 0543 exists to prevent.
+    /// </para>
+    /// <para>
+    /// Answers false when an ACTIVE claim overlaps the slot, or an ACTIVE maintenance block does (ADR 0778
+    /// refuses a booking made into a known grounding). Half-open <c>[start, end)</c>, so a booking ending
+    /// exactly when this slot begins does not make it busy — the same semantics the core's own invariant
+    /// uses, from the same code rather than a second copy of the range test.
+    /// </para>
+    /// <para>
+    /// It is a question about NOW, not a reservation: between the answer and the write somebody else may
+    /// book. The core's invariant remains the authority, and a module should treat this as what to OFFER
+    /// rather than as a promise the write will succeed.
+    /// </para>
+    /// </remarks>
+    /// <param name="resourceDocumentId">The bookable resource.</param>
+    /// <param name="startsAt">The slot's start.</param>
+    /// <param name="endsAt">The slot's end, exclusive.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<bool> IsFreeAsync(
+        Guid resourceDocumentId, DateTimeOffset startsAt, DateTimeOffset endsAt, CancellationToken cancellationToken = default);
 }
 
 /// <summary>A document as the facade shows it: identity, mask, and its index fields by name.</summary>

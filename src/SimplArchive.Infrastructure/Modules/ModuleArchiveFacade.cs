@@ -409,6 +409,33 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
             && (await _dbContext.WindowsCoveringAsync(tenant, resourceDocumentId, startsAt, endsAt, cancellationToken)).Count > 0;
     }
 
+    public async Task<bool> IsFreeAsync(
+        Guid resourceDocumentId, DateTimeOffset startsAt, DateTimeOffset endsAt, CancellationToken cancellationToken = default)
+    {
+        // The tenant comes from the RESOURCE, as IsOfferedAsync does: an id from another tenant answers
+        // "not free" rather than reaching across.
+        var tenantId = await _dbContext.Documents
+            .Where(d => d.Id == resourceDocumentId)
+            .Select(d => (Guid?)d.TenantId)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (tenantId is not { } tenant)
+        {
+            return false;
+        }
+
+        // Both questions come from the core's own answers rather than a range test written here — the
+        // invariant and this must agree about a booking that ends exactly when the slot starts, and two
+        // copies of that rule is how they stop agreeing.
+        if ((await _dbContext.OverlappingClaimsAsync(
+                tenant, resourceDocumentId, startsAt, endsAt, excludingClaimId: null, cancellationToken)).Count > 0)
+        {
+            return false;
+        }
+
+        return (await _dbContext.OverlappingBlocksAsync(
+            tenant, resourceDocumentId, startsAt, endsAt, cancellationToken)).Count == 0;
+    }
+
     public async Task ReplaceContentAsync(Guid documentId, byte[] content, CancellationToken cancellationToken = default)
     {
         if (_objectStorage is null)

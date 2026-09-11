@@ -179,4 +179,87 @@ public class ModuleFacadeOfferedTimeTests
         // to no offer — never to another tenant's windows.
         Assert.False(await facade.IsOfferedAsync(Guid.NewGuid(), At(10), At(11)));
     }
+
+    /// <summary>Books the resource for a slot, so "free" has something to say no to.</summary>
+    private static async Task ClaimAsync(SqliteConnection connection, Guid resourceId, int from, int to)
+    {
+        await using var context = Ctx(connection);
+        var resource = await context.Documents.IgnoreQueryFilters().SingleAsync(d => d.Id == resourceId);
+        context.ResourceBookings.Add(new ResourceBooking
+        {
+            Id = Guid.NewGuid(),
+            TenantId = resource.TenantId,
+            ResourceDocumentId = resourceId,
+            BookingDocumentId = Guid.NewGuid(),
+            StartsAtUtc = At(from),
+            EndsAtUtc = At(to),
+            Status = BookingStatus.Active,
+            BookedByUserId = resource.CreatedByUserId,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await context.SaveChangesAsync();
+    }
+
+    [Theory]
+    // Overlapping a claim in any way makes the resource busy.
+    [InlineData(10, 11, false)]
+    [InlineData(9, 13, false)]
+    [InlineData(11, 14, false)]
+    // TOUCHING is not overlapping: a booking ending at 12:00 leaves 12:00 onwards free. The invariant uses
+    // half-open [start, end) and this must agree with it — which is why both now read the same helper.
+    [InlineData(12, 14, true)]
+    [InlineData(7, 10, true)]
+    public async Task Free_means_nothing_else_claims_the_slot(int from, int to, bool expected)
+    {
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var (facade, resourceId) = await RigAsync(connection);
+        await ClaimAsync(connection, resourceId, 10, 12);
+
+        Assert.Equal(expected, await facade.IsFreeAsync(resourceId, At(from), At(to)));
+    }
+
+    [Fact]
+    public async Task A_resource_nobody_has_booked_is_free()
+    {
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var (facade, resourceId) = await RigAsync(connection);
+
+        Assert.True(await facade.IsFreeAsync(resourceId, At(10), At(11)));
+    }
+
+    [Fact]
+    public async Task A_cancelled_claim_does_not_make_a_resource_busy()
+    {
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var (facade, resourceId) = await RigAsync(connection);
+        await ClaimAsync(connection, resourceId, 10, 12);
+
+        await using (var context = Ctx(connection))
+        {
+            var claim = await context.ResourceBookings.IgnoreQueryFilters().SingleAsync();
+            claim.Status = BookingStatus.Cancelled;
+            await context.SaveChangesAsync();
+        }
+
+        // A cancelled claim is history, not a commitment — the same reading the invariant takes.
+        Assert.True(await facade.IsFreeAsync(resourceId, At(10), At(11)));
+    }
+
+    [Fact]
+    public async Task Offered_and_free_are_different_questions()
+    {
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var (facade, resourceId) = await RigAsync(connection, (9, 13));
+        await ClaimAsync(connection, resourceId, 10, 12);
+
+        // This is the whole reason the second question exists: somebody who published the afternoon and was
+        // then booked is STILL OFFERING it and can no longer take it. A picker built on the offer alone
+        // lists a name the booking will refuse.
+        Assert.True(await facade.IsOfferedAsync(resourceId, At(10), At(11)));
+        Assert.False(await facade.IsFreeAsync(resourceId, At(10), At(11)));
+    }
 }

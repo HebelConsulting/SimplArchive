@@ -209,21 +209,9 @@ public partial class SimplArchiveDbContext
             // comparison runs IN MEMORY: the SQLite provider cannot translate DateTimeOffset range
             // predicates, and the candidate set — one resource's active bookings — is small by nature,
             // reached through the (TenantId, ResourceDocumentId, StartsAtUtc) index.
-            var trackedIds = pendingActive.Select(b => b.Id).ToList();
-            var stored = await ResourceBookings.IgnoreQueryFilters()
-                .Where(b => b.TenantId == booking.TenantId
-                    && b.ResourceDocumentId == booking.ResourceDocumentId
-                    && b.Status == BookingStatus.Active
-                    && b.Id != booking.Id
-                    && !trackedIds.Contains(b.Id))
-                .ToListAsync(cancellationToken);
-            var clash = stored
-                .Concat(pendingActive.Where(b =>
-                    b.Id != booking.Id
-                    && b.TenantId == booking.TenantId
-                    && b.ResourceDocumentId == booking.ResourceDocumentId))
-                .Where(b => b.StartsAtUtc < booking.EndsAtUtc && booking.StartsAtUtc < b.EndsAtUtc)
-                .OrderBy(b => b.StartsAtUtc)
+            var clash = (await OverlappingClaimsAsync(
+                    booking.TenantId, booking.ResourceDocumentId, booking.StartsAtUtc, booking.EndsAtUtc,
+                    excludingClaimId: booking.Id, cancellationToken))
                 .FirstOrDefault();
             if (clash is not null)
             {
@@ -240,6 +228,7 @@ public partial class SimplArchiveDbContext
                 continue; // no document to be a claim OF — every such row would look like every other's sibling
             }
 
+            var trackedIds = pendingActive.Select(b => b.Id).ToList();
             var sibling = (await ResourceBookings.IgnoreQueryFilters()
                     .Where(b => b.TenantId == booking.TenantId
                         && b.BookingDocumentId == booking.BookingDocumentId
@@ -259,5 +248,46 @@ public partial class SimplArchiveDbContext
                     sibling.StartsAtUtc, sibling.EndsAtUtc);
             }
         }
+    }
+
+    /// <summary>
+    /// The ACTIVE claims of one resource that overlap a slot (ADR 0735), earliest first.
+    /// </summary>
+    /// <remarks>
+    /// Stated once because it is now asked twice: the invariant asks it of a booking being written, and
+    /// <c>IsFreeAsync</c> asks it of a resource a module is about to offer somebody (ADR 0785). Two copies of
+    /// a range test is how one of them ends up treating touching slots as a clash while the other does not —
+    /// the same reason <see cref="OverlappingBlocksAsync"/> exists rather than being inlined twice.
+    ///
+    /// Half-open <c>[start, end)</c>: a booking ending exactly when another begins is not an overlap. Tracked
+    /// rows are judged from their tracked state, so claims added in one save are checked against each other
+    /// and not only against what is stored. The range test runs IN MEMORY because the SQLite provider cannot
+    /// translate <see cref="DateTimeOffset"/> predicates, and one resource's active claims are few.
+    /// </remarks>
+    internal async Task<List<ResourceBooking>> OverlappingClaimsAsync(
+        Guid tenantId, Guid resourceDocumentId, DateTimeOffset startsAt, DateTimeOffset endsAt,
+        Guid? excludingClaimId, CancellationToken cancellationToken)
+    {
+        var tracked = ChangeTracker.Entries<ResourceBooking>()
+            .Where(e => e.State is not EntityState.Deleted)
+            .Select(e => e.Entity)
+            .Where(b => b.Status == BookingStatus.Active
+                && b.TenantId == tenantId
+                && b.ResourceDocumentId == resourceDocumentId
+                && b.Id != excludingClaimId)
+            .ToList();
+        var trackedIds = tracked.Select(b => b.Id).ToList();
+
+        var stored = await ResourceBookings.IgnoreQueryFilters()
+            .Where(b => b.TenantId == tenantId
+                && b.ResourceDocumentId == resourceDocumentId
+                && b.Status == BookingStatus.Active
+                && b.Id != excludingClaimId
+                && !trackedIds.Contains(b.Id))
+            .ToListAsync(cancellationToken);
+
+        return [.. stored.Concat(tracked)
+            .Where(b => b.StartsAtUtc < endsAt && startsAt < b.EndsAtUtc)
+            .OrderBy(b => b.StartsAtUtc)];
     }
 }
