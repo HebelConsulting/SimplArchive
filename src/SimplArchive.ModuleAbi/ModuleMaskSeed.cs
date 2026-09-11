@@ -79,6 +79,12 @@ public static class CoreMaskIds
     /// as against when it is spoken for (Schedule) or withdrawn (Maintenance). Admitted implicitly by
     /// <see cref="ModuleMaskSeed.IsBookable"/> like the other two.</summary>
     public static readonly Guid Availability = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E48");
+
+    /// <summary>A booking itself — the <c>.ics</c> in a resource's Schedule that IS the claim (core ADR
+    /// 0744). Published so a module can name it in an <c>ActionSubjectMasks</c> declaration (ABI 0.20): a
+    /// vertical offers actions on bookings it recognises, while deciding per document so it does not speak
+    /// for every booking in the product.</summary>
+    public static readonly Guid Booking = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E43");
 }
 
 /// <summary>One field of a module mask. The type vocabulary mirrors the core's field catalog.</summary>

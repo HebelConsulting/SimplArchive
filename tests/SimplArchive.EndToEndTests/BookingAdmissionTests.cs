@@ -447,4 +447,48 @@ public class BookingAdmissionTests
             Environment.SetEnvironmentVariable(ReviewSwitch, null);
         }
     }
+
+    [Fact]
+    public async Task A_module_offers_its_action_on_the_documents_it_recognises_and_no_others()
+    {
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", vendorKey.ExportSubjectPublicKeyInfoPem());
+        try
+        {
+            var rig = await RigAsync(vendorKey);
+
+            var first = await TestJson.Post(rig.Owner, $"/api/documents/{rig.RoomId}/bookings", Slot(6, 7));
+            var second = await TestJson.Post(rig.Owner, $"/api/documents/{rig.RoomId}/bookings", Slot(7, 8));
+
+            Guid DocumentOf(JsonElement booking) => booking.GetProperty("links").EnumerateArray()
+                .First(l => l.GetProperty("rel").GetString() == "document")
+                .GetProperty("href").GetString()!.Split('/')[^1] is var id ? Guid.Parse(id) : Guid.Empty;
+
+            var offered = DocumentOf(first);
+            var other = DocumentOf(second);
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_ACTION_DOCUMENT", offered.ToString());
+
+            // The module declared a CORE mask (Booking) as its action subject. What stops that meaning "this
+            // module speaks for every booking in the product" is that it decides PER DOCUMENT — so the
+            // action appears on the one it recognises and on nothing else (ADR 0786).
+            var withAction = await TestJson.Get(rig.Admin, $"/api/documents/{offered}");
+            var actions = withAction.GetProperty("moduleActions").EnumerateArray().ToList();
+            Assert.Single(actions);
+            Assert.Equal("test-module:hand-over", actions[0].GetProperty("rel").GetString());
+            Assert.Equal("Hand over to…", actions[0].GetProperty("label").GetString());
+            Assert.Equal("email", actions[0].GetProperty("valueField").GetString());
+            Assert.Contains("/candidates", actions[0].GetProperty("optionsHref").GetString()!, StringComparison.Ordinal);
+            Assert.Contains("/holder", actions[0].GetProperty("commitHref").GetString()!, StringComparison.Ordinal);
+
+            var withoutAction = await TestJson.Get(rig.Admin, $"/api/documents/{other}");
+            Assert.Empty(withoutAction.GetProperty("moduleActions").EnumerateArray());
+
+            rig.Admin.Dispose();
+            rig.Owner.Dispose();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_ACTION_DOCUMENT", null);
+        }
+    }
 }

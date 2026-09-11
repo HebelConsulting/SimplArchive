@@ -63,6 +63,35 @@ public sealed class TestModule : IIndustryModule
     /// Always non-null, so the seam is exercised on every booking written in a tenant where this module is
     /// active: a hook that only existed when a test asked for it would leave the wiring itself untested.
     /// </summary>
+    /// <summary>The action surface under test (ABI 0.20): declared on a mask this module does NOT own, so
+    /// the per-document decision below is what stops it speaking for every document wearing it.</summary>
+    public IReadOnlyList<Guid> ActionSubjectMasks { get; } = [CoreMaskIds.Booking];
+
+    /// <summary>
+    /// Offers an action only when the environment names THIS document — the cheapest way for a test to prove
+    /// the decision is per document rather than per mask.
+    /// </summary>
+    public Func<ModuleDocumentActionContext, Task<IReadOnlyList<ModuleDocumentAction>>>? DocumentActions =>
+        context =>
+        {
+            var wanted = Environment.GetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_ACTION_DOCUMENT");
+            if (!Guid.TryParse(wanted, out var id) || id != context.DocumentId)
+            {
+                return Task.FromResult<IReadOnlyList<ModuleDocumentAction>>([]);
+            }
+
+            return Task.FromResult<IReadOnlyList<ModuleDocumentAction>>(
+            [
+                new ModuleDocumentAction(
+                    "test-module:hand-over",
+                    "Hand over to…",
+                    $"/api/test-module/documents/{context.DocumentId}/candidates",
+                    $"/api/test-module/documents/{context.DocumentId}/holder",
+                    "email",
+                    "Who takes it over?"),
+            ]);
+        };
+
     public Func<BookingAdmissionContext, Task>? ReviewBooking => async context =>
     {
         switch (Environment.GetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_BOOKING_REVIEW"))

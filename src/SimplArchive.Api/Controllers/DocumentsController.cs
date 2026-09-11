@@ -50,12 +50,14 @@ public class DocumentsController : ControllerBase
         ICurrentTenantAccessor currentTenantAccessor,
         Documents.DocumentMover mover,
         Documents.DocumentResourceLinks resourceLinks,
-        Documents.MachineStatusEvaluator machineStatuses)
+        Documents.MachineStatusEvaluator machineStatuses,
+        Documents.ModuleActionEvaluator moduleActions)
     {
         _currentTenantAccessor = currentTenantAccessor;
         _mover = mover;
         _resourceLinks = resourceLinks;
         _machineStatuses = machineStatuses;
+        _moduleActions = moduleActions;
         _dbContext = dbContext;
         _access = access;
         _currentUserAccessor = currentUserAccessor;
@@ -184,6 +186,10 @@ public class DocumentsController : ControllerBase
         /// each with its verdict and, when unmet, the ADR-0742 diagnoses. Empty for a document no active
         /// machine watches. Computed on GET (ADR 0742: never stored).</summary>
         public List<Documents.MachineStatusResource> MachineStatuses { get; set; } = [];
+
+        /// <summary>The pick-then-act surfaces active modules offer on this document (ABI 0.20, ADR 0786).
+        /// Rendered from hypermedia alone, so the clients need no knowledge of any module.</summary>
+        public List<Documents.ModuleActionResource> ModuleActions { get; set; } = [];
     }
 
     public class RetentionInfo
@@ -207,6 +213,7 @@ public class DocumentsController : ControllerBase
     private readonly Documents.DocumentMover _mover;
     private readonly Documents.DocumentResourceLinks _resourceLinks;
     private readonly Documents.MachineStatusEvaluator _machineStatuses;
+    private readonly Documents.ModuleActionEvaluator _moduleActions;
 
     private record DocumentRow(string Name, Guid ConcurrencyToken, Guid? SensitivityLabelId, string? SensitivityLabelName, string? SensitivityLabelColor, bool SensitivityWatermark, bool BreaksInheritance, FolderContentsSortOrder ContentsSortOrder, Guid? ParentId, Guid? MaskVersionId);
 
@@ -293,6 +300,7 @@ public class DocumentsController : ControllerBase
             BreaksInheritance = document.BreaksInheritance,
             ContentsSortOrder = document.ContentsSortOrder,
             MachineStatuses = [.. await _machineStatuses.EvaluateAsync(documentId, maskId, DateTimeOffset.UtcNow, cancellationToken)],
+            ModuleActions = [.. await _moduleActions.EvaluateAsync(documentId, maskId, DateTimeOffset.UtcNow, cancellationToken)],
             Links = links,
         });
     }

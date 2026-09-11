@@ -139,4 +139,27 @@ public interface IIndustryModule
     /// Default null — a module that vets nothing declares nothing, and every booking is admitted as before.
     /// </summary>
     Func<BookingAdmissionContext, Task>? ReviewBooking => null;
+
+    /// <summary>
+    /// The masks whose documents this module may offer actions on (ABI 0.20, core ADR 0786). The core asks
+    /// <see cref="DocumentActions"/> only for these, so a module is not consulted on every document read in
+    /// the tenant. Default: none.
+    /// </summary>
+    /// <remarks>
+    /// A mask this module does NOT own is legal here, and is the point: a flight is a booking, which wears a
+    /// core mask. What stops that becoming "this module speaks for every booking in the product" is that the
+    /// handler decides PER DOCUMENT — asked about a meeting-room booking it simply offers nothing.
+    /// </remarks>
+    IReadOnlyList<Guid> ActionSubjectMasks => [];
+
+    /// <summary>
+    /// The actions this module offers on one document — a pick-then-act surface both clients render from
+    /// hypermedia alone (ABI 0.20, core ADR 0786). Return empty to offer nothing, which is the answer for
+    /// every document the module has no business with.
+    /// </summary>
+    /// <remarks>
+    /// Emitted only where following it would WORK (ADR 0543's absence semantics): a module that cannot
+    /// currently serve the action should return nothing rather than an affordance that then refuses.
+    /// </remarks>
+    Func<ModuleDocumentActionContext, Task<IReadOnlyList<ModuleDocumentAction>>>? DocumentActions => null;
 }
