@@ -288,6 +288,13 @@ public sealed class CalendarContactClassifier
             {
                 await _resources.NotifyAffectedAsync(notice, cancellationToken);
             }
+
+            // Also after the save, and for the same reason: a booking whose crew change was refused must not
+            // have told anybody it changed (ADR 0784).
+            if (audit.Participants is { } participants)
+            {
+                await _resources.NotifyParticipantsChangedAsync(participants, cancellationToken);
+            }
         }
 
         if (start is { } startDate)

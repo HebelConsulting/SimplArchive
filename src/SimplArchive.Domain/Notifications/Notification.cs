@@ -66,6 +66,15 @@ public enum NotificationType
     // restored is left worse off than one never told at all — they have already rebooked, or given up. The
     // pair is also what lets a client style them as opposites.
     BookingRevived = 18,
+
+    // Who is on a booking changed — somebody was added to it, or came off it (ADR 0784). Sent to the OTHER
+    // people on the flight, never to whoever made the change: they know.
+    //
+    // Its own type rather than a reuse of BookingSuspended, which says something different and prompts a
+    // different action — a suspended flight may still be flown if the block lifts, while an instructor
+    // handing the flight to somebody else is settled and simply needs to be known. Not coalescable, for the
+    // reason the pair above is not: each flight whose crew changed is a discrete thing to check.
+    BookingParticipantsChanged = 19,
 }
 
 // A per-User in-app notification (ADR "Notifications (in-app, first slice)"). Written by INotificationService

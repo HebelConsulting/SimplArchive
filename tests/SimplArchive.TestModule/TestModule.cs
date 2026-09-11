@@ -99,6 +99,7 @@ public sealed class TestModule : IIndustryModule
         + $" holding={request.Claims.Count(c => c.IsHolding)}"
         + $" isNew={request.IsNew}"
         + $" newClaims={request.Claims.Count(c => c.IsNewClaim)}"
+        + $" dropped={request.Claims.Count(c => c.IsDropped)}"
         + $" slotChanged={request.SlotChanged}";
 
     public IReadOnlyList<ModuleMaskSeed> Masks { get; } =

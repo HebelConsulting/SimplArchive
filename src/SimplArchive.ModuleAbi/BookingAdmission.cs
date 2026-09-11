@@ -81,9 +81,20 @@ public sealed record BookingAdmissionRequest(
 /// ordinary case — the remaining participants are still on a flight they never left.
 /// </para>
 /// </param>
+/// <param name="IsDropped">True when this write REMOVES the claim — the resource was on the booking and is
+/// coming off it (ABI 0.18, core ADR 0784). The claim is still listed, because a module deciding whether the
+/// removal may stand needs to see WHO is leaving.
+/// <para>
+/// Without it a module cannot tell "left the flight" from "still on it", so it cannot enforce a rule about
+/// leaving — and the rule most worth enforcing is exactly that one: an instructor may hand a flight to
+/// somebody else, but may not simply come off it and leave nobody. A claim already cancelled by an EARLIER
+/// write is history and is not shown at all.
+/// </para>
+/// </param>
 public sealed record BookingAdmissionClaim(
     Guid ResourceDocumentId,
     Guid? MaskId,
     bool IsHolding,
     Guid? RepresentsUserId,
-    bool IsNewClaim = false);
+    bool IsNewClaim = false,
+    bool IsDropped = false);

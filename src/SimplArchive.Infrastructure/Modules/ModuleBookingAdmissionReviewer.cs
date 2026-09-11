@@ -51,7 +51,7 @@ public sealed class ModuleBookingAdmissionReviewer : IBookingAdmissionReviewer
             facts.StartsAtUtc,
             facts.EndsAtUtc,
             [.. facts.Claims.Select(c => new BookingAdmissionClaim(
-                c.ResourceDocumentId, c.MaskId, c.IsHolding, c.RepresentsUserId, c.IsNewClaim))],
+                c.ResourceDocumentId, c.MaskId, c.IsHolding, c.RepresentsUserId, c.IsNewClaim, c.IsDropped))],
             facts.IsNew,
             facts.WriterUserId,
             facts.WriterServiceAccountId,

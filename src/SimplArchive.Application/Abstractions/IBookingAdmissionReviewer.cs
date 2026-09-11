@@ -44,9 +44,11 @@ public sealed record BookingAdmissionFacts(
 /// <param name="IsHolding">True for the resource whose Schedule holds the document.</param>
 /// <param name="RepresentsUserId">The person the resource stands for (ADR 0779), when it stands for one.</param>
 /// <param name="IsNewClaim">True when this write adds the claim rather than carrying it forward.</param>
+/// <param name="IsDropped">True when this write removes the claim.</param>
 public sealed record BookingAdmissionClaimFacts(
     Guid ResourceDocumentId,
     Guid? MaskId,
     bool IsHolding,
     Guid? RepresentsUserId,
-    bool IsNewClaim = false);
+    bool IsNewClaim = false,
+    bool IsDropped = false);

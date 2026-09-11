@@ -141,7 +141,69 @@ internal sealed class ResourceCollectionWriter
 
         return new PendingBookingAudit(
             wasNew ? Controllers.AuditActions.BookingCreated : Controllers.AuditActions.BookingChanged,
-            $"{startsAt:u}–{endsAt:u} claiming {string.Join(", ", resourceNames.OrderBy(n => n, StringComparer.Ordinal))}");
+            $"{startsAt:u}–{endsAt:u} claiming {string.Join(", ", resourceNames.OrderBy(n => n, StringComparer.Ordinal))}",
+            Participants: await ParticipantsNoticeAsync(document, version, claims, wasNew, startsAt, endsAt, cancellationToken));
+    }
+
+    /// <summary>
+    /// Who to tell that this booking's crew changed — or null when it did not (ADR 0784).
+    /// </summary>
+    /// <remarks>
+    /// Nothing is sent for a booking's FIRST version: everyone on it is new, and telling people they were
+    /// added to a flight that did not exist a moment ago is the booking itself, not a change to it.
+    /// </remarks>
+    private async Task<PendingParticipantsNotice?> ParticipantsNoticeAsync(
+        Document document, DocumentVersion version, List<ResourceBooking> claims,
+        bool wasNew, DateTimeOffset startsAt, DateTimeOffset endsAt, CancellationToken cancellationToken)
+    {
+        if (wasNew)
+        {
+            return null;
+        }
+
+        var added = claims.Where(c => _dbContext.Entry(c).State == EntityState.Added).Select(c => c.ResourceDocumentId).ToList();
+        var removed = claims
+            .Where(c => c.Status == BookingStatus.Cancelled && _dbContext.Entry(c).Property(b => b.Status).IsModified)
+            .Select(c => c.ResourceDocumentId)
+            .ToList();
+        if (added.Count == 0 && removed.Count == 0)
+        {
+            return null;
+        }
+
+        var touched = added.Concat(removed).ToList();
+        var names = await _dbContext.Documents
+            .Where(d => touched.Contains(d.Id))
+            .Select(d => new { d.Id, d.Name })
+            .ToListAsync(cancellationToken);
+        string NameOf(Guid id) => names.FirstOrDefault(n => n.Id == id)?.Name ?? "somebody";
+
+        // The people who REMAIN on the flight, plus whoever booked it — minus the person writing, who knows.
+        // A dropped claimant is deliberately not told: they are usually the one acting, and where they are
+        // not, being removed from a flight is a conversation rather than a notification.
+        var staying = claims
+            .Where(c => c.Status == BookingStatus.Active)
+            .Select(c => c.ResourceDocumentId)
+            .ToList();
+        var recipients = (await _dbContext.ResourcePrincipals
+                .Where(p => staying.Contains(p.ResourceDocumentId))
+                .Select(p => p.UserId)
+                .ToListAsync(cancellationToken))
+            .Concat(claims.Select(c => c.BookedByUserId).Where(id => id is not null).Select(id => id!.Value))
+            .Distinct()
+            .Where(id => id != version.CreatedByUserId)
+            .ToList();
+        if (recipients.Count == 0)
+        {
+            return null;
+        }
+
+        return new PendingParticipantsNotice(
+            document.TenantId, document.Id, document.Name,
+            startsAt.ToUniversalTime(), endsAt.ToUniversalTime(),
+            recipients,
+            [.. added.Select(NameOf).OrderBy(n => n, StringComparer.Ordinal)],
+            [.. removed.Select(NameOf).OrderBy(n => n, StringComparer.Ordinal)]);
     }
 
 
@@ -164,6 +226,17 @@ internal sealed class ResourceCollectionWriter
         {
             return;
         }
+
+        // A claim CANCELLED BY THIS WRITE is still shown — a module deciding whether a removal may stand has
+        // to see who is leaving (ADR 0784). One cancelled by an EARLIER write is history, and showing it
+        // would report somebody as being on a flight they came off weeks ago.
+        var dropped = claims
+            .Where(c => c.Status == BookingStatus.Cancelled
+                && _dbContext.Entry(c).Property(b => b.Status).IsModified)
+            .Select(c => c.ResourceDocumentId)
+            .ToHashSet();
+
+        claims = [.. claims.Where(c => c.Status != BookingStatus.Cancelled || dropped.Contains(c.ResourceDocumentId))];
 
         var resourceIds = claims.Select(c => c.ResourceDocumentId).ToList();
 
@@ -197,7 +270,8 @@ internal sealed class ResourceCollectionWriter
                 //
                 // Read at review time rather than captured earlier because the attendee reconcile runs in
                 // between and is what adds the rest.
-                wasNew || _dbContext.Entry(c).State == EntityState.Added))],
+                wasNew || _dbContext.Entry(c).State == EntityState.Added,
+                dropped.Contains(c.ResourceDocumentId)))],
             wasNew,
             version.CreatedByUserId,
             version.CreatedByServiceAccountId,
@@ -587,8 +661,55 @@ internal sealed class ResourceCollectionWriter
         }
     }
 
+    /// <summary>
+    /// Tells the OTHER people on a booking that its crew changed (ADR 0784).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The core's job, not a module's: anyone whose commitment changed should hear about it, and a
+    /// module-specific notifier would leave the same hole open on every path the module does not own —
+    /// including the core's own meeting rooms.
+    /// </para>
+    /// <para>
+    /// Never to whoever made the change. They know, and a notification telling somebody what they just did
+    /// is the kind of noise that teaches people to stop reading notifications.
+    /// </para>
+    /// </remarks>
+    internal async Task NotifyParticipantsChangedAsync(PendingParticipantsNotice notice, CancellationToken cancellationToken)
+    {
+        var changes = new List<string>();
+        if (notice.Added.Count > 0)
+        {
+            changes.Add($"added {string.Join(", ", notice.Added)}");
+        }
+
+        if (notice.Removed.Count > 0)
+        {
+            changes.Add($"removed {string.Join(", ", notice.Removed)}");
+        }
+
+        var title = $"Who is on \"{notice.BookingName}\" changed";
+        var body = $"{char.ToUpperInvariant(changes[0][0])}{changes[0][1..]}"
+            + (changes.Count > 1 ? $", {changes[1]}" : string.Empty)
+            + $" · {notice.From:yyyy-MM-dd HH:mm}–{notice.To:HH:mm} UTC.";
+
+        foreach (var userId in notice.Recipients)
+        {
+            await _notifications.NotifyInTenantAsync(
+                notice.TenantId, userId, NotificationType.BookingParticipantsChanged,
+                title, body, notice.BookingDocumentId, cancellationToken);
+        }
+    }
+
     /// <summary>What to record once the booking has actually been saved (#1092, ADR 0777).</summary>
-    internal sealed record PendingBookingAudit(string Action, string Details, PendingBlockNotice? Notice = null);
+    internal sealed record PendingBookingAudit(
+        string Action, string Details, PendingBlockNotice? Notice = null, PendingParticipantsNotice? Participants = null);
+
+    /// <summary>Who to tell that a booking's crew changed, and how (ADR 0784).</summary>
+    internal sealed record PendingParticipantsNotice(
+        Guid TenantId, Guid BookingDocumentId, string BookingName,
+        DateTimeOffset From, DateTimeOffset To,
+        IReadOnlyList<Guid> Recipients, IReadOnlyList<string> Added, IReadOnlyList<string> Removed);
 
     /// <summary>Who to tell that a resource went out of service, or came back (ADR 0778, slice 4b).</summary>
     internal sealed record PendingBlockNotice(

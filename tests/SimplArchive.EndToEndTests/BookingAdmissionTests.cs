@@ -343,6 +343,40 @@ public class BookingAdmissionTests
             Assert.Contains("holding=1", body, StringComparison.Ordinal);
             Assert.Contains("newClaims=2", body, StringComparison.Ordinal);
             Assert.Contains("slotChanged=False", body, StringComparison.Ordinal);
+            Assert.Contains("dropped=0", body, StringComparison.Ordinal);
+
+            // Now take an attendee OFF a flight. A SECOND booking, deliberately: the write above was
+            // REFUSED, and re-using its UID would be editing whatever husk that left rather than creating
+            // one cleanly — which is exactly how this assertion first failed.
+            Environment.SetEnvironmentVariable(ReviewSwitch, null);
+            var liveUid = Guid.NewGuid().ToString();
+            var liveIcs = ics.Replace(uid, liveUid, StringComparison.Ordinal)
+                .Replace("20270512T200000Z", "20270512T220000Z", StringComparison.Ordinal)
+                .Replace("20270512T210000Z", "20270512T230000Z", StringComparison.Ordinal);
+
+            using (var create = new HttpRequestMessage(HttpMethod.Put, $"{schedule}{liveUid}.ics")
+            {
+                Content = new StringContent(liveIcs, Encoding.UTF8, "text/calendar"),
+            })
+            {
+                create.Headers.Authorization = basic;
+                (await dav.SendAsync(create)).EnsureSuccessStatusCode();
+            }
+
+            Environment.SetEnvironmentVariable(ReviewSwitch, "refuse");
+            var without = liveIcs.Replace($"ATTENDEE:mailto:{rig.AdminEmail}\r\n", string.Empty, StringComparison.Ordinal);
+            using var drop = new HttpRequestMessage(HttpMethod.Put, $"{schedule}{liveUid}.ics")
+            {
+                Content = new StringContent(without, Encoding.UTF8, "text/calendar"),
+            };
+            drop.Headers.Authorization = basic;
+            var dropBody = await (await dav.SendAsync(drop)).Content.ReadAsStringAsync();
+
+            // The module is shown that somebody is LEAVING — without it a rule about withdrawal cannot
+            // exist — and the departing claim is still LISTED, because judging a removal means seeing who
+            // is going (ADR 0784).
+            Assert.Contains("dropped=1", dropBody, StringComparison.Ordinal);
+            Assert.Contains("claims=2", dropBody, StringComparison.Ordinal);
 
             rig.Admin.Dispose();
             rig.Owner.Dispose();

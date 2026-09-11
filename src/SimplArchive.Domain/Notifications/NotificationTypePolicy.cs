@@ -57,6 +57,7 @@ public static class NotificationTypePolicy
             // fact that stopped being true. The two only work together.
             NotificationType.BookingSuspended => false,
             NotificationType.BookingRevived => false,
+            NotificationType.BookingParticipantsChanged => false,
         };
 #pragma warning restore CS8524
 
