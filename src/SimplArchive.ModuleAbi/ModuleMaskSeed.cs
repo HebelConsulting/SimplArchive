@@ -74,6 +74,11 @@ public static class CoreMaskIds
     /// <see cref="ModuleMaskSeed.IsBookable"/> exactly as the Schedule is, so a module's bookable mask gets
     /// both without declaring either.</summary>
     public static readonly Guid Maintenance = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E46");
+
+    /// <summary>The Availability collection a bookable resource holds (core ADR 0780) — its OFFERED time,
+    /// as against when it is spoken for (Schedule) or withdrawn (Maintenance). Admitted implicitly by
+    /// <see cref="ModuleMaskSeed.IsBookable"/> like the other two.</summary>
+    public static readonly Guid Availability = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E48");
 }
 
 /// <summary>One field of a module mask. The type vocabulary mirrors the core's field catalog.</summary>

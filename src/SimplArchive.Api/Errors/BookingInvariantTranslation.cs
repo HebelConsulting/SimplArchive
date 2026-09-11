@@ -31,6 +31,7 @@ internal static class BookingInvariantTranslation
         BookingInvariantKind.SlotTaken => new BookingSlotConflictException(error.Message),
         BookingInvariantKind.SlotWithoutExtent => new BookingSlotInvalidException(error.Message),
         BookingInvariantKind.BlockWithoutExtent => new BookingSlotInvalidException(error.Message),
+        BookingInvariantKind.WindowWithoutExtent => new BookingSlotInvalidException(error.Message),
         // Its own code: a taken slot means try another hour, a blocked resource means no hour inside the
         // block will do, and a caller that cannot tell them apart gives the wrong advice (ADR 0778).
         BookingInvariantKind.ResourceBlocked => new ResourceBlockedException(error.Message),

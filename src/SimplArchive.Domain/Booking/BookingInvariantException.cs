@@ -66,6 +66,12 @@ public sealed class BookingInvariantException : InvalidOperationException
     public static BookingInvariantException BlockWithoutExtent(DateTimeOffset start, DateTimeOffset end) =>
         new(BookingInvariantKind.BlockWithoutExtent, $"A block's window must have extent: start {start:u} does not precede end {end:u}.");
 
+    /// <summary>An availability window's range has no extent: start must precede end.</summary>
+    /// <remarks>Its own kind rather than reusing the booking's or the block's: the message has to say which
+    /// of the three a caller got wrong, and each is written through a different surface.</remarks>
+    public static BookingInvariantException WindowWithoutExtent(DateTimeOffset start, DateTimeOffset end) =>
+        new(BookingInvariantKind.WindowWithoutExtent, $"An availability window must have extent: start {start:u} does not precede end {end:u}.");
+
     /// <summary>Two claims of the same booking document disagree about when the booking is.</summary>
     /// <remarks>
     /// A booking may now claim SEVERAL resources at once (ADR 0774) — a training flight occupies the
@@ -90,4 +96,5 @@ public enum BookingInvariantKind
     ClaimsDisagreeOnSlot,
     ResourceBlocked,
     BlockWithoutExtent,
+    WindowWithoutExtent,
 }

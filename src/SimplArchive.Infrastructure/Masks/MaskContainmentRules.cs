@@ -105,6 +105,12 @@ public sealed class MaskContainmentRules
             children.Add(new { FolderMaskId = bookable.Id, ChildMaskId = WellKnownMaskIds.Schedule });
             parents.Add(new { MaskId = WellKnownMaskIds.Maintenance, ParentMaskId = bookable.Id });
             children.Add(new { FolderMaskId = bookable.Id, ChildMaskId = WellKnownMaskIds.Maintenance });
+            // ...and its Availability collection (ADR 0780) — the third question about one timeline. Derived
+            // for EVERY bookable mask rather than only for person-representing ones: "offered time" is
+            // meaningful for a rental aircraft as much as for an instructor, and one clean rule beats a
+            // second declaration nobody would remember to make.
+            parents.Add(new { MaskId = WellKnownMaskIds.Availability, ParentMaskId = bookable.Id });
+            children.Add(new { FolderMaskId = bookable.Id, ChildMaskId = WellKnownMaskIds.Availability });
         }
 
         string NameOf(Guid maskId) => names.TryGetValue(maskId, out var name) ? name : maskId.ToString();

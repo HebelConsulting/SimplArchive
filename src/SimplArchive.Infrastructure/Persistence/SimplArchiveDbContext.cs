@@ -145,6 +145,8 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
 
     public DbSet<ResourceBlock> ResourceBlocks => Set<ResourceBlock>();
 
+    public DbSet<ResourceAvailability> ResourceAvailability => Set<ResourceAvailability>();
+
     // Per-tenant industry-module activations (ADR 0740) — the row a verified license upserts.
     public DbSet<ModuleActivation> ModuleActivations => Set<ModuleActivation>();
 
@@ -263,6 +265,8 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
         // go must judge the booking against the block's new state, not the state it had on entry.
         SyncBlockDocumentsAsync(CancellationToken.None).GetAwaiter().GetResult();
         ValidateResourceBlocksAsync(CancellationToken.None).GetAwaiter().GetResult();
+        SyncAvailabilityDocumentsAsync(CancellationToken.None).GetAwaiter().GetResult();
+        ValidateResourceAvailabilityAsync(CancellationToken.None).GetAwaiter().GetResult();
         ValidateResourceBookingsAsync(CancellationToken.None).GetAwaiter().GetResult();
         SyncResourcePrincipalsAsync(CancellationToken.None).GetAwaiter().GetResult();
         PrepareMaskVersionsAsync(CancellationToken.None).GetAwaiter().GetResult();
@@ -281,6 +285,8 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
         await SyncBookingDocumentsAsync(cancellationToken);
         await SyncBlockDocumentsAsync(cancellationToken);
         await ValidateResourceBlocksAsync(cancellationToken);
+        await SyncAvailabilityDocumentsAsync(cancellationToken);
+        await ValidateResourceAvailabilityAsync(cancellationToken);
         await ValidateResourceBookingsAsync(cancellationToken);
         await SyncResourcePrincipalsAsync(cancellationToken);
         await PrepareMaskVersionsAsync(cancellationToken);

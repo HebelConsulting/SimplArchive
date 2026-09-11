@@ -27,6 +27,9 @@ public class ImmutableStructuralMaskTests
             // re-type it and the .ics inside stop being blocks, so the ResourceBlock rows point at documents
             // that no longer mean anything, and an aircraft silently comes back into service.
             WellKnownMaskIds.Maintenance,
+            // ADR 0780: and the Availability collection, for the same reason — re-type it and the .ics inside
+            // stop being windows, so a resource silently stops offering time it is still advertising.
+            WellKnownMaskIds.Availability,
         ];
 
         Assert.Equal(

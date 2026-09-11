@@ -54,6 +54,12 @@ public static class MaskIcon
         // blocked calendar for the window. Opposites of the schedule beside them, not variants of it.
         ["maintenance"] = "mdi-wrench",
         ["maintenance-block"] = "mdi-calendar-remove",
+        // Offered time (ADR 0780). NOT the door glyph the web client's metaphor suggested: this set builds an
+        // EMPTY folder's icon by appending "-outline", and mdi-door-open has no outline partner — so an empty
+        // Availability folder would have rendered NOTHING, silently, and only once somebody made one and
+        // looked before filling it. Both of these resolve with their partners (DesktopMaskIconTests).
+        ["availability"] = "mdi-account-clock",
+        ["availability-window"] = "mdi-clock",
         ["email"] = "mdi-email",
         ["note"] = "mdi-note-text",
         ["contact"] = "mdi-card-account-details",

@@ -56,6 +56,12 @@ public static class MaskIcon
         // one resource, so they have to read as opposites at a glance rather than as two calendars.
         ["maintenance"] = (Icons.Material.Filled.Build, Icons.Material.Outlined.Build),
         ["maintenance-block"] = (Icons.Material.Filled.EventBusy, Icons.Material.Outlined.EventBusy),
+        // Offered time (ADR 0780): an open door rather than a third calendar, so the trio on one resource
+        // reads as three different things — spoken for, unavailable, offered — instead of three calendars.
+        ["availability"] = (Icons.Material.Filled.DoorFront, Icons.Material.Outlined.DoorFront),
+        // NOT EventAvailable — that is the Schedule's, and a window is not a booking. An offered HOUR
+        // rather than a calendar, which is what distinguishes it from the entries beside it.
+        ["availability-window"] = (Icons.Material.Filled.AccessTime, Icons.Material.Outlined.AccessTime),
 
         // Item masks — the outline half is never read (an item is not a folder, so it is never empty).
         ["email"] = (Icons.Material.Filled.Email, Icons.Material.Outlined.Email),

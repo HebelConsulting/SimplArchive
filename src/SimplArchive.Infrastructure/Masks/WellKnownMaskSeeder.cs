@@ -219,6 +219,22 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         // the other two do — a client that subscribes to both wants to tell them apart at a glance.
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.Maintenance, "Maintenance", [ColourField], cancellationToken);
 
+        // The offered window (ADR 0780), shaped like Booking and Maintenance block so one classifier reads
+        // all three. Its domain field is Note — a booking says what the time is FOR and a block what is
+        // wrong; an offer usually says nothing, and when it does it is a remark ("dual only").
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.AvailabilityWindow, "Availability window",
+        [
+            new FieldSpec("Event UID", FieldDataType.Text, IsRequired: true),
+            new FieldSpec("Start", FieldDataType.DateTime, IsRequired: false),
+            new FieldSpec("End", FieldDataType.DateTime, IsRequired: false),
+            new FieldSpec("Location", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Note", FieldDataType.Text, IsRequired: false),
+        ], cancellationToken);
+
+        // The offered-time calendar (ADR 0780): a calendar kind, so it carries the colour field its two
+        // siblings do — a client subscribed to all three wants to tell them apart at a glance.
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.Availability, "Availability", [ColourField], cancellationToken);
+
         // The license artefact (ADRs 0740/0743) — generic "License", not "Module license" (owner decision
         // 2026-09-08): support licences will wear it too. Both fields are a server-stamped projection of the
         // VERIFIED claims — optional, so an admin can file the raw .json with nothing to type, and a license

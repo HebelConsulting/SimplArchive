@@ -38,7 +38,16 @@ public static class DavCollectionKinds
     public static readonly DavCollectionKind Maintenance =
         new(WellKnownMaskIds.Maintenance, WellKnownMaskIds.MaintenanceBlock, ".ics", "Event UID");
 
-    public static readonly IReadOnlyList<DavCollectionKind> All = [Calendar, Addressbook, Schedule, Maintenance];
+    /// <summary>A resource's Availability collection (ADR 0780): calendar wire behaviour, window items.</summary>
+    /// <remarks>
+    /// Served over CalDAV because publishing availability is something a person does from the calendar they
+    /// already carry — an instructor marking Thursday afternoon free on their phone. A collection the core
+    /// knows only internally could be filled from the workbench alone, which is not where this happens.
+    /// </remarks>
+    public static readonly DavCollectionKind Availability =
+        new(WellKnownMaskIds.Availability, WellKnownMaskIds.AvailabilityWindow, ".ics", "Event UID");
+
+    public static readonly IReadOnlyList<DavCollectionKind> All = [Calendar, Addressbook, Schedule, Maintenance, Availability];
 
     /// <summary>The kind for a folder mask, or null when the folder is not a synced collection.</summary>
     public static DavCollectionKind? ForFolderMask(Guid? folderMaskId) =>
