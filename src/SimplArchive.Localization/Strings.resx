@@ -4923,4 +4923,10 @@
   <data name="StModuleSettingNotDeclared" xml:space="preserve">
     <value>This module declares no such setting.</value>
   </data>
+  <data name="ModuleActionNoOptions" xml:space="preserve">
+    <value>No one can take this on right now.</value>
+  </data>
+  <data name="ModuleActionDone" xml:space="preserve">
+    <value>{0} — done.</value>
+  </data>
 </root>

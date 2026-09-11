@@ -278,6 +278,21 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <!-- Module actions with options (core ADR 0786): the same server-labeled shape as the
+                         actions above, except choosing comes before acting. Rendered from the resource
+                         alone — this client names no module and no rel. -->
+                    <ItemsControl IsVisible="{Binding HasDetailModuleActions}" ItemsSource="{Binding DetailModuleActions}" Margin="0,4,0,0">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:CompileBindings="False">
+                                <Button Margin="0,0,6,4" Padding="10,4"
+                                        Content="{Binding Label}"
+                                        CommandParameter="{Binding}"
+                                        Command="{Binding DataContext.RunModuleActionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
 
                 <!-- Mask edit mode: choose the mask + type-aware field editors. -->

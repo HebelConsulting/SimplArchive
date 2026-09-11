@@ -4923,4 +4923,10 @@
   <data name="StModuleSettingNotDeclared" xml:space="preserve">
     <value>Questo modulo non dichiara tale impostazione.</value>
   </data>
+  <data name="ModuleActionNoOptions" xml:space="preserve">
+    <value>Al momento nessuno può subentrare.</value>
+  </data>
+  <data name="ModuleActionDone" xml:space="preserve">
+    <value>{0} — fatto.</value>
+  </data>
 </root>

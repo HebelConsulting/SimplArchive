@@ -165,7 +165,8 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
     // is meaningful (tenant switch off, or a folder), which is a different question from "what is its address".
     public sealed record DocumentDetailInfo(string Name, DocumentSensitivityInfo Sensitivity, string? ExternalLinksHref, int ContentsSortOrder,
         IReadOnlyDictionary<string, string>? Links = null, IReadOnlyList<GenericActionInfo>? GenericActions = null,
-        IReadOnlyList<MachineStatusInfo>? MachineStatuses = null)
+        IReadOnlyList<MachineStatusInfo>? MachineStatuses = null,
+        IReadOnlyList<ModuleActionInfo>? ModuleActions = null)
     {
         /// <summary>The advertised href for <paramref name="rel"/>; throws rather than composing one.</summary>
         public string Href(string rel) =>
@@ -194,7 +195,8 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
             json.TryGetProperty("contentsSortOrder", out var so) && so.ValueKind == JsonValueKind.Number ? so.GetInt32() : 0,
             ApiCore.ParseLinks(json),
             ParseGenericActions(json),
-            ParseMachineStatuses(json));
+            ParseMachineStatuses(json),
+            ParseModuleActions(json));
     }
 
     /// <summary>A machine-derived status with its diagnoses (#1062) — what the detail pane's Status section

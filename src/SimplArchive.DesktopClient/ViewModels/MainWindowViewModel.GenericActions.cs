@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using CommunityToolkit.Mvvm.Input;
 using SimplArchive.DesktopClient.Services;
+using SimplArchive.Localization;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -14,6 +16,68 @@ public partial class MainWindowViewModel
     public ObservableCollection<DocumentsClient.GenericActionInfo> DetailGenericActions { get; } = [];
 
     public bool HasDetailGenericActions => DetailGenericActions.Count > 0;
+
+    /// <summary>The selected document's module actions — pick-then-act surfaces (core ADR 0786).</summary>
+    public ObservableCollection<DocumentsClient.ModuleActionInfo> DetailModuleActions { get; } = [];
+
+    public bool HasDetailModuleActions => DetailModuleActions.Count > 0;
+
+    // Same rebuild-and-clear rule as the labeled actions (ADR 0559): an action inherited from the previous
+    // subject would fetch its choices for one document and commit them against another.
+    internal void SetDetailModuleActions(IReadOnlyList<DocumentsClient.ModuleActionInfo>? actions)
+    {
+        DetailModuleActions.Clear();
+        foreach (var action in actions ?? [])
+        {
+            DetailModuleActions.Add(action);
+        }
+
+        OnPropertyChanged(nameof(HasDetailModuleActions));
+    }
+
+    /// <summary>
+    /// Runs a module action: fetch its choices, let the user pick one, send it back.
+    /// </summary>
+    /// <remarks>
+    /// Addressed entirely from the ACTION the button carries (ADR 0559), never from the pane's loaded state —
+    /// the hrefs came with the document the user clicked, so a detail still loading cannot redirect the
+    /// commit at the previous subject.
+    /// </remarks>
+    [RelayCommand]
+    private async Task RunModuleActionAsync(DocumentsClient.ModuleActionInfo? action)
+    {
+        if (action is null || _api is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var options = await _api.Documents.GetModuleActionOptionsAsync(action.OptionsHref);
+            var picker = new ModuleActionPickerViewModel(action, options);
+            if (await ShowModuleActionPickerAsync?.Invoke(picker)! is not true || picker.Result is not { } chosen)
+            {
+                return;
+            }
+
+            await _api.Documents.InvokeModuleActionAsync(action.CommitHref, action.ValueField, chosen);
+            Status = string.Format(CultureInfo.CurrentCulture, Strings.Get("ModuleActionDone"), action.Label);
+            await ReloadDetailAsync();
+        }
+        catch (ApiActionException failure)
+        {
+            // The module's own sentence, already localized — shown rather than replaced with a generic
+            // apology, because it is the one that says what to do next.
+            Status = failure.Message;
+        }
+    }
+
+    /// <summary>
+    /// Opens the picker. A settable callback rather than a constructor argument (ADR 0730): the dialog needs
+    /// a view that does not exist when the view-model is built, and a forgotten one disables a visible
+    /// button — loud, not silent.
+    /// </summary>
+    public Func<ModuleActionPickerViewModel, Task<bool>>? ShowModuleActionPickerAsync { get; set; }
 
     /// <summary>One Status row for the pane (#1062): the pretty name and, when unmet, the diagnoses. The
     /// display split lives in SimplArchive.Presentation so both clients answer identically (ADR 0650).</summary>

@@ -1,0 +1,40 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+        x:Class="SimplArchive.DesktopClient.Views.ModuleActionPickerDialog"
+        x:DataType="vm:ModuleActionPickerViewModel"
+        Title="{Binding Title}" Width="440" Height="420" CanResize="True"
+        WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="14">
+        <TextBlock DockPanel.Dock="Top" Text="{Binding Prompt}"
+                   TextWrapping="Wrap" Margin="0,0,0,10" Foreground="{DynamicResource WbMuted}" />
+
+        <!-- An empty list is SAID rather than shown as a blank pane: the server offers the action only when
+             it can be served, so this is rare — and a dialog that simply looks broken is worse than one that
+             explains itself. -->
+        <TextBlock DockPanel.Dock="Top" Text="{loc:Tr ModuleActionNoOptions}"
+                   IsVisible="{Binding HasNoOptions}" TextWrapping="Wrap"
+                   Foreground="{DynamicResource WbMuted}" Margin="0,0,0,10" />
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right"
+                    Spacing="8" Margin="0,10,0,0">
+            <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+            <Button Content="{loc:Tr Apply}" Click="OnOk" IsDefault="True" IsEnabled="{Binding HasOptions}" />
+        </StackPanel>
+
+        <ScrollViewer IsVisible="{Binding HasOptions}">
+            <ListBox ItemsSource="{Binding Options}" SelectedItem="{Binding Selected}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ModuleActionOptionViewModel">
+                        <StackPanel Margin="2,4">
+                            <TextBlock Text="{Binding Label}" />
+                            <TextBlock Text="{Binding Detail}" IsVisible="{Binding HasDetail}"
+                                       FontSize="12" Foreground="{DynamicResource WbMuted}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

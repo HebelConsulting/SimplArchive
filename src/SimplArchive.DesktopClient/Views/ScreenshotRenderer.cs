@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -271,6 +272,30 @@ internal static class ScreenshotRenderer
             viewModel.ToggleTreeCommand.Execute(null);
             viewModel.ToggleChatCommand.Execute(null);
             viewModel.ToggleIndexCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+        }
+
+        // `--module-action`: put a module's pick-then-act button in the detail pane (core ADR 0786), as
+        // SYNTHETIC state — demo data has no active module.
+        //
+        // HONEST WARNING, so nobody re-discovers this the hard way: the detail pane's height comes from the
+        // workbench splitter, and this button sits BELOW that fold, so the capture does not show it —
+        // neither this one nor the LABELED generic actions beside it, which was verified by injecting one of
+        // those as a control and seeing it equally absent. The flag still sets real view-model state, and
+        // the surface itself is covered by a view-model test rather than by a picture.
+        if (Environment.GetCommandLineArgs().Contains("--module-action"))
+        {
+            viewModel.SetDetailModuleActions(
+            [
+                new Services.DocumentsClient.ModuleActionInfo(
+                    // Obviously-fake hrefs: nothing fetches them, and a realistic-looking api/ path here
+                    // would read as this client composing one (ADR 0543's guard counts the shape, rightly).
+                    "flight-school:hand-over", "Hand over to…",
+                    "(demo)/substitutes",
+                    "(demo)/commit",
+                    "email", "Who takes this flight over?"),
+            ]);
+            Dispatcher.UIThread.RunJobs();
             Dispatcher.UIThread.RunJobs();
         }
 

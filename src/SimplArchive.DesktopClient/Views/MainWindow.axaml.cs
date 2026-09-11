@@ -71,6 +71,12 @@ public partial class MainWindow : Window
                 vm.NameConflictDialog = req => new NameConflictDialog(req).ShowDialog<Services.UploadConflictResolver.NameConflictChoice?>(this);
                 vm.ShowReminderDialog = rvm => new ReminderDialog(rvm).ShowDialog(this);
                 vm.ShowBookingDialog = bvm => new BookingDialog(bvm).ShowDialog(this);
+
+                // The picker a module action opens (core ADR 0786). A settable callback rather than a
+                // constructor argument (ADR 0730): the dialog needs a view that does not exist when the
+                // view-model is built, and forgetting it disables a visible button — loud, not silent.
+                vm.ShowModuleActionPickerAsync = async pvm =>
+                    await new ModuleActionPickerDialog { DataContext = pvm }.ShowDialog<bool>(this);
                 vm.ShowExternalLinksDialog = evm =>
                 {
                     var window = new ExternalLinksDialog(evm);

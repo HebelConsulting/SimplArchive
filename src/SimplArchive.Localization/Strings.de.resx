@@ -4923,4 +4923,10 @@
   <data name="StModuleSettingNotDeclared" xml:space="preserve">
     <value>Dieses Modul kennt diese Einstellung nicht.</value>
   </data>
+  <data name="ModuleActionNoOptions" xml:space="preserve">
+    <value>Derzeit kann dies niemand übernehmen.</value>
+  </data>
+  <data name="ModuleActionDone" xml:space="preserve">
+    <value>{0} — erledigt.</value>
+  </data>
 </root>

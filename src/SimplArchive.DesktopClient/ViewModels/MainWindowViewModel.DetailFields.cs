@@ -24,6 +24,7 @@ public sealed partial class MainWindowViewModel
         // against the wrong document.
         SetDetailGenericActions(null);
         SetDetailMachineStatuses(null);
+        SetDetailModuleActions(null);
         _detailLinks = null;
         OnPropertyChanged(nameof(CanOpenBookings)); // the affordance must not outlive its subject (ADR 0559)
         SysDocumentDate = null;
@@ -61,6 +62,7 @@ public sealed partial class MainWindowViewModel
             _detailLinks = detail.Links;
             SetDetailGenericActions(detail.GenericActions);
             SetDetailMachineStatuses(detail.MachineStatuses);
+            SetDetailModuleActions(detail.ModuleActions);
             OnPropertyChanged(nameof(CanOpenBookings));
             _detailDocumentName = detail.Name;
             CanShareDocument = detail.ExternalLinksHref is not null;

@@ -44,6 +44,13 @@ public partial class NoServerDetailInClientsTests
         ["src/SimplArchive.Client/Components/Panes/IndexDataPane.razor"] = 1,
         ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.DetailEdit.cs"] = 1,
         ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1,
+        // ADR 0786's module-action refusal: a module's own sentence, composed by ITS catalog for the request
+        // culture, is the one server text a client may show — the same license the proposal Detail has.
+        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.ModuleActions.cs"] = 1,
+        // ADR 0786's option Detail — the same class as the proposal Detail above, not the API's problem
+        // detail: it is the MODULE's sentence about one candidate ("FI(A) · offered and free"), composed by
+        // its own catalog for the request culture, and only the module knows what distinguishes its choices.
+        ["src/SimplArchive.DesktopClient/ViewModels/ModuleActionPickerViewModel.cs"] = 1,
     };
 
     [Fact]
