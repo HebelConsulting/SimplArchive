@@ -107,6 +107,68 @@ public class ResourcePrincipalSyncTests
     }
 
     [Fact]
+    public async Task The_mapping_is_written_when_the_MASK_arrives_after_the_field()
+    {
+        // THE ORDER EVERY REAL CALLER USES, and the one no other test here exercised: a document is created
+        // bare, its index data is written, and the mask is assigned LAST. The core mandates exactly this —
+        // required-field validation fires when the mask arrives (ADR 0176), so a mask cannot be assigned to a
+        // document whose required field is still empty.
+        //
+        // Before the fix this produced NO mapping on either save: the field write found a document wearing no
+        // mask, so nothing declared anything; the mask assignment wrote no field value, so the sync returned
+        // at its first guard. ABI 0.13's feature was inert from the day it shipped, and invisibly so — a
+        // document representing nobody is indistinguishable from one nobody has claimed.
+        //
+        // Found by driving the real demo stack. Every test in this file passed throughout, because the
+        // fixture seeds the document ALREADY wearing its mask.
+        var (connection, f) = await StartAsync();
+        using var _ = connection;
+
+        var bareId = Guid.NewGuid();
+        Guid versionId;
+        using (var db = CreateContext(connection, f.TenantId))
+        {
+            versionId = await db.Documents.Where(d => d.Id == f.DossierId).Select(d => d.MaskVersionId!.Value).SingleAsync();
+            db.Documents.Add(new Document
+            {
+                Id = bareId,
+                TenantId = f.TenantId,
+                Name = "Filed bare",
+                CreatedByUserId = f.AnnaId,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        using (var db = CreateContext(connection, f.TenantId))
+        {
+            db.FieldValues.Add(new FieldValue
+            {
+                Id = Guid.NewGuid(),
+                TenantId = f.TenantId,
+                DocumentId = bareId,
+                FieldDefinitionId = f.FieldId,
+                Value = "anna@school.test",
+            });
+            await db.SaveChangesAsync();
+        }
+
+        using (var db = CreateContext(connection, f.TenantId))
+        {
+            var bare = await db.Documents.SingleAsync(d => d.Id == bareId);
+            bare.MaskVersionId = versionId;
+            await db.SaveChangesAsync();
+        }
+
+        using (var db = CreateContext(connection, f.TenantId))
+        {
+            var mapping = await db.ResourcePrincipals.SingleOrDefaultAsync(p => p.ResourceDocumentId == bareId);
+            Assert.NotNull(mapping);
+            Assert.Equal(f.AnnaId, mapping.UserId);
+        }
+    }
+
+    [Fact]
     public async Task Writing_the_declared_field_maps_the_document_to_that_person()
     {
         var (connection, f) = await StartAsync();

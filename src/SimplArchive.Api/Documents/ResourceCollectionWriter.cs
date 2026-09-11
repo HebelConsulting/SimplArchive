@@ -186,9 +186,18 @@ internal sealed class ResourceCollectionWriter
                 masks.FirstOrDefault(m => m.Id == c.ResourceDocumentId)?.MaskId,
                 c.ResourceDocumentId == holding.ResourceDocumentId,
                 principals.FirstOrDefault(p => p.ResourceDocumentId == c.ResourceDocumentId)?.UserId,
-                // Read HERE rather than captured earlier, because the attendee reconcile runs in between and
-                // is what adds most of them. Nothing has saved yet, so an added claim still says so.
-                _dbContext.Entry(c).State == EntityState.Added))],
+                // "New" means the booking is new OR this claim was added in this pass — NOT merely
+                // "the change tracker says Added".
+                //
+                // The bookings endpoint creates the holding claim and SAVES it before the finalizer runs, so
+                // by the time the review happens that row is Unchanged: the one claim the booking is being
+                // made for would report itself as carried forward, and a consent rule keyed on it would skip
+                // the only claimant there is. Exactly the trap the audit line above documents for wasNew, on
+                // the same path, walked into again.
+                //
+                // Read at review time rather than captured earlier because the attendee reconcile runs in
+                // between and is what adds the rest.
+                wasNew || _dbContext.Entry(c).State == EntityState.Added))],
             wasNew,
             version.CreatedByUserId,
             version.CreatedByServiceAccountId,

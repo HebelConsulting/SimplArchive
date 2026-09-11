@@ -16,13 +16,31 @@ public partial class SimplArchiveDbContext
 {
     private async Task SyncResourcePrincipalsAsync(CancellationToken cancellationToken)
     {
-        // Any field value written this save — the declaration names a FIELD, so a change to that field is
-        // the only thing that can change whom the document represents.
+        // Any field value written this save — the declaration names a FIELD, so a change to that field can
+        // change whom the document represents.
         var written = ChangeTracker.Entries<FieldValue>()
             .Where(e => e.State is EntityState.Added or EntityState.Modified)
             .Select(e => e.Entity)
             .ToList();
-        if (written.Count == 0)
+
+        // AND any document whose MASK changed, which is the case that matters most and was missed entirely.
+        //
+        // The core mandates the order create bare → write index data → assign mask, because required-field
+        // validation fires when the mask arrives (ADR 0176) and would refuse a mask whose required field has
+        // no value yet. So on the ONLY order the core permits: the field is written while the document wears
+        // no mask (nothing here declares anything, so it was skipped), and the mask is then assigned by a
+        // save that writes no field value at all (so this returned immediately).
+        //
+        // The mapping was therefore never written by any real caller, and ABI 0.13's feature was inert from
+        // the day it shipped — invisibly, because a document representing nobody looks exactly like a
+        // document nobody has claimed yet. Found by driving the demo stack, not by a test.
+        var remasked = ChangeTracker.Entries<Document>()
+            .Where(e => e.State is EntityState.Added or EntityState.Modified
+                && e.Property(d => d.MaskVersionId).IsModified)
+            .Select(e => e.Entity)
+            .ToList();
+
+        if (written.Count == 0 && remasked.Count == 0)
         {
             return;
         }
@@ -30,11 +48,25 @@ public partial class SimplArchiveDbContext
         // IgnoreQueryFilters throughout: a module's seeder and a worker write with no ambient tenant, where
         // the filter's TenantId == null predicate matches nothing — silently, which here would mean the
         // mapping is simply never written on exactly the paths that create dossiers.
-        var documentIds = written.Select(v => v.DocumentId).Distinct().ToList();
-        var documents = await Documents.IgnoreQueryFilters()
-            .Where(d => documentIds.Contains(d.Id))
+        var documentIds = written.Select(v => v.DocumentId).Concat(remasked.Select(d => d.Id)).Distinct().ToList();
+
+        // The TRACKED entity wins over a query, and that distinction is the whole of the mask case: a
+        // projection is SQL, so it reads the mask the document had BEFORE this save — which for a document
+        // being masked right now is no mask at all. Reading it back that way looked correct and fixed
+        // nothing.
+        var documents = remasked
             .Select(d => new { d.Id, d.TenantId, d.MaskVersionId })
-            .ToListAsync(cancellationToken);
+            .ToList();
+
+        var unseen = documentIds.Except(documents.Select(d => d.Id)).ToList();
+        if (unseen.Count > 0)
+        {
+            documents.AddRange(await Documents.IgnoreQueryFilters()
+                .Where(d => unseen.Contains(d.Id))
+                .Select(d => new { d.Id, d.TenantId, d.MaskVersionId })
+                .ToListAsync(cancellationToken));
+        }
+
         if (documents.Count == 0)
         {
             return;
@@ -70,13 +102,24 @@ public partial class SimplArchiveDbContext
             }
 
             var value = written.FirstOrDefault(v => v.DocumentId == document.Id
-                && nameOf.TryGetValue(v.FieldDefinitionId, out var name) && name == declaredField);
+                && nameOf.TryGetValue(v.FieldDefinitionId, out var name) && name == declaredField)?.Value;
+
+            // Not in this save: the document is being MASKED now, and its declared field was written
+            // earlier — which is the ordinary order rather than an edge case. Read what is already stored.
+            value ??= await FieldValues.IgnoreQueryFilters()
+                .Where(v => v.DocumentId == document.Id)
+                .Join(FieldDefinitions.IgnoreQueryFilters(),
+                    v => v.FieldDefinitionId, f => f.Id, (v, f) => new { f.Name, v.Value })
+                .Where(x => x.Name == declaredField)
+                .Select(x => x.Value)
+                .FirstOrDefaultAsync(cancellationToken);
+
             if (value is null)
             {
-                continue; // this save touched other fields of the document, not the declared one
+                continue; // the declared field has no value anywhere — the document represents nobody yet
             }
 
-            await UpsertPrincipalAsync(document.Id, document.TenantId, value.Value, cancellationToken);
+            await UpsertPrincipalAsync(document.Id, document.TenantId, value, cancellationToken);
         }
     }
 

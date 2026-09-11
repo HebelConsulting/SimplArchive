@@ -129,6 +129,13 @@ public class BookingAdmissionTests
             Assert.Contains("holding=1", detail, StringComparison.Ordinal);
             Assert.Contains("isNew=True", detail, StringComparison.Ordinal);
 
+            // The claim the booking is being MADE for must report itself as new. This endpoint creates and
+            // SAVES the claim row before the finalizer runs, so the change tracker calls it Unchanged by
+            // review time — and a consent rule keyed on "is this claimant new?" would skip the only claimant
+            // there is, admitting every booking ever made through the app. It did exactly that until the
+            // real demo stack was driven; every test here was green throughout.
+            Assert.Contains("newClaims=1", detail, StringComparison.Ordinal);
+
             // Refused BEFORE the save (ADR 0781), so nothing was left behind — the slot is still free.
             Environment.SetEnvironmentVariable(ReviewSwitch, null);
             var second = await rig.Owner.PostAsJsonAsync($"/api/documents/{rig.RoomId}/bookings", Slot(11, 12));
