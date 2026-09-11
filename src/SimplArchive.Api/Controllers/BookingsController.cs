@@ -245,6 +245,21 @@ public class BookingsController : ControllerBase
         };
         _dbContext.ResourceBookings.Add(booking);
 
+        // Both saves ride ONE transaction, so a refusal in step 2 takes step 1's claim with it (ADR 0781).
+        //
+        // The comment below used to say the slot stays held if anything past the first save fails, and that
+        // was tolerable while "anything" meant an infrastructure fault. ADR 0781 makes a refusal a ROUTINE
+        // outcome of step 2 — a module declining the booking — and a routine refusal that silently consumes
+        // the hour it just refused is worse than the failure it replaces: the caller is told no, and the next
+        // caller is told the slot is taken by a booking that does not exist.
+        //
+        // Only when nothing is already in flight: a module read-model context can enlist this one, and
+        // beginning a second transaction inside that would throw where today it works.
+        var owned = _dbContext.Database.CurrentTransaction is null
+            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        await using var transaction = owned;
+
         try
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
@@ -263,9 +278,10 @@ public class BookingsController : ControllerBase
 
         // 2. The bytes: the booking IS the .ics (ADR 0744) — the slot, the room as LOCATION, the purpose
         //    as DESCRIPTION — finalized through the same classifier every write path uses, which stamps
-        //    the Room-booking mask, indexes the fields, and adopts the row created above. If anything past
-        //    the first save fails, the slot is held and the document is an unclassified husk the cancel
-        //    path still clears — the same failure mode the two-document shape had.
+        //    the Room-booking mask, indexes the fields, and adopts the row created above. A failure here —
+        //    an infrastructure fault, or a module refusing the booking (ADR 0781) — rolls the claim back with
+        //    it, so the slot is not held by a booking that was never accepted. The object-storage PUT is the
+        //    one thing outside the transaction: an orphaned blob costs bytes and nothing else.
         var uid = Guid.NewGuid().ToString();
         var blob = _appointments.Merge(null, DocumentAppointmentController.FromResource(new DocumentAppointmentController.AppointmentResource
         {
@@ -298,6 +314,11 @@ public class BookingsController : ControllerBase
         _dbContext.DocumentVersions.Add(version);
         await _dbContext.SaveChangesAsync(cancellationToken);
         await _finalizer.FinalizeAsync(version, cancellationToken);
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
 
         var created = await ToResourceAsync(booking, rights.CanDelete, userId, serviceAccountId, cancellationToken);
         Response.Headers.ETag = $"\"{booking.ConcurrencyToken}\"";

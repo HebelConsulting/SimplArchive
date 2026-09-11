@@ -124,6 +124,9 @@ public static class DependencyInjection
         // WHICH module's code runs in this scope (ADR 0736) — set at the module boundaries, read by the
         // facade's consent gate.
         services.AddScoped<Modules.ModuleIdentityAccessor>();
+        // The booking-admission seam (ADR 0781): asked on every booking write, answering instantly when no
+        // module vets bookings — which is every tenant without one, and every test.
+        services.AddScoped<Application.Abstractions.IBookingAdmissionReviewer, Modules.ModuleBookingAdmissionReviewer>();
         services.AddScoped<Modules.ModuleMaskSeeder>();
         services.AddScoped<Modules.StateMachineEngine>();
         services.AddScoped<Modules.ModuleActivationService>();

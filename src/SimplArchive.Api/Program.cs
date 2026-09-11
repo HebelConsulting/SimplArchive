@@ -263,6 +263,10 @@ builder.Services.AddHttpClient<SimplArchive.Api.CalDav.DavPushNotifier>()
 // its own scope and the notifier needs a context of its own to read subscriptions.
 builder.Services.AddSingleton<SimplArchive.Application.Abstractions.IDavChangeNotifier, SimplArchive.Api.CalDav.DavChangeNotifierAdapter>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.CalendarContactClassifier>();
+// Lets Infrastructure run the Api's finalize (ADR 0781) — how a module's content replace re-enters
+// classification instead of storing bytes nobody re-reads. Resolved lazily inside; see the adapter.
+builder.Services.AddScoped<SimplArchive.Application.Abstractions.IDocumentVersionFinalizer,
+    SimplArchive.Api.Documents.DocumentVersionFinalizerAdapter>();
 // Composing a note as the .eml a notes client expects (#564) — the workbench's "New note" meets the IMAP
 // write path at one shape, written down in one place.
 builder.Services.AddScoped<SimplArchive.Api.Documents.NoteComposer>();

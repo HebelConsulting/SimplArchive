@@ -49,6 +49,40 @@ public sealed class TestModule : IIndustryModule
     public string LicenseVerifyKeyPem =>
         Environment.GetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY") ?? VerifyKeyPem;
 
+    /// <summary>
+    /// The booking-admission seam under test (ABI 0.15, ADR 0781). Driven by an ENVIRONMENT VARIABLE for the
+    /// same reason the verify key is: the loader gives a module its own load context, so a static this module
+    /// reads is not the static a test in the host context writes. One process environment crosses both.
+    /// <list type="bullet">
+    /// <item><c>refuse</c> — the module's own deliberate refusal, carrying the claim set it was shown so a
+    /// test can assert the facts arrived (every claim, not just the holding one).</item>
+    /// <item><c>throw</c> — a BROKEN handler, which the core must turn into a vetting failure rather than
+    /// into an admitted booking.</item>
+    /// <item>anything else, including unset — admit, which is what every other booking test relies on.</item>
+    /// </list>
+    /// Always non-null, so the seam is exercised on every booking written in a tenant where this module is
+    /// active: a hook that only existed when a test asked for it would leave the wiring itself untested.
+    /// </summary>
+    public Func<BookingAdmissionContext, Task>? ReviewBooking => context =>
+        Environment.GetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_BOOKING_REVIEW") switch
+        {
+            "refuse" => throw new ModuleApiException(
+                "TEST_BOOKING_REFUSED",
+                409,
+                $"The test module refused this booking ({Describe(context.Request)}).",
+                [Describe(context.Request)]),
+            "throw" => throw new InvalidOperationException("The test module's booking handler is broken."),
+            _ => Task.CompletedTask,
+        };
+
+    /// <summary>What the module was shown, rendered so a test can assert it over the wire: how many claims,
+    /// how many of them stand for a person, and whether this is a first booking or a rebooking.</summary>
+    private static string Describe(BookingAdmissionRequest request) =>
+        $"claims={request.Claims.Count}"
+        + $" persons={request.Claims.Count(c => c.RepresentsUserId is not null)}"
+        + $" holding={request.Claims.Count(c => c.IsHolding)}"
+        + $" isNew={request.IsNew}";
+
     public IReadOnlyList<ModuleMaskSeed> Masks { get; } =
     [
         new ModuleMaskSeed(DossierMaskId, "Test Dossier", IsFolderMask: true, IsBookable: false,

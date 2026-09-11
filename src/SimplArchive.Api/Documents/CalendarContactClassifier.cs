@@ -42,14 +42,15 @@ public sealed class CalendarContactClassifier
     public CalendarContactClassifier(
         SimplArchiveDbContext dbContext, IObjectStorageClient objectStorageClient,
         IContactCardComposer contacts, ILogger<CalendarContactClassifier> logger, IAuditRecorder audit,
-        IUserSystemRightsResolver userSystemRights, INotificationService notifications)
+        IUserSystemRightsResolver userSystemRights, INotificationService notifications,
+        IBookingAdmissionReviewer? admission = null)
     {
         _dbContext = dbContext;
         _objectStorageClient = objectStorageClient;
         _contacts = contacts;
         _logger = logger;
         _audit = audit;
-        _resources = new ResourceCollectionWriter(dbContext, userSystemRights, notifications);
+        _resources = new ResourceCollectionWriter(dbContext, userSystemRights, notifications, admission);
     }
 
     /// <summary>The extensions this classifier owns.</summary>

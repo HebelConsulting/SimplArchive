@@ -109,4 +109,34 @@ public interface IIndustryModule
     /// keeps today's behaviour exactly.</summary>
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> LocalizedTexts =>
         System.Collections.Immutable.ImmutableDictionary<string, IReadOnlyDictionary<string, string>>.Empty;
+
+    /// <summary>
+    /// Vets a booking before the core commits it (ABI 0.15, core ADR 0781) — the seam where a rule the CORE
+    /// cannot express lives: an instructor's published availability standing as consent, so a student may book
+    /// them, while the instructor booking a student needs none. Core ADR 0780 stores offered time and
+    /// deliberately does not decide what it authorises, because deciding needs to tell a student from an
+    /// instructor, and only the module knows which is which.
+    /// <para>
+    /// <b>Return to admit; throw <see cref="ModuleApiException"/> to refuse</b>, with your own code, status
+    /// and localized args — the refusal reaches the pilot as the same RFC 7807 problem a core refusal does,
+    /// in their own language (ABI 0.10). Name what is missing: "no published availability covering 14:00" and
+    /// "someone else has it" prompt different actions, and a generic conflict collapses the two.
+    /// </para>
+    /// <para>
+    /// <b>Any OTHER exception is a vetting FAILURE, and the booking is refused naming this module</b> (owner
+    /// decision). The alternative — admitting what could not be vetted — fails silently and in the
+    /// safe-looking direction: nothing errors, no screen changes, and the consent rule has quietly stopped
+    /// applying until someone reads a log. A refusal is loud and reported within minutes. The cost is real
+    /// and is the point: a handler that throws stops bookings of every resource in tenants where this module
+    /// is active, including ones the rule never applied to.
+    /// </para>
+    /// <para>
+    /// Called inside the core's booking transaction, before the save, on EVERY path that writes the
+    /// <c>.ics</c> (ADR 0744) — the app, CalDAV, and a module's own write through the facade alike. So keep it
+    /// short, and expect to be re-entered: replacing a booking's content to substitute a claimant is itself a
+    /// booking write, and is vetted again.
+    /// </para>
+    /// Default null — a module that vets nothing declares nothing, and every booking is admitted as before.
+    /// </summary>
+    Func<BookingAdmissionContext, Task>? ReviewBooking => null;
 }

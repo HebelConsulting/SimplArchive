@@ -137,6 +137,36 @@ public interface IModuleArchiveFacade
         DateOnly? documentDate = null,
         TimeOnly? documentTime = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Replaces an EXISTING document's content with a new version, running the same finalize the upload path
+    /// runs (ABI 0.15, core ADR 0781) — so a document whose bytes MEAN something to the core is re-read, and
+    /// what they mean is updated with them.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is how a module changes a booking: rewrite the <c>.ics</c> with a different <c>ATTENDEE</c> and
+    /// the core's classifier turns that into the claim swap, vetted by
+    /// <see cref="IIndustryModule.ReviewBooking"/>, audited and notified — one door, exactly as ADR 0744
+    /// requires of every path that writes an <c>.ics</c>.
+    /// </para>
+    /// <para>
+    /// <b>It is NOT <see cref="CreateContentDocumentAsync"/> with a replace id, and the difference is the
+    /// whole reason it exists.</b> That path takes a deliberate shortcut — a confirmed version without the
+    /// finalizer's tail — which is right for a METAR nobody interprets and silently WRONG for a booking: the
+    /// bytes would name one instructor while the claim rows still named another, with nothing failing and no
+    /// screen showing the disagreement.
+    /// </para>
+    /// <para>
+    /// The document keeps its mask, its name and its place; only the bytes and their consequences change.
+    /// Subject to every invariant an ordinary write is, so a refusal — a slot taken, a resource grounded, a
+    /// vetting refusal from a module — surfaces here as the exception it would surface as anywhere else.
+    /// </para>
+    /// </remarks>
+    /// <param name="documentId">The document to give a new version.</param>
+    /// <param name="content">The new bytes.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task ReplaceContentAsync(Guid documentId, byte[] content, CancellationToken cancellationToken = default);
 }
 
 /// <summary>A document as the facade shows it: identity, mask, and its index fields by name.</summary>

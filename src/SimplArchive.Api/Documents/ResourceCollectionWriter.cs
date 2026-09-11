@@ -32,13 +32,16 @@ internal sealed class ResourceCollectionWriter
     private readonly SimplArchiveDbContext _dbContext;
     private readonly IUserSystemRightsResolver _userSystemRights;
     private readonly INotificationService _notifications;
+    private readonly IBookingAdmissionReviewer? _admission;
 
     internal ResourceCollectionWriter(
-        SimplArchiveDbContext dbContext, IUserSystemRightsResolver userSystemRights, INotificationService notifications)
+        SimplArchiveDbContext dbContext, IUserSystemRightsResolver userSystemRights,
+        INotificationService notifications, IBookingAdmissionReviewer? admission = null)
     {
         _dbContext = dbContext;
         _userSystemRights = userSystemRights;
         _notifications = notifications;
+        _admission = admission;
     }
 
     /// <summary>Creates or moves the <see cref="ResourceBooking"/> claim behind a Schedule's .ics (ADR 0744).</summary>
@@ -113,6 +116,12 @@ internal sealed class ResourceCollectionWriter
 
         await ReconcileAttendeeClaimsAsync(document, version, occurrence, claims, holding, startsAt, endsAt, cancellationToken);
 
+        // Every active module sees the booking before it is saved, and may refuse it (ADR 0781). AFTER the
+        // claims are reconciled, because a module's question is about the whole claim set — "is the writer an
+        // instructor on THIS flight?" is unanswerable from the holding claim alone — and BEFORE the save, so
+        // a refusal costs nothing and leaves nothing behind.
+        await ReviewAsync(document, version, claims, holding, wasNew, startsAt, endsAt, cancellationToken);
+
         // The audit event is BUILT here and RECORDED by the caller, after the save that may still refuse this
         // booking. IAuditRecorder.RecordAsync calls SaveChangesAsync itself, so recording inline would flush
         // the staged claims early — outside the try/catch that translates a slot conflict into a 409 — and a
@@ -128,6 +137,64 @@ internal sealed class ResourceCollectionWriter
             $"{startsAt:u}–{endsAt:u} claiming {string.Join(", ", resourceNames.OrderBy(n => n, StringComparer.Ordinal))}");
     }
 
+
+    /// <summary>
+    /// Shows the staged booking to every active module and lets it refuse (ADR 0781).
+    /// </summary>
+    /// <remarks>
+    /// The two facts a module needs per claim that the claim row does not carry — the resource's MASK, so it
+    /// recognises its own, and the PERSON it represents (ADR 0779) — are read here in two queries for the
+    /// whole set rather than per claim, because this runs on every booking write on every path.
+    ///
+    /// A null reviewer means no module machinery is wired at all, which is every test that drives the
+    /// classifier directly; the booking is admitted, exactly as it was before this seam existed.
+    /// </remarks>
+    private async Task ReviewAsync(
+        Document document, DocumentVersion version, List<ResourceBooking> claims, ResourceBooking holding,
+        bool wasNew, DateTimeOffset startsAt, DateTimeOffset endsAt, CancellationToken cancellationToken)
+    {
+        if (_admission is null)
+        {
+            return;
+        }
+
+        var resourceIds = claims.Select(c => c.ResourceDocumentId).ToList();
+
+        var masks = await _dbContext.Documents
+            .Where(d => resourceIds.Contains(d.Id))
+            .Join(_dbContext.MaskVersions, d => d.MaskVersionId, v => v.Id, (d, v) => new { d.Id, MaskId = (Guid?)v.MaskId })
+            .ToListAsync(cancellationToken);
+
+        var principals = await _dbContext.ResourcePrincipals
+            .Where(p => resourceIds.Contains(p.ResourceDocumentId))
+            .Select(p => new { p.ResourceDocumentId, p.UserId })
+            .ToListAsync(cancellationToken);
+
+        var facts = new BookingAdmissionFacts(
+            document.Id,
+            startsAt.ToUniversalTime(),
+            endsAt.ToUniversalTime(),
+            [.. claims.Select(c => new BookingAdmissionClaimFacts(
+                c.ResourceDocumentId,
+                masks.FirstOrDefault(m => m.Id == c.ResourceDocumentId)?.MaskId,
+                c.ResourceDocumentId == holding.ResourceDocumentId,
+                principals.FirstOrDefault(p => p.ResourceDocumentId == c.ResourceDocumentId)?.UserId))],
+            wasNew,
+            version.CreatedByUserId,
+            version.CreatedByServiceAccountId);
+
+        try
+        {
+            await _admission.ReviewAsync(facts, cancellationToken);
+        }
+        catch (BookingVettingFailedException e)
+        {
+            // Translated HERE, at the one door every booking write passes, for the same reason the invariant
+            // translation is shared: a per-caller catch is one a later caller forgets, and the forgotten case
+            // surfaces as a bare 500 rather than as the refusal it is.
+            throw new BookingVettingUnavailableException(e.Message);
+        }
+    }
 
     /// <summary>Creates or moves the <see cref="ResourceAvailability"/> behind an Availability .ics (ADR 0780).</summary>
     /// <remarks>

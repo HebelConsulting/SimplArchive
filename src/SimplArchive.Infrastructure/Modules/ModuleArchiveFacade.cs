@@ -24,6 +24,7 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
     private readonly IEffectiveRightsCalculator? _rights;
     private readonly IObjectStorageClient? _objectStorage;
     private readonly ITransitEncryptor? _transit;
+    private readonly IDocumentVersionFinalizer? _finalizer;
     private Guid? _principalId;
     private bool _principalResolved;
 
@@ -34,7 +35,8 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         ModuleIdentityAccessor? identity = null,
         IEffectiveRightsCalculator? rights = null,
         IObjectStorageClient? objectStorage = null,
-        ITransitEncryptor? transit = null)
+        ITransitEncryptor? transit = null,
+        IDocumentVersionFinalizer? finalizer = null)
     {
         _dbContext = dbContext;
         _currentUser = currentUser;
@@ -43,6 +45,7 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         _rights = rights;
         _objectStorage = objectStorage;
         _transit = transit;
+        _finalizer = finalizer;
     }
 
     /// <summary>
@@ -390,6 +393,73 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
             parentFolderId, maskId, name, content, extension,
             keyFor: (tenantId, storageFolderId, versionId) => ObjectKeyBuilder.Build(tenantId, DateTimeOffset.UtcNow, storageFolderId, versionId, extension),
             expiresAt: null, fields, replaceDocumentId, documentDate, documentTime, cancellationToken);
+
+    public async Task ReplaceContentAsync(Guid documentId, byte[] content, CancellationToken cancellationToken = default)
+    {
+        if (_objectStorage is null)
+        {
+            throw new InvalidOperationException(
+                "Content writes need an object-storage client; the host wires one — a test facade that replaces content must supply it.");
+        }
+
+        if (_finalizer is null)
+        {
+            // Deliberately a refusal rather than a quiet fall-back to the unclassified write. Falling back
+            // would produce exactly the defect this method exists to prevent — new bytes whose MEANING was
+            // never re-read — and it would do so silently, on a path whose whole purpose is that the meaning
+            // is kept in step with the bytes.
+            throw new InvalidOperationException(
+                "Replacing content needs the document finalizer; the host wires one. Without it the new bytes "
+                + "would be stored without being re-classified, leaving a booking's .ics and its claims disagreeing.");
+        }
+
+        var document = await _dbContext.Documents.SingleOrDefaultAsync(d => d.Id == documentId, cancellationToken)
+            ?? throw new ArgumentException($"Document {documentId} does not exist.", nameof(documentId));
+
+        // The extension comes from the document's CURRENT object key, not from the caller: a replace keeps the
+        // document's kind, and letting a module hand in a different one would let it change what a document IS
+        // behind the classifier's back — an .ics becoming a .vcf on a resource's Schedule.
+        var currentKey = await _dbContext.DocumentVersions
+            .Where(v => v.DocumentId == documentId && v.Status == DocumentVersionStatus.Confirmed)
+            .OrderByDescending(v => v.VersionNumber)
+            .Select(v => v.ObjectKey)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new InvalidOperationException($"Document {documentId} has no confirmed version to replace.");
+
+        var (userId, serviceAccountId) = CallerIdentity();
+        var now = DateTimeOffset.UtcNow;
+        var extension = Path.GetExtension(currentKey);
+        var versionId = Guid.NewGuid();
+        var objectKey = ObjectKeyBuilder.Build(document.TenantId, now, document.StorageFolderId, versionId, extension);
+
+        using (var stream = new MemoryStream(content, writable: false))
+        {
+            await _objectStorage.PutObjectAsync(objectKey, stream, ContentTypeFor(extension), cancellationToken);
+        }
+
+        // PENDING, and finalized rather than hand-confirmed: a confirmed version written directly dies on the
+        // CHECK constraint that pairs status with the version number, and — the point of this method — would
+        // skip the classification that turns these bytes into claims.
+        var version = new DocumentVersion
+        {
+            Id = versionId,
+            TenantId = document.TenantId,
+            DocumentId = document.Id,
+            ObjectKey = objectKey,
+            Status = DocumentVersionStatus.Pending,
+            CreatedByUserId = userId,
+            CreatedByServiceAccountId = serviceAccountId,
+            CreatedAt = now,
+            DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
+        };
+        _dbContext.DocumentVersions.Add(version);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // Any refusal the classification raises — a taken slot, a grounded resource, another module's vetting
+        // refusal — propagates to the module unchanged, which is what makes this the same door as every other
+        // booking write rather than a quieter one beside it.
+        await _finalizer.FinalizeAsync(version, cancellationToken);
+    }
 
     /// <summary>
     /// The one content-write both <see cref="StageContentAsync"/> (ephemeral) and
