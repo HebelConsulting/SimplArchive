@@ -154,6 +154,11 @@ public sealed class AppointmentForm
             StartTime = start.TimeOfDay,
             EndDate = start.AddHours(1).Date,
             EndTime = start.AddHours(1).TimeOfDay,
+            // ...stamped with this machine's zone (#1126), which supersedes the floating default for CREATE
+            // only — editing still shows whatever was stored, blank included. Same helper the desktop uses, so
+            // the two clients cannot disagree about what "here" is called.
+            StartTimeZoneId = SimplArchive.Presentation.TimeZoneChoices.Local(),
+            EndTimeZoneId = SimplArchive.Presentation.TimeZoneChoices.Local(),
         };
     }
 

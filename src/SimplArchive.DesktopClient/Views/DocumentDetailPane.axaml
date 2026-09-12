@@ -329,7 +329,18 @@
                                         </StackPanel>
                                         <CheckBox IsVisible="{Binding IsBoolean}" IsChecked="{Binding BoolValue}" />
                                         <TextBox IsVisible="{Binding IsMultiLine}" Text="{Binding TextValue}" IsReadOnly="{Binding Locked}" AcceptsReturn="True" Height="60" Watermark="{loc:Tr OneValuePerLine}" />
-                                        <Grid IsVisible="{Binding IsSingleLine}" ColumnDefinitions="*,Auto">
+                                        <!-- A field the server offers values for completes as you type (#1127):
+                                             an aerodrome, a cost centre, a project code — a vocabulary the tenant
+                                             already uses and nobody should have to retype from memory. The list is
+                                             what has been filed under this field, narrowed on every keystroke.
+                                             Typing stays primary: an unlisted value is simply a new one. -->
+                                        <Grid IsVisible="{Binding Completes}" ColumnDefinitions="*,Auto">
+                                            <AutoCompleteBox Text="{Binding TextValue}" AsyncPopulator="{Binding SuggestionSource}"
+                                                             FilterMode="None" MinimumPrefixLength="0" MaxDropDownHeight="220"
+                                                             Height="28" Padding="4,2" />
+                                        </Grid>
+
+                                        <Grid IsVisible="{Binding IsPlainSingleLine}" ColumnDefinitions="*,Auto">
                                             <TextBox Text="{Binding TextValue}" IsReadOnly="{Binding Locked}" Height="28" Padding="4,2" VerticalContentAlignment="Center" />
                                             <!-- A machine proposal fills this field (ABI 0.11, ADR 0769): the picker
                                                  writes a candidate into the editor; typing stays primary. Each choice

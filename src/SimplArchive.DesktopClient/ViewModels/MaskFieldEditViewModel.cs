@@ -35,6 +35,30 @@ public sealed partial class MaskFieldEditViewModel : ObservableObject
     /// caller without the routing right. Rendered read-only, so the refusal happens here instead of on save.</summary>
     public bool Locked { get; init; }
 
+    /// <summary>
+    /// The address of the values already filed under this field, when the server offers them (#1127).
+    /// </summary>
+    /// <remarks>Absent means "no suggestions here" — the editor stays a plain text box (ADR 0543).</remarks>
+    public string? ValuesHref { get; init; }
+
+    /// <summary>
+    /// Fetches the suggestions for what has been typed so far. Assigned by whoever builds the field, because
+    /// this view-model owns no api client.
+    /// </summary>
+    public Func<string?, CancellationToken, Task<IEnumerable<object>>>? SuggestionSource { get; set; }
+
+    /// <summary>Whether this field completes as you type — a single-line editor WITH an offered value list.</summary>
+    /// <remarks>
+    /// Reported from use of a module's Aerodrome field, and true of its METAR/TAF and NOTAM siblings: every
+    /// textual field rendered as a bare text box, so a vocabulary the tenant already uses had to be retyped
+    /// from memory. Not for the multi-line list editor, where a line is one of many and a dropdown over the
+    /// caret would fight the editing.
+    /// </remarks>
+    public bool Completes => IsSingleLine && !Locked && SuggestionSource is not null;
+
+    /// <summary>The plain text box, for a single-line field with nothing to complete from.</summary>
+    public bool IsPlainSingleLine => IsSingleLine && !Completes;
+
     [ObservableProperty] private string _textValue = string.Empty;
     // DateTime?, NOT DateTimeOffset? — Avalonia ships TWO date controls with DIFFERENT property types, and
     // this one binds a CalendarDatePicker, whose SelectedDate is DateTime? (DatePicker's is DateTimeOffset?).
@@ -100,6 +124,7 @@ public sealed partial class MaskFieldEditViewModel : ObservableObject
             // Read-only either for THIS caller (mail routing, #703) or for EVERY caller (the classifier
             // owns the value — Start/End/UIDs, ADRs 0743/0744; the real write path is the content editor).
             Locked = (definition.RequiresMailRouting && !mayRouteMail) || definition.ClassifierOwned,
+            ValuesHref = definition.ValuesHref,
         };
         field._originalValues = [.. values];
 

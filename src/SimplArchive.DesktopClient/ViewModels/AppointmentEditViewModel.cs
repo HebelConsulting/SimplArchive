@@ -188,6 +188,10 @@ public sealed partial class AppointmentEditViewModel : StructuredEditFormViewMod
         StartTime = start.TimeOfDay;
         EndDate = end.Date;
         EndTime = end.TimeOfDay;
+
+        // ...stamped with THIS machine's zone (#1126), which supersedes the floating default described above
+        // for CREATE only. Editing still shows whatever was stored, blank included — see TimeZoneChoices.Local.
+        StartTimeZoneId = EndTimeZoneId = SimplArchive.Presentation.TimeZoneChoices.Local();
     }
 
     public object ToPayload() => new

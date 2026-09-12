@@ -3,6 +3,7 @@
 @using SimplArchive.Presentation
 @inject DetailState Detail
 @inject DetailCatalogs Catalogs
+@inject HttpClient Http
 
 @* The workbench's index-data pane: what the selected object IS. (ADR 0558) *@
 <div class="wb-pane wb-index" data-pane="index" data-tour="pane-index" tabindex="-1"
@@ -286,6 +287,17 @@
                                 </MudMenu>
                             </div>
                         }
+                        else if (f.ValuesHref is { } valuesHref)
+                        {
+                            @* A field the server offers values for completes as you type (#1127): an aerodrome,
+                               a cost centre, a project code — a vocabulary the tenant already uses and nobody
+                               should have to retype from memory. CoerceValue so an unlisted value is simply a
+                               new one: typing stays primary, the list is the discovery aid beside it. *@
+                            <MudAutocomplete T="string" Value="@f.TextValue" ValueChanged="@(v => f.TextValue = v ?? string.Empty)"
+                                             SearchFunc="@((string? typed, CancellationToken token) => Suggest(valuesHref, typed, token))"
+                                             CoerceValue="true" ResetValueOnEmptyText="false" MaxItems="20"
+                                             Margin="Margin.Dense" Variant="Variant.Outlined" />
+                        }
                         else
                         {
                             <MudTextField @bind-Value="f.TextValue" Margin="Margin.Dense" Variant="Variant.Outlined" />
@@ -443,6 +455,36 @@
 </div>
 
 @code {
+    /// <summary>
+    /// The values already filed under one index field, narrowed by what has been typed (#1127).
+    /// </summary>
+    /// <remarks>
+    /// Followed from the field's own <c>values</c> rel (ADR 0543); the query is this client's filter on an
+    /// advertised href, which is following rather than composing (ADR 0557). Best-effort — a suggestion list
+    /// that cannot be read costs the completion, never the edit.
+    /// </remarks>
+    private async Task<IEnumerable<string>> Suggest(string valuesHref, string? typed, CancellationToken token)
+    {
+        var href = typed is { Length: > 0 }
+            ? $"{valuesHref}{(valuesHref.Contains('?') ? "&" : "?")}q={Uri.EscapeDataString(typed)}"
+            : valuesHref;
+
+        try
+        {
+            var response = await Http.GetFromJsonAsync<FieldValuesResponse>(href, token);
+            return response?.Values ?? [];
+        }
+        catch (Exception)
+        {
+            return [];
+        }
+    }
+
+    private sealed class FieldValuesResponse
+    {
+        public List<string> Values { get; set; } = [];
+    }
+
     /// <summary>Open the workflow dialog for the shown document — the shell owns the dialog.</summary>
     [Parameter, EditorRequired]
     public EventCallback OpenWorkflow { get; set; }

@@ -46,6 +46,75 @@ public class MasksController : ControllerBase
 
     // Plain mutable classes, not records — System.Xml.Serialization.XmlSerializer (ADR "JSON/XML content
     // negotiation") needs a parameterless constructor and settable properties.
+    /// <summary>The field types whose values are worth completing — anything a person TYPES from a vocabulary.</summary>
+    /// <remarks>
+    /// SingleSelect and MultiSelect are here because core has no stored option list for them: their choices
+    /// ARE the values in use, which is the same thing search facets on. Text and the two constrained text
+    /// types are here because a tenant's vocabulary lives there too — an aerodrome, a cost centre, a project
+    /// code — and retyping one from memory is the hunt the typed-value principle exists to prevent.
+    /// </remarks>
+    private static readonly HashSet<FieldDataType> SuggestibleTypes =
+    [
+        FieldDataType.Text,
+        FieldDataType.SingleSelect,
+        FieldDataType.MultiSelect,
+        FieldDataType.EmailAddress,
+        FieldDataType.Url,
+    ];
+
+    /// <summary>
+    /// The distinct values already filed under this field, for an editor's type-ahead (#1127).
+    /// </summary>
+    /// <remarks>
+    /// Matched by field NAME rather than by the definition's id: a mask version mints a NEW FieldDefinition
+    /// for every field, so scoping to one id would offer only what has been written since the last mask
+    /// change — which on an actively edited mask is nothing at all.
+    /// <para>
+    /// Tenant-scoped by the query filter, and capped: a vocabulary is short by nature, and an editor that
+    /// downloads every value ever filed is a different feature with a different cost.
+    /// </para>
+    /// </remarks>
+    [HttpGet("{maskId:guid}/fields/{fieldId:guid}/values")]
+    public async Task<IActionResult> FieldValues(
+        Guid maskId, Guid fieldId, [FromQuery] string? q, [FromQuery] int? limit, CancellationToken cancellationToken)
+    {
+        if (await _dbContext.FieldDefinitions.FirstOrDefaultAsync(f => f.Id == fieldId, cancellationToken) is not { } definition)
+        {
+            return NotFound();
+        }
+
+        var take = Math.Clamp(limit ?? 20, 1, 100);
+        var names = _dbContext.FieldDefinitions.Where(f => f.Name == definition.Name).Select(f => f.Id);
+        var query = _dbContext.FieldValues.Where(v => names.Contains(v.FieldDefinitionId) && v.Value != null && v.Value != string.Empty);
+
+        if (q is { Length: > 0 })
+        {
+            query = query.Where(v => EF.Functions.Like(v.Value!, $"%{q}%"));
+        }
+
+        var values = await query
+            .Select(v => v.Value!)
+            .Distinct()
+            .OrderBy(v => v)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+
+        return Ok(new FieldValuesResource
+        {
+            Values = values,
+            Links = [new Link("self", $"/api/masks/{maskId}/fields/{fieldId}/values", "GET")],
+        });
+    }
+
+    [HttpHead("{maskId:guid}/fields/{fieldId:guid}/values")]
+    public IActionResult HeadFieldValues(Guid maskId, Guid fieldId) => NoContent();
+
+    /// <summary>The values already filed under one index field.</summary>
+    public class FieldValuesResource : HypermediaResource
+    {
+        public List<string> Values { get; set; } = [];
+    }
+
     public class FieldDefinitionRequest
     {
         public string Name { get; set; } = string.Empty;
@@ -85,7 +154,7 @@ public class MasksController : ControllerBase
         public List<FieldDefinitionRequest> Fields { get; set; } = [];
     }
 
-    public class FieldDefinitionResource
+    public class FieldDefinitionResource : HypermediaResource
     {
         public Guid Id { get; set; }
 
@@ -338,6 +407,15 @@ public class MasksController : ControllerBase
                 MaxTextLength = f.MaxTextLength,
                 MinValue = f.MinValue,
                 MaxValue = f.MaxValue,
+                // Suggestions for a TEXTUAL field (#1127): the values already filed under this field's name,
+                // so an editor can complete rather than make the user remember. Withheld from the types where
+                // completion means nothing — a date has a picker, a boolean two states, a number no vocabulary.
+                //
+                // A rel, so the client follows an address instead of composing one (ADR 0543); its absence
+                // simply means "no suggestions here", which is what an editor gates the autocomplete on.
+                Links = SuggestibleTypes.Contains(f.DataType)
+                    ? [new Link("values", $"/api/masks/{maskId}/fields/{f.Id}/values", "GET")]
+                    : [],
             }).ToList(),
             Links = [new Link("self", $"/api/masks/{maskId}", "GET")],
         };

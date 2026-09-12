@@ -151,7 +151,18 @@ public sealed partial class MainWindowViewModel
         foreach (var field in fields)
         {
             var values = valuesByName.TryGetValue(field.Name, out var v) ? v : [];
-            MaskEditFields.Add(MaskFieldEditViewModel.Create(field, values, CanManageMailRouting));
+            var editor = MaskFieldEditViewModel.Create(field, values, CanManageMailRouting);
+
+            // What the field completes from (#1127) — the values already filed under it. Assigned here rather
+            // than resolved by the field itself, which owns no api client; absent when the server offered no
+            // `values` rel, and the editor then stays a plain text box.
+            if (editor.ValuesHref is { } valuesHref && _api is { } api)
+            {
+                editor.SuggestionSource = async (typed, cancellationToken) =>
+                    await api.Masks.FieldValuesAsync(valuesHref, typed, cancellationToken);
+            }
+
+            MaskEditFields.Add(editor);
         }
     }
 

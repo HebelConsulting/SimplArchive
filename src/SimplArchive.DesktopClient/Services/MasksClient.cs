@@ -33,7 +33,44 @@ public sealed class MasksClient
         bool ClassifierOwned = false,
         // Writing this field needs the manage-mail-routing right (#703) — the server marks it; combined with
         // whoami's flag it renders the editor read-only instead of offering an edit the save would 403.
-        bool RequiresMailRouting = false);
+        bool RequiresMailRouting = false,
+        // The address of the values already filed under this field (#1127), when the server offers them —
+        // absent means "no suggestions here", which is what the editor gates its autocomplete on (ADR 0543).
+        string? ValuesHref = null);
+
+    /// <summary>
+    /// The values already filed under one index field, for an editor's type-ahead (#1127).
+    /// </summary>
+    /// <remarks>
+    /// Followed from the field's own <c>values</c> rel, never composed (ADR 0543); the query is the client's
+    /// own filter on an advertised href, which is following rather than composing (ADR 0557). Best-effort: a
+    /// suggestion list that cannot be read costs the completion, never the edit.
+    /// </remarks>
+    public async Task<IReadOnlyList<string>> FieldValuesAsync(
+        string valuesHref, string? typed, CancellationToken cancellationToken = default)
+    {
+        var href = typed is { Length: > 0 }
+            ? $"{valuesHref}{(valuesHref.Contains('?') ? "&" : "?")}q={Uri.EscapeDataString(typed)}"
+            : valuesHref;
+
+        try
+        {
+            using var response = await _core.Http.GetAsync(href, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return [];
+            }
+
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+            return document.RootElement.TryGetProperty("values", out var values)
+                ? [.. values.EnumerateArray().Select(v => v.GetString() ?? string.Empty)]
+                : [];
+        }
+        catch (Exception)
+        {
+            return [];
+        }
+    }
 
     /// <summary>The masks a user may actually CHOOSE for a document.</summary>
     /// <remarks>
@@ -81,7 +118,8 @@ public sealed class MasksClient
                     f.TryGetProperty("isRequired", out var required) && required.GetBoolean(),
                     f.TryGetProperty("isList", out var isList) && isList.GetBoolean(),
                     f.TryGetProperty("classifierOwned", out var owned) && owned.GetBoolean(),
-                    f.TryGetProperty("requiresMailRouting", out var rmr) && rmr.GetBoolean()));
+                    f.TryGetProperty("requiresMailRouting", out var rmr) && rmr.GetBoolean(),
+                    ApiCore.ParseLinks(f)?.GetValueOrDefault("values")));
             }
         }
 

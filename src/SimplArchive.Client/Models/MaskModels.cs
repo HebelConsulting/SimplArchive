@@ -56,6 +56,9 @@ public record MaskFieldInfo
     /// <summary>Whether the CLASSIFIER owns this field's value (ADRs 0743/0744) — the lockstep projection
     /// of the stored .ics/.vcf; the metadata PUT refuses a change, so the editor must not offer one.</summary>
     public bool ClassifierOwned { get; set; }
+
+    /// <summary>Its advertised addresses — <c>values</c> when the server offers suggestions (#1127).</summary>
+    public List<LinkResponse>? Links { get; set; }
 }
 
 /// <summary>An OCR language the tenant offers, for the per-item language picker.</summary>
@@ -94,6 +97,12 @@ public sealed class EditField
     /// caller without the routing right. Rendered read-only, so the refusal happens here instead of on save.</summary>
     public bool Locked { get; init; }
 
+    /// <summary>
+    /// The address of the values already filed under this field, when the server offers them (#1127).
+    /// </summary>
+    /// <remarks>Absent means "no suggestions here" — the editor stays a plain text box (ADR 0543).</remarks>
+    public string? ValuesHref { get; init; }
+
     public string TextValue { get; set; } = string.Empty;
 
     public DateTime? DateValue { get; set; }
@@ -130,7 +139,17 @@ public sealed class EditField
     {
         // Read-only either for THIS caller (mail routing, #703) or for EVERY caller (the classifier owns
         // the value — Start/End/UIDs, ADRs 0743/0744; the real write path is the content editor).
-        var field = new EditField { FieldDefinitionId = f.Id, Label = f.IsRequired ? $"{f.Name} *" : f.Name, DataType = f.DataType, Required = f.IsRequired, IsList = f.IsList, Locked = (f.RequiresMailRouting && !mayRouteMail) || f.ClassifierOwned };
+        var field = new EditField
+        {
+            FieldDefinitionId = f.Id,
+            Label = f.IsRequired ? $"{f.Name} *" : f.Name,
+            DataType = f.DataType,
+            Required = f.IsRequired,
+            IsList = f.IsList,
+            Locked = (f.RequiresMailRouting && !mayRouteMail) || f.ClassifierOwned,
+            // Followed, never composed (ADR 0543): absent means the server offers nothing to complete from.
+            ValuesHref = Hypermedia.Links.Href(f.Links, "values"),
+        };
         field._originalValues = [.. values];
 
         if (field.Locked)

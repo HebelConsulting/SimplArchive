@@ -51,26 +51,33 @@
         <!-- The zone sits UNDER its endpoint rather than beside it: the date and time pickers already fill the
              dialog's width (their own widths vary with the locale, which is why those are explicit), so a
              fourth column got none and the picker rendered as a two-pixel sliver. Found by capturing it. -->
+        <!-- The zones are AutoCompleteBoxes, not ComboBoxes (#1126): the list is every zone the host knows —
+             several hundred — and scrolling to "Europe/Zurich" is the hunt the typed-value principle exists to
+             prevent. FilterMode=Contains so "zurich" finds it without typing "Europe/", and
+             MinimumPrefixLength=0 so the full list still drops down for someone who wants to browse. Clearing
+             the box is how a time goes back to floating, which is what the watermark says. -->
         <Grid ColumnDefinitions="110,270,8,210,*" RowDefinitions="Auto,Auto,Auto,Auto">
           <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr ApptStart}" VerticalAlignment="Center" />
           <CalendarDatePicker Grid.Row="0" Grid.Column="1" SelectedDate="{Binding StartDate}" Watermark="yyyy-MM-dd" />
           <TextBox Grid.Row="0" Grid.Column="3" Text="{Binding StartTimeEntry}" Watermark="HH:mm"
                    IsVisible="{Binding !IsAllDay}" AutomationProperties.Name="{loc:Tr ApptStart}" />
-          <ComboBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" ItemsSource="{Binding ZoneChoices}"
-                    SelectedItem="{Binding StartTimeZoneId}" Margin="0,4,0,8"
-                    HorizontalAlignment="Stretch" IsVisible="{Binding !IsAllDay}"
-                    PlaceholderText="{loc:Tr ApptTimesAreFloating}"
-                    AutomationProperties.Name="{loc:Tr ApptStartZone}" />
+          <AutoCompleteBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" ItemsSource="{Binding ZoneChoices}"
+                           Text="{Binding StartTimeZoneId}" Margin="0,4,0,8"
+                           FilterMode="Contains" MinimumPrefixLength="0" MaxDropDownHeight="260"
+                           HorizontalAlignment="Stretch" IsVisible="{Binding !IsAllDay}"
+                           Watermark="{loc:Tr ApptTimesAreFloating}"
+                           AutomationProperties.Name="{loc:Tr ApptStartZone}" />
 
           <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr ApptEnd}" VerticalAlignment="Center" />
           <CalendarDatePicker Grid.Row="2" Grid.Column="1" SelectedDate="{Binding EndDate}" Watermark="yyyy-MM-dd" />
           <TextBox Grid.Row="2" Grid.Column="3" Text="{Binding EndTimeEntry}" Watermark="HH:mm"
                    IsVisible="{Binding !IsAllDay}" AutomationProperties.Name="{loc:Tr ApptEnd}" />
-          <ComboBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="4" ItemsSource="{Binding ZoneChoices}"
-                    SelectedItem="{Binding EndTimeZoneId}" Margin="0,4,0,0"
-                    HorizontalAlignment="Stretch" IsVisible="{Binding !IsAllDay}"
-                    PlaceholderText="{loc:Tr ApptTimesAreFloating}"
-                    AutomationProperties.Name="{loc:Tr ApptEndZone}" />
+          <AutoCompleteBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="4" ItemsSource="{Binding ZoneChoices}"
+                           Text="{Binding EndTimeZoneId}" Margin="0,4,0,0"
+                           FilterMode="Contains" MinimumPrefixLength="0" MaxDropDownHeight="260"
+                           HorizontalAlignment="Stretch" IsVisible="{Binding !IsAllDay}"
+                           Watermark="{loc:Tr ApptTimesAreFloating}"
+                           AutomationProperties.Name="{loc:Tr ApptEndZone}" />
         </Grid>
 
         <Grid ColumnDefinitions="110,*">
