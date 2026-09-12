@@ -33,6 +33,15 @@
           <i:Icon Value="mdi-pencil-outline" FontSize="18" />
         </Button>
 
+        <!-- Go to the entry's document in Repositories (#1122) — its own group, because it LEAVES this tab
+             rather than acting on it, which is the same separation the Search ribbon draws. -->
+        <Border Width="1" Background="{DynamicResource WbBorder}" Margin="4,2" />
+        <Button Command="{Binding GoToDocumentCommand}"
+                IsEnabled="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}"
+                ToolTip.Tip="{loc:Tr RibbonGoToDocument}" AutomationProperties.Name="{loc:Tr RibbonGoToDocument}">
+          <i:Icon Value="mdi-open-in-app" FontSize="18" />
+        </Button>
+
         <!-- Month ⇄ List. Two questions, not two skins of one: the list answers "what is coming up" and keeps
              the filter, the month answers "what does this month look like". The active one wears the accent,
              which is the group's vocabulary for STATE (ADR 0581). -->

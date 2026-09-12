@@ -2,6 +2,7 @@
 @inject DavCollections DavCollections
 @inject BrowseService Browse
 @inject StructuredEditors StructuredEditors
+@inject DocumentActions Actions
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -26,6 +27,12 @@
         <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selected is null)" OnClick="EditContactAsync"
                    title="@Strings.Get("ContactsEdit")" aria-label="@Strings.Get("ContactsEdit")">
             <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("ContactsEdit")</span>
+        </MudButton>
+
+        @* Go to the contact's document in Repositories (#1122) — the Calendar twin (ADR 0511). *@
+        <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(_selected is null)" OnClick="GoToDocumentAsync"
+                   title="@Strings.Get("RibbonGoToDocument")" aria-label="@Strings.Get("RibbonGoToDocument")">
+            <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonGoToDocument")</span>
         </MudButton>
     </div>
 
@@ -104,10 +111,18 @@
 </div>
 
 @code {
+    /// <summary>Reveal this contact's document in Repositories — see the Calendar twin (#1122).</summary>
+    [Parameter]
+    public EventCallback<(Guid ParentId, Guid DocumentId)> OnGoToDocument { get; set; }
+
     private List<DavCollection> _collections = [];
     private readonly HashSet<Guid> _checked = [];
     private List<ContactRow> _contacts = [];
     private ContactRow? _selected;
+
+    // Addressed from the selected ROW (ADR 0559) — the Calendar twin.
+    private Task GoToDocumentAsync() =>
+        _selected is { } row ? OnGoToDocument.InvokeAsync((row.ParentId, row.Id)) : Task.CompletedTask;
     private string _filter = string.Empty;
 
     /// <summary>
@@ -115,6 +130,9 @@
     /// THIS, never from whatever the detail pane last finished loading (ADR 0559).
     /// </summary>
     public sealed record ContactRow(
+        // The collection the row came from, and which kind it is — see the Calendar twin (#1122).
+        Guid ParentId,
+        string CollectionKind,
         Guid Id, string CollectionColor, string CollectionName, string FullName,
         string Organization, string Email, string Phone, string? SelfHref, string? PhotoHref = null);
 
@@ -129,7 +147,19 @@
     [
         .. _collections
             .Where(c => _checked.Contains(c.Id) && c.CanCreateEntries && c.Href("contacts") is not null)
-            .Select(c => new CreateTarget(c.Id, c.DisplayName, c.Href("contacts")!)),
+            .Select(c => new CreateTarget(c.Id, c.DisplayName, c.Href("contacts")!, c.CollectionKind)),
+    ];
+
+    /// <summary>
+    /// Where an existing card may be MOVED: the addressbooks of the same kind the caller may add to (#1122).
+    /// </summary>
+    /// <remarks>The Calendar twin (ADR 0511) — see its MoveTargets for why it filters by kind and draws from
+    /// ALL collections rather than the ticked ones.</remarks>
+    private List<CreateTarget> MoveTargets(string collectionKind) =>
+    [
+        .. _collections
+            .Where(c => c.CanCreateEntries && c.CollectionKind == collectionKind && c.Href("contacts") is not null)
+            .Select(c => new CreateTarget(c.Id, c.DisplayName, c.Href("contacts")!, c.CollectionKind)),
     ];
 
     private bool CanCreate => CreateTargets().Count > 0;
@@ -185,6 +215,8 @@
                 foreach (var entry in await DavCollections.ListEntriesAsync(entriesHref))
                 {
                     rows.Add(new ContactRow(
+                        collection.Id,
+                        collection.CollectionKind,
                         entry.Id, collection.Color ?? "#8a8a8a", collection.DisplayName,
                         entry.FullName is { Length: > 0 } full ? full : entry.Name,
                         entry.Organization ?? string.Empty, entry.Email ?? string.Empty,
@@ -219,6 +251,7 @@
         {
             { nameof(Dialogs.ContactDialog.Form), new ContactCardForm() },
             { nameof(Dialogs.ContactDialog.Targets), targets },
+            { nameof(Dialogs.ContactDialog.IsCreate), true },
         };
 
         var dialog = await DialogService.ShowAsync<Dialogs.ContactDialog>(Strings.Get("ContactsNew"), parameters);
@@ -272,6 +305,9 @@
         var parameters = new DialogParameters
         {
             { nameof(Dialogs.ContactDialog.Form), loaded.Value },
+            // Where it may be re-filed (#1122), opened on the addressbook it is in now.
+            { nameof(Dialogs.ContactDialog.Targets), MoveTargets(row.CollectionKind) },
+            { nameof(Dialogs.ContactDialog.CurrentCollectionId), row.ParentId },
             { nameof(Dialogs.ContactDialog.LoadRaw), (Func<Task>)(async () =>
                 {
                     if (await StructuredEditors.ReadRawAsync(loaded.Links) is { } raw)
@@ -307,6 +343,14 @@
         if (await StructuredEditors.SaveAsync(loaded.Href, saved.Form.ToPayload(), loaded.ETag))
         {
             Snackbar.Add(string.Format(Strings.Get("StContactSaved"), row.FullName), Severity.Success);
+
+            // ...and only if the addressbook actually CHANGED, re-file it (#1122) — the Calendar twin: a move
+            // is a reparent of the document, so it is its own request after the save.
+            if (saved.Target is { } target && target.CollectionId != row.ParentId)
+            {
+                await Actions.MoveToAsync(self, target.CollectionId, row.FullName);
+            }
+
             await ReloadContactsAsync();
         }
         else

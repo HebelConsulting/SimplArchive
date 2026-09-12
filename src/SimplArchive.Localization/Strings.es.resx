@@ -4758,6 +4758,9 @@
   <data name="DeepLinkInvalid" xml:space="preserve">
     <value>Eso no es un enlace de SimplArchive.</value>
   </data>
+  <data name="RibbonGoToDocument" xml:space="preserve">
+    <value>Ir al documento</value>
+  </data>
   <data name="RibbonGoToLink" xml:space="preserve">
     <value>Ir al enlace…</value>
   </data>

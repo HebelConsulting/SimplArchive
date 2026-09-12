@@ -51,6 +51,19 @@ public class DavCollectionsController : ControllerBase
         /// <summary><c>addressbook</c> or <c>calendar</c>.</summary>
         public string Kind { get; set; } = string.Empty;
 
+        /// <summary>
+        /// Which collection this actually is — <c>calendar</c>, <c>schedule</c>, <c>maintenance</c>,
+        /// <c>availability</c> or <c>addressbook</c> (#1122).
+        /// </summary>
+        /// <remarks>
+        /// Finer than <see cref="Kind"/>, which reports <c>calendar</c> for all four .ics kinds because that
+        /// is the FAMILY the tab lists. A client offering to MOVE an entry needs the narrower answer: an
+        /// availability window belongs in an Availability, and offering a Schedule as a target would be an
+        /// affordance the server refuses on containment (ADR 0543). Taken from DavCollectionKinds, so a new
+        /// kind reports itself without a line here.
+        /// </remarks>
+        public string CollectionKind { get; set; } = string.Empty;
+
         /// <summary>The caller's colour: their override if set, else the collection's own (ADR 0620).</summary>
         public string? Color { get; set; }
 
@@ -140,6 +153,11 @@ public class DavCollectionsController : ControllerBase
         var kindByMaskVersion = maskVersions.ToDictionary(
             v => v.Id, v => v.MaskId == WellKnownMaskIds.Addressbook ? "addressbook" : "calendar");
 
+        // The narrower answer, straight off the kind list (#1122) — see CollectionKind for why both exist.
+        var collectionKindByMaskVersion = maskVersions.ToDictionary(
+            v => v.Id,
+            v => DavCollectionKinds.All.FirstOrDefault(k => k.FolderMaskId == v.MaskId)?.Name ?? string.Empty);
+
         // The per-KIND fallback colour (ADR 0650's shared-display-rule home). Without it a resource's three
         // calendars all drew in the client's one default, so overlaying them produced an undifferentiated
         // mass — an overlay nobody can read is an overlay nobody uses. A collection's own Colour and the
@@ -199,6 +217,7 @@ public class DavCollectionsController : ControllerBase
                 Name = candidate.Name,
                 DisplayName = parent is null ? candidate.Name : $"{parent.Name} / {candidate.Name}",
                 Kind = kindByMaskVersion.GetValueOrDefault(candidate.MaskVersionId!.Value, "calendar"),
+                CollectionKind = collectionKindByMaskVersion.GetValueOrDefault(candidate.MaskVersionId!.Value, string.Empty),
                 Color = overrides.GetValueOrDefault(candidate.Id)
                     ?? defaults.GetValueOrDefault(candidate.Id)
                     ?? kindColourByMaskVersion.GetValueOrDefault(candidate.MaskVersionId!.Value),

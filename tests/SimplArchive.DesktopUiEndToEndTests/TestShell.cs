@@ -32,6 +32,15 @@ internal sealed class TestShell : IShellContext
 
     public Task DocumentChangedOnServerAsync(Guid documentId) => Task.CompletedTask;
 
+    /// <summary>What "Go to" asked the shell to reveal, so a test can assert it without a window (#1122).</summary>
+    public (Guid DocumentId, string DocumentHref, string? ParentHref)? Revealed { get; private set; }
+
+    public Task RevealDocumentAsync(Guid documentId, string documentHref, string? parentHref)
+    {
+        Revealed = (documentId, documentHref, parentHref);
+        return Task.CompletedTask;
+    }
+
     public Task CheckoutsChangedAsync()
     {
         CheckoutsChangedCount++;

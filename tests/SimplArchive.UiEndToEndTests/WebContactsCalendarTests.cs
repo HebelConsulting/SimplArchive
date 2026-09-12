@@ -74,8 +74,9 @@ public class WebContactsCalendarTests
         await Expect(dialog.Locator("text=Email").First).ToBeVisibleAsync();
 
         var surname = $"Lovelace{Guid.NewGuid().ToString("N")[..6]}";
-        await FillMudAsync(dialog.Locator("input").Nth(0), "Ada");
-        await FillMudAsync(dialog.Locator("input").Nth(1), surname);
+        // By LABEL — see the edit twin below for why position stopped being a safe way to name a field.
+        await FillMudAsync(dialog.GetByLabel("First name").First, "Ada");
+        await FillMudAsync(dialog.GetByLabel("Last name").First, surname);
 
         await dialog.GetByRole(AriaRole.Button, new() { Name = "Save" }).ClickAsync();
         await Expect(dialog).Not.ToBeVisibleAsync();
@@ -99,9 +100,12 @@ public class WebContactsCalendarTests
         await Expect(dialog).ToBeVisibleAsync();
 
         var org = $"Engines{Guid.NewGuid().ToString("N")[..6]}";
-        await FillMudAsync(dialog.Locator("input").Nth(0), "Grace");
-        await FillMudAsync(dialog.Locator("input").Nth(1), "Hopper");
-        await FillMudAsync(dialog.Locator("input").Nth(2), org);
+        // By LABEL, not by position (#1125): the dialog gained a collection picker — where a new entry lands,
+        // and on edit where it MOVES to — so "the third input" stopped being the organisation. A positional
+        // locator was always a claim about layout rather than about the field it meant.
+        await FillMudAsync(dialog.GetByLabel("First name").First, "Grace");
+        await FillMudAsync(dialog.GetByLabel("Last name").First, "Hopper");
+        await FillMudAsync(dialog.GetByLabel("Organization").First, org);
         await dialog.GetByRole(AriaRole.Button, new() { Name = "Save" }).ClickAsync();
         await Expect(dialog).Not.ToBeVisibleAsync();
 
@@ -115,7 +119,7 @@ public class WebContactsCalendarTests
         // `input[value='…']` matches nothing however correct the field is.
         var editor = page.Locator(".mud-dialog").First;
         await Expect(editor).ToBeVisibleAsync();
-        await Expect(editor.Locator("input").Nth(2)).ToHaveValueAsync(org);
+        await Expect(editor.GetByLabel("Organization").First).ToHaveValueAsync(org);
     }
 
     // The two tabs must not show each other's collections: they ask the same endpoint with a different kind,

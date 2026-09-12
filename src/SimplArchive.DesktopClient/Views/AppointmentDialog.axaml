@@ -17,7 +17,7 @@
                  TextWrapping="Wrap" MaxWidth="300" IsVisible="False" />
       <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
       <Button x:Name="SaveButton" Content="{loc:Tr Save}" Click="OnSave" IsDefault="True"
-              IsEnabled="{Binding CanEdit}" />
+              IsEnabled="{Binding CanCommit}" />
     </StackPanel>
 
     <ScrollViewer>
@@ -25,11 +25,19 @@
         <!-- The structured half, disabled as a block while the raw text below is dirty — see ContactDialog. -->
         <StackPanel Spacing="10" IsEnabled="{Binding StructuredEnabled}">
 
-        <!-- Where a NEW appointment lands; hidden when there is only one candidate. -->
+        <!-- Which collection the entry belongs to: where a NEW one lands, and on edit where it MOVES to
+             (#1122). A DROPDOWN when there is a choice; plain text when there is exactly one, because the
+             destination must always be visible (#1125) — showing nothing is how an entry meant for a room's
+             Schedule was filed as an availability window. -->
         <Grid ColumnDefinitions="110,*" IsVisible="{Binding ShowTargetPicker}">
           <TextBlock Grid.Column="0" Text="{loc:Tr CalendarCollections}" VerticalAlignment="Center" />
           <ComboBox Grid.Column="1" ItemsSource="{Binding Targets}" SelectedItem="{Binding SelectedTarget}"
                     HorizontalAlignment="Stretch" AutomationProperties.Name="{loc:Tr CalendarCollections}" />
+        </Grid>
+
+        <Grid ColumnDefinitions="110,*" IsVisible="{Binding ShowTargetName}">
+          <TextBlock Grid.Column="0" Text="{loc:Tr CalendarCollections}" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="1" Text="{Binding TargetName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
         </Grid>
 
         <Grid ColumnDefinitions="110,*">

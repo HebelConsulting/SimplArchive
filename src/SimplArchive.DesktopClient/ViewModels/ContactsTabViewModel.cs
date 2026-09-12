@@ -18,6 +18,12 @@ public sealed partial class ContactRowViewModel : ObservableObject
 
     public required string CollectionName { get; init; }
 
+    /// <summary>The collection's document id — where a MOVE starts from (#1122). See the Calendar twin.</summary>
+    public Guid CollectionId { get; init; }
+
+    /// <summary>Which collection kind it is filed in, so a move offers only those that admit it (#1122).</summary>
+    public string CollectionKind { get; init; } = string.Empty;
+
     [ObservableProperty] private string _fullName = string.Empty;
     [ObservableProperty] private string _organization = string.Empty;
     [ObservableProperty] private string _email = string.Empty;
@@ -90,6 +96,19 @@ public sealed partial class ContactsTabViewModel : ObservableObject
     public ObservableCollection<ContactRowViewModel> Contacts { get; } = [];
 
     [ObservableProperty] private ContactRowViewModel? _selected;
+
+    /// <summary>Reveals the selected contact's document in Repositories (#1122).</summary>
+    /// <remarks>The Calendar twin, for the same reason and addressed the same way — see its GoToDocumentAsync.</remarks>
+    [RelayCommand]
+    private async Task GoToDocumentAsync()
+    {
+        if (Selected is not { } row || !row.Links.TryGetValue("self", out var self))
+        {
+            return;
+        }
+
+        await _shell.RevealDocumentAsync(row.Id, self, row.Links.GetValueOrDefault("parent"));
+    }
     [ObservableProperty] private bool _busy;
     [ObservableProperty] private string _filter = string.Empty;
 
@@ -126,10 +145,45 @@ public sealed partial class ContactsTabViewModel : ObservableObject
     [
         .. Collections
             .Where(c => c.IsChecked && c.Collection.CanCreateEntries)
-            .Select(c => (c.DisplayName, Href: c.Collection.HrefOrNull("contacts")))
+            .Select(c => (c.DisplayName, Href: c.Collection.HrefOrNull("contacts"), c.Collection.Id, c.Collection.CollectionKind))
             .Where(c => c.Href is not null)
-            .Select(c => new CreateTarget(c.DisplayName, c.Href!)),
+            .Select(c => new CreateTarget(c.DisplayName, c.Href!, c.Id, c.CollectionKind)),
     ];
+
+    /// <summary>
+    /// Where an existing contact may be MOVED: the addressbooks of the same kind the caller may add to (#1122).
+    /// </summary>
+    /// <remarks>The Calendar twin (ADR 0511) — see CalendarTabViewModel.MoveTargets for why it filters by kind
+    /// and why it draws from ALL collections rather than the ticked ones.</remarks>
+    public IReadOnlyList<CreateTarget> MoveTargets(string collectionKind) =>
+    [
+        .. Collections
+            .Where(c => c.Collection.CanCreateEntries
+                && string.Equals(c.Collection.CollectionKind, collectionKind, StringComparison.Ordinal))
+            .Select(c => new CreateTarget(c.DisplayName, c.Collection.HrefOrNull("contacts") ?? string.Empty, c.Collection.Id, c.Collection.CollectionKind)),
+    ];
+
+    /// <summary>Re-files a contact into another addressbook (#1122).</summary>
+    /// <remarks>The Calendar twin: a move is a REPARENT of the document, so it is its own request after the
+    /// save, addressed from the row's own `self` (ADR 0555).</remarks>
+    public async Task MoveCardAsync(ContactRowViewModel row, Guid targetCollectionId)
+    {
+        if (_api is null || !row.Links.TryGetValue("self", out var self))
+        {
+            return;
+        }
+
+        try
+        {
+            await _api.Documents.MoveAsync(self, targetCollectionId);
+            Report(string.Format(Strings.Get("StMoved"), row.FullName));
+            await ReloadContactsAsync();
+        }
+        catch (Exception e)
+        {
+            Report(string.Format(Strings.Get("StErrSaveContact"), e.Message));
+        }
+    }
 
     /// <summary>Creates a contact from a filled-in form, then shows it selected in the list.</summary>
     /// <remarks>
@@ -367,6 +421,8 @@ public sealed partial class ContactsTabViewModel : ObservableObject
                     Id = entry.Id,
                     CollectionColor = collection.Color ?? "#8a8a8a",
                     CollectionName = collection.DisplayName,
+                    CollectionId = collection.Collection.Id,
+                    CollectionKind = collection.Collection.CollectionKind,
                     FullName = entry.FullName is { Length: > 0 } full ? full : entry.Name,
                     Organization = entry.Organization ?? string.Empty,
                     Email = entry.Email ?? string.Empty,
@@ -449,7 +505,7 @@ public sealed partial class ContactsTabViewModel : ObservableObject
             {
                 Collection = new DavCollection(
                     Guid.NewGuid(), name, name.Split('/')[^1].Trim(), "addressbook", colour, true, personal, false,
-                    new Dictionary<string, string>()),
+                    new Dictionary<string, string>(), string.Empty),
                 Color = colour,
                 IsChecked = true,
             });

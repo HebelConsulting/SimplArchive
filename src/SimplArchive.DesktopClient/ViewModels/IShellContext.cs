@@ -70,6 +70,22 @@ public interface IShellContext : IStatusReporter
     /// </summary>
     Task DocumentChangedOnServerAsync(Guid documentId);
 
+    /// <summary>
+    /// Brings Repositories to the front and reveals a document there: its parent expanded and selected in the
+    /// tree, the folder loaded into the list, and the document selected in it.
+    /// </summary>
+    /// <remarks>
+    /// Here rather than as a per-tab callback because TWO tabs ask it — Calendar and Contacts both offer
+    /// "Go to" — which is exactly the test this interface states for what belongs in it. Search keeps its own
+    /// <c>OpenResultRequested</c>: it carries the query into the viewer so hits highlight, so it is a
+    /// different request that happens to end in the same place.
+    /// <para>
+    /// Addressed from the ROW's advertised rels (ADR 0555), never a bare id: <paramref name="parentHref"/> is
+    /// null for a document filed at a repository root, which is itself a top-level tree node.
+    /// </para>
+    /// </remarks>
+    Task RevealDocumentAsync(Guid documentId, string documentHref, string? parentHref);
+
     /// <summary>The one drop-filing helper, shared with the shell's own check-out stash. Null before login.</summary>
     DropFiling? DropFiling { get; }
 

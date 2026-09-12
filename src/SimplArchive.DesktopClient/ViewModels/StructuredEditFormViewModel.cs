@@ -78,7 +78,11 @@ public abstract partial class StructuredEditFormViewModel : ObservableObject
         OnPropertyChanged(nameof(StructuredEnabled));
     }
 
-    partial void OnCanEditChanged(bool value) => OnPropertyChanged(nameof(StructuredEnabled));
+    partial void OnCanEditChanged(bool value)
+    {
+        OnPropertyChanged(nameof(StructuredEnabled));
+        OnPropertyChanged(nameof(CanCommit));
+    }
 
     /// <summary>Takes the loaded source as the baseline — so opening the box is not itself an edit.</summary>
     public void SetRaw(string text, string format, string etag)
@@ -97,11 +101,60 @@ public abstract partial class StructuredEditFormViewModel : ObservableObject
     /// entry asks a question that has no second answer, and the status line names the collection afterwards
     /// regardless, so nothing is concealed by leaving it out.
     /// </summary>
-    public bool ShowTargetPicker => IsCreate && Targets.Count > 1;
+    /// <summary>
+    /// Whether to offer the collection picker — on CREATE it chooses where the entry lands, on EDIT it MOVES
+    /// it (#1122).
+    /// </summary>
+    /// <remarks>
+    /// No longer <c>IsCreate &amp;&amp;</c>: an entry filed in the wrong calendar could be edited but never
+    /// re-filed, so the fix was to open somewhere else and retype it. The caller decides which targets are
+    /// offered — on edit, only collections that admit this entry's kind, so the picker cannot propose a move
+    /// the server refuses on containment (ADR 0543).
+    /// </remarks>
+    /// <summary>Whether to offer the collection PICKER — more than one candidate to choose between.</summary>
+    public bool ShowTargetPicker => Targets.Count > 1;
+
+    /// <summary>
+    /// Whether to state the destination as plain text — exactly one candidate, so there is nothing to choose
+    /// but the user still has to be able to see where this will go (#1125).
+    /// </summary>
+    /// <remarks>
+    /// It used to show nothing at all in this case, and that is how an entry meant for a room's Schedule was
+    /// filed as an availability window: the dialog said "New appointment" and never named the collection.
+    /// A read-only line rather than a one-item dropdown, so nothing implies a choice that does not exist.
+    /// </remarks>
+    public bool ShowTargetName => Targets.Count == 1;
+
+    /// <summary>The single destination, for <see cref="ShowTargetName"/>.</summary>
+    public string TargetName => Targets.Count == 1 ? Targets[0].DisplayName : string.Empty;
+
+    /// <summary>
+    /// A create cannot be committed until a destination is chosen — which matters only when nothing could be
+    /// pre-selected, i.e. when the candidates differ in kind (#1125).
+    /// </summary>
+    public bool HasTarget => !IsCreate || SelectedTarget is not null;
+
+    /// <summary>
+    /// Whether Save may be pressed: the caller may edit AND a destination is settled.
+    /// </summary>
+    /// <remarks>
+    /// BOTH, deliberately. Binding Save to <see cref="HasTarget"/> alone would drop the read-only gate and let
+    /// an entry the caller cannot edit be saved — which is what the first version of this change did.
+    /// </remarks>
+    public bool CanCommit => CanEdit && HasTarget;
+
+    partial void OnSelectedTargetChanged(CreateTarget? value)
+    {
+        OnPropertyChanged(nameof(HasTarget));
+        OnPropertyChanged(nameof(CanCommit));
+    }
 
     partial void OnIsCreateChanged(bool value)
     {
         OnPropertyChanged(nameof(ShowTargetPicker));
+        OnPropertyChanged(nameof(ShowTargetName));
+        OnPropertyChanged(nameof(HasTarget));
+        OnPropertyChanged(nameof(CanCommit));
         OnPropertyChanged(nameof(ShowRaw));
     }
 
@@ -110,6 +163,36 @@ public abstract partial class StructuredEditFormViewModel : ObservableObject
     /// The first is the tab's own ordering, which lists the caller's personal collection ahead of shared ones —
     /// so the default is the one a person filing something of their own almost always means.
     /// </remarks>
+    /// <summary>
+    /// Puts the form into EDIT mode over the collections this entry may be moved between, selecting the one it
+    /// is in now (#1122).
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="current"/> is matched by collection id rather than by reference: the targets are rebuilt
+    /// from the tab's listing each time the dialog opens, so the instance is never the same object.
+    /// </remarks>
+    public void OpenForMove(IEnumerable<CreateTarget> targets, Guid current)
+    {
+        Targets.Clear();
+        foreach (var target in targets)
+        {
+            Targets.Add(target);
+        }
+
+        SelectedTarget = Targets.FirstOrDefault(t => t.CollectionId == current);
+        OriginalTargetId = SelectedTarget?.CollectionId ?? current;
+        OnPropertyChanged(nameof(ShowTargetPicker));
+        OnPropertyChanged(nameof(ShowTargetName));
+        OnPropertyChanged(nameof(TargetName));
+    }
+
+    /// <summary>Where the entry was when the form opened, so a save knows whether it must also move it.</summary>
+    public Guid OriginalTargetId { get; private set; }
+
+    /// <summary>True when the user picked a different collection than the entry is filed in.</summary>
+    public bool TargetChanged =>
+        SelectedTarget is { } target && target.CollectionId != Guid.Empty && target.CollectionId != OriginalTargetId;
+
     public void OpenForCreate(IEnumerable<CreateTarget> targets)
     {
         Targets.Clear();
@@ -118,9 +201,23 @@ public abstract partial class StructuredEditFormViewModel : ObservableObject
             Targets.Add(target);
         }
 
-        SelectedTarget = Targets.FirstOrDefault();
+        // Pre-select ONLY when every candidate means the same thing (#1125).
+        //
+        // The first was always taken before, on the reasoning that the tab lists the caller's personal
+        // collection ahead of shared ones — sound for a set of calendars, and wrong the moment a bookable
+        // resource contributes three collections of DIFFERENT meaning. Those sort alphabetically, so
+        // "Availability" came first and a booking meant for the Schedule was silently filed as an offer of
+        // free time. Where the candidates disagree about what they are, guessing is not a convenience; the
+        // dialog asks, and Save waits.
+        SelectedTarget = Targets.Select(t => t.CollectionKind).Distinct(StringComparer.Ordinal).Count() > 1
+            ? null
+            : Targets.FirstOrDefault();
         IsCreate = true;
         OnPropertyChanged(nameof(ShowTargetPicker));
+        OnPropertyChanged(nameof(ShowTargetName));
+        OnPropertyChanged(nameof(TargetName));
+        OnPropertyChanged(nameof(HasTarget));
+        OnPropertyChanged(nameof(CanCommit));
         OnOpenedForCreate();
     }
 

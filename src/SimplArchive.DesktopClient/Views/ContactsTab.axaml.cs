@@ -68,12 +68,21 @@ public partial class ContactsTab : UserControl
 
         loaded.Value.CanEdit = loaded.CanEdit;
 
+        // Where it may be re-filed (#1122) — the Calendar twin, opened on the addressbook it is in now.
+        loaded.Value.OpenForMove(tab.MoveTargets(row.CollectionKind), row.CollectionId);
+
         // The raw source is fetched only if the user opens the disclosure (#648) — the lambda is how this
         // window reaches the api client without owning one.
         var dialog = new ContactDialog(loaded.Value) { RawLoader = () => tab.LoadRawAsync(loaded, loaded.Value) };
         if (await dialog.ShowDialog<ContactEditViewModel?>(owner) is { } edited)
         {
             await tab.SaveCardAsync(loaded, edited);
+
+            // After the save, and only when the addressbook actually changed.
+            if (edited.TargetChanged && edited.SelectedTarget is { } target)
+            {
+                await tab.MoveCardAsync(row, target.CollectionId);
+            }
         }
     });
 }

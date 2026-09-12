@@ -7,7 +7,13 @@ namespace SimplArchive.DesktopClient.Services;
 /// <summary>One addressbook or calendar the caller can see (#564), as the Contacts/Calendar tabs need it.</summary>
 /// <param name="Id">The typed folder.</param>
 /// <param name="DisplayName">Parent-qualified, so two same-named collections are tellable apart (ADR 0619).</param>
-/// <param name="Kind"><c>addressbook</c> or <c>calendar</c>.</param>
+/// <param name="Kind"><c>addressbook</c> or <c>calendar</c> — the FAMILY the tab lists.</param>
+/// <param name="CollectionKind">
+/// Which collection this actually is: <c>calendar</c>, <c>schedule</c>, <c>maintenance</c>,
+/// <c>availability</c> or <c>addressbook</c> (#1122). Finer than <paramref name="Kind"/>, which reports
+/// <c>calendar</c> for all four .ics kinds — a MOVE needs the narrower answer, so the picker offers only
+/// collections that admit this entry and never one the server would refuse on containment.
+/// </param>
 /// <param name="Color">The caller's effective colour — their override if set, else the collection's own.</param>
 /// <param name="Writable">False ⇒ the tab shows the collection but disables its editors.</param>
 /// <param name="IsPersonalDefault">The caller's own My Addressbook / My Calendar, listed first.</param>
@@ -20,7 +26,7 @@ namespace SimplArchive.DesktopClient.Services;
 /// <param name="Links">Its advertised addresses; the tab follows these and composes nothing (ADR 0543).</param>
 public sealed record DavCollection(
     Guid Id, string DisplayName, string Name, string Kind, string? Color, bool Writable, bool IsPersonalDefault,
-    bool CanCreateEntries, IReadOnlyDictionary<string, string> Links)
+    bool CanCreateEntries, IReadOnlyDictionary<string, string> Links, string CollectionKind)
 {
     public string Href(string rel) => Links.TryGetValue(rel, out var href)
         ? href
@@ -76,7 +82,8 @@ public sealed class DavCollectionsClient
             c.TryGetProperty("writable", out var w) && w.GetBoolean(),
             c.TryGetProperty("isPersonalDefault", out var p) && p.GetBoolean(),
             c.TryGetProperty("canCreateEntries", out var cc) && cc.GetBoolean(),
-            ApiCore.ParseLinks(c) ?? new Dictionary<string, string>())).ToList();
+            ApiCore.ParseLinks(c) ?? new Dictionary<string, string>(),
+            c.TryGetProperty("collectionKind", out var ck) ? ck.GetString() ?? string.Empty : string.Empty)).ToList();
     }
 
     /// <summary>

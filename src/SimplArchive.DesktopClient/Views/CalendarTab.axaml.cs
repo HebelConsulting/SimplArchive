@@ -58,11 +58,23 @@ public partial class CalendarTab : UserControl
 
         loaded.Value.CanEdit = loaded.CanEdit;
 
+        // Where it may be re-filed (#1122): the collections of its OWN kind, opened on the one it is in. An
+        // entry filed in the wrong calendar used to be editable but not movable, so the only way to correct it
+        // was to retype it somewhere else.
+        loaded.Value.OpenForMove(tab.MoveTargets(row.CollectionKind), row.CollectionId);
+
         // See ContactsTab.OnEdit: the raw source loads on demand, through a lambda.
         var dialog = new AppointmentDialog(loaded.Value) { RawLoader = () => tab.LoadRawAsync(loaded, loaded.Value) };
         if (await dialog.ShowDialog<AppointmentEditViewModel?>(owner) is { } edited)
         {
             await tab.SaveEntryAsync(loaded, edited);
+
+            // After the save, and only when the collection actually changed: the move is a reparent of the
+            // document, so saving first keeps the two failures tellable apart.
+            if (edited.TargetChanged && edited.SelectedTarget is { } target)
+            {
+                await tab.MoveEntryAsync(row, target.CollectionId);
+            }
         }
     });
 }

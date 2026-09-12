@@ -817,6 +817,14 @@ public partial class Home
     private Task OpenHeldDocumentAsync(LegalHoldItemDto item) =>
         item.ParentId is { } parentId ? NavigateToFolderAsync(parentId, item.DocumentId) : NavigateToFolderAsync(item.DocumentId);
 
+    // "Go to" from the Calendar and Contacts tabs (#1122): reveal the entry's document in Repositories.
+    //
+    // The same navigation a search hit takes — which already switches to Repositories, so the tabs do not
+    // touch _activeTab themselves. The parent is the collection the row was listed from, carried on the row
+    // (and advertised by the server as its `parent` rel), so this costs no lookup.
+    private Task GoToCollectionEntryAsync((Guid ParentId, Guid DocumentId) entry) =>
+        NavigateToFolderAsync(entry.ParentId, entry.DocumentId);
+
     private async Task OpenSearchResultAsync(SearchHit hit)
     {
         if (hit.IsFolder)

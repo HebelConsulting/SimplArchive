@@ -29,6 +29,12 @@ public class StringEmptyRatchetTests
     private static readonly Dictionary<string, int> MandatedEmptyLiterals = new()
     {
         ["src/SimplArchive.Client/Models/BrowseNode.cs"] = 6,
+        // CreateTarget's `string CollectionKind = ""` in both clients (#1125): the dialogs read the kind to
+        // decide whether the candidates differ in MEANING, and therefore whether pre-selecting one would be a
+        // guess. The same CS1736 case as every other entry here — a positional record parameter's default must
+        // be a constant expression, and string.Empty is a static readonly field.
+        ["src/SimplArchive.Client/Services/ContactCardForm.cs"] = 1,
+        ["src/SimplArchive.DesktopClient/ViewModels/CreateTarget.cs"] = 1,
         // Moved from DocumentsClient to ReferencesClient with the Reference record (#518's per-area split): its
         // positional parameters carry `= ""` defaults, which CS1736 requires -- string.Empty is a static
         // readonly field, not a constant expression. Two LINES, three literals: this guard counts lines that

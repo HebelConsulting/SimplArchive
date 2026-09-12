@@ -31,6 +31,22 @@ public sealed partial class MainWindowViewModel
     // code-style rule warns about, so the trigger stays unfired.
     void IShellContext.ActivateIntray() => SelectedTab = 1;
 
+    // "Go to" from the Calendar and Contacts tabs (#1122). The same two reveal paths the search hit and the
+    // legal-hold item already take — a document filed at a repository root IS a top-level tree node, so it has
+    // no parent to expand and takes the folder path instead.
+    async Task IShellContext.RevealDocumentAsync(Guid documentId, string documentHref, string? parentHref)
+    {
+        SelectedTab = 0;   // Repositories — the bare index is this window's own convention (see ActivateIntray)
+        if (parentHref is { } parent)
+        {
+            await RevealDocumentInTreeAsync(documentId, documentHref, parent);
+        }
+        else
+        {
+            await RevealFolderInTreeAsync(documentHref);
+        }
+    }
+
 
     Guid? IShellContext.CurrentUserId => _currentUserId;
 

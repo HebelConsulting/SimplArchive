@@ -8,7 +8,14 @@ namespace SimplArchive.Client.Services;
 /// composes no API URL and can offer no target the server would refuse: a collection that withholds the rel
 /// simply produces no target (ADR 0543).
 /// </remarks>
-public sealed record CreateTarget(Guid CollectionId, string DisplayName, string CreateHref);
+/// <summary>
+/// Where a New entry will be filed, or where an existing one may be MOVED (#1122).
+/// </summary>
+/// <param name="CollectionKind">
+/// Which kind of collection it is. The dialog reads it to decide whether the candidates differ in MEANING,
+/// and therefore whether pre-selecting one would be a guess (#1125).
+/// </param>
+public sealed record CreateTarget(Guid CollectionId, string DisplayName, string CreateHref, string CollectionKind = "");
 
 /// <summary>One typed multi-value row — an e-mail address or a phone number.</summary>
 public sealed class ContactFieldRow

@@ -18,8 +18,19 @@ public sealed class DavCollection
 
     public string Name { get; set; } = string.Empty;
 
-    /// <summary><c>addressbook</c> or <c>calendar</c>.</summary>
+    /// <summary><c>addressbook</c> or <c>calendar</c> — the FAMILY the tab lists.</summary>
     public string Kind { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Which collection this actually is: <c>calendar</c>, <c>schedule</c>, <c>maintenance</c>,
+    /// <c>availability</c> or <c>addressbook</c> (#1122).
+    /// </summary>
+    /// <remarks>
+    /// Finer than <see cref="Kind"/>, which reports <c>calendar</c> for all four .ics kinds. A MOVE needs the
+    /// narrower answer: an availability window belongs in an Availability, and offering a Schedule as a target
+    /// would be an affordance the server refuses on containment (ADR 0543).
+    /// </remarks>
+    public string CollectionKind { get; set; } = string.Empty;
 
     public string? Color { get; set; }
 

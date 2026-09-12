@@ -24,7 +24,7 @@
                  TextWrapping="Wrap" MaxWidth="300" IsVisible="False" />
       <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
       <Button x:Name="SaveButton" Content="{loc:Tr Save}" Click="OnSave" IsDefault="True"
-              IsEnabled="{Binding CanEdit}" />
+              IsEnabled="{Binding CanCommit}" />
     </StackPanel>
 
     <ScrollViewer>
@@ -35,12 +35,18 @@
              than one per field, so a field added later cannot forget the rule. -->
         <StackPanel Spacing="10" IsEnabled="{Binding StructuredEnabled}">
 
-        <!-- Where a NEW contact lands. Shown only when the choice is real: a picker with one entry asks a
-             question that has no second answer, and the status line names the addressbook either way. -->
+        <!-- Which addressbook the card belongs to: where a NEW one lands, and on edit where it MOVES to
+             (#1122). A dropdown when there is a choice, plain text when there is exactly one — the Calendar
+             twin (ADR 0511), and for its reason: the destination must always be visible (#1125). -->
         <Grid ColumnDefinitions="110,*" IsVisible="{Binding ShowTargetPicker}" Margin="0,0,0,6">
           <TextBlock Grid.Column="0" Text="{loc:Tr ContactsCollections}" VerticalAlignment="Center" />
           <ComboBox Grid.Column="1" ItemsSource="{Binding Targets}" SelectedItem="{Binding SelectedTarget}"
                     HorizontalAlignment="Stretch" AutomationProperties.Name="{loc:Tr ContactsCollections}" />
+        </Grid>
+
+        <Grid ColumnDefinitions="110,*" IsVisible="{Binding ShowTargetName}" Margin="0,0,0,6">
+          <TextBlock Grid.Column="0" Text="{loc:Tr ContactsCollections}" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="1" Text="{Binding TargetName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
         </Grid>
 
         <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto,Auto">

@@ -33,6 +33,15 @@
                 ToolTip.Tip="{loc:Tr ContactsEdit}" AutomationProperties.Name="{loc:Tr ContactsEdit}">
           <i:Icon Value="mdi-pencil-outline" FontSize="18" />
         </Button>
+
+        <!-- Go to the contact's document in Repositories (#1122) — the Calendar twin (ADR 0511). Its own
+             group, because it LEAVES this tab rather than acting on it. -->
+        <Border Width="1" Background="{DynamicResource WbBorder}" Margin="4,2" />
+        <Button Command="{Binding GoToDocumentCommand}"
+                IsEnabled="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}"
+                ToolTip.Tip="{loc:Tr RibbonGoToDocument}" AutomationProperties.Name="{loc:Tr RibbonGoToDocument}">
+          <i:Icon Value="mdi-open-in-app" FontSize="18" />
+        </Button>
       </StackPanel>
     </Border>
 

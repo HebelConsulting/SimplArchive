@@ -1,3 +1,4 @@
+using SimplArchive.Domain.CalDav;
 using SimplArchive.Domain.Masks;
 
 namespace SimplArchive.Domain.Documents;
@@ -99,15 +100,30 @@ public static class ChildCreationPolicy
         && rule.Admits.Any(a => a.MaskId == itemMaskId);
 
     /// <summary>
-    /// Whether this folder serves the APPOINTMENTS surface — a Calendar's entries or a Schedule's bookings
-    /// (ADR 0744): the same rel, the same endpoints, the same row shape; only the admitted mask differs.
+    /// Whether this folder serves the APPOINTMENTS surface — a Calendar's entries, a Schedule's bookings, a
+    /// Maintenance block or an Availability window: the same rel, the same endpoints, the same row shape;
+    /// only the admitted mask differs.
     /// </summary>
     /// <remarks>
     /// One predicate rather than an <c>|| Booking</c> at each rel-emitting site, because the sites are
     /// exactly where a listing forgets one emitter and a tab goes silently empty (the new-rel-must-reach-
     /// every-listing lesson).
+    /// <para>
+    /// Derived from <see cref="DavCollectionKinds.All"/> rather than listed here, because listing them here is
+    /// what broke it: the predicate that exists so no SITE forgets a mask named two of the four itself, and
+    /// went on naming two when Maintenance (ADR 0778) and Availability (ADR 0780) were added. Every surface
+    /// dutifully asked the one authority, and the authority was wrong — so an Availability folder advertised
+    /// no create anywhere, the tree offered no New, and the Calendar tab's New stayed disabled however the
+    /// collection was ticked. A Schedule worked throughout, because its item mask happened to be one of the
+    /// two named, which is what made it look like a permissions or ticking problem rather than a missing kind.
+    /// </para>
+    /// <para>
+    /// The <c>.ics</c> filter is the definition of this surface: an Addressbook admits typed items too, and
+    /// its rel is <c>contacts</c>.
+    /// </para>
     /// </remarks>
     public static bool AdmitsCalendarEntries(Guid? folderMaskId) =>
-        AdmitsTypedItem(folderMaskId, WellKnownMaskIds.Appointment)
-        || AdmitsTypedItem(folderMaskId, WellKnownMaskIds.Booking);
+        DavCollectionKinds.All
+            .Where(kind => kind.Extension == ".ics")
+            .Any(kind => AdmitsTypedItem(folderMaskId, kind.ItemMaskId));
 }

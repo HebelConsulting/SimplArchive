@@ -84,6 +84,15 @@ public sealed partial class AppointmentRowViewModel : ObservableObject
 
     public required string CollectionName { get; init; }
 
+    /// <summary>The collection's document id — where a MOVE starts from, and what it is compared against (#1122).</summary>
+    public Guid CollectionId { get; init; }
+
+    /// <summary>
+    /// Which collection kind it is filed in — <c>calendar</c>, <c>schedule</c>, <c>maintenance</c>,
+    /// <c>availability</c> — so a move offers only collections that admit this entry (#1122).
+    /// </summary>
+    public string CollectionKind { get; init; } = string.Empty;
+
     [ObservableProperty] private string _title = string.Empty;
     [ObservableProperty] private DateTimeOffset? _start;
     [ObservableProperty] private DateTimeOffset? _end;
@@ -270,6 +279,23 @@ public sealed partial class CalendarTabViewModel : ObservableObject
 
     [ObservableProperty] private AppointmentRowViewModel? _selected;
 
+    /// <summary>Reveals the selected entry's document in Repositories (#1122).</summary>
+    /// <remarks>
+    /// Addressed from the ROW's own rels, never from the tab's loaded state (ADR 0555/0559) — the listing
+    /// advertises `self` and `parent` precisely so this costs no request. `parent` is passed through as it
+    /// comes: null means the document is filed at a repository root, which the shell reveals differently.
+    /// </remarks>
+    [RelayCommand]
+    private async Task GoToDocumentAsync()
+    {
+        if (Selected is not { } row || !row.Links.TryGetValue("self", out var self))
+        {
+            return;
+        }
+
+        await _shell.RevealDocumentAsync(row.Id, self, row.Links.GetValueOrDefault("parent"));
+    }
+
     /// <summary>The chips the month grid last built, so a selection can light them without a rebuild.</summary>
     private List<CalendarCellEntryViewModel> _monthCells = [];
 
@@ -378,9 +404,31 @@ public sealed partial class CalendarTabViewModel : ObservableObject
     [
         .. Collections
             .Where(c => c.IsChecked && c.Collection.CanCreateEntries)
-            .Select(c => (c.DisplayName, Href: c.Collection.HrefOrNull("appointments")))
+            .Select(c => (c.DisplayName, Href: c.Collection.HrefOrNull("appointments"), c.Collection.Id, c.Collection.CollectionKind))
             .Where(c => c.Href is not null)
-            .Select(c => new CreateTarget(c.DisplayName, c.Href!)),
+            .Select(c => new CreateTarget(c.DisplayName, c.Href!, c.Id, c.CollectionKind)),
+    ];
+
+    /// <summary>
+    /// Where an existing entry may be MOVED: the collections of the same kind the caller may add to (#1122).
+    /// </summary>
+    /// <remarks>
+    /// Filtered by <c>CollectionKind</c>, not merely by "is a calendar": an availability window belongs in an
+    /// Availability, and a Schedule offered as a target would be a move the server refuses on containment —
+    /// the affordance ADR 0543 exists to prevent. The current collection is included so the picker opens on
+    /// it; it is only a move when the selection changes.
+    /// <para>
+    /// Drawn from ALL collections rather than the ticked ones: what is ticked says what the user wants to look
+    /// at, which is a different question from where an entry may go, and filing into a calendar you are not
+    /// currently viewing is entirely ordinary.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<CreateTarget> MoveTargets(string collectionKind) =>
+    [
+        .. Collections
+            .Where(c => c.Collection.CanCreateEntries
+                && string.Equals(c.Collection.CollectionKind, collectionKind, StringComparison.Ordinal))
+            .Select(c => new CreateTarget(c.DisplayName, c.Collection.HrefOrNull("appointments") ?? string.Empty, c.Collection.Id, c.Collection.CollectionKind)),
     ];
 
     /// <summary>Creates an appointment from a filled-in form, then shows it selected in the list.</summary>
@@ -605,6 +653,33 @@ public sealed partial class CalendarTabViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Re-files an entry into another collection of the same kind (#1122).
+    /// </summary>
+    /// <remarks>
+    /// A move is a REPARENT of the underlying document, not a field on the entry — so it is its own request,
+    /// after the save, addressed from the row's own `self` (ADR 0555). MoveAsync carries the If-Match contract
+    /// and refuses with a sentence of its own when the caller may not move the item.
+    /// </remarks>
+    public async Task MoveEntryAsync(AppointmentRowViewModel row, Guid targetCollectionId)
+    {
+        if (_api is null || !row.Links.TryGetValue("self", out var self))
+        {
+            return;
+        }
+
+        try
+        {
+            await _api.Documents.MoveAsync(self, targetCollectionId);
+            Report(string.Format(Strings.Get("StMoved"), row.Title));
+            await ReloadAppointmentsAsync();
+        }
+        catch (Exception e)
+        {
+            Report(string.Format(Strings.Get("StErrSaveAppt"), e.Message));
+        }
+    }
+
     /// <summary>Fills the form's raw box from the stored entry, when the user opens the disclosure (#648).</summary>
     /// <remarks>On demand rather than with the entry — see the contacts twin for why.</remarks>
     public async Task LoadRawAsync(StructuredEditorClient.Loaded<AppointmentEditViewModel> loaded, AppointmentEditViewModel form)
@@ -748,6 +823,8 @@ public sealed partial class CalendarTabViewModel : ObservableObject
                     Id = entry.Id,
                     CollectionColor = collection.Color ?? "#8a8a8a",
                     CollectionName = collection.DisplayName,
+                    CollectionId = collection.Collection.Id,
+                    CollectionKind = collection.Collection.CollectionKind,
                     Title = entry.Name,
                     Start = entry.StartsAt,
                     End = entry.EndsAt,
@@ -808,7 +885,7 @@ public sealed partial class CalendarTabViewModel : ObservableObject
             {
                 Collection = new DavCollection(
                     Guid.NewGuid(), name, name.Split('/')[^1].Trim(), "calendar", colour, writable, personal, false,
-                    new Dictionary<string, string>()),
+                    new Dictionary<string, string>(), string.Empty),
                 Color = colour,
                 IsChecked = true,
             });

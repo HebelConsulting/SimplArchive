@@ -887,11 +887,11 @@
             {
                 @* Self-contained: it reads its own collections from the davCollections rel and owns its
                    selection, so the shell hands it nothing (ADR 0558). *@
-                <ContactsTab />
+                <ContactsTab OnGoToDocument="GoToCollectionEntryAsync" />
             }
             else if (_activeTab == Tab.Calendar)
             {
-                <CalendarTab />
+                <CalendarTab OnGoToDocument="GoToCollectionEntryAsync" />
             }
             else
             {

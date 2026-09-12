@@ -6,6 +6,7 @@ using SimplArchive.Api.Documents;
 using SimplArchive.Api.Hypermedia;
 using SimplArchive.Api.Pagination;
 using SimplArchive.Application.Abstractions;
+using SimplArchive.Domain.CalDav;
 using SimplArchive.Domain.Documents;
 using SimplArchive.Domain.Masks;
 using SimplArchive.Infrastructure.Persistence;
@@ -334,6 +335,12 @@ public class TypedItemsController : ControllerBase
             // The row's own address, so acting on it never reads the pane's loaded state (ADR 0559).
             entry.Links = [new Link("self", $"/api/documents/{row.Id}", "GET")];
 
+            // Where the row LIVES, so "Go to" can reveal it in the tree the way a legal-hold item already
+            // does — from the row's advertised rels, never from a bare id or the pane's state (ADR 0555).
+            // Free: this listing is ONE collection's contents, so every row's parent is that collection, and
+            // making the client resolve `self` first to learn it would be a request per Go-to (ADR 0557).
+            entry.Links.Add(new Link("parent", $"/api/documents/{documentId}", "GET"));
+
             // A contact that HAS a picture also carries its address, so the row follows a rel rather than
             // composing one (ADR 0543) and never spends a request discovering there is nothing to show.
             if (entry is ContactEntryResource { HasPhoto: true })
@@ -371,7 +378,18 @@ public class TypedItemsController : ControllerBase
     // A room's Schedule serves the whole appointments surface (ADR 0744): the tab lists it as a calendar,
     // so its entries must list — and a create THERE is a booking, classified and conflict-checked by the
     // same finalizer pass every .ics write goes through.
-    private static readonly Guid[] CalendarFamily = [WellKnownMaskIds.Calendar, WellKnownMaskIds.Schedule];
+    //
+    // DERIVED from the kind list, not written out (#1122). Written out, it said [Calendar, Schedule] and went
+    // on saying it when Maintenance (ADR 0778) and Availability (ADR 0780) arrived — so this endpoint 404'd
+    // both LISTING and CREATING in those two collections, which is the server half of the same omission
+    // ChildCreationPolicy.AdmitsCalendarEntries had made on the advertising side. Fixing only the advertising
+    // half would have been worse than neither: a create rel the server then refuses is exactly the affordance
+    // ADR 0543 exists to prevent.
+    //
+    // The items themselves stay maskless at creation — the classifier reads the bytes and the parent and
+    // decides, so a new kind needs nothing here beyond being in the list.
+    private static readonly Guid[] CalendarFamily =
+        [.. DavCollectionKinds.All.Where(kind => kind.Extension == ".ics").Select(kind => kind.FolderMaskId)];
 
     private async Task<Document?> RequireFolderAsync(Guid documentId, IReadOnlyList<Guid> maskIds, CancellationToken cancellationToken)
     {

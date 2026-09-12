@@ -11,6 +11,9 @@
     <DialogContent>
         <div style="min-width: 480px; max-width: 620px; max-height: 62vh; overflow-y: auto;">
 
+            @* A dropdown when there is a choice, a read-only field when there is exactly one: the destination
+               must ALWAYS be visible (#1125). Showing nothing is how an entry meant for a room's Schedule was
+               filed as an availability window — the dialog said "New appointment" and never named where. *@
             @if (Targets.Count > 1)
             {
                 <MudSelect T="CreateTarget" Value="_target" ValueChanged="@(t => _target = t)"
@@ -21,6 +24,16 @@
                         <MudSelectItem T="CreateTarget" Value="target">@target.DisplayName</MudSelectItem>
                     }
                 </MudSelect>
+            }
+            else if (Targets.Count == 1)
+            {
+                @* PLAIN TEXT, not a read-only text field: an input that cannot be typed in still looks like one,
+                   and the desktop states this the same way (ADR 0511). It also stops the destination being the
+                   dialog's first input, which is how a read-only box ended up swallowing the first fill. *@
+                <div class="d-flex align-center mb-3" style="gap:8px;">
+                    <span style="color:var(--mud-palette-text-secondary);">@Strings.Get("CalendarCollections")</span>
+                    <span>@Targets[0].DisplayName</span>
+                </div>
             }
 
             <MudTextField @bind-Value="Form.Summary" Label="@Strings.Get("ApptSummary")"
@@ -130,7 +143,9 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="@(() => Dialog.Cancel())">@Strings.Get("Cancel")</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(!Form.CanEdit)" OnClick="Ok">
+        @* Both gates: the caller may edit, AND a destination is settled. CanEdit alone would let a create be
+           committed with nothing chosen when the candidates differ in kind (#1125). *@
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(!Form.CanEdit || !HasTarget)" OnClick="Ok">
             @Strings.Get("Save")
         </MudButton>
     </DialogActions>
@@ -154,11 +169,28 @@
 
     [Parameter] public AppointmentForm Form { get; set; } = new();
 
-    /// <summary>Empty when editing; the calendars the server said the caller may create in when not.</summary>
+    /// <summary>
+    /// Where the entry may go: on create the calendars the caller may add to, on edit the collections of the
+    /// same kind it may be MOVED between (#1122).
+    /// </summary>
     [Parameter] public List<CreateTarget> Targets { get; set; } = [];
 
-/// <summary>Hidden while composing a NEW item: there is no stored source to show yet.</summary>
-    private bool ShowRaw => Targets.Count == 0;
+    /// <summary>
+    /// True while composing a NEW entry — which is what hides the raw-source box and what makes the picker a
+    /// filing choice rather than a move.
+    /// </summary>
+    /// <remarks>
+    /// An explicit flag because the proxy it replaces — "Targets is empty" — stopped meaning "editing" the
+    /// moment edit gained a move picker: passing targets would have silently hidden the raw disclosure, a
+    /// feature nothing would have failed over (#648).
+    /// </remarks>
+    [Parameter] public bool IsCreate { get; set; }
+
+    /// <summary>Where the entry is filed NOW, so the picker opens on it and a move is only what CHANGES.</summary>
+    [Parameter] public Guid CurrentCollectionId { get; set; }
+
+    /// <summary>Hidden while composing a NEW item: there is no stored source to show yet.</summary>
+    private bool ShowRaw => !IsCreate;
 
     private bool _rawExpanded;
 
@@ -181,7 +213,21 @@
 
     private CreateTarget? _target;
 
-    protected override void OnInitialized() => _target = Targets.FirstOrDefault();
+    // On edit, open on the collection the entry is ALREADY in — matched by id, since the targets are rebuilt
+    // from the listing each time and never the same instance. On create, the first, which the tab orders with
+    // the caller's personal collection ahead of shared ones.
+    protected override void OnInitialized() =>
+        // Pre-select ONLY when every candidate means the same thing (#1125): a bookable resource contributes
+        // three collections of DIFFERENT meaning that sort alphabetically, so "Availability" came first and a
+        // booking meant for the Schedule was silently filed as an offer of free time. On edit the entry's own
+        // collection is the answer and there is nothing to guess.
+        _target = Targets.FirstOrDefault(t => t.CollectionId == CurrentCollectionId)
+            ?? (Targets.Select(t => t.CollectionKind).Distinct(StringComparer.Ordinal).Count() > 1
+                ? null
+                : Targets.FirstOrDefault());
+
+    /// <summary>A create cannot be committed until a destination is chosen (#1125).</summary>
+    private bool HasTarget => !IsCreate || _target is not null;
 
     private void Ok() => Dialog.Close(DialogResult.Ok(new Saved(Form, _target)));
 

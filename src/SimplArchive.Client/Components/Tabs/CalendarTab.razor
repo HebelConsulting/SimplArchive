@@ -2,6 +2,7 @@
 @inject DavCollections DavCollections
 @inject BrowseService Browse
 @inject StructuredEditors StructuredEditors
+@inject DocumentActions Actions
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -25,6 +26,13 @@
         <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selected is null)" OnClick="EditAppointmentAsync"
                    title="@Strings.Get("CalendarEdit")" aria-label="@Strings.Get("CalendarEdit")">
             <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CalendarEdit")</span>
+        </MudButton>
+
+        @* Go to the entry's document in Repositories (#1122) — its own group after ml-3, because it LEAVES
+           this tab rather than acting on it. The desktop draws the same separation (ADR 0511). *@
+        <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(_selected is null)" OnClick="GoToDocumentAsync"
+                   title="@Strings.Get("RibbonGoToDocument")" aria-label="@Strings.Get("RibbonGoToDocument")">
+            <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonGoToDocument")</span>
         </MudButton>
 
         @* Month ⇄ List. Two questions, not two skins of one: the list answers "what is coming up" and keeps the
@@ -189,10 +197,25 @@
 </div>
 
 @code {
+    /// <summary>
+    /// Reveal this entry's document in Repositories — the tab asks, the shell navigates (#1122).
+    /// </summary>
+    /// <remarks>
+    /// A callback rather than the tab navigating itself, for the same reason SearchTab has OnOpenHit: which
+    /// tab is in front and where the tree stands is the SHELL's state, and a pane that writes it directly is
+    /// the pane-to-pane chain the workbench rule forbids (#686).
+    /// </remarks>
+    [Parameter]
+    public EventCallback<(Guid ParentId, Guid DocumentId)> OnGoToDocument { get; set; }
+
     private List<DavCollection> _collections = [];
     private readonly HashSet<Guid> _checked = [];
     private List<AppointmentRow> _appointments = [];
     private AppointmentRow? _selected;
+
+    // Addressed from the selected ROW, never from what the detail pane last finished loading (ADR 0559).
+    private Task GoToDocumentAsync() =>
+        _selected is { } row ? OnGoToDocument.InvokeAsync((row.ParentId, row.Id)) : Task.CompletedTask;
 
     /// <summary>
     /// What the pane says about the selected appointment beyond its row — the zones, the link, the notes.
@@ -285,6 +308,13 @@
     /// never from whatever the detail pane last finished loading (ADR 0559).
     /// </summary>
     public sealed record AppointmentRow(
+        // The collection the row came from — its document id, so "Go to" reveals the entry in Repositories
+        // without resolving anything (#1122). Taken where the row is built, inside the per-collection loop,
+        // which already holds it; the server also advertises it as the row's `parent` rel for clients that
+        // work from addresses rather than ids.
+        Guid ParentId,
+        // Which kind of collection it is filed in, so a move offers only those that admit it (#1122).
+        string CollectionKind,
         Guid Id, string CollectionColor, string CollectionName, string Title,
         DateTimeOffset? Start, DateTimeOffset? End, string Location, string? SelfHref,
         DateOnly? Day = null, bool AllDay = false, DateOnly? EndDay = null, string? Repeats = null,
@@ -343,10 +373,26 @@
     [
         .. _collections
             .Where(c => _checked.Contains(c.Id) && c.CanCreateEntries && c.Href("appointments") is not null)
-            .Select(c => new CreateTarget(c.Id, c.DisplayName, c.Href("appointments")!)),
+            .Select(c => new CreateTarget(c.Id, c.DisplayName, c.Href("appointments")!, c.CollectionKind)),
     ];
 
     private bool CanCreate => CreateTargets().Count > 0;
+
+    /// <summary>
+    /// Where an existing entry may be MOVED: the collections of the same kind the caller may add to (#1122).
+    /// </summary>
+    /// <remarks>
+    /// Filtered by CollectionKind rather than "is a calendar": an availability window belongs in an
+    /// Availability, and offering a Schedule would be a move the server refuses on containment (ADR 0543).
+    /// Drawn from ALL collections, not the ticked ones — what is ticked says what the user wants to LOOK at,
+    /// which is a different question from where an entry may go.
+    /// </remarks>
+    private List<CreateTarget> MoveTargets(string collectionKind) =>
+    [
+        .. _collections
+            .Where(c => c.CanCreateEntries && c.CollectionKind == collectionKind && c.Href("appointments") is not null)
+            .Select(c => new CreateTarget(c.Id, c.DisplayName, c.Href("appointments")!, c.CollectionKind)),
+    ];
 
     private IEnumerable<AppointmentRow> Visible
     {
@@ -414,6 +460,8 @@
                 foreach (var entry in await DavCollections.ListEntriesAsync(entriesHref))
                 {
                     rows.Add(new AppointmentRow(
+                        collection.Id,
+                        collection.CollectionKind,
                         entry.Id, collection.Color ?? "#8a8a8a", collection.DisplayName, entry.Name,
                         entry.StartsAt, entry.EndsAt, entry.Location ?? string.Empty, entry.Href("self"),
                         entry.Day, entry.AllDay, entry.EndDay, entry.Repeats, entry.Href("appointment")));
@@ -449,6 +497,7 @@
         {
             { nameof(Dialogs.AppointmentDialog.Form), AppointmentForm.ForCreate() },
             { nameof(Dialogs.AppointmentDialog.Targets), targets },
+            { nameof(Dialogs.AppointmentDialog.IsCreate), true },
         };
 
         var dialog = await DialogService.ShowAsync<Dialogs.AppointmentDialog>(Strings.Get("CalendarNew"), parameters);
@@ -494,6 +543,9 @@
         var parameters = new DialogParameters
         {
             { nameof(Dialogs.AppointmentDialog.Form), loaded.Value },
+            // Where it may be re-filed (#1122), opened on the collection it is in now.
+            { nameof(Dialogs.AppointmentDialog.Targets), MoveTargets(row.CollectionKind) },
+            { nameof(Dialogs.AppointmentDialog.CurrentCollectionId), row.ParentId },
             { nameof(Dialogs.AppointmentDialog.LoadRaw), (Func<Task>)(async () =>
                 {
                     if (await StructuredEditors.ReadRawAsync(loaded.Links) is { } raw)
@@ -527,6 +579,15 @@
         if (await StructuredEditors.SaveAsync(loaded.Href, saved.Form.ToPayload(), loaded.ETag))
         {
             Snackbar.Add(string.Format(Strings.Get("StApptSaved"), row.Title), Severity.Success);
+
+            // ...and only if the collection actually CHANGED, re-file it (#1122). A move is a reparent of the
+            // document rather than a field on the entry, so it is its own request after the save — which also
+            // keeps the two failures tellable apart. Addressed from the row (ADR 0559).
+            if (saved.Target is { } target && target.CollectionId != row.ParentId)
+            {
+                await Actions.MoveToAsync(self, target.CollectionId, row.Title);
+            }
+
             await ReloadAppointmentsAsync();
         }
         else

@@ -420,6 +420,19 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
             return false;
         }
 
+        return await MoveToAsync(selfHref, folderId, node.Name, node.IsFolder);
+    }
+
+    /// <summary>
+    /// Moves an item to an ALREADY-CHOSEN folder — the same mutation, without the picker (#1122).
+    /// </summary>
+    /// <remarks>
+    /// Split out so the Calendar and Contacts tabs can re-file an entry from their edit dialog, where the
+    /// target came from a dropdown of same-kind collections rather than the tree. One implementation, because
+    /// the second copy is the one that never gets the If-Match or the rel-absence sentence right.
+    /// </remarks>
+    public async Task<bool> MoveToAsync(string selfHref, Guid folderId, string name, bool isFolder = false)
+    {
         // ONE GET of the row's address serves both needs at once: its ETag header is the If-Match the mutation
         // wants, and its body advertises `move` — which lives on the full resource, not on a listing row. The
         // old shape was a HEAD for the etag plus a composed path; same request count, no composition (#416).
@@ -443,7 +456,7 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
         }
 
         var response = await http.SendAsync(request);
-        if (!await HandleMutationAsync(response, $"Moved '{node.Name}'.", node.IsFolder
+        if (!await HandleMutationAsync(response, $"Moved '{name}'.", isFolder
             ? "Can't move a folder into itself or one of its own sub-folders."
             : "Can't move the item there.", "An item with that name already exists in the target folder."))
         {
