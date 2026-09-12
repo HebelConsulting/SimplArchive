@@ -425,6 +425,23 @@ public partial class Home
         }
 
         var loaded = await DetailLoad.LoadAsync(item, token);
+
+        // A failed call must not degrade this pane SILENTLY (#816). The loader makes ~8 sequential requests,
+        // and one of them failing left `_downloadUrl` null with nothing scheduled to set it again: Download,
+        // the preview, the workflow transitions and the tags were simply gone for that selection, with no
+        // error and no way to tell why — recoverable only by selecting something else and coming back.
+        //
+        // It surfaced as a "flaky test" for a year: under CI contention a request fails, the ribbon button
+        // never enables, and the test waits out its full minute for an affordance that was never coming. The
+        // same snackbar the folder-open path above already shows for its own version of this (FolderNoAccess).
+        //
+        // Guarded by Superseded: a load abandoned because the user moved on is the ordinary case and says
+        // nothing to anyone.
+        if (loaded.Failed && !DetailLoad.Superseded(token))
+        {
+            Snackbar.Add(Strings.Get("DetailLoadFailed"), Severity.Warning);
+        }
+
         if (loaded.Loaded)
         {
             _downloadUrl = loaded.DownloadUrl;

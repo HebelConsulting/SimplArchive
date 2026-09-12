@@ -153,6 +153,7 @@ public sealed class DetailLoader(
         catch (HttpRequestException)
         {
             detail.IndexData ??= [];
+            return DetailLoadResult.Broken;
         }
         catch (InvalidOperationException)
         {
@@ -161,9 +162,8 @@ public sealed class DetailLoader(
             // included, not just the part that could not load. That is exactly what happened when tree roots
             // were built without their links (#416): one missing rel took the entire page down.
             detail.IndexData ??= [];
+            return DetailLoadResult.Broken;
         }
-
-        return DetailLoadResult.Nothing;
     }
 
     private void DeriveSystemFields(BrowseNode item, List<VersionResponse> confirmed, Guid? currentVersionId)
@@ -214,7 +214,17 @@ public readonly record struct DetailLoadResult(
     string? TextLayoutUrl,
     string? DownloadUrl,
     bool Converted,
-    bool HasVersion)
+    bool HasVersion,
+    bool Failed = false)
 {
     public static DetailLoadResult Nothing => new(false, null, null, null, false, false);
+
+    /// <summary>The load did not finish because a call FAILED — distinct from having nothing to load (#816).</summary>
+    /// <remarks>
+    /// Separate from <c>!Loaded</c> on purpose: the loader returns <see cref="Nothing"/> for three unrelated
+    /// reasons — a superseded token (the ordinary outcome of changing selection quickly), a node with no
+    /// document address, and a failed call. Only the last is worth telling the user about, and treating
+    /// <c>!Loaded</c> as failure would put a warning on screen every time someone clicks two rows in a row.
+    /// </remarks>
+    public static DetailLoadResult Broken => Nothing with { Failed = true };
 }

@@ -585,6 +585,7 @@
                 ? bool.Parse(stored)
                 : await _themeProvider.GetSystemDarkModeAsync();
 
+            await StampThemeAsync();
             await ApplyInstallationThemeAsync();
             StateHasChanged();
         }
@@ -618,7 +619,24 @@
     {
         _isDarkMode = !_isDarkMode;
         await JsRuntime.InvokeVoidAsync("localStorage.setItem", DarkModeStorageKey, _isDarkMode.ToString());
+        await StampThemeAsync();
     }
+
+    // The explicit choice has to reach the CSS custom properties, not just MudBlazor (#1119).
+    //
+    // Dark mode here is an IN-APP choice, while the --sa-* tokens switch on prefers-color-scheme — so with the
+    // OS in light and the app in dark, MudBlazor painted the surface dark and the text light while every
+    // --sa-* token still answered with its LIGHT value. A selected list row became near-white under light
+    // text and could not be read, and hovering fixed it, because hover is the one part of that row styled
+    // from a mud- variable (Home.razor) rather than an --sa- one (app.css).
+    //
+    // ThemeEmitter already emits [data-theme="dark"] AND [data-theme="light"] blocks for exactly this, and
+    // says so in its own doc comment: the explicit choice must win in BOTH directions, which is why light is
+    // repeated rather than left to the default. Only the stamping was missing. Both directions are written
+    // here for the same reason — "not dark" has to beat a dark OS, so it cannot be expressed by removing the
+    // attribute.
+    private ValueTask StampThemeAsync() =>
+        JsRuntime.InvokeVoidAsync("document.documentElement.setAttribute", "data-theme", _isDarkMode ? "dark" : "light");
 
     // Real-time notifications (ADR "Real-time notifications (SignalR)"): subscribe to the hub so a new
     // notification updates the bell live (badge + list) and pops a toast, without a reload/poll. Best-effort —

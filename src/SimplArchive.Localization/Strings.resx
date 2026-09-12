@@ -4734,6 +4734,9 @@
   <data name="FolderNoAccess" xml:space="preserve">
     <value>You do not have access to this folder.</value>
   </data>
+  <data name="DetailLoadFailed" xml:space="preserve">
+    <value>This document's details could not be loaded. Select it again to retry.</value>
+  </data>
   <data name="DeepLinkNoAccess" xml:space="preserve">
     <value>You do not have access to this document. Ask the sender to grant you access.</value>
   </data>
