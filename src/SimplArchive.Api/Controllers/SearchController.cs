@@ -476,7 +476,8 @@ public partial class SearchController : ControllerBase
     {
         public string Name { get; set; } = string.Empty;
 
-        // The FieldDataType as an integer (Text=0, Number=1, Date=2, Boolean=3, SingleSelect=4, MultiSelect=5),
+        // The FieldDataType as an integer (Text=0, Number=1, Date=2, DateTime=3, Boolean=4, SingleSelect=5,
+        // MultiSelect=6 — pinned by FieldDataTypeWireValuesTests, after an insertion silently shifted them),
         // consistent with every other enum on this Api — lets the client pick the right operators/input.
         public int DataType { get; set; }
     }

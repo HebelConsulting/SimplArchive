@@ -23,6 +23,13 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        // Which server this client is talking to, named in the title (#1123). Set here rather than exposed as
+        // a view-model property: a window title is the view's own business, the address is fixed for the life
+        // of the window, and MainWindowViewModel is on the 1000-line debt list (#466) — it may only shrink.
+        // The string itself is built by ServerLabel, which is testable without a display; a native title bar
+        // is not rendered headlessly, so a screenshot could never have checked it.
+        Title = Services.ServerLabel.TitleFor(DesktopClientOptions.ApiBaseUrl);
+
         // Drag-and-drop — OS-file drops + the internal move/reference drag — lives in WorkbenchDragDrop
         // (issue #466); it wires its own handlers onto the list, tree and intray controls.
         new WorkbenchDragDrop(this, ListPane.List, TreePane.Tree, ServerIntrayList).Wire();

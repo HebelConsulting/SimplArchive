@@ -11,7 +11,8 @@ public sealed record OperatorOption(string Value, string Label);
 
 // One repeatable index-field filter row in the desktop search-refinement panel (ADR "Search-refinement UI"):
 // a field, a type-appropriate operator, and a value. The operators and which value input shows adapt to the
-// selected field's DataType (Text=0, Number=1, Date=2, Boolean=3, SingleSelect=4, MultiSelect=5).
+// selected field's DataType (Text=0, Number=1, Date=2, DateTime=3, Boolean=4, SingleSelect=5,
+// MultiSelect=6) — pinned to the enum by FieldDataTypeWireValuesTests after these drifted (#1128).
 public partial class FieldFilterRowViewModel : ObservableObject
 {
     private readonly IReadOnlyDictionary<string, int> _typesByField;
@@ -57,7 +58,7 @@ public partial class FieldFilterRowViewModel : ObservableObject
         }
 
         SelectedOperator = Operators.Count > 0 ? Operators[0] : null;
-        IsDate = DataType == 2;
+        IsDate = DataType is 2 or 3;
         IsBoolean = DataType == 3;
         IsTextLike = !IsDate && !IsBoolean;
         Value = string.Empty;
@@ -68,9 +69,11 @@ public partial class FieldFilterRowViewModel : ObservableObject
     public static IReadOnlyList<OperatorOption> OperatorsFor(int dataType) => dataType switch
     {
         1 => [new("eq", "="), new("gt", ">"), new("gte", "≥"), new("lt", "<"), new("lte", "≤")],
-        2 => [new("eq", "on"), new("gte", "on/after"), new("lte", "on/before"), new("gt", "after"), new("lt", "before")],
-        3 => [new("eq", "is")],
-        4 or 5 => [new("eq", "is"), new("in", "is any of")],
+        // A DateTime (3) is a MOMENT, filtered by day like a Date — see the web twin for why these numbers
+        // moved (#1128): DateTime was inserted at 3 and shifted Boolean, SingleSelect and MultiSelect up one.
+        2 or 3 => [new("eq", "on"), new("gte", "on/after"), new("lte", "on/before"), new("gt", "after"), new("lt", "before")],
+        4 => [new("eq", "is")],
+        5 or 6 => [new("eq", "is"), new("in", "is any of")],
         _ => [new("contains", "contains"), new("eq", "equals")],
     };
 }

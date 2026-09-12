@@ -168,11 +168,11 @@
                             <MudSelectItem T="string" Value="@op.Value">@op.Label</MudSelectItem>
                         }
                     </MudSelect>
-                    @if (row.DataType == 2)
+                    @if (row.DataType is 2 or 3)
                     {
                         <MudDatePicker Editable="true" @bind-Date="row.DateValue" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" Class="wb-filter-date" />
                     }
-                    else if (row.DataType == 3)
+                    else if (row.DataType == 4)
                     {
                         <MudSelect T="string" @bind-Value="row.Value" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:120px;">
                             <MudSelectItem T="string" Value="@("true")">@Strings.Get("FilterYes")</MudSelectItem>
@@ -492,13 +492,21 @@
 
     // ---- Refinement panel (ADR "Search-refinement UI") ----------------------------------------------
 
-    // FieldDataType: Text=0, Number=1, Date=2, Boolean=3, SingleSelect=4, MultiSelect=5.
+    // FieldDataType as it goes over the wire: Text=0, Number=1, Date=2, DateTime=3, Boolean=4,
+    // SingleSelect=5, MultiSelect=6.
+    //
+    // These numbers DRIFTED (#1128): DateTime was inserted at 3 (#660) and shifted everything after it, while
+    // both clients went on assuming the old set — so a DateTime field offered Boolean's single "is", a Boolean
+    // offered "is any of", and a MultiSelect fell through to "contains". Nothing failed; the filters were just
+    // wrong, which is why it survived. FieldDataTypeWireValuesTests now pins the numbers to the enum, so the
+    // next insertion breaks a build instead of a dropdown.
     private static IReadOnlyList<(string Value, string Label)> OperatorsFor(int dataType) => dataType switch
     {
         1 => [("eq", "="), ("gt", ">"), ("gte", "≥"), ("lt", "<"), ("lte", "≤")],
-        2 => [("eq", "on"), ("gte", "on/after"), ("lte", "on/before"), ("gt", "after"), ("lt", "before")],
-        3 => [("eq", "is")],
-        4 or 5 => [("eq", "is"), ("in", "is any of")],
+        // A DateTime is a MOMENT, filtered by day like a Date — not a two-state value.
+        2 or 3 => [("eq", "on"), ("gte", "on/after"), ("lte", "on/before"), ("gt", "after"), ("lt", "before")],
+        4 => [("eq", "is")],
+        5 or 6 => [("eq", "is"), ("in", "is any of")],
         _ => [("contains", "contains"), ("eq", "equals")],
     };
 

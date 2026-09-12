@@ -138,7 +138,7 @@ public sealed class FieldFilterRow
 {
     public string FieldName { get; set; } = string.Empty;
 
-    /// <summary>FieldDataType: Text=0, Number=1, Date=2, Boolean=3, SingleSelect=4, MultiSelect=5.</summary>
+    /// <summary>FieldDataType: Text=0, Number=1, Date=2, DateTime=3, Boolean=4, SingleSelect=5, MultiSelect=6.</summary>
     public int DataType { get; set; }
 
     public string Operator { get; set; } = string.Empty;
