@@ -14,6 +14,13 @@ public class ResourceAvailabilityConfiguration : IEntityTypeConfiguration<Resour
     {
         builder.HasKey(a => a.Id);
 
+        // Recurrence (#1133): the RRULE text and the cancelled occurrences, both nullable — a slot that does
+        // not repeat carries neither, which is every row written before this existed. Capped rather than
+        // unbounded text: an RRULE is a short line by the format's own grammar, and a cancellation list that
+        // needs more than this is a series that should have been split.
+        builder.Property(a => a.RecurrenceRule).HasMaxLength(500);
+        builder.Property(a => a.ExceptionDates).HasMaxLength(4000);
+
         // "Which windows does this resource offer around then?" — the one scan both the module's booking
         // rule and the derived committed label need. Same shape as the booking and block indexes, because it
         // is the same question asked of the third table.

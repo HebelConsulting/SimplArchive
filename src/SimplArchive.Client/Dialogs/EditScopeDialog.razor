@@ -1,0 +1,38 @@
+@using SimplArchive.Localization
+
+@* Asks which occurrences an edit to a repeating entry should change (#1133).
+
+   Shown BEFORE the change is sent. The three answers write different things — an EXDATE plus a new entry, a
+   split, or a rewrite — so asking afterwards would be asking whether to undo something already done.
+
+   The default is the NARROWEST answer: a person editing a single day in a series almost always means that
+   day, and the wide answer reaches occurrences already past, which is the damage this dialog exists to
+   prevent. The desktop twin defaults the same way (ADR 0511). *@
+
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 380px;">
+            <MudText Typo="Typo.body1" Class="mb-3">@Strings.Get("ScopeQuestion")</MudText>
+
+            <MudRadioGroup T="string" Value="_scope" ValueChanged="@(v => _scope = v ?? "this")">
+                <MudRadio T="string" Value="@("this")" Class="d-block">@Strings.Get("ScopeThis")</MudRadio>
+                <MudRadio T="string" Value="@("following")" Class="d-block">@Strings.Get("ScopeFollowing")</MudRadio>
+                <MudRadio T="string" Value="@("all")" Class="d-block">@Strings.Get("ScopeAll")</MudRadio>
+            </MudRadioGroup>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => Dialog.Cancel())">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@(() => Dialog.Close(DialogResult.Ok(_scope)))">
+            @Strings.Get("Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = default!;
+
+    /// <summary>The scope as the API names it — its vocabulary, so there is no mapping here to drift.</summary>
+    private string _scope = "this";
+}

@@ -6,4 +6,14 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Recurrence is a DOMAIN concept here, not a persistence or protocol one: a window, a claim and a block
+         each carry an RRULE, and the same expansion answers "which occurrences fall in this range" for the
+         invariant in Infrastructure and the validation in the Api. Putting the expander here is what keeps
+         that ONE implementation instead of one per layer; the layer rule forbids other layers and EF Core,
+         and Ical.Net is neither. RRULE is also far too intricate to hand-roll — it is the format's own
+         arithmetic, not ours. -->
+    <PackageReference Include="Ical.Net" Version="5.2.3" />
+  </ItemGroup>
+
 </Project>

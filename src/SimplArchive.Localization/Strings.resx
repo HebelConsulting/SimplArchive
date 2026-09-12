@@ -4587,6 +4587,45 @@
   <data name="ApptRepeats" xml:space="preserve">
     <value>Repeats</value>
   </data>
+  <data name="ScopeTitle" xml:space="preserve">
+    <value>This entry repeats</value>
+  </data>
+  <data name="ScopeQuestion" xml:space="preserve">
+    <value>Which occurrences should this change?</value>
+  </data>
+  <data name="ScopeThis" xml:space="preserve">
+    <value>This occurrence only</value>
+  </data>
+  <data name="ScopeFollowing" xml:space="preserve">
+    <value>This and all later occurrences</value>
+  </data>
+  <data name="ScopeAll" xml:space="preserve">
+    <value>All occurrences, including past ones</value>
+  </data>
+  <data name="RepeatNone" xml:space="preserve">
+    <value>Does not repeat</value>
+  </data>
+  <data name="RepeatDaily" xml:space="preserve">
+    <value>Every day</value>
+  </data>
+  <data name="RepeatWeekdays" xml:space="preserve">
+    <value>Every weekday (Mon–Fri)</value>
+  </data>
+  <data name="RepeatWeekly" xml:space="preserve">
+    <value>Every week</value>
+  </data>
+  <data name="RepeatMonthly" xml:space="preserve">
+    <value>Every month</value>
+  </data>
+  <data name="RepeatYearly" xml:space="preserve">
+    <value>Every year</value>
+  </data>
+  <data name="RepeatUntil" xml:space="preserve">
+    <value>Until</value>
+  </data>
+  <data name="RepeatUntilHint" xml:space="preserve">
+    <value>A booking or a maintenance block must say when it stops.</value>
+  </data>
   <data name="ApptRepeatsDaily" xml:space="preserve">
     <value>Every day</value>
   </data>

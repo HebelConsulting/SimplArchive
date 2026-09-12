@@ -6,6 +6,7 @@ using SimplArchive.Api.Documents;
 using SimplArchive.Api.Hypermedia;
 using SimplArchive.Api.Pagination;
 using SimplArchive.Application.Abstractions;
+using SimplArchive.Domain.Booking;
 using SimplArchive.Domain.CalDav;
 using SimplArchive.Domain.Documents;
 using SimplArchive.Domain.Masks;
@@ -151,6 +152,21 @@ public class TypedItemsController : ControllerBase
     {
         public Guid Id { get; set; }
 
+        /// <summary>
+        /// Which occurrence of a repeating series this row is — the instant that identifies it (#1133).
+        /// </summary>
+        /// <remarks>
+        /// Null for an entry that does not repeat, and for a listing asked without a window. It is the same
+        /// value an <c>EXDATE</c> carries, which is what lets an editor act on THIS occurrence — cancel the
+        /// 24th of December — rather than only on the whole series.
+        /// <para>
+        /// <see cref="Id"/> stays the SERIES' document, because that is what a client opens, follows rels
+        /// from and addresses actions at. Two rows of one series therefore share an Id, so a client keying its
+        /// selection on the id alone must key on the pair instead.
+        /// </para>
+        /// </remarks>
+        public string? RecurrenceId { get; set; }
+
         public string Name { get; set; } = string.Empty;
 
         /// <summary>
@@ -183,6 +199,16 @@ public class TypedItemsController : ControllerBase
         /// to read the rule.
         /// </remarks>
         public string? Repeats { get; set; }
+
+        /// <summary>
+        /// The occurrences taken OUT of the series — the <c>EXDATE</c> instants, comma-separated (#1133).
+        /// </summary>
+        /// <remarks>
+        /// Sent so a client can tell a cancelled day from one that never existed, and — more to the point —
+        /// so expansion leaves it out. Without it an occurrence cancelled through "this occurrence" keeps
+        /// being drawn, which is a calendar disagreeing with itself.
+        /// </remarks>
+        public string? Exceptions { get; set; }
     }
 
     public class ContactListResource : HypermediaResource
@@ -227,9 +253,24 @@ public class TypedItemsController : ControllerBase
             : await CanListAsync(documentId, cancellationToken) ? NoContent() : Forbid();
 
     /// <summary>The appointments filed in this calendar, with their index fields. See <see cref="ListContacts"/>.</summary>
+    /// <remarks>
+    /// <paramref name="from"/>/<paramref name="to"/> ask for OCCURRENCES rather than stored entries (#1133): a
+    /// repeating series comes back once per occurrence in the window, each carrying the day it falls on and
+    /// the instant that identifies it. Without them the listing answers as it always has — one row per stored
+    /// entry — which is what CalDAV and every other caller still wants.
+    /// <para>
+    /// Expanded on the SERVER so there is one implementation of it. The clients render what they are given,
+    /// and a surface added later inherits the same answer rather than reimplementing the arithmetic.
+    /// </para>
+    /// </remarks>
     [HttpGet("appointments")]
     public Task<IActionResult> ListAppointments(
-        Guid documentId, [FromQuery] string? cursor, [FromQuery] int? limit, CancellationToken cancellationToken) =>
+        Guid documentId,
+        [FromQuery] string? cursor,
+        [FromQuery] int? limit,
+        [FromQuery] DateTimeOffset? from,
+        [FromQuery] DateTimeOffset? to,
+        CancellationToken cancellationToken) =>
         ListAsync(
             documentId, CalendarFamily, cursor, limit, cancellationToken,
             (id, name, field) => new AppointmentEntryResource
@@ -242,8 +283,68 @@ public class TypedItemsController : ControllerBase
                 // A day, not a moment: the indexed value carries no time at all (ADR 0647).
                 AllDay = field("Start") is { } start && !start.Contains('T', StringComparison.Ordinal),
                 Repeats = field("Repeats"),
+                // The cancelled occurrences, so expansion can leave them out (#1133) — without this an
+                // occurrence cancelled through "this occurrence" keeps being drawn.
+                Exceptions = field("Exceptions"),
             },
-            (entries, links) => new AppointmentListResource { Appointments = entries, Links = links });
+            (entries, links) => new AppointmentListResource { Appointments = entries, Links = links },
+            from is { } start && to is { } end ? entries => ExpandOccurrences(entries, start, end) : null);
+
+    /// <summary>One row per OCCURRENCE that falls in the window, in place of the series' single row (#1133).</summary>
+    /// <remarks>
+    /// <para>
+    /// An entry that does not repeat is passed through untouched — the common case, and the one every caller
+    /// had before this existed.
+    /// </para>
+    /// <para>
+    /// Each occurrence carries <c>RecurrenceId</c>, the instant that identifies it WITHIN the series. That is
+    /// what lets an editor say "this occurrence" — cancel the 24th of December — rather than only "the whole
+    /// series", and it is the same value an EXDATE carries.
+    /// </para>
+    /// </remarks>
+    private static List<AppointmentEntryResource> ExpandOccurrences(
+        List<AppointmentEntryResource> entries, DateTimeOffset from, DateTimeOffset to)
+    {
+        var expanded = new List<AppointmentEntryResource>();
+        foreach (var entry in entries)
+        {
+            if (string.IsNullOrWhiteSpace(entry.Repeats)
+                || !DateTimeOffset.TryParse(entry.Start, out var startsAt))
+            {
+                expanded.Add(entry);
+                continue;
+            }
+
+            var endsAt = DateTimeOffset.TryParse(entry.End, out var parsedEnd) ? parsedEnd : startsAt;
+            var series = new ListedSeries(startsAt, endsAt, entry.Repeats, entry.Exceptions);
+
+            foreach (var occurrence in SlotOccurrences.Between(series, from, to))
+            {
+                expanded.Add(new AppointmentEntryResource
+                {
+                    Id = entry.Id,
+                    Name = entry.Name,
+                    Start = occurrence.StartsAtUtc.ToString("O"),
+                    End = occurrence.EndsAtUtc.ToString("O"),
+                    Location = entry.Location,
+                    AllDay = entry.AllDay,
+                    Repeats = entry.Repeats,
+                    Exceptions = entry.Exceptions,
+                    RecurrenceId = occurrence.StartsAtUtc.ToString("O"),
+                    Links = entry.Links,
+                });
+            }
+        }
+
+        return expanded;
+    }
+
+    /// <summary>A listed row seen as a repeating slot, so the shared expander can answer about it.</summary>
+    private sealed record ListedSeries(
+        DateTimeOffset StartsAtUtc,
+        DateTimeOffset EndsAtUtc,
+        string? RecurrenceRule,
+        string? ExceptionDates) : IRecurringSlot;
 
     [HttpHead("appointments")]
     public async Task<IActionResult> HeadAppointments(Guid documentId, CancellationToken cancellationToken) =>
@@ -281,7 +382,8 @@ public class TypedItemsController : ControllerBase
         int? limit,
         CancellationToken cancellationToken,
         Func<Guid, string, Func<string, string?>, TEntry> shape,
-        Func<List<TEntry>, List<Link>, TList> envelope)
+        Func<List<TEntry>, List<Link>, TList> envelope,
+        Func<List<TEntry>, List<TEntry>>? expand = null)
         where TEntry : HypermediaResource
         where TList : HypermediaResource
     {
@@ -357,6 +459,14 @@ public class TypedItemsController : ControllerBase
                 entry.Links.Add(new Link("appointment", $"/api/documents/{row.Id}/appointment", "GET"));
             }
             entries.Add(entry);
+        }
+
+        // Occurrences, when the caller asked for a window (#1133). A post-step on the SHAPED rows rather than a
+        // second listing: the paging, the access check and the field lookup are what a reader never re-reads,
+        // and a second copy of them is where the two would drift.
+        if (expand is not null)
+        {
+            entries = expand(entries);
         }
 
         var links = new List<Link> { new("self", $"/api/documents/{documentId}", "GET") };

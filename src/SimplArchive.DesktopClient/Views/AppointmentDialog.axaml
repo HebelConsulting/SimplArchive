@@ -104,10 +104,28 @@
                    TextWrapping="Wrap" MinHeight="70" />
         </Grid>
 
-        <!-- Recurrence is SHOWN, not edited, this round: changing a series properly means choosing between
-             this occurrence / this and following / all events, and offering a rule box without that choice
-             would apply every edit to the whole series including occurrences already past. -->
-        <Grid ColumnDefinitions="110,*" IsVisible="{Binding Repeats}">
+        <!-- Recurrence, editable for the repeats the shared list offers (#1133) — daily hours, WORKING DAYS,
+             a weekly slot. A rule richer than the list (every second Tuesday, the last Thursday of a month)
+             arrived over CalDAV and is STATED instead, because offering the nearest button would rewrite it
+             on the next save. -->
+        <Grid ColumnDefinitions="110,*" IsVisible="{Binding !RepeatIsRicherThanOffered}">
+          <TextBlock Grid.Column="0" Text="{loc:Tr ApptRepeats}" VerticalAlignment="Center" />
+          <ComboBox Grid.Column="1" ItemsSource="{Binding RepeatOptions}" SelectedItem="{Binding SelectedRepeat}"
+                    HorizontalAlignment="Stretch" AutomationProperties.Name="{loc:Tr ApptRepeats}" />
+        </Grid>
+
+        <!-- When it stops. An availability window may be left open — an offer takes nothing from anyone — while
+             a booking or a block must end, because two endless claims cannot be compared for overlap. -->
+        <Grid ColumnDefinitions="110,*" IsVisible="{Binding RepeatsOnAChoice}">
+          <TextBlock Grid.Column="0" Text="{loc:Tr RepeatUntil}" VerticalAlignment="Center" />
+          <StackPanel Grid.Column="1" Spacing="2">
+            <CalendarDatePicker SelectedDate="{Binding RepeatUntil}" Watermark="yyyy-MM-dd" HorizontalAlignment="Left" />
+            <TextBlock Text="{loc:Tr RepeatUntilHint}" Foreground="{DynamicResource WbMuted}"
+                       FontSize="11" TextWrapping="Wrap" />
+          </StackPanel>
+        </Grid>
+
+        <Grid ColumnDefinitions="110,*" IsVisible="{Binding RepeatIsRicherThanOffered}">
           <TextBlock Grid.Column="0" Text="{loc:Tr ApptRepeats}" VerticalAlignment="Top" />
           <StackPanel Grid.Column="1" Spacing="2">
             <SelectableTextBlock Text="{Binding RecurrenceText}" TextWrapping="Wrap" />

@@ -116,6 +116,13 @@ public partial class SimplArchiveDbContext
 
         // In memory for the reason every range test in this area is: the SQLite provider cannot translate
         // DateTimeOffset range predicates, and one resource's windows are few by nature.
-        return [.. stored.Where(a => a.StartsAtUtc <= from && to <= a.EndsAtUtc).OrderBy(a => a.StartsAtUtc)];
+        //
+        // Asked of the OCCURRENCES rather than the row's own span (#1133). A repeating window's row holds only
+        // its first occurrence, so comparing the row would answer about the wrong day entirely — and a window
+        // entered as daily hours would otherwise read as one unbroken span covering the nights between, which
+        // is what let a booking run past closing time.
+        return [.. stored
+            .Where(a => SlotOccurrences.AnyCovers(a, from, to))
+            .OrderBy(a => a.StartsAtUtc)];
     }
 }

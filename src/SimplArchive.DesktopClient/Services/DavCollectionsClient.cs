@@ -96,8 +96,23 @@ public sealed class DavCollectionsClient
     /// else, so When, Where, Organization, Email and Phone were all empty strings and the detail pane beside
     /// them was blank by construction (#660).
     /// </remarks>
-    public async Task<IReadOnlyList<DavEntry>> ListEntriesAsync(string href, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// The entries of one collection. With <paramref name="from"/>/<paramref name="to"/> a repeating entry
+    /// comes back once per OCCURRENCE in that window (#1133), each carrying the instant that identifies it.
+    /// </summary>
+    /// <remarks>
+    /// A query on an ADVERTISED href is following it, not composing one: the server owns the path, the client
+    /// owns the filter (ADR 0557).
+    /// </remarks>
+    public async Task<IReadOnlyList<DavEntry>> ListEntriesAsync(
+        string href, DateTimeOffset? from = null, DateTimeOffset? to = null, CancellationToken cancellationToken = default)
     {
+        if (from is { } start && to is { } end)
+        {
+            var separator = href.Contains('?') ? "&" : "?";
+            href += $"{separator}from={Uri.EscapeDataString(start.ToString("O"))}&to={Uri.EscapeDataString(end.ToString("O"))}";
+        }
+
         var response = await _core.Http.GetFromJsonAsync<JsonElement>(href, cancellationToken);
         var array = response.TryGetProperty("appointments", out var a) && a.ValueKind == JsonValueKind.Array
             ? a
@@ -123,7 +138,8 @@ public sealed class DavCollectionsClient
             Text(e, "phone"),
             Text(e, "organization"),
             ApiCore.ParseLinks(e) ?? new Dictionary<string, string>(),
-            Text(e, "repeats"))).ToList();
+            Text(e, "repeats"),
+            Text(e, "recurrenceId"))).ToList();
     }
 
     /// <summary>Sets the caller's personal colour for a collection; null resets it to the collection's own.</summary>
@@ -150,9 +166,13 @@ public sealed record DavEntry(
     Guid Id, string Name, string? Start, string? End, string? Location, bool AllDay,
     string? FullName, string? Email, string? Phone, string? Organization,
     IReadOnlyDictionary<string, string> Links,
-    string? Repeats = null)
+    string? Repeats = null,
+    // WHICH occurrence this row is, when the listing was asked for a window (#1133) — the instant the server
+    // gave, sent back verbatim when an edit names one. Never reconstructed from the wall clock: a floating
+    // entry is stamped with the SERVER's zone at index time, so "Wednesday 09:00" here is not 09:00 UTC.
+    string? RecurrenceId = null)
 {
-    /// <summary>Whether this entry repeats — all a client needs, since the rule is never expanded here.</summary>
+    /// <summary>Whether this entry repeats.</summary>
     public bool Recurring => !string.IsNullOrEmpty(Repeats);
 
     public string? HrefOrNull(string rel) => Links.GetValueOrDefault(rel);

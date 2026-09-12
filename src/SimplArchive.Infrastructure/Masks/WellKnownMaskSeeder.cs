@@ -171,6 +171,13 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             // adds it to tenants seeded before it existed; a document filed before it simply has no value, which
             // reads as "does not repeat" — right for every entry that does not, and corrected on its next write.
             new FieldSpec("Repeats", FieldDataType.Text, IsRequired: false),
+            // The cancelled occurrences — the EXDATE instants, comma-separated. Indexed beside Repeats and for
+            // the same reason: a listing that expands a series has to know which days were taken OUT of it,
+            // and reading one blob per row to learn that is the per-row cost ADR 0557 forbids. Without it an
+            // occurrence cancelled through "this occurrence" keeps appearing (#1133). Optional, like its
+            // sibling, so the heal adds it to tenants seeded before it existed and a document filed before it
+            // simply has none — which reads as "nothing cancelled", right for every series where nothing was.
+            new FieldSpec("Exceptions", FieldDataType.Text, IsRequired: false),
         ], cancellationToken);
 
         // AFTER the item, deliberately: MaskVersions has a unique (TenantId, Name) index, and this folder mask
@@ -189,7 +196,8 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         // The booking IS the .ics in the room's Schedule (ADR 0744), so the mask carries the Appointment
         // mask's calendar facts — same names, same types, so the classifier and every calendar surface
         // read both masks identically — plus the one domain field (Purpose, indexed from DESCRIPTION).
-        // Deliberately NO Repeats: a recurring booking is refused (the row models one slot).
+        // Repeats and Exceptions, since a booking MAY now repeat (#1133) — a weekly slot, a training block.
+        // The row still models one span; the rule says which days it falls on, and the invariant expands it.
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.Booking, "Booking",
         [
             new FieldSpec("Event UID", FieldDataType.Text, IsRequired: true),
@@ -197,6 +205,14 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             new FieldSpec("End", FieldDataType.DateTime, IsRequired: false),
             new FieldSpec("Location", FieldDataType.Text, IsRequired: false),
             new FieldSpec("Purpose", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Repeats", FieldDataType.Text, IsRequired: false),
+            // The cancelled occurrences — the EXDATE instants, comma-separated. Indexed beside Repeats and for
+            // the same reason: a listing that expands a series has to know which days were taken OUT of it,
+            // and reading one blob per row to learn that is the per-row cost ADR 0557 forbids. Without it an
+            // occurrence cancelled through "this occurrence" keeps appearing (#1133). Optional, like its
+            // sibling, so the heal adds it to tenants seeded before it existed and a document filed before it
+            // simply has none — which reads as "nothing cancelled", right for every series where nothing was.
+            new FieldSpec("Exceptions", FieldDataType.Text, IsRequired: false),
         ], cancellationToken);
 
         // The room's booking calendar (ADR 0744): a calendar kind, so it carries the calendar's one field.
@@ -205,7 +221,8 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         // The out-of-service window (ADR 0778), shaped like Booking on purpose: same calendar facts under the
         // same field names, so the classifier and every calendar surface read both without a second code path.
         // Reason rather than Purpose — a booking says what the resource is FOR, a block what is wrong with it.
-        // No Repeats, for the same reason Booking has none: a block models one window.
+        // Repeats and Exceptions like its siblings (#1133): a recurring inspection slot is a real want, and
+        // the same expansion answers for all three kinds.
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.MaintenanceBlock, "Maintenance block",
         [
             new FieldSpec("Event UID", FieldDataType.Text, IsRequired: true),
@@ -213,6 +230,14 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             new FieldSpec("End", FieldDataType.DateTime, IsRequired: false),
             new FieldSpec("Location", FieldDataType.Text, IsRequired: false),
             new FieldSpec("Reason", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Repeats", FieldDataType.Text, IsRequired: false),
+            // The cancelled occurrences — the EXDATE instants, comma-separated. Indexed beside Repeats and for
+            // the same reason: a listing that expands a series has to know which days were taken OUT of it,
+            // and reading one blob per row to learn that is the per-row cost ADR 0557 forbids. Without it an
+            // occurrence cancelled through "this occurrence" keeps appearing (#1133). Optional, like its
+            // sibling, so the heal adds it to tenants seeded before it existed and a document filed before it
+            // simply has none — which reads as "nothing cancelled", right for every series where nothing was.
+            new FieldSpec("Exceptions", FieldDataType.Text, IsRequired: false),
         ], cancellationToken);
 
         // The resource's out-of-service calendar (ADR 0778): a calendar kind, so it carries the colour field
@@ -229,6 +254,14 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             new FieldSpec("End", FieldDataType.DateTime, IsRequired: false),
             new FieldSpec("Location", FieldDataType.Text, IsRequired: false),
             new FieldSpec("Note", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Repeats", FieldDataType.Text, IsRequired: false),
+            // The cancelled occurrences — the EXDATE instants, comma-separated. Indexed beside Repeats and for
+            // the same reason: a listing that expands a series has to know which days were taken OUT of it,
+            // and reading one blob per row to learn that is the per-row cost ADR 0557 forbids. Without it an
+            // occurrence cancelled through "this occurrence" keeps appearing (#1133). Optional, like its
+            // sibling, so the heal adds it to tenants seeded before it existed and a document filed before it
+            // simply has none — which reads as "nothing cancelled", right for every series where nothing was.
+            new FieldSpec("Exceptions", FieldDataType.Text, IsRequired: false),
         ], cancellationToken);
 
         // The offered-time calendar (ADR 0780): a calendar kind, so it carries the colour field its two

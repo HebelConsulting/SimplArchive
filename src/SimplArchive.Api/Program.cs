@@ -271,6 +271,10 @@ builder.Services.AddScoped<SimplArchive.Application.Abstractions.IDocumentVersio
 // write path at one shape, written down in one place.
 builder.Services.AddScoped<SimplArchive.Api.Documents.NoteComposer>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentFinalizer>();
+
+// Files a typed item's bytes — a new entry, or a new version of one (#1133). Shared, because editing ONE
+// occurrence of a series does both in a single request.
+builder.Services.AddScoped<SimplArchive.Api.Documents.TypedItemWriter>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.ChatSystemEntryRecorder>();
 
 // Permanent purge of recycle-bin documents (blobs + rows + search index) — shared by DocumentsController

@@ -1,0 +1,28 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.EditScopeDialog"
+        Title="{loc:Tr ScopeTitle}"
+        Width="420" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+
+  <!-- Asked BEFORE the change is sent, not after: the three answers write different things, and a dialog that
+       appeared afterwards would be asking whether to undo something already done. The default is the narrowest
+       one — a person editing a single day in a series almost always means that day, and the wide answer
+       reaches occurrences already past, which is the damage this dialog exists to prevent. -->
+  <StackPanel Margin="20" Spacing="14">
+    <TextBlock Text="{loc:Tr ScopeQuestion}" TextWrapping="Wrap" FontWeight="SemiBold" />
+
+    <StackPanel Spacing="8">
+      <RadioButton x:Name="ThisOnly" GroupName="scope" IsChecked="True" Content="{loc:Tr ScopeThis}" />
+      <RadioButton x:Name="Following" GroupName="scope" Content="{loc:Tr ScopeFollowing}" />
+      <RadioButton x:Name="All" GroupName="scope" Content="{loc:Tr ScopeAll}" />
+    </StackPanel>
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+      <Button Content="{loc:Tr Save}" Click="OnOk" IsDefault="True" />
+    </StackPanel>
+  </StackPanel>
+</Window>

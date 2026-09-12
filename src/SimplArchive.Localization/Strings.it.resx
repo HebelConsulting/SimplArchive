@@ -4587,6 +4587,45 @@
   <data name="ApptRepeats" xml:space="preserve">
     <value>Ricorrenza</value>
   </data>
+  <data name="ScopeTitle" xml:space="preserve">
+    <value>Questa voce si ripete</value>
+  </data>
+  <data name="ScopeQuestion" xml:space="preserve">
+    <value>Quali ricorrenze deve modificare?</value>
+  </data>
+  <data name="ScopeThis" xml:space="preserve">
+    <value>Solo questa ricorrenza</value>
+  </data>
+  <data name="ScopeFollowing" xml:space="preserve">
+    <value>Questa e tutte le successive</value>
+  </data>
+  <data name="ScopeAll" xml:space="preserve">
+    <value>Tutte, comprese quelle passate</value>
+  </data>
+  <data name="RepeatNone" xml:space="preserve">
+    <value>Non si ripete</value>
+  </data>
+  <data name="RepeatDaily" xml:space="preserve">
+    <value>Ogni giorno</value>
+  </data>
+  <data name="RepeatWeekdays" xml:space="preserve">
+    <value>Ogni giorno feriale (lun–ven)</value>
+  </data>
+  <data name="RepeatWeekly" xml:space="preserve">
+    <value>Ogni settimana</value>
+  </data>
+  <data name="RepeatMonthly" xml:space="preserve">
+    <value>Ogni mese</value>
+  </data>
+  <data name="RepeatYearly" xml:space="preserve">
+    <value>Ogni anno</value>
+  </data>
+  <data name="RepeatUntil" xml:space="preserve">
+    <value>Fino a</value>
+  </data>
+  <data name="RepeatUntilHint" xml:space="preserve">
+    <value>Una prenotazione o un blocco di manutenzione deve avere una fine.</value>
+  </data>
   <data name="ApptRepeatsDaily" xml:space="preserve">
     <value>Ogni giorno</value>
   </data>

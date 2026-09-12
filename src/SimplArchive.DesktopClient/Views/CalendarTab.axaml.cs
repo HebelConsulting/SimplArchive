@@ -67,6 +67,20 @@ public partial class CalendarTab : UserControl
         var dialog = new AppointmentDialog(loaded.Value) { RawLoader = () => tab.LoadRawAsync(loaded, loaded.Value) };
         if (await dialog.ShowDialog<AppointmentEditViewModel?>(owner) is { } edited)
         {
+            // WHICH occurrences this changes (#1133) — asked only when the row IS one occurrence of a series,
+            // because otherwise there is nothing to choose. Asked BEFORE the save: the three answers write
+            // different things, so asking afterwards would be asking whether to undo something already done.
+            if (row.IsOccurrenceOfSeries)
+            {
+                if (await EditScopeDialog.AskAsync(owner, repeats: true) is not { } scope)
+                {
+                    return;   // cancelled at the scope question — nothing has been sent
+                }
+
+                edited.Scope = scope;
+                edited.RecurrenceId = row.RecurrenceId;
+            }
+
             await tab.SaveEntryAsync(loaded, edited);
 
             // After the save, and only when the collection actually changed: the move is a reparent of the

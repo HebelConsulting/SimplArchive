@@ -73,6 +73,7 @@
             @if (_monthView)
             {
                 <CalendarMonth Entries="Visible.ToList()" Selected="_selected"
+                               OnMonthChanged="@(async month => { _month = month; await ReloadAppointmentsAsync(); })"
                                OnSelected="@(async row => await SelectAsync(row))"
                                OnActivated="@(async row => { await SelectAsync(row); await EditAppointmentAsync(); })"
                                OnDayOverflowed="ShowDay" />
@@ -210,6 +211,9 @@
 
     private List<DavCollection> _collections = [];
     private readonly HashSet<Guid> _checked = [];
+    /// <summary>The month whose occurrences are loaded — told by the grid, which owns what it shows (#1133).</summary>
+    private DateOnly _month = DateOnly.FromDateTime(DateTime.Today).AddDays(1 - DateTime.Today.Day);
+
     private List<AppointmentRow> _appointments = [];
     private AppointmentRow? _selected;
 
@@ -315,6 +319,10 @@
         Guid ParentId,
         // Which kind of collection it is filed in, so a move offers only those that admit it (#1122).
         string CollectionKind,
+        // WHICH occurrence of a repeating entry this row is (#1133) — the instant the server gave, sent back
+        // verbatim when an edit names one. Never rebuilt from the displayed time: a floating entry is stamped
+        // with the SERVER's zone at index time, so the wall clock here is not the instant the series falls on.
+        string? RecurrenceId,
         Guid Id, string CollectionColor, string CollectionName, string Title,
         DateTimeOffset? Start, DateTimeOffset? End, string Location, string? SelfHref,
         DateOnly? Day = null, bool AllDay = false, DateOnly? EndDay = null, string? Repeats = null,
@@ -457,11 +465,18 @@
 
             try
             {
-                foreach (var entry in await DavCollections.ListEntriesAsync(entriesHref))
+                // The month on screen, so a repeating entry arrives once per day it falls on rather than once
+                // for the series (#1133). A margin either side, because the grid shows the days of the
+                // neighbouring months that complete its first and last weeks.
+                var from = new DateTimeOffset(_month.AddDays(-7), TimeOnly.MinValue, TimeSpan.Zero);
+                var to = new DateTimeOffset(_month.AddMonths(1).AddDays(7), TimeOnly.MinValue, TimeSpan.Zero);
+
+                foreach (var entry in await DavCollections.ListEntriesAsync(entriesHref, from, to))
                 {
                     rows.Add(new AppointmentRow(
                         collection.Id,
                         collection.CollectionKind,
+                        entry.RecurrenceId,
                         entry.Id, collection.Color ?? "#8a8a8a", collection.DisplayName, entry.Name,
                         entry.StartsAt, entry.EndsAt, entry.Location ?? string.Empty, entry.Href("self"),
                         entry.Day, entry.AllDay, entry.EndDay, entry.Repeats, entry.Href("appointment")));
@@ -560,6 +575,21 @@
         if ((await dialog.Result) is not { Canceled: false, Data: Dialogs.AppointmentDialog.Saved saved })
         {
             return;
+        }
+
+        // WHICH occurrences this changes (#1133) — asked only when the row IS one occurrence of a series,
+        // because otherwise there is nothing to choose. Asked BEFORE the save: the three answers write
+        // different things, so asking afterwards would be asking whether to undo something already done.
+        if (row.RecurrenceId is { Length: > 0 } recurrenceId)
+        {
+            var scopeDialog = await DialogService.ShowAsync<Dialogs.EditScopeDialog>(Strings.Get("ScopeTitle"));
+            if ((await scopeDialog.Result) is not { Canceled: false, Data: string scope })
+            {
+                return;   // cancelled at the scope question — nothing has been sent
+            }
+
+            saved.Form.Scope = scope;
+            saved.Form.RecurrenceId = recurrenceId;
         }
 
         // A dirty raw box wins and REPLACES the entry — see the contacts twin.

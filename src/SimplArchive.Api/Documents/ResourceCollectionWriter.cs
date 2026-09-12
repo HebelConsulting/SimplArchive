@@ -53,10 +53,9 @@ internal sealed class ResourceCollectionWriter
     internal async Task<PendingBookingAudit> UpsertBookingRowAsync(
         Document document, DocumentVersion version, Ical.Net.CalendarComponents.CalendarEvent occurrence, CancellationToken cancellationToken)
     {
-        if (occurrence.RecurrenceRule is not null)
-        {
-            throw new BookingRecurrenceUnsupportedException();
-        }
+        // A repeating claim is stored as its RULE rather than refused (#1133); whether it may repeat ENDLESSLY
+        // is the invariant's question, and for a claim the answer is no.
+        var (recurrence, exceptions) = RecurrenceOf(occurrence);
 
         if (CalendarInstants.Instant(occurrence.DtStart) is not { } startsAt)
         {
@@ -114,11 +113,15 @@ internal sealed class ResourceCollectionWriter
             && _dbContext.Entry(holding).State != EntityState.Added
             && (holding.StartsAtUtc != startsAt.ToUniversalTime() || holding.EndsAtUtc != endsAt.ToUniversalTime());
 
-        // The slot moves on EVERY claim: they are one event, and the invariant requires them to agree.
+        // The slot moves on EVERY claim: they are one event, and the invariant requires them to agree. The
+        // repeat rule travels with it for the same reason (#1133) — a training flight's three claims must
+        // recur together, or the aircraft is held on days the instructor is not.
         foreach (var claim in claims)
         {
             claim.StartsAtUtc = startsAt.ToUniversalTime();
             claim.EndsAtUtc = endsAt.ToUniversalTime();
+            claim.RecurrenceRule = recurrence;
+            claim.ExceptionDates = exceptions;
         }
 
         await ReconcileAttendeeClaimsAsync(document, version, occurrence, claims, holding, startsAt, endsAt, cancellationToken);
@@ -290,6 +293,34 @@ internal sealed class ResourceCollectionWriter
         }
     }
 
+    /// <summary>
+    /// The repeat rule and the cancelled occurrences a slot carries, as the row stores them (#1133).
+    /// </summary>
+    /// <remarks>
+    /// All three kinds repeat, and all three read it the same way — the recurrence is a property of the
+    /// stored <c>.ics</c>, not of what the slot MEANS. Whether an endless rule is allowed is the invariant's
+    /// question, not this one's: an offer may repeat forever, a claim and a block may not.
+    /// <para>
+    /// EXDATE instants are flattened to a comma-separated list, which is what the expander reads back. Any
+    /// CalDAV client writes them natively when a single occurrence is cancelled.
+    /// </para>
+    /// </remarks>
+    private static (string? Rule, string? Exceptions) RecurrenceOf(Ical.Net.CalendarComponents.CalendarEvent occurrence)
+    {
+        if (occurrence.RecurrenceRule is not { } rule)
+        {
+            return (null, null);
+        }
+
+        var cancelled = occurrence.ExceptionDates.GetAllDates()
+            .Select(date => CalendarInstants.Instant(date))
+            .Where(instant => instant is not null)
+            .Select(instant => instant!.Value.ToUniversalTime().ToString("O"))
+            .ToList();
+
+        return (rule.ToString(), cancelled.Count > 0 ? string.Join(',', cancelled) : null);
+    }
+
     /// <summary>Creates or moves the <see cref="ResourceAvailability"/> behind an Availability .ics (ADR 0780).</summary>
     /// <remarks>
     /// The simplest of the three, and deliberately so: a window claims nothing, conflicts with nothing, and
@@ -304,13 +335,9 @@ internal sealed class ResourceCollectionWriter
     internal async Task UpsertAvailabilityRowAsync(
         Document document, DocumentVersion version, Ical.Net.CalendarComponents.CalendarEvent occurrence, CancellationToken cancellationToken)
     {
-        if (occurrence.RecurrenceRule is not null)
-        {
-            // Refused like its siblings: the row models ONE window, and a rule the server does not expand
-            // would make the stored offer and the displayed one disagree. A weekly availability is a real
-            // want, and it needs expansion designed rather than assumed.
-            throw new BookingRecurrenceUnsupportedException();
-        }
+        // Daily opening hours, a weekly slot: the offer's own rule, stored and expanded on demand (#1133).
+        // An offer MAY repeat endlessly, unlike a claim — it takes nothing from anyone.
+        var (recurrence, exceptions) = RecurrenceOf(occurrence);
 
         if (CalendarInstants.Instant(occurrence.DtStart) is not { } startsAt)
         {
@@ -350,6 +377,8 @@ internal sealed class ResourceCollectionWriter
         }
 
         window.ResourceDocumentId = resourceId;
+        window.RecurrenceRule = recurrence;
+        window.ExceptionDates = exceptions;
         window.StartsAtUtc = startsAt.ToUniversalTime();
         window.EndsAtUtc = endsAt.ToUniversalTime();
     }
@@ -372,12 +401,9 @@ internal sealed class ResourceCollectionWriter
     internal async Task<PendingBookingAudit> UpsertBlockRowAsync(
         Document document, DocumentVersion version, Ical.Net.CalendarComponents.CalendarEvent occurrence, CancellationToken cancellationToken)
     {
-        if (occurrence.RecurrenceRule is not null)
-        {
-            // Same refusal as a booking, for the same reason: the row models ONE window, and a rule the
-            // server does not expand would make the stored block and the displayed one disagree.
-            throw new BookingRecurrenceUnsupportedException();
-        }
+        // A recurring grounding — a weekly inspection slot — stored as its rule (#1133). Bounded, like a
+        // claim: it takes the resource out of service for everyone else.
+        var (recurrence, exceptions) = RecurrenceOf(occurrence);
 
         if (CalendarInstants.Instant(occurrence.DtStart) is not { } startsAt)
         {
@@ -437,6 +463,8 @@ internal sealed class ResourceCollectionWriter
         // A move between two resources' Maintenance collections re-points the block, exactly as a booking's
         // holding claim follows its document. There is only ever one row, so no ambiguity arises.
         block.ResourceDocumentId = resourceId;
+        block.RecurrenceRule = recurrence;
+        block.ExceptionDates = exceptions;
         block.StartsAtUtc = startsAt.ToUniversalTime();
         block.EndsAtUtc = endsAt.ToUniversalTime();
         block.Status = willBeActive ? BlockStatus.Active : BlockStatus.Cleared;

@@ -1,4 +1,5 @@
 @using SimplArchive.Client.Services
+@using SimplArchive.Presentation
 
 @* The web structured appointment editor (#631) — the twin of the desktop dialog, and the same window for New
    and Edit. Everything the form does not show, VALARM above all, is preserved by the server's merge.
@@ -80,13 +81,38 @@
             <MudTextField @bind-Value="Form.Description" Label="@Strings.Get("ApptDescription")" Lines="3" Class="mt-2"
                           Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
 
-            @if (Form.Repeats)
+            @* Recurrence, editable for the repeats the shared list offers (#1133) — daily hours, WORKING DAYS,
+               a weekly slot. A rule richer than the list arrived over CalDAV and is STATED instead, because
+               offering the nearest button would rewrite it on the next save. The desktop draws the same
+               distinction (ADR 0511). *@
+            @if (Form.RepeatIsRicherThanOffered)
             {
                 <div class="mt-3">
                     <MudText Typo="Typo.subtitle2">@Strings.Get("ApptRepeats")</MudText>
                     <MudText Typo="Typo.body2">@Form.RecurrenceRule</MudText>
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("ApptRecurrenceReadOnly")</MudText>
                 </div>
+            }
+            else
+            {
+                <MudSelect T="string" Value="Form.RepeatKey" ValueChanged="@(key => Form.RepeatKey = key ?? RepeatChoices.None)"
+                           Label="@Strings.Get("ApptRepeats")" Variant="Variant.Outlined" Margin="Margin.Dense"
+                           Class="mt-2" Disabled="@(!Form.StructuredEnabled)">
+                    @foreach (var choice in RepeatChoices.All)
+                    {
+                        <MudSelectItem T="string" Value="@choice.Key">@RepeatLabel(choice.Key)</MudSelectItem>
+                    }
+                </MudSelect>
+
+                @* When it stops. An availability window may be left open — an offer takes nothing from anyone —
+                   while a booking or a block must end, because two endless claims cannot be compared. *@
+                @if (Form.RepeatsOnAChoice)
+                {
+                    <MudDatePicker @bind-Date="Form.RepeatUntil" Label="@Strings.Get("RepeatUntil")"
+                                   DateFormat="yyyy-MM-dd" Editable="true" Variant="Variant.Outlined"
+                                   Margin="Margin.Dense" Class="mt-2" Disabled="@(!Form.StructuredEnabled)" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("RepeatUntilHint")</MudText>
+                }
             }
 
             @if (Form.Attendees.Count > 0)
@@ -152,6 +178,21 @@
 </MudDialog>
 
 @code {
+    /// <summary>This client's wording for a shared repeat key (#1133).</summary>
+    /// <remarks>
+    /// The RULES are decided once in RepeatChoices so the two clients cannot offer different repeats; the
+    /// LABELS stay each client's, because they come from the localized resources.
+    /// </remarks>
+    private static string RepeatLabel(string key) => Strings.Get(key switch
+    {
+        RepeatChoices.Daily => "RepeatDaily",
+        RepeatChoices.Weekdays => "RepeatWeekdays",
+        RepeatChoices.Weekly => "RepeatWeekly",
+        RepeatChoices.Monthly => "RepeatMonthly",
+        RepeatChoices.Yearly => "RepeatYearly",
+        _ => "RepeatNone",
+    });
+
     /// <summary>
     /// The zone list, narrowed by what has been typed — six hundred entries is a list nobody scrolls.
     /// </summary>

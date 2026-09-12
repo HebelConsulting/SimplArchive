@@ -26,7 +26,7 @@ namespace SimplArchive.Domain.Booking;
 /// instructor.
 /// </para>
 /// </remarks>
-public class ResourceAvailability : ITenantScoped, IConcurrencyTracked
+public class ResourceAvailability : ITenantScoped, IConcurrencyTracked, IRecurringSlot
 {
     public Guid Id { get; set; }
 
@@ -55,6 +55,18 @@ public class ResourceAvailability : ITenantScoped, IConcurrencyTracked
     public Guid? OfferedByUserId { get; set; }
 
     public Guid? OfferedByServiceAccountId { get; set; }
+
+    /// <summary>The <c>RRULE</c> value when the window repeats — opening hours, a weekly slot. May be ENDLESS: an offer takes nothing from anyone.</summary>
+    /// <remarks>
+    /// Stored rather than materialised into one row per occurrence (#1133), which is what keeps this row 1:1
+    /// with its <c>.ics</c> document — the identity the booking primitive rests on (ADR 0744) and the shape of
+    /// its unique index. <see cref="StartsAtUtc"/>/<see cref="EndsAtUtc"/> stay the FIRST occurrence, so every
+    /// row written before recurrence existed reads as a single one.
+    /// </remarks>
+    public string? RecurrenceRule { get; set; }
+
+    /// <summary>The cancelled occurrences — <c>EXDATE</c> instants, ISO-8601, comma-separated.</summary>
+    public string? ExceptionDates { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
 

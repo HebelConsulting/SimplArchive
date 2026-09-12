@@ -66,4 +66,14 @@ public interface IAppointmentComposer
     /// <paramref name="uid"/> is kept so a later sync matches rather than duplicates.
     /// </summary>
     string Merge(string? existingBlob, Appointment appointment, string uid);
+
+    /// <summary>
+    /// The same entry with one occurrence of its series cancelled — an <c>EXDATE</c> (#1133).
+    /// </summary>
+    /// <remarks>
+    /// What iCalendar already says cancelling one occurrence is, so a series edited here reads correctly in
+    /// every CalDAV client rather than only in ours. Everything else in the entry is left exactly as stored:
+    /// this changes which days the series happens on, not what it says.
+    /// </remarks>
+    string CancelOccurrence(string existingBlob, DateTimeOffset occurrence);
 }

@@ -88,6 +88,26 @@ public sealed partial class AppointmentRowViewModel : ObservableObject
     public Guid CollectionId { get; init; }
 
     /// <summary>
+    /// WHICH occurrence of a repeating entry this row is — the instant the server gave (#1133).
+    /// </summary>
+    /// <remarks>
+    /// Sent back verbatim when an edit names one occurrence. Never rebuilt from the row's displayed time: a
+    /// floating entry is stamped with the SERVER's zone at index time, so the wall clock here is not the
+    /// instant the series actually falls on.
+    /// </remarks>
+    public string? RecurrenceId { get; init; }
+
+    /// <summary>
+    /// Whether this row is one occurrence OF a series — what the scope question is asked for.
+    /// </summary>
+    /// <remarks>
+    /// Asked of the occurrence identity rather than of <see cref="Repeats"/>: the rule says the entry repeats,
+    /// this says the server told us which occurrence we are looking at, and only the second lets an edit name
+    /// one.
+    /// </remarks>
+    public bool IsOccurrenceOfSeries => !string.IsNullOrWhiteSpace(RecurrenceId);
+
+    /// <summary>
     /// Which collection kind it is filed in — <c>calendar</c>, <c>schedule</c>, <c>maintenance</c>,
     /// <c>availability</c> — so a move offers only collections that admit this entry (#1122).
     /// </summary>
@@ -807,7 +827,13 @@ public sealed partial class CalendarTabViewModel : ObservableObject
             IReadOnlyList<DavEntry> entries;
             try
             {
-                entries = await _api.DavCollections.ListEntriesAsync(entriesHref);
+                // The month on screen, so a repeating entry arrives once per day it falls on rather than once
+                // for the series (#1133). A margin either side, because the grid shows the days of the
+                // neighbouring months that complete its first and last weeks.
+                entries = await _api.DavCollections.ListEntriesAsync(
+                    entriesHref,
+                    new DateTimeOffset(Month.AddDays(-7), TimeOnly.MinValue, TimeSpan.Zero),
+                    new DateTimeOffset(Month.AddMonths(1).AddDays(7), TimeOnly.MinValue, TimeSpan.Zero));
             }
             catch (Exception e)
             {
@@ -825,6 +851,7 @@ public sealed partial class CalendarTabViewModel : ObservableObject
                     CollectionName = collection.DisplayName,
                     CollectionId = collection.Collection.Id,
                     CollectionKind = collection.Collection.CollectionKind,
+                    RecurrenceId = entry.RecurrenceId,
                     Title = entry.Name,
                     Start = entry.StartsAt,
                     End = entry.EndsAt,

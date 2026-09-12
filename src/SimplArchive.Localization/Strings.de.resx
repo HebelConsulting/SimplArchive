@@ -4587,6 +4587,45 @@
   <data name="ApptRepeats" xml:space="preserve">
     <value>Wiederholung</value>
   </data>
+  <data name="ScopeTitle" xml:space="preserve">
+    <value>Dieser Eintrag wiederholt sich</value>
+  </data>
+  <data name="ScopeQuestion" xml:space="preserve">
+    <value>Welche Termine soll diese Änderung betreffen?</value>
+  </data>
+  <data name="ScopeThis" xml:space="preserve">
+    <value>Nur diesen Termin</value>
+  </data>
+  <data name="ScopeFollowing" xml:space="preserve">
+    <value>Diesen und alle späteren Termine</value>
+  </data>
+  <data name="ScopeAll" xml:space="preserve">
+    <value>Alle Termine, auch vergangene</value>
+  </data>
+  <data name="RepeatNone" xml:space="preserve">
+    <value>Wiederholt sich nicht</value>
+  </data>
+  <data name="RepeatDaily" xml:space="preserve">
+    <value>Täglich</value>
+  </data>
+  <data name="RepeatWeekdays" xml:space="preserve">
+    <value>Jeden Werktag (Mo–Fr)</value>
+  </data>
+  <data name="RepeatWeekly" xml:space="preserve">
+    <value>Wöchentlich</value>
+  </data>
+  <data name="RepeatMonthly" xml:space="preserve">
+    <value>Monatlich</value>
+  </data>
+  <data name="RepeatYearly" xml:space="preserve">
+    <value>Jährlich</value>
+  </data>
+  <data name="RepeatUntil" xml:space="preserve">
+    <value>Bis</value>
+  </data>
+  <data name="RepeatUntilHint" xml:space="preserve">
+    <value>Eine Buchung oder Wartungssperre muss ein Ende haben.</value>
+  </data>
   <data name="ApptRepeatsDaily" xml:space="preserve">
     <value>Täglich</value>
   </data>

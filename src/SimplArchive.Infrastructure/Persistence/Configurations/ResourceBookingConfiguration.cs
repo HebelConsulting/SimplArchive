@@ -14,6 +14,13 @@ public class ResourceBookingConfiguration : IEntityTypeConfiguration<ResourceBoo
     {
         builder.HasKey(b => b.Id);
 
+        // Recurrence (#1133): the RRULE text and the cancelled occurrences, both nullable — a slot that does
+        // not repeat carries neither, which is every row written before this existed. Capped rather than
+        // unbounded text: an RRULE is a short line by the format's own grammar, and a cancellation list that
+        // needs more than this is a series that should have been split.
+        builder.Property(b => b.RecurrenceRule).HasMaxLength(500);
+        builder.Property(b => b.ExceptionDates).HasMaxLength(4000);
+
         // The overlap invariant's scan: all Active bookings of one resource, ordered by start. The
         // no-overlap rule itself cannot be a unique index (ranges don't unique portably — a Postgres
         // exclusion constraint has no SQLite equivalent, ADR 0735), so it lives in SaveChanges.

@@ -2,9 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Linq;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using SimplArchive.Localization;
+
+using SimplArchive.Presentation;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -102,10 +105,10 @@ public sealed partial class AppointmentEditViewModel : StructuredEditFormViewMod
     public IReadOnlyList<string> ZoneChoices { get; } = [string.Empty, .. SimplArchive.Presentation.TimeZoneChoices.All()];
 
     /// <summary>
-    /// The RRULE as stored. READ-ONLY this round: editing recurrence properly means choosing between this
-    /// occurrence / this and following / all events, and those operations are not built yet — so a rule box
-    /// here would silently apply every change to the whole series, including occurrences already past. It is
-    /// still sent back verbatim, because the server's merge clears a rule it is handed as null.
+    /// The RRULE as stored, and what a save sends back. Editable through <see cref="RepeatKey"/> and
+    /// <see cref="RepeatUntil"/> for the repeats the shared list offers (#1133); a richer rule that arrived
+    /// over CalDAV is shown read-only rather than replaced by the nearest button, which on the next save
+    /// would turn "every second Tuesday" into "every Tuesday".
     /// </summary>
     public string? RecurrenceRule { get; set; }
 
@@ -113,6 +116,97 @@ public sealed partial class AppointmentEditViewModel : StructuredEditFormViewMod
     public string RecurrenceText => Describe(RecurrenceRule);
 
     public bool Repeats => !string.IsNullOrWhiteSpace(RecurrenceRule);
+
+    /// <summary>One repeat as the picker shows it: the shared key, this client's own wording.</summary>
+    /// <remarks>
+    /// The RULES are decided once in <see cref="RepeatChoices"/> so the two clients cannot offer different
+    /// repeats; the LABELS stay each client's, because they come from the localized resources.
+    /// </remarks>
+    public sealed record RepeatOption(string Key, string Label)
+    {
+        public override string ToString() => Label;
+    }
+
+    /// <summary>The repeats this editor offers, in the order the shared list gives them.</summary>
+    public IReadOnlyList<RepeatOption> RepeatOptions { get; } =
+    [
+        .. RepeatChoices.All.Select(choice => new RepeatOption(choice.Key, Strings.Get(choice.Key switch
+        {
+            RepeatChoices.Daily => "RepeatDaily",
+            RepeatChoices.Weekdays => "RepeatWeekdays",
+            RepeatChoices.Weekly => "RepeatWeekly",
+            RepeatChoices.Monthly => "RepeatMonthly",
+            RepeatChoices.Yearly => "RepeatYearly",
+            _ => "RepeatNone",
+        }))),
+    ];
+
+    /// <summary>Which occurrences a save changes, as the API names it — null for an entry that does not repeat.</summary>
+    /// <remarks>
+    /// Set from the scope dialog just before the save, together with <see cref="RecurrenceId"/>. Null sends no
+    /// scope at all, which is what every client did before the choice existed.
+    /// </remarks>
+    public string? Scope { get; set; }
+
+    /// <summary>WHICH occurrence <see cref="Scope"/> is about — the instant the listing gave for the row.</summary>
+    public string? RecurrenceId { get; set; }
+
+    /// <summary>The selected option, which is what the picker binds to.</summary>
+    public RepeatOption? SelectedRepeat
+    {
+        get => RepeatOptions.FirstOrDefault(option => option.Key == RepeatKey);
+        set => RepeatKey = value?.Key ?? RepeatChoices.None;
+    }
+
+    /// <summary>Which repeat is selected — the shared key.</summary>
+    /// <remarks>
+    /// Kept as the KEY rather than the rule, so the picker's selection survives an UNTIL being set or cleared:
+    /// the same repeat with a different end is still the same choice.
+    /// </remarks>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RepeatsOnAChoice))]
+    [NotifyPropertyChangedFor(nameof(SelectedRepeat))]
+    private string _repeatKey = RepeatChoices.None;
+
+    /// <summary>When the repeat stops, or null for a series with no end.</summary>
+    /// <remarks>
+    /// A booking or a maintenance block MUST have one — two endless claims cannot be compared for overlap, so
+    /// the server refuses an unbounded claim (#1133). An availability window may be left open: an offer takes
+    /// nothing from anyone.
+    /// </remarks>
+    [ObservableProperty] private DateTime? _repeatUntil;
+
+    /// <summary>True when the selected repeat is one this editor can express — what the UNTIL row is shown for.</summary>
+    public bool RepeatsOnAChoice => RepeatKey != RepeatChoices.None;
+
+    /// <summary>
+    /// True when the stored rule is richer than the offered list, so the editor states it instead of offering
+    /// to replace it.
+    /// </summary>
+    public bool RepeatIsRicherThanOffered => Repeats && RepeatChoices.KeyFor(RepeatChoices.WithoutUntil(RecurrenceRule)) is null;
+
+    /// <summary>Loads the two picker values from the stored rule.</summary>
+    public void ReadRepeatFromRule()
+    {
+        RepeatKey = RepeatChoices.KeyFor(RepeatChoices.WithoutUntil(RecurrenceRule)) ?? RepeatChoices.None;
+        RepeatUntil = RepeatChoices.UntilOf(RecurrenceRule) is { } until ? until.ToDateTime(TimeOnly.MinValue) : null;
+    }
+
+    /// <summary>Writes the two picker values back into the rule a save sends.</summary>
+    /// <remarks>
+    /// A rule richer than the list is left ALONE: the picker never claimed it, so it must not overwrite it.
+    /// </remarks>
+    public void WriteRepeatIntoRule()
+    {
+        if (RepeatIsRicherThanOffered)
+        {
+            return;
+        }
+
+        RecurrenceRule = RepeatChoices.WithUntil(
+            RepeatChoices.RuleFor(RepeatKey),
+            RepeatUntil is { } until ? DateOnly.FromDateTime(until) : null);
+    }
 
     /// <summary>Who is invited and how they replied. Shown, never edited (ADR 0631 decision 3).</summary>
     public ObservableCollection<AttendeeRowViewModel> Attendees { get; } = [];
@@ -139,6 +233,9 @@ public sealed partial class AppointmentEditViewModel : StructuredEditFormViewMod
             RecurrenceRule = Text(body, "recurrenceRule") is { Length: > 0 } rule ? rule : null,
             ReminderCount = body.TryGetProperty("reminderCount", out var count) && count.TryGetInt32(out var n) ? n : 0,
         };
+
+        // The picker's two values, read from the rule that arrived (#1133).
+        model.ReadRepeatFromRule();
 
         if (Parse(Text(body, "start")) is { } start)
         {
@@ -194,8 +291,18 @@ public sealed partial class AppointmentEditViewModel : StructuredEditFormViewMod
         StartTimeZoneId = EndTimeZoneId = SimplArchive.Presentation.TimeZoneChoices.Local();
     }
 
-    public object ToPayload() => new
+    public object ToPayload()
     {
+        // The picker writes into the rule before it is sent — never the reverse, so a rule richer than the
+        // offered list survives a save untouched (#1133).
+        WriteRepeatIntoRule();
+        return Payload();
+    }
+
+    private object Payload() => new
+    {
+        scope = Scope,
+        recurrenceId = RecurrenceId,
         summary = Null(Summary),
         start = Combine(StartDate, StartTime),
         end = Combine(EndDate, EndTime),

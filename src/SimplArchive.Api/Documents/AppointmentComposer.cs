@@ -37,6 +37,21 @@ public sealed class AppointmentComposer : IAppointmentComposer
             Nonempty(master.Url?.ToString()));
     }
 
+    public string CancelOccurrence(string existingBlob, DateTimeOffset occurrence)
+    {
+        var calendar = Load(existingBlob);
+        if (Master(calendar) is { } master)
+        {
+            // UTC, matching what the listing gave as the occurrence's identity — an EXDATE in another zone
+            // would name a different instant and cancel nothing.
+            master.ExceptionDates.Add(new CalDateTime(
+                DateOnly.FromDateTime(occurrence.UtcDateTime), TimeOnly.FromDateTime(occurrence.UtcDateTime), "UTC"));
+        }
+
+        return new CalendarSerializer().SerializeToString(calendar)
+               ?? throw new InvalidOperationException("The iCalendar serializer returned nothing.");
+    }
+
     public string Merge(string? existingBlob, Appointment appointment, string uid)
     {
         var calendar = existingBlob is null ? NewCalendar() : Load(existingBlob);

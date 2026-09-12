@@ -109,6 +109,16 @@
     /// <summary>Raised when a day's hidden entries are asked for — the tab switches to the filtered list.</summary>
     [Parameter] public EventCallback<DateOnly> OnDayOverflowed { get; set; }
 
+    /// <summary>
+    /// Raised when the month on show changes, so the tab can load THAT month's occurrences (#1133).
+    /// </summary>
+    /// <remarks>
+    /// The grid owns which month it shows; the tab owns the rows. Without this the tab would have to guess a
+    /// window — and a guess is silently empty the moment somebody navigates past it, which is the failure
+    /// mode this project keeps paying for.
+    /// </remarks>
+    [Parameter] public EventCallback<DateOnly> OnMonthChanged { get; set; }
+
     /// <summary>The month on show. Opens on today's, which is what every calendar does and what a reader expects.</summary>
     private DateOnly Month { get; set; } = DateOnly.FromDateTime(DateTime.Today).AddDays(1 - DateTime.Today.Day);
 
@@ -117,9 +127,15 @@
     private string MonthName => Month.ToDateTime(TimeOnly.MinValue)
         .ToString("MMMM yyyy", CultureInfo.CurrentCulture);
 
-    private void Shift(int months) => Month = Month.AddMonths(months);
+    private async Task Shift(int months) => await ShowAsync(Month.AddMonths(months));
 
-    private void GoToday() => Month = Today.AddDays(1 - Today.Day);
+    private async Task GoToday() => await ShowAsync(Today.AddDays(1 - Today.Day));
+
+    private async Task ShowAsync(DateOnly month)
+    {
+        Month = month;
+        await OnMonthChanged.InvokeAsync(month);
+    }
 
     /// <summary>The culture's own first day of the week — Monday here, Sunday there; never a constant.</summary>
     private static DayOfWeek FirstDay => CultureInfo.CurrentCulture.DateTimeFormat.FirstDayOfWeek;

@@ -181,6 +181,13 @@ public partial class SimplArchiveDbContext
                 throw BookingInvariantException.SlotWithoutExtent(booking.StartsAtUtc, booking.EndsAtUtc);
             }
 
+            // A claim that repeats must say when it stops (#1133) — see EndlessRecurrence for why an offer may
+            // and a claim may not.
+            if (!SlotOccurrences.IsBounded(booking))
+            {
+                throw BookingInvariantException.EndlessRecurrence(booking.RecurrenceRule!);
+            }
+
             // The resource's mask must declare bookability — the shared document -> version -> mask walk
             // (see IsBookableAsync in the Blocks partial; the block invariant asks the same question, and
             // two copies of it is how one of them ends up accepting a resource the other refuses).
@@ -314,8 +321,12 @@ public partial class SimplArchiveDbContext
                 && !trackedIds.Contains(b.Id))
             .ToListAsync(cancellationToken);
 
+        // Asked of the OCCURRENCES, not the row's own span (#1133): a repeating claim's row holds only its
+        // first occurrence, so comparing the row would miss every later one — the overlap that matters is
+        // between what the two actually claim, on the day in question. Half-open throughout, so touching
+        // spans still do not collide.
         return [.. stored.Concat(tracked)
-            .Where(b => b.StartsAtUtc < endsAt && startsAt < b.EndsAtUtc)
+            .Where(b => SlotOccurrences.Between(b, startsAt, endsAt).Count > 0)
             .OrderBy(b => b.StartsAtUtc)];
     }
 }

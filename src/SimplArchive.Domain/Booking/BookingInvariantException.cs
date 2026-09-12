@@ -58,6 +58,16 @@ public sealed class BookingInvariantException : InvalidOperationException
         new(BookingInvariantKind.ResourceBlocked, $"The requested slot {requestedStart:u}–{requestedEnd:u} falls in a maintenance "
             + $"block {blockStart:u}–{blockEnd:u}: the resource is out of service (ADR 0778).");
 
+    /// <summary>A claim or a block repeats endlessly — it must carry <c>UNTIL</c> or <c>COUNT</c> (#1133).</summary>
+    /// <remarks>
+    /// An OFFER may repeat forever, because it takes nothing from anyone. A claim and a block may not: two
+    /// endless claims cannot be compared for overlap in the general case, so allowing them would mean
+    /// detection that is either wrong or arbitrarily capped — and an endless claim on a shared resource is a
+    /// commitment nobody can outlive.
+    /// </remarks>
+    public static BookingInvariantException EndlessRecurrence(string rule) =>
+        new(BookingInvariantKind.EndlessRecurrence, $"The repeat rule '{rule}' never ends. A booking or a maintenance "
+            + "block must say when it stops — add UNTIL or COUNT. (An availability window may repeat endlessly.)");
     /// <summary>
     /// The slot is not covered by any window the resource has offered, and the resource HAS offered some.
     /// </summary>
@@ -113,6 +123,7 @@ public enum BookingInvariantKind
     SlotWithoutExtent,
     ClaimsDisagreeOnSlot,
     ResourceBlocked,
+    EndlessRecurrence,
     NotOffered,
     BlockWithoutExtent,
     WindowWithoutExtent,

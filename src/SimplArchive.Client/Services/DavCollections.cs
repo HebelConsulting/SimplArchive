@@ -108,8 +108,20 @@ public sealed class DavCollections
     /// name and nothing else — so When, Where, e-mail and phone were rendered from empty strings and the
     /// detail pane beside them was blank by construction (#660).
     /// </remarks>
-    public async Task<List<DavEntry>> ListEntriesAsync(string href, CancellationToken cancellationToken = default)
+    /// <remarks>
+    /// With <paramref name="from"/>/<paramref name="to"/> a repeating entry comes back once per OCCURRENCE in
+    /// that window (#1133), each carrying the instant that identifies it. A query on an ADVERTISED href is
+    /// following it, not composing one: the server owns the path, the client owns the filter (ADR 0557).
+    /// </remarks>
+    public async Task<List<DavEntry>> ListEntriesAsync(
+        string href, DateTimeOffset? from = null, DateTimeOffset? to = null, CancellationToken cancellationToken = default)
     {
+        if (from is { } start && to is { } end)
+        {
+            var separator = href.Contains('?') ? "&" : "?";
+            href += $"{separator}from={Uri.EscapeDataString(start.ToString("O"))}&to={Uri.EscapeDataString(end.ToString("O"))}";
+        }
+
         var response = await _http.GetFromJsonAsync<EntriesResponse>(href, cancellationToken);
         return response?.Appointments.Count > 0 ? response.Appointments : response?.Contacts ?? [];
     }
@@ -153,6 +165,15 @@ public sealed class DavEntry
 
     /// <summary>The stored <c>RRULE</c> as text, or null when the entry does not repeat.</summary>
     public string? Repeats { get; set; }
+
+    /// <summary>
+    /// WHICH occurrence this row is, when the listing was asked for a window (#1133).
+    /// </summary>
+    /// <remarks>
+    /// Null for an entry that does not repeat. Sent back verbatim when an edit names one occurrence — never
+    /// rebuilt from the displayed time, which for a floating entry is not the instant the series falls on.
+    /// </remarks>
+    public string? RecurrenceId { get; set; }
 
     /// <summary>Whether this entry repeats — all a client needs, since the rule is never expanded here.</summary>
     public bool Recurring => !string.IsNullOrEmpty(Repeats);

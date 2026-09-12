@@ -19,7 +19,7 @@ namespace SimplArchive.Domain.Booking;
 /// land later behind this same seam. A booking against a taken slot is simply refused for now.
 /// </para>
 /// </remarks>
-public class ResourceBooking : ITenantScoped, IConcurrencyTracked
+public class ResourceBooking : ITenantScoped, IConcurrencyTracked, IRecurringSlot
 {
     public Guid Id { get; set; }
 
@@ -48,6 +48,18 @@ public class ResourceBooking : ITenantScoped, IConcurrencyTracked
     public Guid? BookedByUserId { get; set; }
 
     public Guid? BookedByServiceAccountId { get; set; }
+
+    /// <summary>The <c>RRULE</c> value when the claim repeats. Must be BOUNDED (UNTIL or COUNT): two endless claims cannot be compared for overlap.</summary>
+    /// <remarks>
+    /// Stored rather than materialised into one row per occurrence (#1133), which is what keeps this row 1:1
+    /// with its <c>.ics</c> document — the identity the booking primitive rests on (ADR 0744) and the shape of
+    /// its unique index. <see cref="StartsAtUtc"/>/<see cref="EndsAtUtc"/> stay the FIRST occurrence, so every
+    /// row written before recurrence existed reads as a single one.
+    /// </remarks>
+    public string? RecurrenceRule { get; set; }
+
+    /// <summary>The cancelled occurrences — <c>EXDATE</c> instants, ISO-8601, comma-separated.</summary>
+    public string? ExceptionDates { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
 

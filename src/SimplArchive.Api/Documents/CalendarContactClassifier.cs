@@ -256,15 +256,18 @@ public sealed class CalendarContactClassifier
             values.Add(("Reason", Nonempty(occurrence.Description)));
             pendingAudit = await _resources.UpsertBlockRowAsync(document, version, occurrence, cancellationToken);
         }
-        else
-        {
-            // Indexed so a listing can SAY the entry repeats without opening the blob. The rule itself stays
-            // opaque — this is the stored text, not an interpretation of it, and nothing here expands a
-            // recurrence set. What it buys is honesty in the grid: an entry drawn at its first occurrence and
-            // nowhere else is under-reporting the month, and a marker is what stops that being silent.
-            // Bookings have no Repeats field at all — a recurring booking is refused above.
-            values.Add(("Repeats", Nonempty(RecurrenceRule(occurrence))));
-        }
+
+        // The recurrence, indexed for EVERY calendar-shaped kind (#1133) — an appointment, a booking, a block
+        // and an offered window all repeat now, and all four are listed through the same endpoint.
+        //
+        // Indexed so a listing can expand a series without opening the blob: reading one .ics per row to learn
+        // which days it falls on is exactly the per-row cost ADR 0557 forbids. The rule itself stays opaque —
+        // stored text, not an interpretation of it.
+        //
+        // Exceptions matter as much as the rule: without them an occurrence cancelled through "this
+        // occurrence" keeps being drawn, because the expansion has no way to know the day was taken out.
+        values.Add(("Repeats", Nonempty(RecurrenceRule(occurrence))));
+        values.Add(("Exceptions", Nonempty(ExceptionDates(occurrence))));
 
         try
         {
@@ -324,6 +327,18 @@ public sealed class CalendarContactClassifier
     /// </remarks>
     private static string? RecurrenceRule(Ical.Net.CalendarComponents.CalendarEvent occurrence) =>
         Nonempty(occurrence.RecurrenceRule?.ToString());
+
+    /// <summary>The cancelled occurrences as the index stores them — UTC instants, comma-separated (#1133).</summary>
+    private static string? ExceptionDates(Ical.Net.CalendarComponents.CalendarEvent occurrence)
+    {
+        var cancelled = occurrence.ExceptionDates.GetAllDates()
+            .Select(date => CalendarInstants.Instant(date))
+            .Where(instant => instant is not null)
+            .Select(instant => instant!.Value.ToUniversalTime().ToString("O"))
+            .ToList();
+
+        return cancelled.Count > 0 ? string.Join(',', cancelled) : null;
+    }
 
     // Assigns the mask version, REPLACE-writes the field values that parsed, and names the document after
     // its human title (summary / display name) when the upload carried a placeholder-ish name — same

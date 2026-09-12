@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Documents;
 using SimplArchive.Api.Hypermedia;
 using SimplArchive.Application.Abstractions;
+using SimplArchive.Presentation;
 using SimplArchive.Domain.Documents;
 using SimplArchive.Infrastructure.Persistence;
 
@@ -40,6 +41,7 @@ public class DocumentAppointmentController : ControllerBase
     private readonly DocumentAccessService _access;
     private readonly IObjectStorageClient _storage;
     private readonly IAppointmentComposer _composer;
+    private readonly TypedItemWriter _writer;
     private readonly DocumentFinalizer _finalizer;
     private readonly ICurrentUserAccessor _currentUser;
 
@@ -49,6 +51,7 @@ public class DocumentAppointmentController : ControllerBase
         IObjectStorageClient storage,
         IAppointmentComposer composer,
         DocumentFinalizer finalizer,
+        TypedItemWriter writer,
         ICurrentUserAccessor currentUser)
     {
         _dbContext = dbContext;
@@ -56,12 +59,30 @@ public class DocumentAppointmentController : ControllerBase
         _storage = storage;
         _composer = composer;
         _finalizer = finalizer;
+        _writer = writer;
         _currentUser = currentUser;
     }
 
     // Plain mutable classes, not records — XmlSerializer (ADRs 0189/0190).
     public class AppointmentResource : HypermediaResource
     {
+        /// <summary>
+        /// Which occurrences of a repeating entry a PUT changes — <c>all</c>, <c>this</c> or <c>following</c>
+        /// (#1133). Request-only, and ignored for an entry that does not repeat.
+        /// </summary>
+        /// <remarks>
+        /// Editing a series without this choice applies every change to the WHOLE series, including
+        /// occurrences already past — which is why the editors showed recurrence read-only until the choice
+        /// existed. <c>all</c> is the default, because that is what a PUT of a series has always meant.
+        /// </remarks>
+        public string? Scope { get; set; }
+
+        /// <summary>
+        /// WHICH occurrence <see cref="Scope"/> is about — the instant the listing gave as its
+        /// <c>recurrenceId</c>. Required for <c>this</c> and <c>following</c>, meaningless for <c>all</c>.
+        /// </summary>
+        public string? RecurrenceId { get; set; }
+
         public string? Summary { get; set; }
 
         [System.Xml.Serialization.XmlElement(IsNullable = true)]
@@ -198,6 +219,21 @@ public class DocumentAppointmentController : ControllerBase
         var uid = await _dbContext.FieldValueAsync(documentId, "Event UID", cancellationToken)
                   ?? documentId.ToString();
 
+        // "This occurrence" and "this and following" both AMEND the series and file a new entry beside it
+        // (#1133). Handled before the ordinary merge, because they write a different blob to a different
+        // document — and in one request, so a half-applied edit cannot leave an occurrence cancelled with
+        // nothing put in its place.
+        if (ScopedEdit.Parse(request.Scope) is { } scope && scope != ScopedEdit.Scope.All)
+        {
+            if (await SplitSeriesAsync(document, blob, request, scope, uid, cancellationToken) is { } refusal)
+            {
+                return refusal;
+            }
+
+            Response.Headers.ETag = $"\"{document.ConcurrencyToken}\"";
+            return NoContent();
+        }
+
         var merged = _composer.Merge(blob, FromResource(request), uid);
 
         var now = DateTimeOffset.UtcNow;
@@ -230,6 +266,88 @@ public class DocumentAppointmentController : ControllerBase
 
         Response.Headers.ETag = $"\"{document.ConcurrencyToken}\"";
         return NoContent();
+    }
+
+    /// <summary>
+    /// Cancels or ends the series at one occurrence and files the edited values as an entry of their own.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Returns null when it succeeded, or the refusal to send back. Both halves happen in ONE request, so a
+    /// half-applied edit cannot leave an occurrence cancelled with nothing put in its place.
+    /// </para>
+    /// <para>
+    /// The new entry is filed into the SAME collection, so it inherits the containment and the rights the
+    /// series already lives under — there is nothing to re-authorise, and the caller's right to edit the
+    /// series was settled above.
+    /// </para>
+    /// </remarks>
+    private async Task<IActionResult?> SplitSeriesAsync(
+        Document document,
+        string blob,
+        AppointmentResource request,
+        ScopedEdit.Scope scope,
+        string uid,
+        CancellationToken cancellationToken)
+    {
+        if (!DateTimeOffset.TryParse(request.RecurrenceId, out var occurrence))
+        {
+            throw new Errors.Exceptions.Booking.BookingSlotInvalidException(
+                "Changing one occurrence needs the recurrenceId the listing gave for it.");
+        }
+
+        var stored = _composer.Read(blob);
+        if (string.IsNullOrWhiteSpace(stored.RecurrenceRule))
+        {
+            // Not a series at all: the scope is meaningless, and rewriting the one entry is what the caller
+            // plainly meant. Falling through to the ordinary merge would be the same thing with an extra
+            // round trip, so say so instead of pretending the choice applied.
+            throw new Errors.Exceptions.Booking.BookingSlotInvalidException(
+                "This entry does not repeat, so there is no single occurrence to change.");
+        }
+
+        if (document.ParentId is not { } collectionId
+            || await _dbContext.Documents.FirstOrDefaultAsync(d => d.Id == collectionId, cancellationToken) is not { } collection)
+        {
+            return NotFound();
+        }
+
+        // The series, amended. ThisOccurrence cancels the one day; ThisAndFollowing ends the series just
+        // before it, so everything already held keeps the values it was held with.
+        var amended = scope == ScopedEdit.Scope.ThisOccurrence
+            ? _composer.CancelOccurrence(blob, occurrence)
+            : _composer.Merge(
+                blob,
+                stored with
+                {
+                    RecurrenceRule = RepeatChoices.WithUntil(
+                    RepeatChoices.WithoutUntil(stored.RecurrenceRule), DateOnly.FromDateTime(occurrence.UtcDateTime.AddDays(-1)))
+                },
+                uid);
+
+        await _writer.WriteVersionAsync(document, amended, ".ics", "text/calendar", _currentUser.UserId, cancellationToken);
+        await StructuredItemVersioning.MarkContentChangedAsync(_dbContext, document, cancellationToken);
+
+        // ...and the edited values as an entry of their own. A fresh UID, because it is a different entry:
+        // reusing the series' would fork it into a duplicate on the next DAV sync.
+        var replacement = FromResource(request) with
+        {
+            // ThisOccurrence is a single entry; ThisAndFollowing carries the series on from here.
+            RecurrenceRule = scope == ScopedEdit.Scope.ThisOccurrence ? null : stored.RecurrenceRule,
+        };
+
+        var created = _composer.Merge(null, replacement, Guid.NewGuid().ToString());
+        await _writer.CreateAsync(
+            collection,
+            request.Summary is { Length: > 0 } summary ? summary : document.Name,
+            created,
+            ".ics",
+            "text/calendar",
+            _currentUser.UserId,
+            null,
+            cancellationToken);
+
+        return null;
     }
 
     /// <summary>The document and its current version's bytes — or null if it is not an appointment.</summary>

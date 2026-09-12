@@ -14,6 +14,13 @@ public class ResourceBlockConfiguration : IEntityTypeConfiguration<ResourceBlock
     {
         builder.HasKey(b => b.Id);
 
+        // Recurrence (#1133): the RRULE text and the cancelled occurrences, both nullable — a slot that does
+        // not repeat carries neither, which is every row written before this existed. Capped rather than
+        // unbounded text: an RRULE is a short line by the format's own grammar, and a cancellation list that
+        // needs more than this is a series that should have been split.
+        builder.Property(b => b.RecurrenceRule).HasMaxLength(500);
+        builder.Property(b => b.ExceptionDates).HasMaxLength(4000);
+
         // The scan both rules need: all Active blocks of one resource, ordered by start. It answers the
         // refusal on create ("is this slot blocked?") and the derived suspension ("which bookings does this
         // block catch?") — the same shape as the booking index, because they are the same question asked of

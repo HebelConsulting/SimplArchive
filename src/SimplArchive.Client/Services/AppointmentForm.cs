@@ -65,6 +65,61 @@ public sealed class AppointmentForm
 
     public bool Repeats => !string.IsNullOrWhiteSpace(RecurrenceRule);
 
+    /// <summary>Which occurrences a save changes, as the API names it — null for an entry that does not repeat.</summary>
+    /// <remarks>
+    /// Set from the scope dialog just before the save, with <see cref="RecurrenceId"/>. Null sends no scope,
+    /// which is what every client did before the choice existed.
+    /// </remarks>
+    public string? Scope { get; set; }
+
+    /// <summary>WHICH occurrence <see cref="Scope"/> is about — the instant the listing gave for the row.</summary>
+    public string? RecurrenceId { get; set; }
+
+    /// <summary>Which repeat is selected — the shared key (#1133).</summary>
+    /// <remarks>
+    /// Kept as the KEY rather than the rule, so the picker's selection survives an UNTIL being set or cleared:
+    /// the same repeat with a different end is still the same choice. The desktop twin holds it the same way.
+    /// </remarks>
+    public string RepeatKey { get; set; } = SimplArchive.Presentation.RepeatChoices.None;
+
+    /// <summary>When the repeat stops, or null for a series with no end.</summary>
+    public DateTime? RepeatUntil { get; set; }
+
+    /// <summary>True when the selected repeat is one this editor can express.</summary>
+    public bool RepeatsOnAChoice => RepeatKey != SimplArchive.Presentation.RepeatChoices.None;
+
+    /// <summary>
+    /// True when the stored rule is richer than the offered list, so the editor STATES it instead of offering
+    /// to replace it — otherwise "every second Tuesday" becomes "every Tuesday" on the next save.
+    /// </summary>
+    public bool RepeatIsRicherThanOffered =>
+        Repeats && SimplArchive.Presentation.RepeatChoices.KeyFor(
+            SimplArchive.Presentation.RepeatChoices.WithoutUntil(RecurrenceRule)) is null;
+
+    /// <summary>Loads the two picker values from the stored rule.</summary>
+    public void ReadRepeatFromRule()
+    {
+        RepeatKey = SimplArchive.Presentation.RepeatChoices.KeyFor(
+            SimplArchive.Presentation.RepeatChoices.WithoutUntil(RecurrenceRule))
+            ?? SimplArchive.Presentation.RepeatChoices.None;
+        RepeatUntil = SimplArchive.Presentation.RepeatChoices.UntilOf(RecurrenceRule) is { } until
+            ? until.ToDateTime(TimeOnly.MinValue)
+            : null;
+    }
+
+    /// <summary>Writes the two picker values back into the rule a save sends; a richer rule is left alone.</summary>
+    public void WriteRepeatIntoRule()
+    {
+        if (RepeatIsRicherThanOffered)
+        {
+            return;
+        }
+
+        RecurrenceRule = SimplArchive.Presentation.RepeatChoices.WithUntil(
+            SimplArchive.Presentation.RepeatChoices.RuleFor(RepeatKey),
+            RepeatUntil is { } until ? DateOnly.FromDateTime(until) : null);
+    }
+
     public int ReminderCount { get; set; }
 
     public List<AttendeeRow> Attendees { get; } = [];
@@ -133,6 +188,9 @@ public sealed class AppointmentForm
                 ContactCardForm.Text(attendee, "status")));
         }
 
+        // The picker's two values, read from the rule that arrived (#1133).
+        form.ReadRepeatFromRule();
+
         return form;
     }
 
@@ -163,8 +221,18 @@ public sealed class AppointmentForm
     }
 
     /// <summary>The body a save or a create sends.</summary>
-    public object ToPayload() => new
+    public object ToPayload()
     {
+        // The picker writes into the rule before it is sent — never the reverse, so a rule richer than the
+        // offered list survives a save untouched (#1133).
+        WriteRepeatIntoRule();
+        return Payload();
+    }
+
+    private object Payload() => new
+    {
+        scope = Scope,
+        recurrenceId = RecurrenceId,
         summary = Null(Summary),
         start = Combine(StartDate, StartTime),
         end = Combine(EndDate, EndTime),
