@@ -42,6 +42,12 @@ internal static class CalendarInstants
         }
         catch (Exception)
         {
+            // LOUD, because this fallback silently moves every zoned entry to a different instant (#1138).
+            // Alpine ships no IANA database unless tzdata is installed, so EVERY TZID missed and every
+            // appointment was stored in the container's own zone: 10:00 Europe/Zurich became 10:00Z instead
+            // of 08:00Z. Nothing failed, the times were merely wrong — which is precisely the shape ADR 0626
+            // says must announce itself, and the reason this took a user's report to find.
+            UnresolvableZones.Warn(timeZoneId);
             return TimeZoneInfo.Local.GetUtcOffset(local);
         }
     }

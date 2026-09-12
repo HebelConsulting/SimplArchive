@@ -83,7 +83,13 @@ WORKDIR /app
 #
 # The build and clients stages are deliberately left alone: they are SDK images that never ship, and only this
 # final stage is published and scanned.
-RUN apk upgrade --no-cache && apk add --no-cache icu-libs curl krb5-libs
+# tzdata is NOT optional for this application (#1138). Alpine ships no IANA database, so
+# TimeZoneInfo.FindSystemTimeZoneById("Europe/Zurich") throws — and CalendarInstants catches that and falls
+# back to the container's own zone, which is UTC. The result was silent and severe: an appointment published
+# as 10:00-22:00 Europe/Zurich was STORED as 10:00Z-22:00Z instead of 08:00Z-20:00Z, so every zoned entry sat
+# two hours from where it belonged, and conflict checks, availability and CalDAV interop all judged the wrong
+# instants. Nothing failed; the times were simply wrong.
+RUN apk upgrade --no-cache && apk add --no-cache icu-libs curl krb5-libs tzdata
 
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false \
     ASPNETCORE_HTTP_PORTS=8080

@@ -427,6 +427,13 @@ if (modules.Count > 0)
 
 var app = builder.Build();
 
+// A zone this host cannot resolve moves every entry naming it to a different instant, so it must SAY so
+// (#1138). Checked once at startup as well: an image without tzdata resolves nothing at all, and finding
+// that out from the first mis-stored appointment is how it stayed hidden.
+SimplArchive.Api.Documents.UnresolvableZones.Logger =
+    app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("SimplArchive.Api.TimeZones");
+SimplArchive.Api.Documents.UnresolvableZones.WarnIfDatabaseMissing();
+
 // Applies migrations through the dedicated owner connection when one is provisioned (ADR "Dedicated migration
 // owner role") — the running app's OpenBao dynamic role has DML grants but can't run DDL (it isn't the table
 // owner), so migrations use a separate owner identity. Falls back to the Default connection when no owner is
