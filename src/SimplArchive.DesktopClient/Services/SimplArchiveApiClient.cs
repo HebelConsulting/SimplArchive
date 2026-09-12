@@ -265,12 +265,23 @@ public sealed class SimplArchiveApiClient
         }
 
         string? errorCode = null;
+        var offered = new List<(DateTimeOffset StartsAt, DateTimeOffset EndsAt)>();
         try
         {
             var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
             if (json.TryGetProperty("errorCode", out var c) && c.GetString() is { Length: > 0 } code)
             {
                 errorCode = code;
+            }
+
+            // The FACTS a refusal computed, never its prose (#1135 / issue #424): a booking outside the
+            // offered hours sends the hours as data, and the sentence is composed HERE in the reader's own
+            // language rather than quoted from an English exception message.
+            if (json.TryGetProperty("offered", out var windows) && windows.ValueKind == JsonValueKind.Array)
+            {
+                offered.AddRange(windows.EnumerateArray()
+                    .Where(w => w.TryGetProperty("startsAt", out _) && w.TryGetProperty("endsAt", out _))
+                    .Select(w => (w.GetProperty("startsAt").GetDateTimeOffset(), w.GetProperty("endsAt").GetDateTimeOffset())));
             }
         }
         catch
@@ -280,7 +291,12 @@ public sealed class SimplArchiveApiClient
             throw new ApiActionException(fallback);
         }
 
-        throw new ApiActionException(errorCode is null ? fallback : ApiErrorText.For(errorCode));
+        var sentence = errorCode is null ? fallback : ApiErrorText.For(errorCode);
+        throw new ApiActionException(offered.Count > 0
+            ? sentence + " " + string.Format(
+                Strings.Get("ApiErrSlotNotOfferedHours"),
+                SimplArchive.Presentation.OfferedHours.Describe(offered))
+            : sentence);
     }
 
     // The always-shown system fields (ADR "System fields + OCR-language mask field"): Created/CreatedBy/

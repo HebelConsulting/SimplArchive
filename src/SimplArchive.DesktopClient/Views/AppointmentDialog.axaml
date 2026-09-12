@@ -114,6 +114,26 @@
                     HorizontalAlignment="Stretch" AutomationProperties.Name="{loc:Tr ApptRepeats}" />
         </Grid>
 
+        <!-- WHICH days a weekly repeat falls on (#1136) — "Mon, Wed, Fri", which neither "every week" nor the
+             weekdays preset could say. Drawn in the culture's own order; the rule's order is fixed. Ticking
+             none leaves a plain weekly repeat, which already means the entry's own weekday. -->
+        <Grid ColumnDefinitions="110,*" IsVisible="{Binding ChoosesWeekdays}">
+          <TextBlock Grid.Column="0" Text="{loc:Tr RepeatOnDays}" VerticalAlignment="Center" />
+          <ItemsControl Grid.Column="1" ItemsSource="{Binding Weekdays}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" Spacing="6" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:AppointmentEditViewModel+WeekdayChoice">
+                <CheckBox IsChecked="{Binding IsChecked}" Content="{Binding Label}"
+                          AutomationProperties.Name="{Binding Label}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </Grid>
+
         <!-- When it stops. An availability window may be left open — an offer takes nothing from anyone — while
              a booking or a block must end, because two endless claims cannot be compared for overlap. -->
         <Grid ColumnDefinitions="110,*" IsVisible="{Binding RepeatsOnAChoice}">

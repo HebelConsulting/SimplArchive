@@ -452,11 +452,12 @@ public sealed partial class CalendarTabViewModel : ObservableObject
     ];
 
     /// <summary>Creates an appointment from a filled-in form, then shows it selected in the list.</summary>
-    public async Task CreateAppointmentAsync(CreateTarget target, AppointmentEditViewModel form)
+    /// <returns>True when it was created; false when the server refused and the form should reopen (#1135).</returns>
+    public async Task<bool> CreateAppointmentAsync(CreateTarget target, AppointmentEditViewModel form)
     {
         if (_api is null)
         {
-            return;
+            return false;
         }
 
         try
@@ -468,10 +469,13 @@ public sealed partial class CalendarTabViewModel : ObservableObject
             // name, and a second "Quarterly review" would otherwise select the first one or nothing at all.
             Selected = Appointments.FirstOrDefault(a => a.Id == createdId) ?? Selected;
             Report(string.Format(Strings.Get("StApptCreated"), form.Summary, target.DisplayName));
+            return true;
         }
         catch (Exception e)
         {
+            // The message already carries the server's own sentence, including the values it computed.
             Report(string.Format(Strings.Get("StErrCreateAppt"), e.Message));
+            return false;
         }
     }
 

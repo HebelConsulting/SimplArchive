@@ -261,12 +261,16 @@
             return;
         }
 
-        var createdId = await StructuredEditors.CreateAsync(target.CreateHref, saved.Form.ToPayload());
-        if (createdId is null)
+        // The server's own sentence when it refuses (#1135) — a create told only "rejected by the server"
+        // leaves the user nothing to act on.
+        var outcome = await StructuredEditors.CreateAsync(target.CreateHref, saved.Form.ToPayload());
+        if (!outcome.Created)
         {
-            Snackbar.Add(string.Format(Strings.Get("StErrCreateContact"), string.Empty), Severity.Error);
+            Snackbar.Add(outcome.Problem ?? string.Format(Strings.Get("StErrCreateContact"), string.Empty), Severity.Error);
             return;
         }
+
+        var createdId = outcome.Id;
 
         await ReloadContactsAsync();
 

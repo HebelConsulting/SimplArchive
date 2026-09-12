@@ -104,6 +104,23 @@
                     }
                 </MudSelect>
 
+                @* WHICH days a weekly repeat falls on (#1136) — "Mon, Wed, Fri", which neither "every week" nor
+                   the weekdays preset could say. Drawn in the culture's own order; the rule's order is fixed.
+                   Ticking none leaves a plain weekly repeat, which already means the entry's own weekday. *@
+                @if (Form.ChoosesWeekdays)
+                {
+                    <div class="d-flex align-center flex-wrap mt-2" style="gap:4px;">
+                        <span class="mud-text-secondary mr-2">@Strings.Get("RepeatOnDays")</span>
+                        @foreach (var day in AppointmentForm.WeekdaysInCultureOrder())
+                        {
+                            <MudCheckBox T="bool" Dense="true"
+                                         Value="@Form.RepeatDays.Contains(day)"
+                                         ValueChanged="@(on => ToggleDay(day, on))"
+                                         Label="@DayLabel(day)" />
+                        }
+                    </div>
+                }
+
                 @* When it stops. An availability window may be left open — an offer takes nothing from anyone —
                    while a booking or a block must end, because two endless claims cannot be compared. *@
                 @if (Form.RepeatsOnAChoice)
@@ -178,6 +195,22 @@
 </MudDialog>
 
 @code {
+    /// <summary>The culture's own short day name — "Mo" here, "Mon" there; never a hardcoded letter.</summary>
+    private static string DayLabel(DayOfWeek day) =>
+        System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.AbbreviatedDayNames[(int)day];
+
+    private void ToggleDay(DayOfWeek day, bool on)
+    {
+        if (on)
+        {
+            Form.RepeatDays.Add(day);
+        }
+        else
+        {
+            Form.RepeatDays.Remove(day);
+        }
+    }
+
     /// <summary>This client's wording for a shared repeat key (#1133).</summary>
     /// <remarks>
     /// The RULES are decided once in RepeatChoices so the two clients cannot offer different repeats; the

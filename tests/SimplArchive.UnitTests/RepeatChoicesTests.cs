@@ -94,6 +94,52 @@ public class RepeatChoicesTests
             new DateOnly(2026, 9, 30),
             RepeatChoices.UntilOf(RepeatChoices.WithUntil("FREQ=DAILY", new DateOnly(2026, 9, 30))));
 
+    // THE ONE ASKED FOR NEXT: an arbitrary combination — "Mon, Wed, Fri" — which neither "every week" nor the
+    // weekdays preset could say.
+    [Fact]
+    public void A_weekly_rule_repeats_on_exactly_the_days_chosen()
+    {
+        var monday = new DateTimeOffset(2026, 9, 14, 9, 0, 0, TimeSpan.Zero);
+        var rule = RepeatChoices.WithDays(
+            RepeatChoices.RuleFor(RepeatChoices.Weekly),
+            [DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday]);
+
+        var days = SlotOccurrences.Between(new Repeating(monday, monday.AddHours(1), rule), monday, monday.AddDays(7))
+            .Select(o => o.StartsAtUtc.DayOfWeek)
+            .ToList();
+
+        Assert.Equal([DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday], days);
+    }
+
+    // Order is the RULE's, not the culture's: the same repeat must read as the same rule in every session,
+    // whatever a client draws first.
+    [Fact]
+    public void The_days_are_written_in_a_fixed_order() =>
+        Assert.Equal(
+            "FREQ=WEEKLY;BYDAY=TU,SA",
+            RepeatChoices.WithDays("FREQ=WEEKLY", [DayOfWeek.Saturday, DayOfWeek.Tuesday]));
+
+    // No days means "the entry's own weekday", which a bare FREQ=WEEKLY already says — so an empty selection
+    // REMOVES the BYDAY rather than writing an empty one, which no client would accept.
+    [Fact]
+    public void Choosing_no_days_leaves_a_plain_weekly_rule() =>
+        Assert.Equal("FREQ=WEEKLY", RepeatChoices.WithDays("FREQ=WEEKLY;BYDAY=MO,WE", []));
+
+    [Fact]
+    public void The_days_survive_a_round_trip() =>
+        Assert.Equal(
+            [DayOfWeek.Monday, DayOfWeek.Friday],
+            RepeatChoices.DaysOf(RepeatChoices.WithDays("FREQ=WEEKLY", [DayOfWeek.Friday, DayOfWeek.Monday])));
+
+    // The weekdays PRESET is the same thing spelled out, so the picker shows it as that preset rather than as
+    // a custom selection — which is what keeps the short list meaningful.
+    [Fact]
+    public void The_weekday_preset_is_the_same_rule_as_ticking_monday_to_friday() =>
+        Assert.Equal(
+            RepeatChoices.RuleFor(RepeatChoices.Weekdays),
+            RepeatChoices.WithDays("FREQ=WEEKLY",
+                [DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday]));
+
     private sealed record Repeating(
         DateTimeOffset StartsAtUtc,
         DateTimeOffset EndsAtUtc,

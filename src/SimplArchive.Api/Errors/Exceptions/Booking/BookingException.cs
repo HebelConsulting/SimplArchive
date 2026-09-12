@@ -5,8 +5,9 @@ namespace SimplArchive.Api.Errors.Exceptions.Booking;
 // `catch (BookingException)`. See the exception-type principle in CLAUDE.md.
 public abstract class BookingException : ApiException
 {
-    protected BookingException(string errorCode, int statusCode, string message)
-        : base(errorCode, statusCode, message)
+    protected BookingException(
+        string errorCode, int statusCode, string message, IReadOnlyDictionary<string, object?>? extensions = null)
+        : base(errorCode, statusCode, message, extensions)
     {
     }
 }

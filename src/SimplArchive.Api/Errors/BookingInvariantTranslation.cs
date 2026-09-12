@@ -40,7 +40,8 @@ internal static class BookingInvariantTranslation
         BookingInvariantKind.EndlessRecurrence => new BookingSlotInvalidException(error.Message),
         // ...and its own code again, for the same reason: "not on offer then" is a different sentence from
         // "out of service" and from "not bookable at all", and they have three different remedies (#1124).
-        BookingInvariantKind.NotOffered => new SlotNotOfferedException(error.Message),
+        // The offered hours ride along as DATA, so a client composes its own localized sentence (#1135).
+        BookingInvariantKind.NotOffered => new SlotNotOfferedException(error.Message, error.Offered),
         BookingInvariantKind.ClaimsDisagreeOnSlot => new BookingSlotInvalidException(error.Message),
         _ => new ResourceNotBookableException(error.Message),
     };

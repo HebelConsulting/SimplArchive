@@ -90,6 +90,87 @@ public static class RepeatChoices
     public static string? RuleFor(string? key) =>
         All.FirstOrDefault(choice => choice.Key == key).Rule;
 
+    /// <summary>The weekday tokens an RRULE uses, Monday first — the order a European week is drawn in.</summary>
+    /// <remarks>
+    /// The ORDER is this list's, not the culture's: a rule is a wire value, and reordering BYDAY per locale
+    /// would make the same repeat read as a different rule in a different session. What a client draws first
+    /// is its own business (<see cref="System.Globalization.DateTimeFormatInfo.FirstDayOfWeek"/>).
+    /// </remarks>
+    public static IReadOnlyList<string> WeekdayTokens { get; } = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
+
+    /// <summary>The token for a <see cref="DayOfWeek"/>, as an RRULE spells it.</summary>
+    public static string TokenFor(DayOfWeek day) => day switch
+    {
+        DayOfWeek.Monday => "MO",
+        DayOfWeek.Tuesday => "TU",
+        DayOfWeek.Wednesday => "WE",
+        DayOfWeek.Thursday => "TH",
+        DayOfWeek.Friday => "FR",
+        DayOfWeek.Saturday => "SA",
+        _ => "SU",
+    };
+
+    /// <summary>The <see cref="DayOfWeek"/> a token names.</summary>
+    public static DayOfWeek DayFor(string token) => token.ToUpperInvariant() switch
+    {
+        "MO" => DayOfWeek.Monday,
+        "TU" => DayOfWeek.Tuesday,
+        "WE" => DayOfWeek.Wednesday,
+        "TH" => DayOfWeek.Thursday,
+        "FR" => DayOfWeek.Friday,
+        "SA" => DayOfWeek.Saturday,
+        _ => DayOfWeek.Sunday,
+    };
+
+    /// <summary>
+    /// <paramref name="rule"/> repeating on exactly <paramref name="days"/>, or unchanged when none are given.
+    /// </summary>
+    /// <remarks>
+    /// No days means "the entry's own weekday", which is what a bare <c>FREQ=WEEKLY</c> already says — so an
+    /// empty selection REMOVES the BYDAY rather than writing an empty one, which no client would accept.
+    /// Only meaningful for a weekly rule: a daily or monthly repeat has no weekday to choose.
+    /// </remarks>
+    public static string? WithDays(string? rule, IEnumerable<DayOfWeek> days)
+    {
+        if (string.IsNullOrWhiteSpace(rule))
+        {
+            return rule;
+        }
+
+        var tokens = days
+            .Select(TokenFor)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(token => WeekdayTokens.ToList().IndexOf(token))
+            .ToList();
+
+        var withoutDays = string.Join(';', rule
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(part => !part.StartsWith("BYDAY=", StringComparison.OrdinalIgnoreCase)));
+
+        return tokens.Count == 0 ? withoutDays : $"{withoutDays};BYDAY={string.Join(',', tokens)}";
+    }
+
+    /// <summary>The weekdays a rule names, or empty when it names none.</summary>
+    public static IReadOnlyList<DayOfWeek> DaysOf(string? rule)
+    {
+        if (string.IsNullOrWhiteSpace(rule))
+        {
+            return [];
+        }
+
+        foreach (var part in rule.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (part.StartsWith("BYDAY=", StringComparison.OrdinalIgnoreCase))
+            {
+                return [.. part["BYDAY=".Length..]
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(DayFor)];
+            }
+        }
+
+        return [];
+    }
+
     /// <summary>
     /// <paramref name="rule"/> with an <c>UNTIL</c> for <paramref name="until"/>, or unchanged when there is none.
     /// </summary>

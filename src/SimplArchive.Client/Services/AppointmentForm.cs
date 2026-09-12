@@ -88,6 +88,19 @@ public sealed class AppointmentForm
     /// <summary>True when the selected repeat is one this editor can express.</summary>
     public bool RepeatsOnAChoice => RepeatKey != SimplArchive.Presentation.RepeatChoices.None;
 
+    /// <summary>Shown only for a WEEKLY repeat: a daily or monthly one has no weekday to choose (#1136).</summary>
+    public bool ChoosesWeekdays => RepeatKey == SimplArchive.Presentation.RepeatChoices.Weekly;
+
+    /// <summary>The weekdays a weekly repeat falls on — empty means the entry's own weekday.</summary>
+    public HashSet<DayOfWeek> RepeatDays { get; } = [];
+
+    /// <summary>The seven days in the CULTURE's own order, which is a display question, not the rule's.</summary>
+    public static IReadOnlyList<DayOfWeek> WeekdaysInCultureOrder()
+    {
+        var first = (int)System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.FirstDayOfWeek;
+        return [.. Enumerable.Range(0, 7).Select(offset => (DayOfWeek)((first + offset) % 7))];
+    }
+
     /// <summary>
     /// True when the stored rule is richer than the offered list, so the editor STATES it instead of offering
     /// to replace it — otherwise "every second Tuesday" becomes "every Tuesday" on the next save.
@@ -105,6 +118,12 @@ public sealed class AppointmentForm
         RepeatUntil = SimplArchive.Presentation.RepeatChoices.UntilOf(RecurrenceRule) is { } until
             ? until.ToDateTime(TimeOnly.MinValue)
             : null;
+
+        RepeatDays.Clear();
+        foreach (var day in SimplArchive.Presentation.RepeatChoices.DaysOf(RecurrenceRule))
+        {
+            RepeatDays.Add(day);
+        }
     }
 
     /// <summary>Writes the two picker values back into the rule a save sends; a richer rule is left alone.</summary>
@@ -115,8 +134,16 @@ public sealed class AppointmentForm
             return;
         }
 
+        // The days are part of the RULE, not a separate field: ticking none leaves a plain weekly repeat,
+        // which already means "the entry's own weekday" (#1136).
+        var rule = SimplArchive.Presentation.RepeatChoices.RuleFor(RepeatKey);
+        if (RepeatKey == SimplArchive.Presentation.RepeatChoices.Weekly)
+        {
+            rule = SimplArchive.Presentation.RepeatChoices.WithDays(rule, RepeatDays);
+        }
+
         RecurrenceRule = SimplArchive.Presentation.RepeatChoices.WithUntil(
-            SimplArchive.Presentation.RepeatChoices.RuleFor(RepeatKey),
+            rule,
             RepeatUntil is { } until ? DateOnly.FromDateTime(until) : null);
     }
 

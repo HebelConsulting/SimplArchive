@@ -236,7 +236,17 @@ public partial class SimplArchiveDbContext
                     booking.TenantId, booking.ResourceDocumentId, booking.StartsAtUtc, booking.EndsAtUtc, cancellationToken))
                     .Count == 0)
             {
-                throw BookingInvariantException.NotOffered(booking.StartsAtUtc, booking.EndsAtUtc);
+                // What the resource DOES offer around the requested slot, so the refusal can say "only
+                // available 08:00–22:00" rather than merely "not then" (#1135). Structured, because the
+                // message is English by construction and a client must never show that (issue #424).
+                //
+                // The whole DAY either side, not just the slot: a booking refused at 19:00–23:30 is answered
+                // by naming the day's hours, and a window that ended before the slot began is exactly the
+                // fact the user needs.
+                var day = await OfferedAroundAsync(
+                    booking.TenantId, booking.ResourceDocumentId, booking.StartsAtUtc, booking.EndsAtUtc, cancellationToken);
+
+                throw BookingInvariantException.NotOffered(booking.StartsAtUtc, booking.EndsAtUtc, day);
             }
 
             // Overlap against Active rows of the same resource ([start, end) semantics: touching slots are
@@ -299,6 +309,28 @@ public partial class SimplArchiveDbContext
     /// and not only against what is stored. The range test runs IN MEMORY because the SQLite provider cannot
     /// translate <see cref="DateTimeOffset"/> predicates, and one resource's active claims are few.
     /// </remarks>
+    /// <summary>The offered occurrences touching the DAY the requested slot starts on (#1135).</summary>
+    /// <remarks>
+    /// The day rather than the slot, because a refusal is answered by naming the hours the resource IS on
+    /// offer — and a window that ended before the slot began is precisely what the caller needs to see.
+    /// </remarks>
+    private async Task<List<SlotOccurrence>> OfferedAroundAsync(
+        Guid tenantId, Guid resourceDocumentId, DateTimeOffset startsAt, DateTimeOffset endsAt, CancellationToken cancellationToken)
+    {
+        var dayStart = new DateTimeOffset(startsAt.UtcDateTime.Date, TimeSpan.Zero);
+        var dayEnd = dayStart.AddDays(endsAt.UtcDateTime.Date > startsAt.UtcDateTime.Date ? 2 : 1);
+
+        var stored = await ResourceAvailability.IgnoreQueryFilters()
+            .Where(a => a.TenantId == tenantId
+                && a.ResourceDocumentId == resourceDocumentId
+                && a.Status == AvailabilityStatus.Offered)
+            .ToListAsync(cancellationToken);
+
+        return [.. stored
+            .SelectMany(window => SlotOccurrences.Between(window, dayStart, dayEnd))
+            .OrderBy(occurrence => occurrence.StartsAtUtc)];
+    }
+
     internal async Task<List<ResourceBooking>> OverlappingClaimsAsync(
         Guid tenantId, Guid resourceDocumentId, DateTimeOffset startsAt, DateTimeOffset endsAt,
         Guid? excludingClaimId, CancellationToken cancellationToken)

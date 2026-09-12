@@ -165,6 +165,7 @@ public sealed partial class AppointmentEditViewModel : StructuredEditFormViewMod
     /// </remarks>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(RepeatsOnAChoice))]
+    [NotifyPropertyChangedFor(nameof(ChoosesWeekdays))]
     [NotifyPropertyChangedFor(nameof(SelectedRepeat))]
     private string _repeatKey = RepeatChoices.None;
 
@@ -179,6 +180,39 @@ public sealed partial class AppointmentEditViewModel : StructuredEditFormViewMod
     /// <summary>True when the selected repeat is one this editor can express — what the UNTIL row is shown for.</summary>
     public bool RepeatsOnAChoice => RepeatKey != RepeatChoices.None;
 
+    /// <summary>One weekday a weekly repeat may fall on.</summary>
+    public sealed partial class WeekdayChoice : ObservableObject
+    {
+        public required DayOfWeek Day { get; init; }
+
+        /// <summary>The culture's own short name — "Mo" here, "Mon" there; never a hardcoded letter.</summary>
+        public required string Label { get; init; }
+
+        [ObservableProperty] private bool _isChecked;
+    }
+
+    /// <summary>
+    /// The seven days a weekly repeat may be ticked on, in the CULTURE's own order (#1136).
+    /// </summary>
+    /// <remarks>
+    /// Drawn Monday-first here and Sunday-first there, because that is a display question — while the RULE's
+    /// order is fixed, so the same repeat reads as the same rule in every session.
+    /// </remarks>
+    public IReadOnlyList<WeekdayChoice> Weekdays { get; } = BuildWeekdays();
+
+    /// <summary>Shown only for a WEEKLY repeat: a daily or monthly one has no weekday to choose.</summary>
+    public bool ChoosesWeekdays => RepeatKey == RepeatChoices.Weekly;
+
+    private static IReadOnlyList<WeekdayChoice> BuildWeekdays()
+    {
+        var first = (int)CultureInfo.CurrentCulture.DateTimeFormat.FirstDayOfWeek;
+        var names = CultureInfo.CurrentCulture.DateTimeFormat.AbbreviatedDayNames;
+
+        return [.. Enumerable.Range(0, 7)
+            .Select(offset => (DayOfWeek)((first + offset) % 7))
+            .Select(day => new WeekdayChoice { Day = day, Label = names[(int)day] })];
+    }
+
     /// <summary>
     /// True when the stored rule is richer than the offered list, so the editor states it instead of offering
     /// to replace it.
@@ -190,6 +224,12 @@ public sealed partial class AppointmentEditViewModel : StructuredEditFormViewMod
     {
         RepeatKey = RepeatChoices.KeyFor(RepeatChoices.WithoutUntil(RecurrenceRule)) ?? RepeatChoices.None;
         RepeatUntil = RepeatChoices.UntilOf(RecurrenceRule) is { } until ? until.ToDateTime(TimeOnly.MinValue) : null;
+
+        var chosen = RepeatChoices.DaysOf(RecurrenceRule);
+        foreach (var weekday in Weekdays)
+        {
+            weekday.IsChecked = chosen.Contains(weekday.Day);
+        }
     }
 
     /// <summary>Writes the two picker values back into the rule a save sends.</summary>
@@ -203,8 +243,16 @@ public sealed partial class AppointmentEditViewModel : StructuredEditFormViewMod
             return;
         }
 
+        // The days are part of the RULE, not a separate field: ticking none leaves a plain weekly repeat,
+        // which already means "the entry's own weekday" (#1136).
+        var rule = RepeatChoices.RuleFor(RepeatKey);
+        if (RepeatKey == RepeatChoices.Weekly)
+        {
+            rule = RepeatChoices.WithDays(rule, Weekdays.Where(w => w.IsChecked).Select(w => w.Day));
+        }
+
         RecurrenceRule = RepeatChoices.WithUntil(
-            RepeatChoices.RuleFor(RepeatKey),
+            rule,
             RepeatUntil is { } until ? DateOnly.FromDateTime(until) : null);
     }
 

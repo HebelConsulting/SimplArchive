@@ -28,13 +28,22 @@ public partial class CalendarTab : UserControl
             return;
         }
 
+        // A REFUSED create reopens the form with what was typed (#1135), rather than closing and leaving the
+        // user to retype it. The server's refusal is the reason to change something — "the room is only
+        // offered until 22:00" — so the moment the values are most needed was the moment they were being
+        // thrown away. The same form instance goes back in, so every field is exactly as it was.
         var form = new AppointmentEditViewModel();
         form.OpenForCreate(targets);
 
-        if (await new AppointmentDialog(form).ShowDialog<AppointmentEditViewModel?>(owner) is { } filled
+        while (await new AppointmentDialog(form).ShowDialog<AppointmentEditViewModel?>(owner) is { } filled
             && filled.SelectedTarget is { } target)
         {
-            await tab.CreateAppointmentAsync(target, filled);
+            if (await tab.CreateAppointmentAsync(target, filled))
+            {
+                return;
+            }
+
+            form = filled;   // ...and round again, with the form as the user left it
         }
     });
 

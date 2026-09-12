@@ -42,6 +42,26 @@ public class AvailabilityBookingPathTests
         });
         Assert.Equal(HttpStatusCode.Conflict, outside.StatusCode);
 
+        // The refusal carries what the resource DOES offer, as DATA (#1135) — so each client composes "only
+        // available 09:00–12:00" in the reader's own language. The exception's own message is English by
+        // construction and a client must never show it (issue #424, NoServerDetailInClientsTests).
+        var problem = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(
+            await outside.Content.ReadAsStringAsync());
+
+        Assert.Equal("SLOT_NOT_OFFERED", problem.GetProperty("errorCode").GetString());
+
+        // The window is ONE span of three hours on the requested day. Asserted by shape and length rather
+        // than by the wall clock it was typed as: the entry is floating, so the server stamps ITS zone at
+        // index time and 09:00 as typed is not 09:00Z. Pinning the typed hour here would fail on any machine
+        // whose zone is not UTC — which is the same trap that made the scope test report a working feature
+        // broken.
+        var window = problem.GetProperty("offered").EnumerateArray().Single();
+        var offeredFrom = window.GetProperty("startsAt").GetDateTimeOffset();
+        var offeredTo = window.GetProperty("endsAt").GetDateTimeOffset();
+
+        Assert.Equal(TimeSpan.FromHours(3), offeredTo - offeredFrom);
+        Assert.Equal(new DateOnly(2027, 6, 8), DateOnly.FromDateTime(offeredFrom.UtcDateTime));
+
         // ...and one wholly inside it still goes through, so the rule is not simply refusing everything.
         var inside = await api.PostAsJsonAsync($"/api/documents/{collections["Schedule"]}/appointments", new
         {

@@ -20,8 +20,25 @@ namespace SimplArchive.Api.Errors.Exceptions.Booking;
 /// </remarks>
 public sealed class SlotNotOfferedException : BookingException
 {
-    public SlotNotOfferedException(string detail)
-        : base("SLOT_NOT_OFFERED", StatusCodes.Status409Conflict, detail)
+    /// <param name="offered">
+    /// What the resource DOES offer around the requested slot, as DATA (#1135) — so a client can say "only
+    /// available 08:00–22:00" in the reader's own language instead of quoting this exception's English
+    /// message, which it must never do (issue #424).
+    /// </param>
+    public SlotNotOfferedException(string detail, IReadOnlyList<SimplArchive.Domain.Booking.SlotOccurrence>? offered = null)
+        : base("SLOT_NOT_OFFERED", StatusCodes.Status409Conflict, detail, Extension(offered))
     {
     }
+
+    /// <summary>An empty list is omitted: "offers nothing that day" is a different sentence from "not then".</summary>
+    private static IReadOnlyDictionary<string, object?>? Extension(
+        IReadOnlyList<SimplArchive.Domain.Booking.SlotOccurrence>? offered) =>
+        offered is { Count: > 0 }
+            ? new Dictionary<string, object?>
+            {
+                ["offered"] = offered
+                    .Select(window => new { startsAt = window.StartsAtUtc, endsAt = window.EndsAtUtc })
+                    .ToList(),
+            }
+            : null;
 }

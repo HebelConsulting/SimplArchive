@@ -508,33 +508,44 @@
             return;
         }
 
-        var parameters = new DialogParameters
+        // A REFUSED create reopens the form with what was typed (#1135), rather than closing and leaving the
+        // user to retype it. The server's refusal is the reason to change something — "the room is only
+        // offered until 22:00" — so the one moment the values are most needed is the moment they were being
+        // thrown away. The same form instance goes back in, so every field is exactly as it was.
+        var form = AppointmentForm.ForCreate();
+        while (true)
         {
-            { nameof(Dialogs.AppointmentDialog.Form), AppointmentForm.ForCreate() },
-            { nameof(Dialogs.AppointmentDialog.Targets), targets },
-            { nameof(Dialogs.AppointmentDialog.IsCreate), true },
-        };
+            var parameters = new DialogParameters
+            {
+                { nameof(Dialogs.AppointmentDialog.Form), form },
+                { nameof(Dialogs.AppointmentDialog.Targets), targets },
+                { nameof(Dialogs.AppointmentDialog.IsCreate), true },
+            };
 
-        var dialog = await DialogService.ShowAsync<Dialogs.AppointmentDialog>(Strings.Get("CalendarNew"), parameters);
-        if ((await dialog.Result) is not { Canceled: false, Data: Dialogs.AppointmentDialog.Saved saved }
-            || saved.Target is not { } target)
-        {
+            var dialog = await DialogService.ShowAsync<Dialogs.AppointmentDialog>(Strings.Get("CalendarNew"), parameters);
+            if ((await dialog.Result) is not { Canceled: false, Data: Dialogs.AppointmentDialog.Saved saved }
+                || saved.Target is not { } target)
+            {
+                return;   // cancelled — and cancelling is how a user abandons a refused create
+            }
+
+            form = saved.Form;
+
+            var outcome = await StructuredEditors.CreateAsync(target.CreateHref, saved.Form.ToPayload());
+            if (!outcome.Created)
+            {
+                Snackbar.Add(outcome.Problem ?? string.Format(Strings.Get("StErrCreateAppt"), string.Empty), Severity.Error);
+                continue;   // ...and round again, with the form as the user left it
+            }
+
+            await ReloadAppointmentsAsync();
+
+            // By the id the server returned, not by the summary the form holds: the server decides the filed
+            // name, and a second "Quarterly review" would otherwise select the first one or nothing at all.
+            _selected = _appointments.FirstOrDefault(a => a.Id == outcome.Id) ?? _selected;
+            Snackbar.Add(string.Format(Strings.Get("StApptCreated"), saved.Form.Summary, target.DisplayName), Severity.Success);
             return;
         }
-
-        var createdId = await StructuredEditors.CreateAsync(target.CreateHref, saved.Form.ToPayload());
-        if (createdId is null)
-        {
-            Snackbar.Add(string.Format(Strings.Get("StErrCreateAppt"), string.Empty), Severity.Error);
-            return;
-        }
-
-        await ReloadAppointmentsAsync();
-
-        // By the id the server returned, not by the summary the form holds: the server decides the filed name,
-        // and a second "Quarterly review" would otherwise select the first one or nothing at all.
-        _selected = _appointments.FirstOrDefault(a => a.Id == createdId) ?? _selected;
-        Snackbar.Add(string.Format(Strings.Get("StApptCreated"), saved.Form.Summary, target.DisplayName), Severity.Success);
     }
 
     /// <summary>Opens the structured editor for the selected appointment, addressed from the ROW (ADR 0559).</summary>
@@ -606,7 +617,8 @@
             return;
         }
 
-        if (await StructuredEditors.SaveAsync(loaded.Href, saved.Form.ToPayload(), loaded.ETag))
+        var saveOutcome = await StructuredEditors.SaveWithProblemAsync(loaded.Href, saved.Form.ToPayload(), loaded.ETag);
+        if (saveOutcome.Problem is null)
         {
             Snackbar.Add(string.Format(Strings.Get("StApptSaved"), row.Title), Severity.Success);
 
@@ -622,7 +634,9 @@
         }
         else
         {
-            Snackbar.Add(string.Format(Strings.Get("StErrSaveAppt"), string.Empty), Severity.Error);
+            // The refusal's OWN sentence (#1135): a booking moved past the hours the room is offered for has
+            // to say so, or the user is left guessing at what to change.
+            Snackbar.Add(saveOutcome.Problem, Severity.Error);
         }
     }
 }

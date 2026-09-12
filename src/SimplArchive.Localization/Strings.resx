@@ -4620,6 +4620,9 @@
   <data name="RepeatYearly" xml:space="preserve">
     <value>Every year</value>
   </data>
+  <data name="RepeatOnDays" xml:space="preserve">
+    <value>On days</value>
+  </data>
   <data name="RepeatUntil" xml:space="preserve">
     <value>Until</value>
   </data>
@@ -4820,6 +4823,15 @@
   </data>
   <data name="BulkExportFailed" xml:space="preserve">
     <value>The selection could not be exported as one file.</value>
+  </data>
+  <data name="ApiErrSlotNotOfferedHours" xml:space="preserve">
+    <value>Only available {0} that day.</value>
+  </data>
+  <data name="ApiErrSlotNotOffered" xml:space="preserve">
+    <value>This resource is not on offer at that time. Book inside a published availability window, or publish one.</value>
+  </data>
+  <data name="ApiErrResourceBlocked" xml:space="preserve">
+    <value>This resource is out of service for part of that time.</value>
   </data>
   <data name="ApiErrBookingSlotConflict" xml:space="preserve">
     <value>This slot overlaps an existing booking of the same resource.</value>

@@ -185,28 +185,85 @@ public sealed class StructuredEditors
     /// the user typed is left for a second call that could fail and leave a half-filled contact behind — and
     /// nothing exists at all until Save, so a cancelled dialog leaves no stub for a DAV client to sync.
     /// </remarks>
-    public async Task<Guid?> CreateAsync(string createHref, object payload, CancellationToken cancellationToken = default)
+    /// <summary>What a create did: the new id, or the sentence to show the user (#1135).</summary>
+    /// <remarks>
+    /// The REFUSAL travels with the result. Returning a bare null threw the problem document away, so every
+    /// caller could say only "the action was rejected by the server" — useless for a refusal whose whole point
+    /// is the values it computed, like a booking that runs past the hours the room is offered for.
+    /// </remarks>
+    public sealed record CreateOutcome(Guid? Id, string? Problem)
+    {
+        public bool Created => Id is not null;
+    }
+
+    public async Task<CreateOutcome> CreateAsync(string createHref, object payload, CancellationToken cancellationToken = default)
     {
         using var response = await _http.PostAsJsonAsync(createHref, payload, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            return null;
+            return new CreateOutcome(null, await ProblemTextAsync(response, cancellationToken));
         }
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-        return body.TryGetProperty("id", out var id) && id.TryGetGuid(out var guid) ? guid : null;
+        return new CreateOutcome(
+            body.TryGetProperty("id", out var id) && id.TryGetGuid(out var guid) ? guid : null,
+            null);
+    }
+
+    /// <summary>The user-facing sentence for a refusal — read ONCE, because the body is a stream.</summary>
+    private static async Task<string> ProblemTextAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        // The CODE, never the server's `detail` — which is English whatever the user's language is, so it
+        // would give a German user German until something went wrong and English exactly when it mattered
+        // (issue #424, guarded by NoServerDetailInClientsTests). The client owns the words.
+        string? code = null;
+        var offered = new List<(DateTimeOffset StartsAt, DateTimeOffset EndsAt)>();
+
+        try
+        {
+            var problem = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+            code = problem.TryGetProperty("errorCode", out var c) ? c.GetString() : null;
+
+            // The FACTS a refusal computed, never its prose (#1135 / issue #424): a booking outside the
+            // offered hours sends the hours as data, and the sentence is composed here in the reader's own
+            // language rather than quoted from an English exception message.
+            if (problem.TryGetProperty("offered", out var windows) && windows.ValueKind == JsonValueKind.Array)
+            {
+                offered.AddRange(windows.EnumerateArray()
+                    .Where(w => w.TryGetProperty("startsAt", out _) && w.TryGetProperty("endsAt", out _))
+                    .Select(w => (w.GetProperty("startsAt").GetDateTimeOffset(), w.GetProperty("endsAt").GetDateTimeOffset())));
+            }
+        }
+        catch (JsonException)
+        {
+            // A refusal that is not a problem document at all still has to say something.
+        }
+
+        var sentence = SimplArchive.Localization.ApiErrorText.For(code);
+        return offered.Count > 0
+            ? $"{sentence} {string.Format(
+                SimplArchive.Localization.Strings.Get("ApiErrSlotNotOfferedHours"),
+                SimplArchive.Presentation.OfferedHours.Describe(offered))}"
+            : sentence;
     }
 
     /// <summary>Saves <paramref name="payload"/> back to the address the read came from, under its ETag.</summary>
     /// <returns>True on success; false leaves the caller to report it — a 412 means somebody saved first.</returns>
     public async Task<bool> SaveAsync(
+        string href, object payload, string etag, CancellationToken cancellationToken = default) =>
+        (await SaveWithProblemAsync(href, payload, etag, cancellationToken)).Problem is null;
+
+    /// <summary>The same save, carrying the refusal's own sentence when it fails (#1135).</summary>
+    public async Task<CreateOutcome> SaveWithProblemAsync(
         string href, object payload, string etag, CancellationToken cancellationToken = default)
     {
         using var request = new HttpRequestMessage(HttpMethod.Put, href) { Content = JsonContent.Create(payload) };
         request.Headers.TryAddWithoutValidation("If-Match", etag);
 
         using var response = await _http.SendAsync(request, cancellationToken);
-        return response.IsSuccessStatusCode;
+        return response.IsSuccessStatusCode
+            ? new CreateOutcome(Guid.Empty, null)
+            : new CreateOutcome(null, await ProblemTextAsync(response, cancellationToken));
     }
 
     private static string? HrefOf(JsonElement resource, string rel) =>

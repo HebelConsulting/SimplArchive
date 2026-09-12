@@ -80,6 +80,11 @@ public static class ApiErrorText
         // The inventory-booking primitive (ADR 0735). The slot conflict is the one users will actually
         // meet; the other two are backstops a conforming client never triggers (the rel gates them).
         "BOOKING_SLOT_CONFLICT" => Strings.Get("ApiErrBookingSlotConflict"),
+        // The booking refusals that had no sentence of their own and so read as the generic one (#1135).
+        // Three different remedies, so three different sentences: publish or book inside a window / wait for
+        // the resource to come back / correct the request itself.
+        "SLOT_NOT_OFFERED" => Strings.Get("ApiErrSlotNotOffered"),
+        "RESOURCE_BLOCKED" => Strings.Get("ApiErrResourceBlocked"),
         "RESOURCE_NOT_BOOKABLE" => Strings.Get("ApiErrResourceNotBookable"),
         "BOOKING_SLOT_INVALID" => Strings.Get("ApiErrBookingSlotInvalid"),
         // ADR 0744: users meet this from a calendar app writing a repeating event into a room's Schedule.

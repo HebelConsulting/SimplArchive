@@ -11,11 +11,26 @@ namespace SimplArchive.Domain.Booking;
 /// </remarks>
 public sealed class BookingInvariantException : InvalidOperationException
 {
-    private BookingInvariantException(BookingInvariantKind kind, string message)
+    private BookingInvariantException(BookingInvariantKind kind, string message, IReadOnlyList<SlotOccurrence>? offered = null)
         : base(message)
     {
         Kind = kind;
+        Offered = offered ?? [];
     }
+
+    /// <summary>
+    /// The windows this resource DOES offer around the requested slot (#1135).
+    /// </summary>
+    /// <remarks>
+    /// Structured, not prose. The message is English by construction — an exception's literal — and a client
+    /// must never put that in front of a user (issue #424), so the values a refusal computed travel as DATA
+    /// and each client composes "only available 08:00–22:00" in the reader's own language.
+    /// <para>
+    /// Empty for every other kind, and for a resource that offers nothing that day — which is itself the
+    /// answer, and a different sentence from "offered, but not then".
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<SlotOccurrence> Offered { get; }
 
     /// <summary>Which invariant refused — so a boundary translates by FACT, not by matching message text
     /// (a message-substring dispatch is a carve-out that verifies prose; ADR 0744 added a second caller
@@ -81,10 +96,11 @@ public sealed class BookingInvariantException : InvalidOperationException
     /// that HAS published means it.
     /// </para>
     /// </remarks>
-    public static BookingInvariantException NotOffered(DateTimeOffset requestedStart, DateTimeOffset requestedEnd) =>
+    public static BookingInvariantException NotOffered(
+        DateTimeOffset requestedStart, DateTimeOffset requestedEnd, IReadOnlyList<SlotOccurrence>? offered = null) =>
         new(BookingInvariantKind.NotOffered, $"The requested slot {requestedStart:u}–{requestedEnd:u} is not covered by any "
             + "window this resource has offered. A window must cover the WHOLE slot: one ending before the slot does "
-            + "consents to part of it, not all of it.");
+            + "consents to part of it, not all of it.", offered);
 
     /// <summary>A block's window has no extent: start must precede end.</summary>
     /// <remarks>
