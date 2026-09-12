@@ -58,6 +58,24 @@ public sealed class BookingInvariantException : InvalidOperationException
         new(BookingInvariantKind.ResourceBlocked, $"The requested slot {requestedStart:u}–{requestedEnd:u} falls in a maintenance "
             + $"block {blockStart:u}–{blockEnd:u}: the resource is out of service (ADR 0778).");
 
+    /// <summary>
+    /// The slot is not covered by any window the resource has offered, and the resource HAS offered some.
+    /// </summary>
+    /// <remarks>
+    /// Its own kind rather than <see cref="ResourceBlocked"/>: a block says the resource is out of service and
+    /// nothing but time fixes it, while this says the resource is simply not on offer then — a different
+    /// sentence, and a different remedy (book inside a window, or publish one).
+    /// <para>
+    /// Only for a resource that has published at least one window. Publishing nothing keeps the old behaviour
+    /// — book freely — so the rule cannot surprise a resource that never used availability, and a resource
+    /// that HAS published means it.
+    /// </para>
+    /// </remarks>
+    public static BookingInvariantException NotOffered(DateTimeOffset requestedStart, DateTimeOffset requestedEnd) =>
+        new(BookingInvariantKind.NotOffered, $"The requested slot {requestedStart:u}–{requestedEnd:u} is not covered by any "
+            + "window this resource has offered. A window must cover the WHOLE slot: one ending before the slot does "
+            + "consents to part of it, not all of it.");
+
     /// <summary>A block's window has no extent: start must precede end.</summary>
     /// <remarks>
     /// Its own kind rather than reusing <see cref="SlotWithoutExtent"/>: the message has to say which of the
@@ -95,6 +113,7 @@ public enum BookingInvariantKind
     SlotWithoutExtent,
     ClaimsDisagreeOnSlot,
     ResourceBlocked,
+    NotOffered,
     BlockWithoutExtent,
     WindowWithoutExtent,
 }

@@ -204,6 +204,34 @@ public partial class SimplArchiveDbContext
                     booking.StartsAtUtc, booking.EndsAtUtc, blocked.StartsAtUtc, blocked.EndsAtUtc);
             }
 
+            // ...and the resource must actually be ON OFFER for the whole slot — but only if it has offered
+            // anything at all (#1124).
+            //
+            // Reported from use: a window was published for a room, an appointment was made that STARTED
+            // inside it and ENDED outside, and it was accepted. Core used to leave this entirely to an
+            // industry module's booking rule, which is why a plain installation had an Availability
+            // collection that did nothing — publish a window, and nothing anywhere honoured it.
+            //
+            // The gate is "has published at least one window", so a resource that never used availability
+            // books exactly as before and cannot be surprised by a rule it never opted into, while one that
+            // HAS published is taken to mean it. A module's own rule still layers on top: this answers "is
+            // the resource on offer", not "did this particular person consent", which stays the module's
+            // question (ADR 0780).
+            //
+            // Coverage by a SINGLE window, per WindowsCoveringAsync — two adjacent windows are not merged
+            // into one offer, because that is an inference about somebody's intent the core should not make.
+            var hasOffered = await ResourceAvailability.IgnoreQueryFilters()
+                .AnyAsync(a => a.TenantId == booking.TenantId
+                    && a.ResourceDocumentId == booking.ResourceDocumentId
+                    && a.Status == AvailabilityStatus.Offered, cancellationToken);
+            if (hasOffered
+                && (await WindowsCoveringAsync(
+                    booking.TenantId, booking.ResourceDocumentId, booking.StartsAtUtc, booking.EndsAtUtc, cancellationToken))
+                    .Count == 0)
+            {
+                throw BookingInvariantException.NotOffered(booking.StartsAtUtc, booking.EndsAtUtc);
+            }
+
             // Overlap against Active rows of the same resource ([start, end) semantics: touching slots are
             // fine), excluding self; anything already tracked is judged from its tracked state. The time
             // comparison runs IN MEMORY: the SQLite provider cannot translate DateTimeOffset range
