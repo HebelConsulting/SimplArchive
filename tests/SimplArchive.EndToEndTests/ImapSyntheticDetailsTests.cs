@@ -103,9 +103,21 @@ public class ImapSyntheticDetailsTests
         Assert.StartsWith("Filed", lines[2], StringComparison.Ordinal);
 
         // A blank line separates the system rows from the mask block, and the mask block from the signature.
-        var blanks = lines.Select((l, i) => (l, i)).Where(x => x.l.Length == 0).Select(x => x.i).ToList();
+        //
+        // SEPARATORS only — the trailing blank line is deliberately excluded, because it is a terminator and
+        // not a separator. The body ends with one so that a client rendering the attachment inline (Apple
+        // Mail does) does not draw the document's preview flush against the signature URL, which makes the
+        // archive's footer read as a caption for the document. Counting every empty entry conflated the two
+        // and turned that fix into a failure of THIS test, whose subject is the arrangement of the blocks.
+        var interior = lines.Reverse().SkipWhile(l => l.Length == 0).Reverse().ToArray();
+        var blanks = interior.Select((l, i) => (l, i)).Where(x => x.l.Length == 0).Select(x => x.i).ToList();
         Assert.Equal(3, blanks.Count);
-        Assert.Equal("Served from the SimplArchive archive:", lines[blanks[2] + 1]);
+        Assert.Equal("Served from the SimplArchive archive:", interior[blanks[2] + 1]);
+
+        // And the terminator itself, pinned so it cannot be tidied away by someone reading the line above.
+        // Against the NORMALISED text: MimeKit decodes a text part's CRLFs to LF, so asserting "\r\n\r\n"
+        // on body here fails against a wire that is perfectly correct. (It did.)
+        Assert.EndsWith("\n\n", body.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
 
         // Values line up in a column rather than being jammed against their labels.
         var filedRow = lines.Single(l => l.StartsWith("Filed", StringComparison.Ordinal));

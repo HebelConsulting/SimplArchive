@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.RegularExpressions;
 using SimplArchive.Api.Imap;
 
 namespace SimplArchive.EndToEndTests;
@@ -149,5 +151,104 @@ public class ImapBodyStructureTests
         var response = await FetchAsync(world, "BODYSTRUCTURE");
 
         Assert.Contains("\"MIXED\" (\"BOUNDARY\"", response, StringComparison.Ordinal);
+    }
+
+    // body-fld-lines is a COUNT, and we used to answer it with size/60 (#1141). For the synthetic detail body
+    // that said 3 where the truth was 10.
+    //
+    // Note what shape this test has to be, because it is the point. Every assertion above is Contains, and a
+    // substring can only ask whether something is PRESENT — it cannot notice that a number beside it is wrong,
+    // so the defect sat underneath a file whose own header comment is about testing the raw wire.
+    //
+    // It also cannot use FetchAsync: that helper reads by LINES and rejoins them with '\n', which is lossless
+    // enough for a structure line and destroys exactly what this test is about — the literal's byte count and
+    // its CRLFs. So this one reads the socket as bytes, which is what "raw wire" has to mean here.
+    [Fact]
+    public async Task The_text_parts_line_count_is_the_bodys_real_line_count()
+    {
+        var world = await SeedAsync("invoice.pdf");
+
+        var structure = await FetchAsync(world, "BODYSTRUCTURE");
+        var body = await FetchRawAsync(world, "BODY.PEEK[1]");
+
+        // ("TEXT" "PLAIN" (...) NIL NIL "7BIT" <octets> <lines> ...) — the field after the octet count.
+        var text = Regex.Match(structure, "\"TEXT\" \"PLAIN\".*?\"7BIT\" (\\d+) (\\d+)");
+        Assert.True(text.Success, $"No text part in the structure: {structure}");
+        var declaredOctets = int.Parse(text.Groups[1].Value, CultureInfo.InvariantCulture);
+        var declaredLines = int.Parse(text.Groups[2].Value, CultureInfo.InvariantCulture);
+
+        // The literal the server announced, then exactly that many octets of it — the bytes it CLAIMS the
+        // part is, rather than anything this test reconstructs.
+        var literal = Regex.Match(body, @"BODY\[1\] \{(\d+)\}\r\n");
+        Assert.True(literal.Success, $"No BODY[1] literal in the response: {body}");
+        var octets = int.Parse(literal.Groups[1].Value, CultureInfo.InvariantCulture);
+        var served = body.Substring(literal.Index + literal.Length, octets);
+
+        Assert.Equal(octets, declaredOctets);
+
+        // A final line without a terminator still counts, which is why this is not simply a count of '\n'.
+        var actualLines = served.Count(c => c == '\n') + (served.Length > 0 && !served.EndsWith('\n') ? 1 : 0);
+        Assert.Equal(actualLines, declaredLines);
+    }
+
+    // The same conversation as FetchAsync, read as BYTES: Latin-1 so one byte is one char and a literal's
+    // octet count indexes the string directly.
+    private static async Task<string> FetchRawAsync(World world, string item)
+    {
+        using var tcp = new TcpClient();
+        await tcp.ConnectAsync("127.0.0.1", world.Port);
+        using var stream = tcp.GetStream();
+        var writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\r\n" };
+
+        var buffer = new byte[64 * 1024];
+
+        // A BUDGET on every read, so a protocol mistake in this helper fails the test instead of hanging it.
+        // Learned at the desk: a wait for a line that could never arrive sat at 0.2% CPU for 29 minutes and
+        // looked exactly like a slow container start. A test that cannot finish is worse than one that fails,
+        // because only the second one tells you which.
+        using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+
+        // Done when the TAGGED line has arrived. It must be matched at a line START — either the very first
+        // thing in this read or after a CRLF — and not merely "after a CRLF": the reply to the first command
+        // begins at position 0 of a fresh buffer, so waiting for a preceding CRLF waits forever. (It did:
+        // 29 minutes at 0.2% CPU, which is what a hang looks like when you are expecting slowness.)
+        static bool Complete(StringBuilder sb, string tag)
+        {
+            var text = sb.ToString();
+            return text.StartsWith($"{tag} ", StringComparison.Ordinal)
+                || text.Contains($"\r\n{tag} ", StringComparison.Ordinal);
+        }
+
+        async Task<string> ReadUntilAsync(string tag)
+        {
+            var sb = new StringBuilder();
+            while (!Complete(sb, tag))
+            {
+                var read = await stream.ReadAsync(buffer, budget.Token);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                sb.Append(Encoding.Latin1.GetString(buffer, 0, read));
+            }
+
+            return sb.ToString();
+        }
+
+        // The greeting, with ONE read: it is unsolicited, so there is no tag to wait for — and waiting for a
+        // tagged line here deadlocks against a command that has not been sent yet.
+        var greeting = await stream.ReadAsync(buffer, budget.Token);
+        Assert.True(greeting > 0, "The server closed the connection before greeting.");
+
+        await SendAndReadAsync("a1", $"LOGIN \"{world.Email}\" \"{world.ImapPassword}\"");
+        await SendAndReadAsync("a2", $"SELECT \"{world.RepoName}\"");
+        return await SendAndReadAsync("a3", $"FETCH 1 ({item})");
+
+        async Task<string> SendAndReadAsync(string tag, string command)
+        {
+            await writer.WriteLineAsync($"{tag} {command}");
+            return await ReadUntilAsync(tag);
+        }
     }
 }

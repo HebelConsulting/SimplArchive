@@ -524,7 +524,11 @@ internal static class ImapFetch
             }
         }
 
-        text.Append("\nServed from the SimplArchive archive:\nhttps://www.simplarchive.dev");
+        // Trailing blank line, and it is two separate fixes wearing one edit. A text body that ends without a
+        // line break is malformed-ish RFC 5322 and left our last line unterminated; and a client that renders
+        // the attachment INLINE under the text — Apple Mail does — then draws the document's preview flush
+        // against the signature URL, so the archive's own footer reads as a caption for the document.
+        text.Append("\nServed from the SimplArchive archive:\nhttps://www.simplarchive.dev\n\n");
         return text.ToString();
     }
 
@@ -689,7 +693,18 @@ internal static class ImapFetch
                         _ => "7BIT",
                     };
                     var size = part.Content?.Stream?.Length ?? 0;
-                    var lineEstimate = part.ContentType.IsMimeType("text", "*") ? $" {Math.Max(1, size / 60)}" : string.Empty;
+
+                    // body-fld-lines. RFC 3501 defines it as "the size of the body in text lines" — a COUNT,
+                    // not an approximation, and it is COUNTED here (#1141). It used to be `size / 60`, and the
+                    // variable was honestly called lineEstimate: for the synthetic detail body that guessed 3
+                    // where the truth was 10. Every other field in the response was correct, which is what made
+                    // it worth finding — it was the one thing on the wire that was not true.
+                    //
+                    // It survived because MailKit does not care, so no test through a client library could
+                    // see it, and the E2E tests that DO read the raw wire assert with Contains — a substring
+                    // cannot notice that a number is wrong. A strict client reading a short line count can
+                    // decide the part ends before it does.
+                    var lines = part.ContentType.IsMimeType("text", "*") ? $" {CountLines(part.Content)}" : string.Empty;
 
                     // MD5, disposition, language, location — in that order (RFC 3501). Only the disposition is
                     // answered with anything; the other three are honestly NIL rather than omitted, because a
@@ -699,7 +714,7 @@ internal static class ImapFetch
                         : string.Empty;
 
                     return $"({Quote(part.ContentType.MediaType.ToUpperInvariant())} {Quote(part.ContentType.MediaSubtype.ToUpperInvariant())} "
-                        + $"{Parameters(part.ContentType)} NIL NIL {Quote(encoding)} {size}{lineEstimate}{tail})";
+                        + $"{Parameters(part.ContentType)} NIL NIL {Quote(encoding)} {size}{lines}{tail})";
                 }
             default:
                 return "(\"TEXT\" \"PLAIN\" (\"CHARSET\" \"US-ASCII\") NIL NIL \"7BIT\" 0 0)";
@@ -707,6 +722,58 @@ internal static class ImapFetch
     }
 
     /// <summary>A content type's parameters as the parenthesized list BODYSTRUCTURE wants, or NIL.</summary>
+    /// <summary>
+    /// The number of text lines in a part's content, as stored — the encoding is not undone, because
+    /// <c>body-fld-octets</c> beside it counts encoded octets too and the pair must describe the same bytes.
+    /// </summary>
+    /// <remarks>
+    /// A final line with no terminator still counts: "a\r\nb" is two lines, not one. Reading the stream is
+    /// affordable here because the same stream is about to be written to the client anyway, and the position
+    /// is restored so this stays an observation rather than a consumption.
+    /// </remarks>
+    private static int CountLines(IMimeContent? content)
+    {
+        if (content?.Stream is not { } stream)
+        {
+            return 0;
+        }
+
+        var restore = stream.CanSeek ? stream.Position : 0L;
+        if (stream.CanSeek)
+        {
+            stream.Position = 0;
+        }
+
+        var lines = 0;
+        var any = false;
+        var endedWithNewline = true;
+        var buffer = new byte[8192];
+        int read;
+        while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            any = true;
+            for (var i = 0; i < read; i++)
+            {
+                if (buffer[i] == (byte)'\n')
+                {
+                    lines++;
+                    endedWithNewline = true;
+                }
+                else
+                {
+                    endedWithNewline = false;
+                }
+            }
+        }
+
+        if (stream.CanSeek)
+        {
+            stream.Position = restore;
+        }
+
+        return any && !endedWithNewline ? lines + 1 : lines;
+    }
+
     private static string Parameters(ContentType contentType) =>
         contentType.Parameters.Count == 0
             ? "NIL"

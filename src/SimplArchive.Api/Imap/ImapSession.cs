@@ -41,6 +41,23 @@ public sealed class ImapSession
     // analogue of an HTTP request, so it is summarised the way UseSerilogRequestLogging summarises those —
     // one line with an outcome, rather than a running commentary at Information.
     private readonly long _startedAt = Stopwatch.GetTimestamp();
+
+    // WHICH CONNECTION a line belongs to. A real mail client opens SEVERAL at once — Apple Mail ran five
+    // against this server — and it pipelines, so one session's response lands between another's command and
+    // its reply. Without this, the log is a correctly-ordered record of an interleaving nobody can undo:
+    // ADR 0626 asks that the exchange be recoverable, and a transcript you cannot demultiplex is not.
+    //
+    // Found the hard way (#1141): two adjacent SELECT replies appeared to report the same UIDVALIDITY and
+    // MAILBOXID for different mailboxes, which reads as a serious tenancy-shaped bug. They were two
+    // connections, and the only way to know that was to reason about which STATUS replies sat between them.
+    //
+    // The email is NOT a substitute, which is why this is not just "log the user": every one of those five
+    // connections is the same account. Short and monotonic rather than a GUID, because its whole job is to be
+    // compared by eye across thousands of adjacent lines; it is unique within a process lifetime, and the
+    // session summary ties it to the account and peer address.
+    private static int _nextConnectionId;
+    private readonly int _connection = Interlocked.Increment(ref _nextConnectionId);
+
     private string _email = "anonymous";
     // The peer's address, for the sign-in throttle's per-address spray counter (ADR 0716). Read once at
     // accept: a socket that has been closed no longer has a remote endpoint to ask.
@@ -80,14 +97,14 @@ public sealed class ImapSession
             {
                 // The total cap (ADR 0618) refuses at the greeting — a polite BYE instead of a silent close,
                 // after the TLS handshake so a TLS client can actually read it.
-                _logger.LogWarning("IMAP connection refused: total connection cap ({MaxConnections}) reached", _options.MaxConnections);
+                _logger.LogWarning("IMAP [{Connection}] connection refused: total connection cap ({MaxConnections}) reached", _connection, _options.MaxConnections);
                 await WriteLineAsync("* BYE too many connections");
                 return;
             }
 
             _logger.LogDebug(
-                "IMAP connection from {RemoteEndPoint} ({Transport})",
-                client.Client.RemoteEndPoint, _tlsCertificate is null ? "plaintext" : "TLS");
+                "IMAP [{Connection}] connection from {RemoteEndPoint} ({Transport})",
+                _connection, client.Client.RemoteEndPoint, _tlsCertificate is null ? "plaintext" : "TLS");
 
             await WriteLineAsync("* OK SimplArchive IMAP4rev1 ready");
             await CommandLoopAsync(stopping);
@@ -99,7 +116,7 @@ public sealed class ImapSession
         }
         catch (Exception e)
         {
-            _logger.LogError(e, "IMAP session failed");
+            _logger.LogError(e, "IMAP [{Connection}] session failed", _connection);
         }
         finally
         {
@@ -117,9 +134,11 @@ public sealed class ImapSession
             // per-command Debug line: a client that cannot work because we answer NO to something it needs
             // looks IDENTICAL to a healthy one at Information, which is how an unimplemented mandatory command
             // stayed invisible while a device silently showed empty folders.
+            // The line that BINDS the id to an identity: every other line carries [{Connection}] and nothing
+            // else, so this is where a reader learns whose connection 7 was and where it came from.
             _logger.LogInformation(
-                "IMAP session {Email} ended: {Commands} commands, {Refused} refused, in {ElapsedMs} ms",
-                _email, _commands, _refused,
+                "IMAP [{Connection}] session {Email} from {Address} ended: {Commands} commands, {Refused} refused, in {ElapsedMs} ms",
+                _connection, _email, _address ?? "unknown", _commands, _refused,
                 (int)Stopwatch.GetElapsedTime(_startedAt).TotalMilliseconds);
         }
     }
@@ -147,7 +166,7 @@ public sealed class ImapSession
             // Per command, at Debug: the verb and its ARGUMENTS, which for IMAP are the mailbox, the sequence
             // set or the fetch items — i.e. exactly what a client-interop question turns on. Redacted, because
             // LOGIN and AUTHENTICATE carry the password in that same position.
-            _logger.LogDebug("IMAP {Email} > {Command} {Arguments}", _email, verb, Redact(verb, arguments));
+            _logger.LogDebug("IMAP [{Connection}] {Email} > {Command} {Arguments}", _connection, _email, verb, Redact(verb, arguments));
 
             try
             {
@@ -158,7 +177,7 @@ public sealed class ImapSession
             }
             catch (Exception e)
             {
-                _logger.LogError(e, "IMAP command {Command} failed", command);
+                _logger.LogError(e, "IMAP [{Connection}] command {Command} failed", _connection, command);
                 await WriteLineAsync($"{tag} NO server error");
             }
         }
@@ -334,10 +353,10 @@ public sealed class ImapSession
     internal void WarnSubstituted(string asked, string served)
     {
         _logger.LogWarning(
-            "IMAP {Email}: asked for {Asked} and served {Served} instead — the client cannot tell, and will "
-            + "present the result as though it were what it requested; set Serilog:MinimumLevel:Override:{LogSource} "
-            + "to Trace to see the exchange",
-            _email, asked, served, TraceSource);
+            "IMAP [{Connection}] {Email}: asked for {Asked} and served {Served} instead — the client cannot tell, "
+            + "and will present the result as though it were what it requested; set "
+            + "Serilog:MinimumLevel:Override:{LogSource} to Trace to see the exchange",
+            _connection, _email, asked, served, TraceSource);
     }
 
     /// <remarks>
@@ -357,9 +376,9 @@ public sealed class ImapSession
         // has to guess which knob shows more; naming the source override removes the guess, and it is the
         // difference between a note and an instruction.
         _logger.LogWarning(
-            "IMAP {Email}: refused {Command} — {Reason}. A client relying on it will misbehave SILENTLY; "
-            + "set Serilog:MinimumLevel:Override:{LogSource} to Trace to see the exchange",
-            _email, command, reason, TraceSource);
+            "IMAP [{Connection}] {Email}: refused {Command} — {Reason}. A client relying on it will misbehave "
+            + "SILENTLY; set Serilog:MinimumLevel:Override:{LogSource} to Trace to see the exchange",
+            _connection, _email, command, reason, TraceSource);
         await WriteLineAsync($"{tag} {(bad ? "BAD" : "NO")} {reason}");
     }
 
@@ -522,7 +541,7 @@ public sealed class ImapSession
         {
             // One failure message for every cause — a prober learns nothing about which accounts exist or
             // have IMAP enabled. The failed attempt is Warning-logged for SIEM aggregation, like a failed login.
-            _logger.LogWarning("IMAP authentication failed for {Email}", email);
+            _logger.LogWarning("IMAP [{Connection}] authentication failed for {Email}", _connection, email);
             await throttle.RecordFailureAsync(SimplArchive.Api.Security.SignInSurface.Imap, normalized, _address);
             await WriteLineAsync($"{tag} NO authentication failed");
             return;
@@ -532,7 +551,7 @@ public sealed class ImapSession
         // The refused session stays unauthenticated, so the pre-auth timeout keeps it on the short leash.
         if (!_registry.TryAddUser(user.Id, _options.MaxConnectionsPerUser))
         {
-            _logger.LogDebug("IMAP connection refused for {Email}: per-user connection cap ({MaxConnectionsPerUser}) reached", email, _options.MaxConnectionsPerUser);
+            _logger.LogDebug("IMAP [{Connection}] connection refused for {Email}: per-user connection cap ({MaxConnectionsPerUser}) reached", _connection, email, _options.MaxConnectionsPerUser);
             await WriteLineAsync($"{tag} NO too many connections for this user");
             return;
         }
@@ -550,8 +569,8 @@ public sealed class ImapSession
         // rides along because it decides whether this session can see anything but emails, and "the folders
         // are empty" is the first thing it is asked about.
         _logger.LogInformation(
-            "IMAP sign-in for {Email} (tenant {TenantId}, all documents: {ShowAllDocuments})",
-            _email, _tenantId, ShowAllDocuments);
+            "IMAP [{Connection}] sign-in for {Email} (tenant {TenantId}, all documents: {ShowAllDocuments})",
+            _connection, _email, _tenantId, ShowAllDocuments);
 
         // Provision-on-login (#802's live find): the mailbox heals on credential CREATION and on LMTP
         // delivery, and a user whose credential predates a new standing folder touches neither — their client
@@ -568,7 +587,7 @@ public sealed class ImapSession
         {
             // A heal that fails must not refuse the login — the account worked yesterday without the new
             // folder and still does today. Warning, because the folder the user expects will be missing.
-            _logger.LogWarning(e, "IMAP mailbox provisioning on login failed for {Email}; standing folders may be incomplete", _email);
+            _logger.LogWarning(e, "IMAP [{Connection}] mailbox provisioning on login failed for {Email}; standing folders may be incomplete", _connection, _email);
         }
 
         await OkAsync(tag, "authenticated");
@@ -608,7 +627,7 @@ public sealed class ImapSession
         // Verbatim is safe HERE and only here: message bodies do not travel this path. A FETCH writes its
         // protocol line through this method and the content itself through WriteRawAsync below, which is what
         // lets the response lines be recorded exactly as sent while the payload never is.
-        _logger.LogTrace("IMAP {Email} S: {Line}", _email, line);
+        _logger.LogTrace("IMAP [{Connection}] {Email} S: {Line}", _connection, _email, line);
 
         var bytes = Encoding.Latin1.GetBytes(line + "\r\n");
         await _stream.WriteAsync(bytes);
@@ -619,7 +638,7 @@ public sealed class ImapSession
     {
         // A payload: its SIZE is the diagnostic fact, its content is somebody's document. Never the content —
         // not even at Trace, which is the one place a "raw payloads" reading of the levels would allow it.
-        _logger.LogTrace("IMAP {Email} S: <{Bytes} bytes of content>", _email, bytes.Length);
+        _logger.LogTrace("IMAP [{Connection}] {Email} S: <{Bytes} bytes of content>", _connection, _email, bytes.Length);
 
         await _stream.WriteAsync(bytes);
         await _stream.FlushAsync();
