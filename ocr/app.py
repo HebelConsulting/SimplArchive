@@ -10,12 +10,15 @@ as a new document version. Kept deliberately minimal — all the real work is OC
     text and PRESERVE the original page images (don't re-rasterize). The Api only sends a PDF here once it has
     detected it as image-only, so in practice every page gets OCR'd.
 """
+import functools
 import glob
 import os
 import re
 import subprocess
 import tempfile
 
+import anyio
+import anyio.to_thread
 import numpy as np
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
@@ -24,6 +27,42 @@ from PIL import Image, ImageSequence
 import patchcode
 
 app = FastAPI()
+
+# Every endpoint here does BLOCKING work — a ghostscript or OCRmyPDF subprocess, PIL, numpy — and none of it
+# belongs on the event loop. Declared `async def` and executed inline, as they were until #1142, the handlers
+# ran ON the loop, so the sidecar served exactly one request at a time and a request that had already arrived
+# simply waited, invisibly, for whatever was running.
+#
+# Measured on the kiosk, which is how this was found: patch-code detection on the sample batch takes 0.58 s
+# alone and 22.64 s while an OCR call is in flight — the OCR call's own duration, near enough exactly. It had
+# not slowed down; it had not started. A user cutting a scan minutes after a reset, while the demo seed OCR'd
+# its documents, waited past their client's 100 s ceiling and saw a dead button.
+#
+# So the blocking work moves to a worker thread, and the two KINDS get separate budgets. That separation is
+# the point rather than a refinement: detection is sub-second and someone is watching it happen, OCR is a
+# background minute, and one shared queue lets the second decide how long the first takes. With its own
+# limiter a detection waits only behind other detections.
+#
+# The wait happens on the LOOP, not on a thread — `to_thread.run_sync` acquires the limiter before it takes a
+# worker — so a queue of OCR calls costs nothing but memory and cannot starve detection of threads. Holding a
+# thread while waiting for a slot would just move the same bottleneck one layer down, which is the mistake
+# this is written to avoid.
+def _slots(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.environ.get(name, "")))
+    except ValueError:
+        return default
+
+
+_CPUS = os.cpu_count() or 2
+
+# OCR is CPU-bound and OCRmyPDF parallelises internally, so a couple of concurrent jobs already saturate a
+# small host; more would only make every one of them slower. Deliberately BELOW the thread budget, so a burst
+# queues on the limiter rather than in the pool.
+OCR_LIMITER = anyio.CapacityLimiter(_slots("OCR_CONCURRENCY", max(1, _CPUS // 2)))
+
+# Detection and thumbnails are short and interactive. They get their own budget so they never queue behind OCR.
+FAST_LIMITER = anyio.CapacityLimiter(_slots("FAST_CONCURRENCY", max(2, _CPUS)))
 
 # What patch-code detection rasterises at. Well over the ~40 px a 0.08 in narrow bar needs to be measurable,
 # and far under what a 600 dpi colour scan would cost to hold in memory a page at a time.
@@ -90,6 +129,16 @@ async def ocr(
     force: bool = Query(False),
 ):
     data = await file.read()
+    pdf = await anyio.to_thread.run_sync(
+        functools.partial(_run_ocr, data, lang=lang, kind=kind, deskew=deskew, rotate=rotate, force=force),
+        limiter=OCR_LIMITER,
+    )
+    return Response(content=pdf, media_type="application/pdf")
+
+
+def _run_ocr(data: bytes, lang: str, kind: str, deskew: bool, rotate: bool, force: bool) -> bytes:
+    """The OCRmyPDF call itself. Synchronous and blocking on purpose — it runs on a worker thread under
+    OCR_LIMITER, never on the event loop."""
     is_pdf = kind == "pdf"
     with tempfile.TemporaryDirectory() as work:
         src = os.path.join(work, "in.pdf" if is_pdf else "in.tif")
@@ -148,9 +197,7 @@ async def ocr(
             raise HTTPException(status_code=500, detail=result.stderr.decode(errors="replace")[:2000])
 
         with open(dst, "rb") as handle:
-            pdf = handle.read()
-
-    return Response(content=pdf, media_type="application/pdf")
+            return handle.read()
 
 
 @app.post("/patch-codes")
@@ -164,6 +211,13 @@ async def patch_codes(file: UploadFile = File(...), kind: str = Query("pdf")):
     answer for a batch nobody put separators in, and is not an error.
     """
     data = await file.read()
+    # FAST_LIMITER, not OCR_LIMITER: this is the interactive half, and someone is watching a spinner.
+    return await anyio.to_thread.run_sync(
+        functools.partial(_find_patch_codes, data, kind), limiter=FAST_LIMITER)
+
+
+def _find_patch_codes(data: bytes, kind: str) -> dict:
+    """The rasterise-and-scan itself — ghostscript plus numpy, so it runs on a worker thread."""
     with tempfile.TemporaryDirectory() as work:
         pages = _tiff_pages(data, work) if kind == "tiff" else _pdf_pages(data, work)
 
@@ -231,6 +285,14 @@ async def thumbnail(file: UploadFile = File(...), width: int = Query(600)):
     rendering anything, so a 400-page document does not get rasterised twice.
     """
     data = await file.read()
+    # Interactive too — a thumbnail is drawn while someone looks at a listing — so it shares FAST_LIMITER.
+    png, page_count = await anyio.to_thread.run_sync(
+        functools.partial(_render_thumbnail, data, width), limiter=FAST_LIMITER)
+    return Response(content=png, media_type="image/png", headers={"X-Page-Count": str(page_count)})
+
+
+def _render_thumbnail(data: bytes, width: int) -> tuple[bytes, int]:
+    """Two ghostscript calls, both blocking, so this runs on a worker thread."""
     with tempfile.TemporaryDirectory() as work:
         src = os.path.join(work, "in.pdf")
         dst = os.path.join(work, "page1.png")
@@ -261,6 +323,4 @@ async def thumbnail(file: UploadFile = File(...), width: int = Query(600)):
             raise HTTPException(status_code=500, detail=result.stderr.decode(errors="replace")[:2000])
 
         with open(dst, "rb") as handle:
-            png = handle.read()
-
-    return Response(content=png, media_type="image/png", headers={"X-Page-Count": str(page_count)})
+            return handle.read(), page_count

@@ -18,6 +18,33 @@ public class ApiExceptionHandler : IExceptionHandler
 
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
+        // THE CALLER LEFT. Nothing failed here, and saying otherwise costs twice over: it logs an Error an
+        // administrator is asked to investigate, and it writes a body to a socket nobody is reading.
+        //
+        // A cancelled request unwinds through whatever await happened to be pending, so the exception names
+        // an innocent bystander — on the kiosk (#1142) it surfaced from an S3 PUT and read as object storage
+        // timing out. It was not: the AWS SDK's default timeout is ALSO 100 s, which is exactly the default
+        // HttpClient.Timeout the Blazor and desktop clients both inherit, and the two coincide into a very
+        // convincing wrong answer. The log's own ordering is what settled it — the PUT was logged in the same
+        // second it threw, so it had not been running 100 s; it met a token that was already cancelled.
+        //
+        // 499 is nginx's, not an IANA code, and is chosen precisely because it never reaches a client: it
+        // marks the access log so "the user gave up" stays distinguishable from "we broke", which is the
+        // distinction that was lost. Returning 500 here is what made a slow operation look like a fault.
+        if (httpContext.RequestAborted.IsCancellationRequested && exception is OperationCanceledException)
+        {
+            _logger.LogDebug(
+                "Request {Method} {Path} was abandoned by the caller before it finished; no response was written.",
+                httpContext.Request.Method, httpContext.Request.Path);
+
+            if (!httpContext.Response.HasStarted)
+            {
+                httpContext.Response.StatusCode = 499;
+            }
+
+            return true;
+        }
+
         string? localizedByModule = null;
         var (errorCode, statusCode, detail) = exception switch
         {

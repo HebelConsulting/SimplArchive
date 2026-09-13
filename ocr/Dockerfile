@@ -28,7 +28,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # numpy (BSD-3-Clause) and Pillow (MIT-CMU) are patch-code detection (#492): Pillow decodes the rasterised
 # pages and multi-page TIFF frames, numpy does the projection profile. A per-pixel loop in plain Python over a
 # 1240x1754 page is not a micro-optimisation away from being usable — it is seconds per page.
-RUN pip install --no-cache-dir fastapi uvicorn python-multipart numpy pillow
+#
+# anyio (MIT) arrives transitively with FastAPI, but app.py imports it DIRECTLY — the per-kind capacity
+# limiters that keep a sub-second patch-code detection from queueing behind a minute of OCR (#1142) are its
+# primitives. A transitive dependency you import yourself is one a dependency bump can remove without
+# warning, so it is named here.
+RUN pip install --no-cache-dir fastapi uvicorn python-multipart numpy pillow anyio
 
 COPY app.py /app/app.py
 COPY patchcode.py /app/patchcode.py
