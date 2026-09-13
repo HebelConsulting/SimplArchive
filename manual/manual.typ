@@ -504,6 +504,50 @@ with who did it and why.
   tenant has an SLA configured.
 ]
 
+== Reserving a meeting room <bookings>
+
+A *meeting room*#idx("Meeting room")#idx("Booking") is a folder whose type is _Meeting room_ — an administrator
+creates one wherever rooms should live, and whoever may see the folder may see its reservations. Select a room
+and the ribbon offers *Bookings…*: the reservations that exist, and a row to take a new one.
+
+#shot("screenshots/desktop-bookings.png",
+  [The Bookings dialog on a room: existing reservations above — a cancelled one stays visible as history — and
+   the new reservation below, its times typed rather than picked.],
+  width: 58%)
+
+Pick the date, type the times — `0950`, `9:50` and `09:50` all work — add a purpose if you want one, and *Book*.
+A slot that overlaps an existing reservation is *refused, and the refusal says so*: the room is never silently
+double-booked, and there is no queue to wonder about. *Cancel* keeps the row, marked cancelled, so "who had the
+room booked?" stays answerable; cancelling frees the slot for the next person.
+
+*A reservation can repeat.* The dialog books single slots; a weekly jour fixe is made as a repeating calendar
+entry in the room's Schedule — from the Calendar tab or from your phone — and *every occurrence* is
+conflict-checked, so a series that would collide with anything on any of its dates is refused as a whole. The
+one condition: a repeating *reservation* must have an end (a last date or a number of times). "Every Monday,
+forever" cannot be checked against the next endless series, so the archive does not accept it.
+
+Behind the dialog there is no separate booking system. The first reservation creates a *Schedule* calendar under
+the room, and every reservation *is* a calendar entry in it — a document like any other, with versions, an audit
+trail and the room's own permissions. Open the Schedule in the tree and you are looking at the same reservations
+the dialog shows; tick it in the *Calendar* tab and they overlay your own appointments, colour-coded like any
+other collection.
+
+*And because the Schedule is a calendar, your phone can subscribe to it* — the same CalDAV subscription as any
+other calendar (@davsub). That cuts both ways, deliberately:
+
+- *Reading:* tick the room's Schedule on your phone and the room's reservations appear beside your own
+  appointments — the fastest answer to "is the room free at three?" is the calendar already in your pocket.
+- *Writing:* creating an event in that calendar from your phone *is* booking the room, and it passes the *same*
+  conflict check as the dialog. Dragging a reservation to another time is a rebooking, checked again; there is no
+  way in — workbench, phone, or any calendar program — that bypasses the rule.
+
+#note[
+  *A room can be taken out of service.* Beside the Schedule, a room can carry a *Maintenance* calendar; a block
+  filed there ("projector broken, Tuesday to Thursday") *suspends* every reservation it overlaps rather than
+  deleting them — and when the block is cleared, the reservations simply stand again. Blocks may overlap each
+  other: two defects are two entries, and neither hides the other.
+]
+
 == On a phone or a tablet
 
 The same address, in the same browser, gives you a layout built for the screen you are holding. There is no

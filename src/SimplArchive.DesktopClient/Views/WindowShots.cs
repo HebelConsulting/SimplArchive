@@ -401,6 +401,49 @@ public static class WindowShots
             return true;
         }
 
+        // Headless render of the Bookings… dialog over a plausible schedule — the figure the manual's
+        // room-reservation section stands on: `--booking-screenshot <out.png>`.
+        //
+        // Rows and the form's date are FIXED values, never Today.AddDays: the manual is regenerated on main
+        // and a date that moves with the calendar makes the PNG differ on every run, which reads as a content
+        // change and churns the committed manual (the --intray baseline expiring at midnight taught this).
+        var bookingShotIndex = Array.IndexOf(args, "--booking-screenshot");
+        if (bookingShotIndex >= 0 && bookingShotIndex + 1 < args.Length)
+        {
+            AppBuilder.Configure<App>()
+                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .UseSkia()
+                .WithInterFont()
+                .SetupWithoutStarting();
+
+            // Deliberately NOT an api/-shaped address (the ADR 0543 guard), and the parameterless dialog ctor
+            // on purpose: the VM ctor overload wires Opened → LoadAsync, whose failed fetch would stamp an
+            // exception message into the status line of the very frame being photographed.
+            var bookingVm = new ViewModels.BookingDialogViewModel(
+                new Services.SimplArchiveApiClient("screenshot"), "never-fetched-in-a-screenshot", "Meeting room Rigi")
+            {
+                BookingDate = new DateTime(2026, 10, 6),
+                CanBook = true,
+            };
+            var zurich = TimeSpan.FromHours(2);
+            bookingVm.Bookings.Add(new ViewModels.BookingDialogViewModel.BookingRowView(
+                new Services.BookingsClient.BookingRow(Guid.NewGuid(),
+                    new DateTimeOffset(2026, 10, 5, 9, 0, 0, zurich), new DateTimeOffset(2026, 10, 5, 10, 30, 0, zurich),
+                    "Active", "Anna Meyer", "Quarterly review", true, "headless", "never-fetched-in-a-screenshot"),
+                "05.10.2026 09:00 – 10:30", SimplArchive.Localization.Strings.Get("BookStatusActive")));
+            bookingVm.Bookings.Add(new ViewModels.BookingDialogViewModel.BookingRowView(
+                new Services.BookingsClient.BookingRow(Guid.NewGuid(),
+                    new DateTimeOffset(2026, 10, 5, 14, 0, 0, zurich), new DateTimeOffset(2026, 10, 5, 15, 0, 0, zurich),
+                    "Cancelled", "Tom Fischer", "Sprint planning", false, "headless", null),
+                "05.10.2026 14:00 – 15:00", SimplArchive.Localization.Strings.Get("BookStatusCancelled")));
+
+            var bookingDialog = new Views.BookingDialog { DataContext = bookingVm };
+            bookingDialog.Show();
+            Dispatcher.UIThread.RunJobs();
+            bookingDialog.CaptureRenderedFrame()?.Save(args[bookingShotIndex + 1]);
+            return true;
+        }
+
         var connLostShotIndex = Array.IndexOf(args, "--connlost-screenshot");
         if (connLostShotIndex >= 0 && connLostShotIndex + 1 < args.Length)
         {

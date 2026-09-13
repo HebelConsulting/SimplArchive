@@ -17,6 +17,7 @@ public enum DesktopWindow
     Servers,   // --servers-screenshot <out>
     SortDialog, // --sortdialog-screenshot <out> <pdf> — the sort & rotate dialog over the sample batch (#527)
     ContactDialog, // --contact-screenshot <out> --raw — the structured editor with its raw disclosure open (#651)
+    BookingDialog, // --booking-screenshot <out> — the Bookings… dialog over a plausible schedule (room reservations)
 }
 
 // A web screen: after login, click the bottom tab whose label matches `Tab` (null = the default workbench, or the
@@ -49,6 +50,9 @@ public static class Screens
         // because neither of the two tabs above can show it — and the disclosure is the part of this feature a
         // reader is least likely to guess at, since its whole point is the properties the form does not show.
         new("contact-editor", [], DesktopWindow.ContactDialog),
+        // The Bookings… dialog on a meeting room — reservations above, the new-booking row below, times TYPED.
+        // Synthetic fixed-date rows (WindowShots.cs), so the figure does not churn with the calendar.
+        new("bookings", [], DesktopWindow.BookingDialog),
     ];
 
     // Web — the Blazor workbench. Tab labels match the bottom tab bar (.wb-tab). The demo admin holds every right,
