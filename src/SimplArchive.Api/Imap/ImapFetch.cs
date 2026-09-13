@@ -447,28 +447,48 @@ internal static class ImapFetch
             mime.Headers.Add(name, value);
         }
 
-        var body = new Multipart("mixed")
+        var mimeType = MimeTypes.GetMimeType(message.Name + message.Extension);
+
+        // A TEXT document's content becomes the message BODY, inline, rather than an attachment behind the
+        // signature (#1153). The reason is a measured Apple Mail behaviour and the
+        // shape of what these documents ARE: a NOTAM briefing, a .txt, a .csv is text a reader came to read,
+        // and Apple fetches a message whole only up to ~18 KB — above that it fetches per-part, takes the
+        // text part to display inline, and DEFERS the attachment, showing no affordance for it at all. So a
+        // large briefing filed as an attachment rendered as our footer and nothing else: the one thing the
+        // user wanted was the one part Apple never fetched. Inline, the content IS BODY[1], which is exactly
+        // the part Apple always fetches to display. Binary documents (PDF, office) cannot be a text body and
+        // stay attachments — a large PDF may still defer, but "download a PDF" is a normal outcome where "an
+        // empty message" is not.
+        //
+        // The signature stays (#783): it trails the content in the SAME text body rather than living in a
+        // sibling, keeping the whole message a single text part — no BODY[2] to be misnumbered (#766) and
+        // nothing for Apple to defer.
+        if (mimeType.StartsWith("text/", StringComparison.OrdinalIgnoreCase))
         {
-            // A bare URL, deliberately (#783): plain text cannot carry a real link, and every mainstream
-            // client auto-links a recognisable URL while the rest degrade to readable text. The alternative —
-            // a multipart/alternative HTML sibling — moves the attachment out of BODY[2], which is the exact
-            // section-number defect class #766 was. Unconditional by decision: this is a showcase product's
-            // signature, and gating it becomes a feature the day a customer asks.
-            new TextPart("plain") { Text = SyntheticText(message) },
-            // The media type is derived from the EXTENSION rather than left to default. A MimePart with no
-            // content type is application/octet-stream, so every attachment this server synthesised — a PDF,
-            // a JPEG, a Word document — arrived as an anonymous blob: a client cannot preview it, cannot pick
-            // an icon for it, and cannot offer "open with". The bytes were always right; what was missing was
-            // the one header that says what they are.
-            new MimePart(MimeTypes.GetMimeType(message.Name + message.Extension))
+            // UTF-8 with replacement on invalid bytes rather than a throw: a mis-encoded text document should
+            // degrade to readable-ish text, never 500 a mailbox listing.
+            var documentText = Encoding.UTF8.GetString(content.ToArray());
+            mime.Body = new TextPart("plain") { Text = $"{documentText}\n\n{SyntheticText(message)}" };
+        }
+        else
+        {
+            mime.Body = new Multipart("mixed")
             {
-                Content = new MimeContent(new MemoryStream(content.ToArray())),
-                ContentDisposition = new ContentDisposition(ContentDisposition.Attachment) { FileName = message.Name + message.Extension },
-                ContentTransferEncoding = ContentEncoding.Base64,
-                FileName = message.Name + message.Extension,
-            },
-        };
-        mime.Body = body;
+                new TextPart("plain") { Text = SyntheticText(message) },
+                // The media type is derived from the EXTENSION rather than left to default. A MimePart with no
+                // content type is application/octet-stream, so every attachment this server synthesised — a PDF,
+                // a JPEG, a Word document — arrived as an anonymous blob: a client cannot preview it, cannot pick
+                // an icon for it, and cannot offer "open with". The bytes were always right; what was missing was
+                // the one header that says what they are.
+                new MimePart(mimeType)
+                {
+                    Content = new MimeContent(new MemoryStream(content.ToArray())),
+                    ContentDisposition = new ContentDisposition(ContentDisposition.Attachment) { FileName = message.Name + message.Extension },
+                    ContentTransferEncoding = ContentEncoding.Base64,
+                    FileName = message.Name + message.Extension,
+                },
+            };
+        }
 
         using var output = new MemoryStream();
 

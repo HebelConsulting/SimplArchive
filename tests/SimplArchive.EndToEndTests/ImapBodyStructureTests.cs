@@ -29,7 +29,7 @@ public class ImapBodyStructureTests
 
     private sealed record World(string Email, string ImapPassword, string RepoName, int Port);
 
-    private async Task<World> SeedAsync(string fileName)
+    private async Task<World> SeedAsync(string fileName, string? textContent = null)
     {
         var (clientId, secret, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
         using var owner = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
@@ -48,8 +48,16 @@ public class ImapBodyStructureTests
         var basic = new AuthenticationHeaderValue("Basic",
             Convert.ToBase64String(Encoding.UTF8.GetBytes($"{email}:{davGen.GetProperty("password").GetString()}")));
 
-        var bytes = new byte[2048];
-        Encoding.ASCII.GetBytes("%PDF-1.4\n").CopyTo(bytes, 0);
+        // Real text when a text document is under test — a text/plain part full of the PDF buffer's null bytes
+        // would force MimeKit to base64-encode it, which is neither what a NOTAM is nor what the inline path
+        // should produce.
+        var bytes = textContent is { } t
+            ? Encoding.UTF8.GetBytes(t)
+            : new byte[2048];
+        if (textContent is null)
+        {
+            Encoding.ASCII.GetBytes("%PDF-1.4\n").CopyTo(bytes, 0);
+        }
         using (var put = new HttpRequestMessage(HttpMethod.Put, $"/SimplArchive/{repoName}/{fileName}")
         {
             Content = new ByteArrayContent(bytes),
@@ -151,6 +159,53 @@ public class ImapBodyStructureTests
         var response = await FetchAsync(world, "BODYSTRUCTURE");
 
         Assert.Contains("\"MIXED\" (\"BOUNDARY\"", response, StringComparison.Ordinal);
+    }
+
+    // A TEXT document's content is the message BODY, inline, not a multipart with the content behind the
+    // signature as an attachment (#1153). The reason is a measured Apple Mail
+    // behaviour: it fetches a message whole only up to ~18 KB, and above that fetches per-part, takes the
+    // text part to render, and DEFERS the attachment — offering no affordance for it at all. A large NOTAM
+    // briefing therefore rendered as our footer and nothing else, because the one part the reader wanted was
+    // the one part Apple never fetched. Inline, the content is BODY[1], which is the part Apple always
+    // fetches. So the structure of a text document is a SINGLE text part, not a MIXED multipart.
+    [Fact]
+    public async Task A_text_document_is_a_single_inline_text_part_not_an_attachment()
+    {
+        var world = await SeedAsync("briefing.txt", "B1000/26 NOTAMN E) Restricted area active.\n");
+
+        var response = await FetchAsync(world, "BODYSTRUCTURE");
+
+        // A single body-type-text, not a parenthesised list of parts: MIXED means the content was attached.
+        Assert.Contains("BODYSTRUCTURE (\"TEXT\" \"PLAIN\"", response, StringComparison.Ordinal);
+        Assert.DoesNotContain("MIXED", response, StringComparison.Ordinal);
+        Assert.DoesNotContain("ATTACHMENT", response, StringComparison.Ordinal);
+    }
+
+    // And the inline body IS the document's own text, with the signature trailing it in the same part (#783) —
+    // which is why this asserts the content is present rather than that the footer is absent.
+    [Fact]
+    public async Task The_text_body_carries_the_documents_own_content()
+    {
+        var world = await SeedAsync("briefing.txt", "B2000/26 NOTAMN E) Runway 09 closed for works.\n");
+
+        var body = await FetchAsync(world, "BODY.PEEK[1]");
+
+        Assert.Contains("B2000/26 NOTAMN E) Runway 09 closed", body, StringComparison.Ordinal);
+        Assert.Contains("simplarchive.dev", body, StringComparison.Ordinal);
+    }
+
+    // The other direction must NOT regress: a BINARY document cannot be a text body, so it stays a multipart
+    // with the content as an attachment. Pinning both arities keeps a later "just inline everything" change
+    // from turning a PDF into mojibake in the message body.
+    [Fact]
+    public async Task A_binary_document_stays_a_multipart_attachment()
+    {
+        var world = await SeedAsync("invoice.pdf");
+
+        var response = await FetchAsync(world, "BODYSTRUCTURE");
+
+        Assert.Contains("\"MIXED\"", response, StringComparison.Ordinal);
+        Assert.Contains("(\"ATTACHMENT\" (\"FILENAME\" \"invoice.pdf\"))", response, StringComparison.Ordinal);
     }
 
     // body-fld-lines is a COUNT, and we used to answer it with size/60 (#1141). For the synthetic detail body
