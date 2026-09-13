@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
@@ -199,21 +200,137 @@ internal static partial class Ui
 
         await serverSignOut;
 
-        // The URL, not a load state. What this needs to guarantee is that logout's SECOND navigation has
-        // LANDED — the request itself is awaited above — and WaitForLoadStateAsync cannot say that: it
-        // answers for the page currently loaded, so it returns happily while the redirect to
-        // /authentication/logged-out is still to come. A caller navigating straight afterwards then races it
-        // and Playwright aborts with "interrupted by another navigation", which reads as the caller's bug.
+        // Logout is finished when the page has STOPPED NAVIGATING — not when the URL looks right (#1140).
         //
-        // Measured on a loaded CI runner, in a PR that could not touch the login flow at all.
+        // This line has had four attempts because each of the first three answered the wrong question. The
+        // sequence, finally OBSERVED by recording every FrameNavigated with a timestamp rather than inferred
+        // from a stack trace, is:
         //
-        // Still DOMContentLoaded rather than NetworkIdle (#1081): a Blazor WASM SPA keeps making background
-        // requests — WASM boot, the OIDC silent-renew iframe — so "500 ms of network silence" is a condition
-        // this app may never meet, and that wait once burned its full 60 s on a test whose subject had
-        // already succeeded.
+        //     251 ms  main  /authentication/logged-out
+        //     257 ms  main  /authentication/logged-out     <- a SECOND navigation, to the same URL
+        //     689 ms  LogOutAsync returned
+        //
+        // TWO main-frame navigations to the same address, milliseconds apart. A URL predicate is satisfied by
+        // the first and cannot distinguish them, so the helper could return inside the gap; the caller's
+        // GotoAsync then started there and Playwright aborted it with "interrupted by another navigation",
+        // which reads as the caller's bug. On this machine the gap is ~6 ms and it almost never bites; on a
+        // loaded two-core runner it is wide enough to lose, which is why it was CI-only and why three fixes
+        // reasoned from a single trace each closed a window that was not the one open.
+        //
+        // So: wait for the URL, then wait for QUIET. Not a sleep — it returns as soon as the main frame has
+        // been still for the settle window, and it is bounded so a future change cannot turn it into a hang.
+        // Counting navigations instead ("wait for the second") would encode today's count as a law.
         await page.WaitForURLAsync(
             url => url.Contains("logged-out", StringComparison.OrdinalIgnoreCase),
             new PageWaitForURLOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+
+        await WaitForMainFrameToSettleAsync(page);
+    }
+
+    /// <summary>How long the main frame must be still before a navigation sequence counts as finished.</summary>
+    /// <remarks>
+    /// Generous against the ~6 ms observed locally, because the whole point is the loaded runner where the
+    /// gap is wider. It is a QUIET window rather than a delay: a settled page costs the window once, and
+    /// nothing waits the full budget unless the page really is still navigating.
+    /// </remarks>
+    private static readonly TimeSpan SettleQuiet = TimeSpan.FromMilliseconds(400);
+
+    private static readonly TimeSpan SettleBudget = TimeSpan.FromSeconds(15);
+
+    /// <summary>Returns once the page's MAIN frame has not navigated for <see cref="SettleQuiet"/>.</summary>
+    /// <remarks>
+    /// Deliberately main-frame only. A Blazor WASM app's OIDC silent-renew iframe navigates to
+    /// <c>about:blank</c> on its own schedule, so counting subframes would be waiting for a silence this app
+    /// never reaches — which is the same mistake NetworkIdle made here (#1081), one level down.
+    /// </remarks>
+    private static async Task WaitForMainFrameToSettleAsync(IPage page)
+    {
+        var sinceLastNavigation = Stopwatch.StartNew();
+        void OnNavigated(object? sender, IFrame frame)
+        {
+            if (frame == page.MainFrame)
+            {
+                sinceLastNavigation.Restart();
+            }
+        }
+
+        page.FrameNavigated += OnNavigated;
+        try
+        {
+            var deadline = Stopwatch.StartNew();
+            while (sinceLastNavigation.Elapsed < SettleQuiet && deadline.Elapsed < SettleBudget)
+            {
+                await Task.Delay(25);
+            }
+        }
+        finally
+        {
+            page.FrameNavigated -= OnNavigated;
+        }
+    }
+
+    /// <summary>
+    /// Returns once no <c>/api/documents/</c> request has been in flight for a short quiet window.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For tests that INJECT a failure into a detail load. A pane loads asynchronously and a new selection
+    /// supersedes an old one (ADR 0559), so at any moment a previous subject's requests may still be in the
+    /// air — and a test that aborts "the first matching call" hits whichever load happens to be running.
+    /// </para>
+    /// <para>
+    /// That is not hypothetical: aborting a FOLDER's superseded load produced no error message at all, and
+    /// correctly so — <c>DetailLoader</c> discards a superseded result rather than painting a stale subject's
+    /// failure (ADR 0559). The test then waited 30 s for a message the client had no reason to show, about 1
+    /// run in 5, and the product was right every time.
+    /// </para>
+    /// <para>
+    /// NOT NetworkIdle, which this app never reaches — a Blazor WASM SPA's OIDC silent-renew iframe keeps
+    /// talking (#1081). Scoped to the document API, which is the only traffic that can carry the load under
+    /// test, and bounded so it degrades to "carry on" rather than hanging.
+    /// </para>
+    /// </remarks>
+    public static async Task WaitForDocumentApiQuietAsync(IPage page, int quietMs = 400, int budgetMs = 15000)
+    {
+        var inFlight = 0;
+        var sinceLastActivity = Stopwatch.StartNew();
+
+        void Started(object? sender, IRequest request)
+        {
+            if (request.Url.Contains("/api/documents/", StringComparison.Ordinal))
+            {
+                Interlocked.Increment(ref inFlight);
+                sinceLastActivity.Restart();
+            }
+        }
+
+        void Ended(object? sender, IRequest request)
+        {
+            if (request.Url.Contains("/api/documents/", StringComparison.Ordinal))
+            {
+                Interlocked.Decrement(ref inFlight);
+                sinceLastActivity.Restart();
+            }
+        }
+
+        page.Request += Started;
+        page.RequestFinished += Ended;
+        page.RequestFailed += Ended;
+        try
+        {
+            var deadline = Stopwatch.StartNew();
+            while ((Volatile.Read(ref inFlight) > 0 || sinceLastActivity.ElapsedMilliseconds < quietMs)
+                   && deadline.ElapsedMilliseconds < budgetMs)
+            {
+                await Task.Delay(25);
+            }
+        }
+        finally
+        {
+            page.Request -= Started;
+            page.RequestFinished -= Ended;
+            page.RequestFailed -= Ended;
+        }
     }
 
     private static string Base64Url(byte[] bytes) =>

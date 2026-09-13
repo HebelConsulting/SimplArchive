@@ -35,6 +35,15 @@ public class WebDetailLoadFailureTests
         var row = list.Locator(".wb-list-row").Filter(new() { HasText = "Invoice 2026-003" }).First;
         await Expect(row).ToBeVisibleAsync();
 
+        // Let the FOLDER's own detail load finish before injecting anything. Opening a folder selects it, and
+        // selecting loads its details — so a /versions call for a different document is still in the air while
+        // the row below is already visible. Aborting "the first call" then hit the folder's load about 1 run
+        // in 5, and DetailLoader correctly DISCARDS a superseded result rather than painting it (ADR 0559),
+        // so no message appeared and the test waited 30 s for something that was never going to happen.
+        //
+        // The product was right every time. The test was racing an overlap it had not waited for.
+        await Ui.WaitForDocumentApiQuietAsync(page);
+
         // Fail exactly ONE call of the detail load, the way a transient blip under contention does — then let
         // every later call through, so what this measures is the client's handling and not a broken server.
         var aborted = 0;
@@ -53,9 +62,18 @@ public class WebDetailLoadFailureTests
 
         // Half one: the user is told. Before the fix the pane degraded in total silence, which is what made
         // this a mystery rather than a bug report.
-        await Expect(page.GetByText("could not be loaded")).ToBeVisibleAsync();
+        // The INJECTION is confirmed FIRST, and the order is the point: asserting the message first leaves this
+        // check unreachable exactly when it would explain the failure, so "nothing was injected" and "the
+        // client stayed silent" — opposite defects — arrive as one identical 30-second timeout.
+        var injected = System.Diagnostics.Stopwatch.StartNew();
+        while (aborted == 0 && injected.ElapsedMilliseconds < 15000)
+        {
+            await Task.Delay(50);
+        }
 
         Assert.True(aborted > 0, "the versions call was never intercepted, so no failure was injected and this proved nothing");
+
+        await Expect(page.GetByText("could not be loaded")).ToBeVisibleAsync();
 
         // Half two: the affordance is reachable again by the means the message names. Reselecting is a real
         // recovery only if the second load is allowed to succeed — which is why the route aborts once.
