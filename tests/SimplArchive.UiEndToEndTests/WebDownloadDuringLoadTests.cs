@@ -31,11 +31,40 @@ public class WebDownloadDuringLoadTests
         var page = await Ui.LoginAsync(_app);
         var list = page.Locator("[data-pane='list']");
 
-        // First visit, unthrottled: the race needs the document rows already on screen when the delayed
-        // reload starts. Same seeded path the plain download test walks.
-        await page.GetByText("Demo Repository").First.ClickAsync();
-        await list.GetByText("Contracts").First.DblClickAsync();
-        await list.GetByText("Acme Corp").First.DblClickAsync();
+        // Walked down in the TREE rather than by double-clicking list rows, and that is the whole of this
+        // test's history with #420.
+        //
+        // Opening a folder from the LIST is what used to put its node in the tree, via TreeState.RevealAsync —
+        // which searches only the ALREADY-LOADED tree, returns false when the ancestor chain has not arrived
+        // yet, and schedules NOTHING to try again. So under load the node is not late, it is never coming, and
+        // this test sat waiting for it until the timeout. That is why it failed only in a long single-process
+        // run and passed alone: the reveal wins the race on an idle machine.
+        //
+        // Two earlier explanations were measured and discarded, which is why this comment is long: it is not
+        // shared-data (nothing in the suite moves this folder) and it is not the throttle below racing the
+        // setup (the failure moved to an assertion placed BEFORE the route was installed). Bisecting found no
+        // culprit either — 57 predecessor classes pass and only the full 116 reproduce.
+        //
+        // Expanding the tree puts the node there BY CONSTRUCTION, so nothing here depends on a one-shot
+        // side-effect firing in time. The list still ends up listing this folder, because clicking a tree node
+        // opens it — which is also what the re-open below relies on.
+        var tree = page.Locator("[data-pane='tree']");
+        var repository = tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = "Demo Repository" }).First;
+        await Expect(repository).ToBeVisibleAsync();
+        await repository.Locator(".mud-treeview-item-arrow").ClickAsync();
+
+        var contracts = tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = "Contracts" }).First;
+        await Expect(contracts).ToBeVisibleAsync();
+        await contracts.Locator(".mud-treeview-item-arrow").ClickAsync();
+
+        // Scoped to the TREE deliberately: "Acme Corp" is also the breadcrumb and a list row one level up, and
+        // a click landing on either of those selects without re-firing a children load — which would leave
+        // nothing in flight and quietly turn this into a test of the ordinary path.
+        var treeFolder = tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = "Acme Corp" }).First;
+        await Expect(treeFolder).ToBeVisibleAsync();
+        await treeFolder.ClickAsync();
+
+        // The rows must be on screen before the delayed reload starts — that is the state the race needs.
         var documentRow = list.Locator(".wb-list-row").Filter(new() { HasText = "Invoice 2026-003" }).First;
         await Expect(documentRow).ToBeVisibleAsync();
 
@@ -49,12 +78,8 @@ public class WebDownloadDuringLoadTests
 
         // Re-open the folder the rows belong to, so its reload is in flight and held, then click the document
         // row against the stale-but-clickable list.
-        //
-        // Scoped to the TREE deliberately: "Acme Corp" is also the breadcrumb and was a list row one level up,
-        // and a click landing on either of those selects without re-firing a children load — which would leave
-        // nothing in flight and quietly turn this into a test of the ordinary path.
         var beforeReopen = delayed;
-        await page.Locator("[data-pane='tree']").GetByText("Acme Corp").First.ClickAsync();
+        await treeFolder.ClickAsync();
         await documentRow.ClickAsync();
 
         // Outlive the delayed response: the reload's completion is what re-points the selection at a freshly

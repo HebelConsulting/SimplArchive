@@ -63,7 +63,30 @@
 
         @* One shared cursor-positioned menu for the whole tree (rather than one per node):
            opened programmatically from the right-click handler against _menuNode. *@
-        <MudMenu @ref="_menu" PositionAtCursor="true" Dense="true">
+        @* The anchor is pinned OUT OF THE SCROLL FLOW, and that is load-bearing rather than cosmetic.
+           MudBlazor refuses to position a popover whose anchor has scrolled out of view:
+
+               isInViewport(anchor, rect):
+                 if (rect.top < H && rect.bottom > 0 && ...) return true;   // anchor on screen -> place
+                 walk ancestors: if one is overflow:auto/scroll AND scrolls -> return false;
+               placePopover: if (!isInViewport(...)) return;                // popover STAYS at -9999
+
+           This menu is declared after the tree view inside .wb-pane (overflow:auto), so its anchor sat at the
+           bottom of the pane's scrollable content. As soon as the tree grew taller than the pane, the anchor
+           was off-screen, the walk found .wb-tree, and the menu was never placed at all -- every item left
+           parked at -9999. To a user the menu simply does not appear; to Playwright the items are "visible,
+           enabled and stable" and permanently "outside of the viewport", which reads as a hang.
+
+           Measured, not reasoned: with the tree scrolled to the TOP the popover reported y=-9999 (unplaced);
+           scrolled to the BOTTOM, which pulls the anchor back into view, the SAME right-click on the SAME node
+           placed it correctly. Only the scroll offset differed.
+
+           fixed + 1px + pointer-events:none, because the rect must satisfy BOTH halves of the test above: a
+           zero-height anchor fails `rect.bottom > 0` and falls through to the ancestor walk, so "display:none"
+           would not do. Fixed positioning keeps it viewport-relative no matter how the pane scrolls. It never
+           shows and never takes a click; the menu itself is rendered in MudBlazor's popover provider. *@
+        <MudMenu @ref="_menu" PositionAtCursor="true" Dense="true"
+                 Style="position:fixed; top:0; left:0; width:1px; height:1px; pointer-events:none;">
             <ActivatorContent Context="menuCtx">
                 <span style="display:none;"></span>
             </ActivatorContent>
