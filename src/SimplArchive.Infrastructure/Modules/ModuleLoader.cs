@@ -44,6 +44,21 @@ public static class ModuleLoader
                         continue;
                     }
 
+                    if (!MinorCompatible(module.AbiMinorVersion))
+                    {
+                        // A module built against a NEWER minor may call members this host does not have. Left
+                        // unchecked that surfaces as a MissingMethodException from a static initializer,
+                        // which killed the host outright before #1147. Refused here instead, the same way
+                        // and for the same reason as a major mismatch.
+                        logger.LogWarning(
+                            "Module {ModuleId} ({Path}) was built against ABI {ModuleMajor}.{ModuleMinor}; this host provides "
+                            + "{HostMajor}.{HostMinor}. The module is NOT loaded — a module may be OLDER than its host but "
+                            + "never newer. Upgrade SimplArchive, or install a module built against this host's ABI.",
+                            module.ModuleId, candidate, module.AbiMajorVersion, module.AbiMinorVersion,
+                            ModuleAbiVersion.Major, ModuleAbiVersion.Minor);
+                        continue;
+                    }
+
                     if (!AbiCompatible(module.AbiMajorVersion))
                     {
                         // The version gate is load-time and self-explaining (ADR 0741): an admin message,
@@ -77,6 +92,16 @@ public static class ModuleLoader
     /// <summary>The compat rule, its own method so the refusal is testable without loading anything:
     /// major locks (ADR 0741).</summary>
     public static bool AbiCompatible(int moduleAbiMajor) => moduleAbiMajor == ModuleAbiVersion.Major;
+
+    /// <summary>
+    /// Whether a module's ABI MINOR is servable by this host: anything up to and including our own (#1147).
+    /// </summary>
+    /// <remarks>
+    /// Asymmetric on purpose, and that asymmetry IS "minor floats": an older module asks only for members
+    /// this host still has, while a newer one may ask for members that do not exist here. The first is the
+    /// compatibility the ADR promises; the second is the crash it did not prevent.
+    /// </remarks>
+    public static bool MinorCompatible(int moduleAbiMinor) => moduleAbiMinor <= ModuleAbiVersion.Minor;
 
     private static IEnumerable<string> CandidateAssemblies(string modulesDirectory)
     {

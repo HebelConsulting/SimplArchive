@@ -391,15 +391,40 @@ var modules = SimplArchive.Infrastructure.Modules.ModuleLoader.LoadAll(
     builder.Configuration["Modules:Directory"] ?? Path.Combine(AppContext.BaseDirectory, "Modules"),
     LoggerFactory.Create(logging => logging.AddSerilog()).CreateLogger("ModuleLoader"));
 var machineCatalog = new SimplArchive.Infrastructure.Modules.StateMachineCatalog();
+
+// EVERY call into a module is guarded, and the ones that throw are dropped (#1147). ADR 0741 promises a
+// bad module "stays inactive, the tenant's data untouched"; ModuleLoader honoured that for the failures it
+// could see, and these two calls ran unguarded on the host's construction path — so a module that loaded
+// fine and then threw terminated the API, which then crash-looped. That is how the public kiosk spent 94
+// minutes down, and it is what any customer would meet on upgrading the core with an older module build.
+var moduleStartupLogger = LoggerFactory.Create(logging => logging.AddSerilog()).CreateLogger("ModuleStartup");
+var healthyModules = new List<SimplArchive.Infrastructure.Modules.ModuleLoader.LoadedModule>();
 foreach (var loaded in modules)
 {
-    loaded.Module.ConfigureServices(builder.Services);
+    if (!SimplArchive.Infrastructure.Modules.ModuleStartup.TryRun(
+            loaded, "ConfigureServices", moduleStartupLogger, () => loaded.Module.ConfigureServices(builder.Services)))
+    {
+        continue;
+    }
+
     // The enumerable definitions (ADR 0742) — declared once, held for the process's life; the scoped
     // engine evaluates against them per request.
     // Through the module scope, so every machine carries its declaring module's id — what the wire
     // surface gates activation on (ADR 0737).
-    loaded.Module.DefineStateMachines(machineCatalog.ForModule(loaded.Module.ModuleId));
+    if (!SimplArchive.Infrastructure.Modules.ModuleStartup.TryRun(
+            loaded, "DefineStateMachines", moduleStartupLogger,
+            () => loaded.Module.DefineStateMachines(machineCatalog.ForModule(loaded.Module.ModuleId))))
+    {
+        continue;
+    }
+
+    healthyModules.Add(loaded);
 }
+
+// Only the modules that survived their own startup are published. A module that threw must not reach the
+// activation surface, the ApplicationParts, or the read-model wiring: it would advertise features whose
+// registration never happened.
+modules = healthyModules;
 
 builder.Services.AddSingleton(machineCatalog);
 builder.Services.AddSingleton<IReadOnlyList<SimplArchive.Infrastructure.Modules.ModuleLoader.LoadedModule>>(modules);

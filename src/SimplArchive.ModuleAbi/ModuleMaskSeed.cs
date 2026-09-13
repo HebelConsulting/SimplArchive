@@ -41,29 +41,7 @@ namespace SimplArchive.ModuleAbi;
 /// which is the honest answer for a dossier filed before its pilot has an account — and says so at Warning
 /// rather than failing the write.
 /// </para></param>
-/// <param name="NameVocabularyRel">
-/// One of this module's own <see cref="IIndustryModule.RootLinks"/> rels, whose endpoint answers
-/// <c>?q=&lt;what has been typed&gt;</c> with a <see cref="ModuleVocabularyResource"/> (ABI 0.21). Documents
-/// wearing this mask are then NAMED with a type-ahead over that vocabulary instead of from memory.
-/// <para>
-/// For the case where the name IS the identifier. A weather folder is called <c>LSZH</c> and a wrong code
-/// fetches nothing; the module has always held the 3,706-entry aerodrome list and served a search over it,
-/// but the create dialog is a bare text box, so the two never met and a user typed four letters from memory.
-/// Reported exactly that way: "there's no completion".
-/// </para>
-/// <para>
-/// It names a REL rather than a path, for the reason ADR 0543 gives — routes stay module-private and a rel
-/// is the compatibility surface — and the core resolves it per tenant, emitting nothing when the module is
-/// inactive. A rel naming no root link is ignored with a Warning: a silently absent type-ahead is
-/// indistinguishable from one that was never declared, and that is the failure mode this whole feature
-/// exists to remove.
-/// </para>
-/// <para>
-/// Completion only, never validation. The user may type anything; whether a name is real stays the
-/// module's own business at the moment it acts on it — the weather fetch already validates the ICAO on open
-/// and stages a note for an unknown one. A type-ahead that refused unknown values would be a gate wearing a
-/// convenience's clothes.
-/// </para></param>
+
 public sealed record ModuleMaskSeed(
     Guid MaskId,
     string Name,
@@ -73,8 +51,11 @@ public sealed record ModuleMaskSeed(
     bool AdmitsOnlyDeclaredChildren = false,
     IReadOnlyList<Guid>? AdmittedChildren = null,
     IReadOnlyList<Guid>? AllowedParents = null,
-    string? RepresentsPrincipalField = null,
-    string? NameVocabularyRel = null);
+    string? RepresentsPrincipalField = null)
+{
+    /// <inheritdoc cref="NameVocabularyRelDocumentation"/>
+    public string? NameVocabularyRel { get; init; }
+}
 
 /// <summary>
 /// The handful of CORE mask ids the ABI promises to a module's containment declarations (ABI 0.8) — an
@@ -132,3 +113,45 @@ public sealed record ModuleFieldSeed(
     string DataType,
     bool IsRequired = false,
     bool IsList = false);
+
+/// <summary>
+/// Marker for the shared documentation of <see cref="ModuleMaskSeed.NameVocabularyRel"/>.
+/// </summary>
+/// <remarks>
+/// <para>
+/// AN INIT-ONLY PROPERTY, NOT A PRIMARY-CONSTRUCTOR PARAMETER, and that is a rule rather than a preference
+/// (#1147). Adding a parameter to a positional record CHANGES ITS CONSTRUCTOR SIGNATURE, so every module
+/// compiled against the previous ABI minor calls a constructor that no longer exists — it loads cleanly and
+/// then throws MissingMethodException from a static initializer. That took the public kiosk down for 94
+/// minutes, and it is what a customer would meet on upgrading the core with an older module build.
+/// </para>
+/// <para>
+/// An init-only property is additive: old modules never mention it and keep compiling and RUNNING; new ones
+/// set it with an object initialiser. Every future optional member of this ABI goes in the same way.
+/// </para>
+/// One of this module's own <see cref="IIndustryModule.RootLinks"/> rels, whose endpoint answers
+/// <c>?q=&lt;what has been typed&gt;</c> with a <see cref="ModuleVocabularyResource"/> (ABI 0.21). Documents
+/// wearing this mask are then NAMED with a type-ahead over that vocabulary instead of from memory.
+/// <para>
+/// For the case where the name IS the identifier. A weather folder is called <c>LSZH</c> and a wrong code
+/// fetches nothing; the module has always held the 3,706-entry aerodrome list and served a search over it,
+/// but the create dialog is a bare text box, so the two never met and a user typed four letters from memory.
+/// Reported exactly that way: "there's no completion".
+/// </para>
+/// <para>
+/// It names a REL rather than a path, for the reason ADR 0543 gives — routes stay module-private and a rel
+/// is the compatibility surface — and the core resolves it per tenant, emitting nothing when the module is
+/// inactive. A rel naming no root link is ignored with a Warning: a silently absent type-ahead is
+/// indistinguishable from one that was never declared, and that is the failure mode this whole feature
+/// exists to remove.
+/// </para>
+/// <para>
+/// Completion only, never validation. The user may type anything; whether a name is real stays the
+/// module's own business at the moment it acts on it — the weather fetch already validates the ICAO on open
+/// and stages a note for an unknown one. A type-ahead that refused unknown values would be a gate wearing a
+/// convenience's clothes.
+/// </para>
+/// </remarks>
+internal static class NameVocabularyRelDocumentation
+{
+}

@@ -40,6 +40,25 @@ public interface IIndustryModule
     int AbiMajorVersion { get; }
 
     /// <summary>
+    /// The ABI MINOR this module was built against (#1147). Defaulted, so an existing module compiles
+    /// unchanged and simply declares 0 — the oldest possible answer, which is the safe one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The host refuses a module whose minor is NEWER than its own: that module may call members this host
+    /// does not have, and the failure would otherwise arrive as a <c>MissingMethodException</c> from
+    /// somewhere unrelated. An older minor is fine and is the point of "minor floats" — additions to this
+    /// assembly are made in a binary-compatible way (init-only properties, never new primary-constructor
+    /// parameters) precisely so that stays true.
+    /// </para>
+    /// <para>
+    /// Declaring it is a one-line change and worth making: a module that leaves it at 0 is never refused for
+    /// being too new, so it forfeits the check rather than gaining anything.
+    /// </para>
+    /// </remarks>
+    int AbiMinorVersion => 0;
+
+    /// <summary>
     /// The vendor's license verify key as a PEM <c>SubjectPublicKeyInfo</c> (ECDsa P-256). Ships inside
     /// the module — no phone-home, air-gap-friendly (ADR 0743); the core verifies a tenant's
     /// <see cref="ModuleLicense"/> against this at activation.
