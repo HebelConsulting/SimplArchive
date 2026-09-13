@@ -101,3 +101,48 @@ public sealed record ModuleDocumentRightsAnswer(
 /// <param name="Path">The absolute path the rel reaches (<c>/api/test-module/status</c>).</param>
 /// <param name="Method">The HTTP method.</param>
 public sealed record ModuleRootLink(string Rel, string Path, string Method);
+
+/// <summary>
+/// One offered value for a NAME a user is about to type (ABI 0.21) — what a module's name-vocabulary
+/// endpoint returns, and what both clients render in the create dialog's type-ahead.
+/// </summary>
+/// <remarks>
+/// Deliberately the same three-part shape as <see cref="ProposalItem"/>, and deliberately not the same type.
+/// They answer different questions at different moments — a proposal fills a FIELD on a document that
+/// already exists, through a state machine that needs a subject; this fills the NAME of a document that does
+/// not exist yet, so there is no subject to run a machine against. Sharing the type would have forced one of
+/// them to carry a subject it has no use for.
+/// </remarks>
+/// <param name="Value">What the document will be NAMED if the user picks this — an ICAO code.</param>
+/// <param name="Label">What to show as the entry's headline; usually the value itself.</param>
+/// <param name="Description">
+/// The identifying line beside it ("Kägiswil Airfield, Sarnen (CH)"), or null.
+/// <para>
+/// Named Description rather than Detail, which would have been the obvious mirror of
+/// <see cref="ProposalItem"/>. In this codebase "detail" is a term of art — RFC 7807's Problem Details
+/// field, which carries English error text a client must never render (issue #424) — and a guard scans the
+/// clients for exactly that word. A guard that is wrong is one people learn to suppress rather than read,
+/// so the collision is removed here instead of taught around there.
+/// </para></param>
+public sealed record ModuleVocabularyItem(string Value, string Label, string? Description = null);
+
+/// <summary>
+/// The response a module's name-vocabulary endpoint returns (ABI 0.21): the matches for the caller's
+/// <c>?q=</c>. The core's clients follow the advertised href and append that query — appending a QUERY to an
+/// advertised address is following, where appending a path segment would be composing (core ADR 0557).
+/// </summary>
+/// <remarks>
+/// A plain mutable class with a parameterless constructor, matching every other resource the core serves:
+/// responses negotiate to XML as well as JSON, and <c>XmlSerializer</c> requires that shape.
+/// </remarks>
+public class ModuleVocabularyResource : HypermediaResource
+{
+    /// <summary>The query these matches answer, echoed.</summary>
+    public string Query { get; set; } = string.Empty;
+
+    /// <summary>How many matches are returned — already capped by the endpoint's own limit.</summary>
+    public int Count { get; set; }
+
+    /// <summary>The matches, best first. An empty list is an ordinary answer, not an error.</summary>
+    public List<ModuleVocabularyItem> Items { get; set; } = [];
+}

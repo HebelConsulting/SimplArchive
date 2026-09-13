@@ -3,11 +3,40 @@
 
    Also serves the plain "give this a name" prompts (a new section, #564), which is why the confirm button
    takes its label from a parameter: a create whose button says "Rename" is a small lie the user reads before
-   they read anything else. Defaults to Rename, so every existing caller is unchanged. *@
+   they read anything else. Defaults to Rename, so every existing caller is unchanged.
+
+   With a SuggestionSource it COMPLETES as you type (ABI 0.21): for the masks whose name is an identifier
+   rather than a label — a weather folder called LSZH — where the user was otherwise typing four letters from
+   memory and a wrong one silently fetches nothing.
+
+   It stays a text field that suggests, never a picker. CLAUDE.md's standing principle: a value the user
+   already knows is TYPED, and a chooser is a discovery aid offered beside the typing rather than a step the
+   typist is forced through. CoerceValue keeps whatever was typed if it matches nothing — completion here is
+   convenience, not validation, and the module validates on its own terms when it acts. *@
 <MudDialog>
     <DialogContent>
-        <MudTextField @bind-Value="_name" Label="@Strings.Get("Name")" Variant="Variant.Outlined" Immediate="true"
-                      AutoFocus="true" OnKeyDown="OnKeyDown" Style="min-width: 360px;" />
+        @if (SuggestionSource is null)
+        {
+            <MudTextField @bind-Value="_name" Label="@Strings.Get("Name")" Variant="Variant.Outlined" Immediate="true"
+                          AutoFocus="true" OnKeyDown="OnKeyDown" Style="min-width: 360px;" />
+        }
+        else
+        {
+            <MudAutocomplete T="string" @bind-Value="_name" Label="@Strings.Get("Name")" Variant="Variant.Outlined"
+                             SearchFunc="@SearchAsync" CoerceValue="true" CoerceText="false"
+                             ResetValueOnEmptyText="false" AutoFocus="true" OnKeyDown="OnKeyDown"
+                             MaxItems="20" Immediate="true" Clearable="true" Style="min-width: 360px;">
+                <ItemTemplate Context="value">
+                    <div class="d-flex flex-column">
+                        <span>@Label(value)</span>
+                        @if (Describe(value) is { Length: > 0 } description)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@description</MudText>
+                        }
+                    </div>
+                </ItemTemplate>
+            </MudAutocomplete>
+        }
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">@Strings.Get("Cancel")</MudButton>
@@ -24,9 +53,48 @@
     /// <summary>Localisation key for the confirm button — "Rename" unless the caller is creating something.</summary>
     [Parameter] public string ConfirmLabelKey { get; set; } = "RibbonRename";
 
+    /// <summary>
+    /// Fetches name suggestions for what has been typed so far, or null for a plain text box.
+    /// </summary>
+    /// <remarks>
+    /// Assigned by whoever opens the dialog, because a dialog owns no api client — the same shape the
+    /// desktop's field editor uses for the identical job.
+    /// </remarks>
+    [Parameter] public Func<string?, CancellationToken, Task<IReadOnlyList<NameSuggestion>>>? SuggestionSource { get; set; }
+
     private string _name = string.Empty;
 
+    // The last answer, so the item template can show each value's identifying line without asking again.
+    private IReadOnlyList<NameSuggestion> _suggestions = [];
+
     protected override void OnInitialized() => _name = CurrentName;
+
+    private async Task<IEnumerable<string>> SearchAsync(string? value, CancellationToken cancellationToken)
+    {
+        if (SuggestionSource is null)
+        {
+            return [];
+        }
+
+        try
+        {
+            _suggestions = await SuggestionSource(value, cancellationToken);
+            return _suggestions.Select(s => s.Value);
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+        {
+            // The vocabulary is a convenience. If it cannot be reached the field stays usable and the user
+            // types the name themselves, which is exactly what they did before this existed — offering
+            // nothing is degradation, refusing the dialog would be a regression.
+            _suggestions = [];
+            return [];
+        }
+    }
+
+    private string Label(string value) =>
+        _suggestions.FirstOrDefault(s => s.Value == value)?.Label is { Length: > 0 } label ? label : value;
+
+    private string? Describe(string value) => _suggestions.FirstOrDefault(s => s.Value == value)?.Description;
 
     private void OnKeyDown(KeyboardEventArgs e)
     {

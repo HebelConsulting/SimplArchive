@@ -31,7 +31,9 @@ public sealed record AclRights(
 /// The <c>folderMask</c> body value to send back, or null when the address alone says what to make. Handed
 /// over by the server and returned unread: the vocabulary stays the server's, so no client keeps a copy.
 /// </param>
-public sealed record CreatableChild(Guid MaskId, string Name, bool Folder, string Href, string? FolderMask, string Prompt, string? Icon = null);
+/// <param name="NameValuesHref">Where the NAME completes from as the user types, or null for a plain name box
+/// (ABI 0.21). A module mask whose name IS an identifier — a weather folder called LSZH — declares one.</param>
+public sealed record CreatableChild(Guid MaskId, string Name, bool Folder, string Href, string? FolderMask, string Prompt, string? Icon = null, string? NameValuesHref = null);
 
 public sealed record Node(Guid Id, string Name, bool HasChildren, bool HasVersions, bool HasSubfolders, bool HasReferences, bool OnLegalHold = false, bool CheckedOut = false, bool CheckedOutByMe = false, string CheckedOutByName = "",
     string DocumentType = "", DateOnly? DocumentDate = null, TimeOnly? DocumentTime = null, long? SizeBytes = null, IReadOnlyList<string>? Tags = null, string SensitivityLabelName = "", string? SensitivityLabelColor = null, int VersionCount = 0,

@@ -1,12 +1,35 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:views="using:SimplArchive.DesktopClient.Views"
         x:Class="SimplArchive.DesktopClient.Views.NewFolderDialog"
         Title="{loc:Tr NewFolder}" Width="380" SizeToContent="Height" CanResize="False"
         WindowStartupLocation="CenterOwner">
     <StackPanel Margin="18" Spacing="12">
         <TextBlock x:Name="LabelText" Text="{loc:Tr NewFolderName}" />
-        <TextBox x:Name="NameBox" Watermark="{loc:Tr Name}" />
+        <!-- An AutoCompleteBox rather than a TextBox, ALWAYS: with no populator assigned it behaves as a
+             plain text field, so the ordinary "name this folder" prompt is unchanged and there is one
+             control rather than two that can come to disagree.
+
+             FilterMode=None because the SERVER filters — it holds 3,706 aerodromes and we fetch the matches
+             for what has been typed; filtering again on the client would filter the page we were given.
+             MinimumPrefixLength=0 so focusing offers the opening page (the endpoint answers an empty query),
+             and the populate delay debounces a keystroke-per-request. -->
+        <AutoCompleteBox x:Name="NameBox" Watermark="{loc:Tr Name}"
+                         FilterMode="None" MinimumPrefixLength="0" MinimumPopulateDelay="0:0:0.2">
+            <AutoCompleteBox.ItemTemplate>
+                <!-- x:DataType so the bindings COMPILE against the item type: compiled bindings are on
+                     repo-wide, and without it these three resolve against a pseudo-type and fail the build. -->
+                <DataTemplate x:DataType="views:NameSuggestion">
+                    <StackPanel Spacing="1">
+                        <TextBlock Text="{Binding Label}" />
+                        <TextBlock Text="{Binding Description}" FontSize="11"
+                                   Foreground="{DynamicResource WbMuted}"
+                                   IsVisible="{Binding HasDescription}" />
+                    </StackPanel>
+                </DataTemplate>
+            </AutoCompleteBox.ItemTemplate>
+        </AutoCompleteBox>
         <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
             <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
             <Button Content="{loc:Tr Create}" Click="OnCreate" IsDefault="True" />

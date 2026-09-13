@@ -16,4 +16,34 @@ public static class ModuleActivationCheck
         SimplArchiveDbContext dbContext, string moduleId, DateTimeOffset now, CancellationToken cancellationToken) =>
         await dbContext.ModuleActivations.FirstOrDefaultAsync(a => a.ModuleId == moduleId, cancellationToken)
             is { } activation && ModuleActivationPolicy.IsActive(activation, now);
+
+    /// <summary>
+    /// Which of <paramref name="moduleIds"/> are active for the ambient tenant — the same question as
+    /// <see cref="IsActiveAsync"/>, asked once for several modules instead of once per module.
+    /// </summary>
+    /// <remarks>
+    /// Here rather than at the call sites for this file's stated reason: the derived-active arithmetic
+    /// (including the grace window) must have ONE implementation, and a caller that needs the set rather
+    /// than a single answer would otherwise write the loop itself. Two already had.
+    /// </remarks>
+    public static async Task<HashSet<string>> ActiveIdsAsync(
+        SimplArchiveDbContext dbContext,
+        IReadOnlyCollection<string> moduleIds,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (moduleIds.Count == 0)
+        {
+            return [];
+        }
+
+        var activations = await dbContext.ModuleActivations
+            .Where(a => moduleIds.Contains(a.ModuleId))
+            .ToListAsync(cancellationToken);
+
+        return activations
+            .Where(a => ModuleActivationPolicy.IsActive(a, now))
+            .Select(a => a.ModuleId)
+            .ToHashSet(StringComparer.Ordinal);
+    }
 }

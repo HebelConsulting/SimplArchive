@@ -19,7 +19,16 @@ namespace SimplArchive.Client.Models;
 /// What to ask for: <c>name</c>, or <c>note</c> for a title and a body. The SERVER names the input, because a
 /// client that inferred it from the mask would need to know every mask — which is what this removes.
 /// </param>
-public record CreatableChild(Guid MaskId, string Name, bool Folder, string Href, string? FolderMask, string Prompt, string? Icon = null);
+/// <summary>One offered NAME in a create dialog's type-ahead (ABI 0.21) — the mirror of the server's
+/// ModuleVocabularyItem, kept as a client record so no dialog references the ABI assembly.</summary>
+/// <param name="Value">What the document will be named if this is chosen.</param>
+/// <param name="Label">The headline to show; usually the value itself.</param>
+/// <param name="Description">The identifying line beside it, or null (see ModuleVocabularyItem on the name).</param>
+public record NameSuggestion(string Value, string Label, string? Description);
+
+/// <param name="NameValuesHref">Where the NAME completes from as the user types, or null for a plain name box
+/// (ABI 0.21). A module mask whose name IS an identifier — a weather folder called LSZH — declares one.</param>
+public record CreatableChild(Guid MaskId, string Name, bool Folder, string Href, string? FolderMask, string Prompt, string? Icon = null, string? NameValuesHref = null);
 
 public record BrowseNode(Guid Id, string Name, bool HasChildren, bool HasVersions, bool HasSubfolders,
     bool HasReferences = false, bool IsReference = false, Guid ReferenceId = default, Guid? RealParentId = null,

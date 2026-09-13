@@ -113,7 +113,17 @@ public partial class MainWindow
 
         // Titled with the mask's own name, so the user is told which of the kinds on the menu they picked —
         // and so a tenant-authored folder mask reads correctly without a string of its own.
-        var name = await new NewFolderDialog(admitted.Name, admitted.Name).ShowDialog<string?>(this);
+        var dialog = new NewFolderDialog(admitted.Name, admitted.Name);
+
+        // The name completes as you type when the server said where from (ABI 0.21). The href came from the
+        // ENTRY, and only a QUERY is appended to it — following an advertised address, not composing one
+        // (ADR 0557).
+        if (admitted.NameValuesHref is { Length: > 0 } vocabulary)
+        {
+            dialog.CompleteFrom((typed, cancellationToken) => vm.NameSuggestionsAsync(vocabulary, typed, cancellationToken));
+        }
+
+        var name = await dialog.ShowDialog<string?>(this);
         if (!string.IsNullOrWhiteSpace(name))
         {
             // The href the ENTRY carried, never one composed from the node: following the address that granted

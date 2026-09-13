@@ -36,6 +36,18 @@ public class CreatableChild
     /// </remarks>
     public string? FolderMask { get; set; }
 
+    /// <summary>
+    /// Where to complete the NAME from as the user types, or null when there is nothing to complete from
+    /// (ABI 0.21). The client appends <c>?q=</c> and follows it — a query on an advertised address, which is
+    /// following rather than composing (ADR 0557).
+    /// </summary>
+    /// <remarks>
+    /// For the masks whose name IS an identifier: a weather folder called <c>LSZH</c>, where a wrong name
+    /// fetches nothing and the user was typing four letters from memory. Null is the ordinary case and means
+    /// a plain name box, so no existing entry changes shape.
+    /// </remarks>
+    public string? NameValuesHref { get; set; }
+
     /// <summary>What to draw for this entry — the mask's icon token, or null for the shape default.</summary>
     /// <remarks>
     /// So a menu entry wears the same glyph the thing will wear once it exists. Without it the menu says
@@ -123,8 +135,17 @@ public static class CreatableChildren
     /// A personal space's first level is closed to all but its provisioned folders (#634) — a separate
     /// invariant from containment, so it is asked separately here too.
     /// </param>
+    /// <param name="nameVocabularies">
+    /// Mask id → the address whose <c>?q=</c> completes that mask's NAME (ABI 0.21), from
+    /// <see cref="ModuleNameVocabularies"/>. Empty is the ordinary case; a mask absent from it gets a plain
+    /// name box, which is every core mask.
+    /// </param>
     public static List<CreatableChild> For(
-        MaskContainmentRules rules, Guid documentId, Guid? folderMaskId, bool isPersonalRoot)
+        MaskContainmentRules rules,
+        Guid documentId,
+        Guid? folderMaskId,
+        bool isPersonalRoot,
+        IReadOnlyDictionary<Guid, string>? nameVocabularies = null)
     {
         // A personal space's first level holds only what provisioning put there (#634). A separate invariant
         // from containment, so it is answered separately — and answered FIRST, because nothing below it can
@@ -140,7 +161,7 @@ public static class CreatableChildren
         // per folder is one the user has to read rather than aim at.
         if (Offers(rules, WellKnownMaskIds.Folder, folderMaskId))
         {
-            admits.Add(Entry(rules, documentId, WellKnownMaskIds.Folder));
+            admits.Add(Entry(rules, documentId, WellKnownMaskIds.Folder, nameVocabularies));
         }
 
         // Everything else this folder will take, by NAME so the order is stable — a menu whose entries move
@@ -149,7 +170,7 @@ public static class CreatableChildren
         admits.AddRange(rules.UserCreatableMasks
             .Where(m => m != WellKnownMaskIds.Folder && Offers(rules, m, folderMaskId))
             .OrderBy(rules.NameOf, StringComparer.Ordinal)
-            .Select(m => Entry(rules, documentId, m)));
+            .Select(m => Entry(rules, documentId, m, nameVocabularies)));
 
         return admits;
     }
@@ -172,7 +193,11 @@ public static class CreatableChildren
         && (rules.IsFolderMask(maskId) || DedicatedEndpoints.ContainsKey(maskId))
         && rules.Allows(maskId, folderMaskId);
 
-    private static CreatableChild Entry(MaskContainmentRules rules, Guid documentId, Guid maskId)
+    private static CreatableChild Entry(
+        MaskContainmentRules rules,
+        Guid documentId,
+        Guid maskId,
+        IReadOnlyDictionary<Guid, string>? nameVocabularies)
     {
         // A family with its own endpoint goes there; everything else is the children collection's create,
         // carrying the mask id. That is the whole reason a tenant-authored mask needs no entry in any table:
@@ -191,6 +216,10 @@ public static class CreatableChildren
             FolderMask = LegacySlugs.GetValueOrDefault(maskId),
             Prompt = prompt,
             Icon = rules.IconOf(maskId),
+            // Only for a "name" prompt: the richer dialogs (a note, a contact, an appointment) collect
+            // several values and a name vocabulary has no slot in them. A module declaring one on such a
+            // mask gets nothing here rather than a dialog that half-completes.
+            NameValuesHref = prompt == "name" ? nameVocabularies?.GetValueOrDefault(maskId) : null,
         };
     }
 }

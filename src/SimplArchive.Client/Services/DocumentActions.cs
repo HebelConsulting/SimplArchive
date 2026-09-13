@@ -102,6 +102,17 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
         // Titled with the mask's own name, so the user is told which of the kinds on the menu they picked —
         // and so a tenant-authored folder mask reads correctly without a string of its own.
         var parameters = new DialogParameters<RenameDialog> { { x => x.ConfirmLabelKey, "Create" } };
+
+        // The name completes as you type when the server said where from (ABI 0.21) — a weather folder is
+        // called LSZH, and typing four letters from memory is how a folder ends up fetching nothing. The href
+        // came from the row; the client appends only the QUERY, which is following rather than composing
+        // (ADR 0557).
+        if (admitted.NameValuesHref is { Length: > 0 } vocabulary)
+        {
+            parameters.Add(x => x.SuggestionSource, (typed, cancellationToken) =>
+                NameSuggestionsAsync(vocabulary, typed, cancellationToken));
+        }
+
         var dialog = await dialogs.ShowAsync<RenameDialog>(admitted.Name, parameters);
         if (await dialog.Result is not { Canceled: false, Data: string name } || string.IsNullOrWhiteSpace(name))
         {
@@ -890,5 +901,30 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
         public Guid Id { get; set; }
 
         public string Name { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// The name suggestions for what has been typed, from an address the server advertised (ABI 0.21).
+    /// </summary>
+    /// <remarks>
+    /// The query is appended to the ADVERTISED href and nothing else is — appending a query to an address the
+    /// server owns is following it; appending a path segment would be composing in disguise (ADR 0557). An
+    /// unreachable or unexpected answer yields no suggestions rather than an error: the field is still a text
+    /// box and the user still knows the code.
+    /// </remarks>
+    private async Task<IReadOnlyList<NameSuggestion>> NameSuggestionsAsync(
+        string vocabularyHref, string? typed, CancellationToken cancellationToken)
+    {
+        var separator = vocabularyHref.Contains('?', StringComparison.Ordinal) ? '&' : '?';
+        var url = $"{vocabularyHref}{separator}q={Uri.EscapeDataString(typed ?? string.Empty)}";
+
+        var response = await http.GetFromJsonAsync<VocabularyResponse>(url, cancellationToken);
+        return response?.Items ?? [];
+    }
+
+    /// <summary>The module vocabulary envelope, as much of it as this client reads.</summary>
+    private sealed class VocabularyResponse
+    {
+        public List<NameSuggestion> Items { get; set; } = [];
     }
 }

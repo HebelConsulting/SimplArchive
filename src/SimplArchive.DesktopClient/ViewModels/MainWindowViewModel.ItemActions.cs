@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using SimplArchive.DesktopClient.Services;
 using SimplArchive.Localization;
 
@@ -41,6 +42,50 @@ public sealed partial class MainWindowViewModel
         Guid parentId, string createHref, object payload, string okKey, string errKey, string name, string inFolder) =>
         CreateChildAsync(
             parentId, api => api.StructuredEditors.CreateAsync(createHref, payload), okKey, errKey, name, inFolder);
+
+    /// <summary>
+    /// The name suggestions for what has been typed, from an address the server advertised (ABI 0.21).
+    /// </summary>
+    /// <remarks>
+    /// Returns <c>IEnumerable&lt;object&gt;</c> because that is what Avalonia's AutoCompleteBox populator is
+    /// typed as; the items are <see cref="Views.NameSuggestion"/>. An unreachable vocabulary yields NOTHING
+    /// rather than throwing: the box stays a text box and the user types the name, which is exactly what
+    /// they did before this existed. A dialog that failed instead would be a regression bought with a
+    /// convenience.
+    /// </remarks>
+    public async Task<IEnumerable<object>> NameSuggestionsAsync(
+        string vocabularyHref, string? typed, CancellationToken cancellationToken)
+    {
+        if (_api is null)
+        {
+            return [];
+        }
+
+        try
+        {
+            var separator = vocabularyHref.Contains('?', StringComparison.Ordinal) ? '&' : '?';
+            var url = $"{vocabularyHref}{separator}q={Uri.EscapeDataString(typed ?? string.Empty)}";
+            var json = await _api.Core.Http.GetFromJsonAsync<System.Text.Json.JsonElement>(url, cancellationToken);
+
+            if (!json.TryGetProperty("items", out var items) || items.ValueKind != System.Text.Json.JsonValueKind.Array)
+            {
+                return [];
+            }
+
+            return items.EnumerateArray()
+                .Select(i => new Views.NameSuggestion(
+                    i.TryGetProperty("value", out var v) ? v.GetString() ?? string.Empty : string.Empty,
+                    i.TryGetProperty("label", out var l) ? l.GetString() ?? string.Empty : string.Empty,
+                    i.TryGetProperty("description", out var d) ? d.GetString() : null))
+                .Where(s => s.Value.Length > 0)
+                .Cast<object>()
+                .ToList();
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            return [];
+        }
+    }
 
     // The creates differ only in the call and the two strings, so they share one body rather than becoming
     // copies that drift (the fourth would get the fix and the first three would not). What genuinely differs

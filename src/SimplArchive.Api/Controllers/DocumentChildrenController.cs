@@ -42,6 +42,12 @@ public class DocumentChildrenController : ControllerBase
     // rather than two that agree today (#673, ADR 0655).
     private readonly IMaskContainmentProvider _containment;
 
+    // The loaded modules and a logger, for the name vocabularies a module's masks may declare (ABI 0.21).
+    // Both are optional in effect: with no module loaded the lookup is empty and every entry keeps a plain
+    // name box.
+    private readonly IReadOnlyList<Infrastructure.Modules.ModuleLoader.LoadedModule> _modules;
+    private readonly ILogger<DocumentChildrenController> _logger;
+
     public DocumentChildrenController(
         ICurrentUserAccessor currentUserAccessor,
         SimplArchiveDbContext dbContext,
@@ -50,8 +56,12 @@ public class DocumentChildrenController : ControllerBase
         IDocumentIndexQueue queue,
         Documents.IClearanceScopeResolver clearanceScope,
         ICurrentTenantAccessor currentTenantAccessor,
-        IMaskContainmentProvider containment)
+        IMaskContainmentProvider containment,
+        IReadOnlyList<Infrastructure.Modules.ModuleLoader.LoadedModule> modules,
+        ILogger<DocumentChildrenController> logger)
     {
+        _modules = modules;
+        _logger = logger;
         _currentUserAccessor = currentUserAccessor;
         _dbContext = dbContext;
         _access = access;
@@ -339,6 +349,10 @@ public class DocumentChildrenController : ControllerBase
         // however many rows the page holds — and the same object the invariant will consult if any of these
         // creates is actually attempted.
         var rules = await _containment.ForAsync(_dbContext, _currentTenantAccessor.TenantId!.Value, cancellationToken);
+        // Once for the page, beside the rules, for the same reason they are: a per-row resolution would mean
+        // an activation query per listed folder (ADR 0557 — one read, many follows).
+        var nameVocabularies = await Documents.ModuleNameVocabularies.ForTenantAsync(
+            _modules, _dbContext, _logger, DateTimeOffset.UtcNow, cancellationToken);
 
         var children = page.Select(d => new DocumentSummaryResource
         {
@@ -361,7 +375,7 @@ public class DocumentChildrenController : ControllerBase
             CreatedBy = d.CreatedByName ?? "",
             // isPersonalRoot is false by construction: a personal space is a ROOT document, so it is never
             // itself a listed child. Its own resource answers this separately.
-            Admits = CreatableChildren.For(rules, d.Id, d.MaskId, isPersonalRoot: false),
+            Admits = CreatableChildren.For(rules, d.Id, d.MaskId, isPersonalRoot: false, nameVocabularies),
             // From the rules object already loaded for this page — the mask facts are all in one place, so
             // the icon costs no query.
             Icon = rules.IconOf(d.MaskId),

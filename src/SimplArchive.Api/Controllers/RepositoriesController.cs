@@ -39,6 +39,10 @@ public class RepositoriesController : ControllerBase
     private readonly IUserSystemRightsResolver _userSystemRights;
     private readonly SimplArchive.Infrastructure.Masks.IMaskContainmentProvider _containment;
 
+    // For the name vocabularies a module's masks may declare (ABI 0.21) — empty with no module loaded.
+    private readonly IReadOnlyList<SimplArchive.Infrastructure.Modules.ModuleLoader.LoadedModule> _modules;
+    private readonly ILogger<RepositoriesController> _logger;
+
     public RepositoriesController(
         SimplArchiveDbContext dbContext,
         ICurrentServiceAccountAccessor currentServiceAccountAccessor,
@@ -51,8 +55,12 @@ public class RepositoriesController : ControllerBase
         Documents.RepositoryImporter importer,
         Documents.IClearanceScopeResolver clearanceScope,
         SimplArchive.Infrastructure.Masks.IMaskContainmentProvider containment,
-        Documents.DocumentAccessService access)
+        Documents.DocumentAccessService access,
+        IReadOnlyList<SimplArchive.Infrastructure.Modules.ModuleLoader.LoadedModule> modules,
+        ILogger<RepositoriesController> logger)
     {
+        _modules = modules;
+        _logger = logger;
         _dbContext = dbContext;
         _clearanceScope = clearanceScope;
         _currentServiceAccountAccessor = currentServiceAccountAccessor;
@@ -161,6 +169,9 @@ public class RepositoriesController : ControllerBase
         // Once for the page, never once per row (#673): the rules are a tenant-wide fact and every row asks the
         // same question of them.
         var rules = await _containment.ForAsync(_dbContext, _currentTenantAccessor.TenantId!.Value, cancellationToken);
+        // Once for the listing, beside the rules (ADR 0557: one read, many follows).
+        var nameVocabularies = await Documents.ModuleNameVocabularies.ForTenantAsync(
+            _modules, _dbContext, _logger, DateTimeOffset.UtcNow, cancellationToken);
 
         // Personal repositories (ADR "Per-user personal repository") are surfaced separately (the clients' "Personal"
         // node) — keep them out of the shared repository list.
@@ -284,7 +295,7 @@ public class RepositoriesController : ControllerBase
                     HasVersions = candidate.HasVersions,
                     HasSubfolders = candidate.HasSubfolders,
                     Links = rowLinks,
-                    Admits = Documents.CreatableChildren.For(rules, candidate.Id, candidate.MaskId, isPersonalRoot: false),
+                    Admits = Documents.CreatableChildren.For(rules, candidate.Id, candidate.MaskId, isPersonalRoot: false, nameVocabularies),
                     Icon = rules.IconOf(candidate.MaskId),
                 });
             }
