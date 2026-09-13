@@ -48,6 +48,16 @@ public class CreatableChild
     /// </remarks>
     public string? NameValuesHref { get; set; }
 
+    /// <summary>
+    /// Whether the NAME may hold SEVERAL values from that vocabulary, space-separated (ABI 0.23).
+    /// </summary>
+    /// <remarks>
+    /// A NOTAM briefing folder named "LSZH LSAS EDGG" briefs a whole route in one digest. The client then
+    /// completes the code being typed and leaves the ones already there alone. False — every other mask —
+    /// means the box is one value, which is the behaviour that existed before.
+    /// </remarks>
+    public bool NameValuesAreMultiple { get; set; }
+
     /// <summary>What to draw for this entry — the mask's icon token, or null for the shape default.</summary>
     /// <remarks>
     /// So a menu entry wears the same glyph the thing will wear once it exists. Without it the menu says
@@ -145,7 +155,7 @@ public static class CreatableChildren
         Guid documentId,
         Guid? folderMaskId,
         bool isPersonalRoot,
-        IReadOnlyDictionary<Guid, string>? nameVocabularies = null)
+        IReadOnlyDictionary<Guid, ModuleNameVocabularies.Vocabulary>? nameVocabularies = null)
     {
         // A personal space's first level holds only what provisioning put there (#634). A separate invariant
         // from containment, so it is answered separately — and answered FIRST, because nothing below it can
@@ -197,7 +207,7 @@ public static class CreatableChildren
         MaskContainmentRules rules,
         Guid documentId,
         Guid maskId,
-        IReadOnlyDictionary<Guid, string>? nameVocabularies)
+        IReadOnlyDictionary<Guid, ModuleNameVocabularies.Vocabulary>? nameVocabularies)
     {
         // A family with its own endpoint goes there; everything else is the children collection's create,
         // carrying the mask id. That is the whole reason a tenant-authored mask needs no entry in any table:
@@ -219,7 +229,8 @@ public static class CreatableChildren
             // Only for a "name" prompt: the richer dialogs (a note, a contact, an appointment) collect
             // several values and a name vocabulary has no slot in them. A module declaring one on such a
             // mask gets nothing here rather than a dialog that half-completes.
-            NameValuesHref = prompt == "name" ? nameVocabularies?.GetValueOrDefault(maskId) : null,
+            NameValuesHref = prompt == "name" ? nameVocabularies?.GetValueOrDefault(maskId)?.Href : null,
+            NameValuesAreMultiple = prompt == "name" && nameVocabularies?.GetValueOrDefault(maskId)?.IsMultiple == true,
         };
     }
 }

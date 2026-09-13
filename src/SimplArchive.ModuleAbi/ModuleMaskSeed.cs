@@ -55,6 +55,31 @@ public sealed record ModuleMaskSeed(
 {
     /// <inheritdoc cref="NameVocabularyRelDocumentation"/>
     public string? NameVocabularyRel { get; init; }
+
+    /// <summary>
+    /// Whether this mask's NAME may carry SEVERAL values from its vocabulary, separated by spaces (ABI 0.23).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For a name that is a LIST of identifiers rather than one. A NOTAM briefing folder named
+    /// <c>"LSZH LSAS EDGG"</c> briefs a whole route in one digest, because the provider's query takes an
+    /// array and answers the union — so the type-ahead must complete the code being typed while leaving the
+    /// ones already there alone.
+    /// </para>
+    /// <para>
+    /// Declared per mask rather than assumed from the vocabulary, because it is a property of THE MASK, not
+    /// of the list: METAR/TAF and Aerodrome complete from the same aerodrome vocabulary and accept exactly
+    /// one code each — their handlers read the whole folder name as the identifier. A client that always
+    /// completed the last word would silently invite a second code those masks then ignore.
+    /// </para>
+    /// <para>
+    /// An INIT-ONLY PROPERTY, which is now the rule for every ABI addition (ADR 0789): adding a parameter to
+    /// this record's primary constructor changes its signature, and a module built against the previous minor
+    /// then throws <c>MissingMethodException</c> from a static initializer and takes the host down. This is
+    /// that rule's first use.
+    /// </para>
+    /// </remarks>
+    public bool NameVocabularyIsMultiple { get; init; }
 }
 
 /// <summary>

@@ -54,7 +54,7 @@ public sealed partial class MainWindowViewModel
     /// convenience.
     /// </remarks>
     public async Task<IEnumerable<object>> NameSuggestionsAsync(
-        string vocabularyHref, string? typed, CancellationToken cancellationToken)
+        string vocabularyHref, bool multiple, string? typed, CancellationToken cancellationToken)
     {
         if (_api is null)
         {
@@ -63,8 +63,14 @@ public sealed partial class MainWindowViewModel
 
         try
         {
+            // With a multi-value name only the LAST word is being typed; the ones before it are already
+            // chosen and must survive. Each suggestion's value is therefore the WHOLE resulting string —
+            // AutoCompleteBox replaces its content with the chosen item, so handing it the complete answer
+            // is what makes "LSZH LSA" become "LSZH LSAS " rather than "LSAS".
+            var (prefix, fragment) = SimplArchive.Presentation.NameVocabularyInput.SplitTrailingValue(typed, multiple);
+
             var separator = vocabularyHref.Contains('?', StringComparison.Ordinal) ? '&' : '?';
-            var url = $"{vocabularyHref}{separator}q={Uri.EscapeDataString(typed ?? string.Empty)}";
+            var url = $"{vocabularyHref}{separator}q={Uri.EscapeDataString(fragment)}";
             var json = await _api.Core.Http.GetFromJsonAsync<System.Text.Json.JsonElement>(url, cancellationToken);
 
             if (!json.TryGetProperty("items", out var items) || items.ValueKind != System.Text.Json.JsonValueKind.Array)
@@ -73,11 +79,18 @@ public sealed partial class MainWindowViewModel
             }
 
             return items.EnumerateArray()
+                .Select(i => new
+                {
+                    Value = i.TryGetProperty("value", out var v) ? v.GetString() ?? string.Empty : string.Empty,
+                    Label = i.TryGetProperty("label", out var l) ? l.GetString() ?? string.Empty : string.Empty,
+                    Description = i.TryGetProperty("description", out var d) ? d.GetString() : null,
+                })
+                .Where(i => i.Value.Length > 0)
+                // The LABEL stays the bare code so the list still reads as codes; only the value carries the
+                // sentence being built. A trailing space so the next code can be typed straight away.
                 .Select(i => new Views.NameSuggestion(
-                    i.TryGetProperty("value", out var v) ? v.GetString() ?? string.Empty : string.Empty,
-                    i.TryGetProperty("label", out var l) ? l.GetString() ?? string.Empty : string.Empty,
-                    i.TryGetProperty("description", out var d) ? d.GetString() : null))
-                .Where(s => s.Value.Length > 0)
+                    SimplArchive.Presentation.NameVocabularyInput.Compose(prefix, i.Value, multiple),
+                    i.Label, i.Description))
                 .Cast<object>()
                 .ToList();
         }

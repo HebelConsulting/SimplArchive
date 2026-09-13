@@ -28,7 +28,9 @@ public record NameSuggestion(string Value, string Label, string? Description);
 
 /// <param name="NameValuesHref">Where the NAME completes from as the user types, or null for a plain name box
 /// (ABI 0.21). A module mask whose name IS an identifier — a weather folder called LSZH — declares one.</param>
-public record CreatableChild(Guid MaskId, string Name, bool Folder, string Href, string? FolderMask, string Prompt, string? Icon = null, string? NameValuesHref = null);
+/// <param name="NameValuesAreMultiple">Whether the NAME may hold several values from that vocabulary,
+/// space-separated (ABI 0.23) — a NOTAM briefing's "LSZH LSAS EDGG".</param>
+public record CreatableChild(Guid MaskId, string Name, bool Folder, string Href, string? FolderMask, string Prompt, string? Icon = null, string? NameValuesHref = null, bool NameValuesAreMultiple = false);
 
 public record BrowseNode(Guid Id, string Name, bool HasChildren, bool HasVersions, bool HasSubfolders,
     bool HasReferences = false, bool IsReference = false, Guid ReferenceId = default, Guid? RealParentId = null,

@@ -33,7 +33,9 @@ public sealed record AclRights(
 /// </param>
 /// <param name="NameValuesHref">Where the NAME completes from as the user types, or null for a plain name box
 /// (ABI 0.21). A module mask whose name IS an identifier — a weather folder called LSZH — declares one.</param>
-public sealed record CreatableChild(Guid MaskId, string Name, bool Folder, string Href, string? FolderMask, string Prompt, string? Icon = null, string? NameValuesHref = null);
+/// <param name="NameValuesAreMultiple">Whether the NAME may hold several values from that vocabulary,
+/// space-separated (ABI 0.23) — a NOTAM briefing's "LSZH LSAS EDGG".</param>
+public sealed record CreatableChild(Guid MaskId, string Name, bool Folder, string Href, string? FolderMask, string Prompt, string? Icon = null, string? NameValuesHref = null, bool NameValuesAreMultiple = false);
 
 public sealed record Node(Guid Id, string Name, bool HasChildren, bool HasVersions, bool HasSubfolders, bool HasReferences, bool OnLegalHold = false, bool CheckedOut = false, bool CheckedOutByMe = false, string CheckedOutByName = "",
     string DocumentType = "", DateOnly? DocumentDate = null, TimeOnly? DocumentTime = null, long? SizeBytes = null, IReadOnlyList<string>? Tags = null, string SensitivityLabelName = "", string? SensitivityLabelColor = null, int VersionCount = 0,

@@ -24,11 +24,19 @@ namespace SimplArchive.Api.Documents;
 /// </remarks>
 public static class ModuleNameVocabularies
 {
+    /// <summary>Where a mask's name completes from, and whether the name may hold several such values.</summary>
+    /// <param name="Href">The address whose <c>?q=</c> answers the vocabulary.</param>
+    /// <param name="IsMultiple">
+    /// True when the NAME is a list — a NOTAM briefing's "LSZH LSAS EDGG". The client then completes the
+    /// value being typed and leaves the others alone; false means the whole box is one value.
+    /// </param>
+    public sealed record Vocabulary(string Href, bool IsMultiple);
+
     /// <summary>
-    /// Mask id → the address whose <c>?q=</c> answers that mask's name vocabulary, for the ambient tenant.
-    /// Empty when no module is loaded, none is active, or none declares one — the ordinary case.
+    /// Mask id → where that mask's name completes from, for the ambient tenant. Empty when no module is
+    /// loaded, none is active, or none declares one — the ordinary case.
     /// </summary>
-    public static async Task<IReadOnlyDictionary<Guid, string>> ForTenantAsync(
+    public static async Task<IReadOnlyDictionary<Guid, Vocabulary>> ForTenantAsync(
         IReadOnlyList<ModuleLoader.LoadedModule> modules,
         SimplArchiveDbContext dbContext,
         ILogger logger,
@@ -40,13 +48,13 @@ public static class ModuleNameVocabularies
             .ToList();
         if (declaring.Count == 0)
         {
-            return new Dictionary<Guid, string>();
+            return new Dictionary<Guid, Vocabulary>();
         }
 
         var active = await ModuleActivationCheck.ActiveIdsAsync(
             dbContext, declaring.Select(m => m.Module.ModuleId).ToList(), now, cancellationToken);
 
-        var map = new Dictionary<Guid, string>();
+        var map = new Dictionary<Guid, Vocabulary>();
         foreach (var loaded in declaring.Where(m => active.Contains(m.Module.ModuleId)))
         {
             foreach (var mask in loaded.Module.Masks.Where(m => !string.IsNullOrWhiteSpace(m.NameVocabularyRel)))
@@ -68,7 +76,7 @@ public static class ModuleNameVocabularies
                     continue;
                 }
 
-                map[mask.MaskId] = link.Path;
+                map[mask.MaskId] = new Vocabulary(link.Path, mask.NameVocabularyIsMultiple);
             }
         }
 

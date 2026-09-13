@@ -120,7 +120,8 @@ public partial class MainWindow
         // (ADR 0557).
         if (admitted.NameValuesHref is { Length: > 0 } vocabulary)
         {
-            dialog.CompleteFrom((typed, cancellationToken) => vm.NameSuggestionsAsync(vocabulary, typed, cancellationToken));
+            dialog.CompleteFrom((typed, cancellationToken) =>
+                vm.NameSuggestionsAsync(vocabulary, admitted.NameValuesAreMultiple, typed, cancellationToken));
         }
 
         var name = await dialog.ShowDialog<string?>(this);

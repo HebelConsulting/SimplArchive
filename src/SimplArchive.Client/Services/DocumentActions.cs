@@ -110,7 +110,7 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
         if (admitted.NameValuesHref is { Length: > 0 } vocabulary)
         {
             parameters.Add(x => x.SuggestionSource, (typed, cancellationToken) =>
-                NameSuggestionsAsync(vocabulary, typed, cancellationToken));
+                NameSuggestionsAsync(vocabulary, admitted.NameValuesAreMultiple, typed, cancellationToken));
         }
 
         var dialog = await dialogs.ShowAsync<RenameDialog>(admitted.Name, parameters);
@@ -913,13 +913,25 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
     /// box and the user still knows the code.
     /// </remarks>
     private async Task<IReadOnlyList<NameSuggestion>> NameSuggestionsAsync(
-        string vocabularyHref, string? typed, CancellationToken cancellationToken)
+        string vocabularyHref, bool multiple, string? typed, CancellationToken cancellationToken)
     {
+        // With a multi-value name, only the LAST word is being typed — the ones before it are already chosen
+        // and must survive. So the query is that word, and each suggestion's VALUE is the whole resulting
+        // string: the control replaces its content with whatever is picked, so handing it the complete answer
+        // is what makes "LSZH LSA" become "LSZH LSAS " rather than "LSAS".
+        var (prefix, fragment) = SimplArchive.Presentation.NameVocabularyInput.SplitTrailingValue(typed, multiple);
+
         var separator = vocabularyHref.Contains('?', StringComparison.Ordinal) ? '&' : '?';
-        var url = $"{vocabularyHref}{separator}q={Uri.EscapeDataString(typed ?? string.Empty)}";
+        var url = $"{vocabularyHref}{separator}q={Uri.EscapeDataString(fragment)}";
 
         var response = await http.GetFromJsonAsync<VocabularyResponse>(url, cancellationToken);
-        return response?.Items ?? [];
+        var items = response?.Items ?? [];
+
+        // A trailing space so the next code can be typed straight away — the whole point of a route name.
+        return [.. items.Select(i => i with
+        {
+            Value = SimplArchive.Presentation.NameVocabularyInput.Compose(prefix, i.Value, multiple),
+        })];
     }
 
     /// <summary>The module vocabulary envelope, as much of it as this client reads.</summary>
