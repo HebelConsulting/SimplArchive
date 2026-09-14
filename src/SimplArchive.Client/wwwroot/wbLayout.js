@@ -39,6 +39,17 @@ function indexCap() {
     return viewportMode() === 'tablet-landscape' ? INDEX_CAP_TABLET_LANDSCAPE : INDEX_CAP;
 }
 const MIN = 90;
+
+// The floor the PREVIEW pane keeps while a neighbour is dragged wider (#1164). The preview is the grow pane —
+// it has no size of its own and simply takes what the others leave — so nothing stopped a drag from squeezing
+// it to nothing: measured at 48px, where the toolbar cannot fit and its controls were drawn over the chat pane
+// (the #419 symptom, in the case #419's wrapping fix does not cover; at 48px no amount of wrapping helps,
+// because a single 26px button plus the pane's padding is already wider than the pane).
+//
+// A floor rather than more wrapping, so both standing decisions survive: the find field, its match counter and
+// its arrows still wrap as ONE unit, and the preview stays "the thing the user came to look at". 240px is the
+// measured requirement plus margin — at 221px every control already sits inside the pane.
+const MIN_PREVIEW = 240;
 const GUTTERS = {
     tree: { pane: 'tree', mode: 'left' },
     list: { pane: 'list', mode: 'left' },
@@ -296,11 +307,21 @@ export function attach(root) {
             const vertical = cfg.mode === 'top';
             const limit = vertical ? window.innerHeight * 0.7 : window.innerWidth * 0.7;
 
+            // What this drag may grow to before the PREVIEW falls below its floor (#1164). Whatever this pane
+            // gains horizontally, the preview loses — it is the grow pane — so the ceiling is "my size now,
+            // plus whatever slack the preview has above MIN_PREVIEW". Measured once, at grab time, from the
+            // real boxes: a collapsed or absent preview yields Infinity, which is the honest answer (there is
+            // no preview to protect, and the old 70% limit still applies).
+            const previewEl = vertical || state.collapsed.preview ? null : pane('preview');
+            const previewSlack = previewEl
+                ? rect.width + previewEl.getBoundingClientRect().width - MIN_PREVIEW
+                : Infinity;
+
             const onMove = ev => {
                 const raw = cfg.mode === 'left' ? ev.clientX - rect.left
                     : cfg.mode === 'right' ? rect.right - ev.clientX
                         : ev.clientY - rect.top;
-                const size = Math.round(Math.max(MIN, Math.min(raw, limit)));
+                const size = Math.round(Math.max(MIN, Math.min(raw, limit, previewSlack)));
                 if (cfg.pane === 'index') {
                     // A peek, held apart from `state` so it can reach neither storage nor the cap (ADR 0550).
                     indexPeek = size;

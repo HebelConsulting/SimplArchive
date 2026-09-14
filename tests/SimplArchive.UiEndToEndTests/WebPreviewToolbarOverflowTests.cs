@@ -46,50 +46,76 @@ public class WebPreviewToolbarOverflowTests
         await page.Locator("[data-pane='list']").GetByText(name).First.ClickAsync();
         await Expect(page.Locator(".wb-pv-note-add")).ToBeVisibleAsync(new() { Timeout = 30000 });
 
+        var pane = page.Locator("[data-pane='preview']");
+        var before = await pane.BoundingBoxAsync();
+        Assert.NotNull(before);
+
         // Squeeze the preview by dragging the chat gutter left (wbLayout.js sizes the chat from the right, so
         // moving the gutter left widens the chat and narrows the preview).
+        //
+        // Grabbed ABOVE the gutter's centre, deliberately (#1164). The centre is where the gutter's collapse
+        // TOGGLE sits, and wbLayout.js's drag handler opens with
+        //     if (btn && (e.target === btn || btn.contains(e.target))) return;
+        // — so a press on the toggle starts no drag at all. This test used to grab the exact centre, which made
+        // the whole drag a silent no-op: measured on a dev machine, the pane was byte-identical before and
+        // after (x=564 w=368 right=932, the gutter's own position). No click fired either, because the mouse
+        // moves before the release. So the test squeezed nothing and still passed — see the precondition below
+        // for why that was invisible.
         var gutter = page.Locator("[data-gutter='chat']");
         var gutterBox = await gutter.BoundingBoxAsync();
         Assert.NotNull(gutterBox);
-        await page.Mouse.MoveAsync(gutterBox!.X + gutterBox.Width / 2, gutterBox.Y + gutterBox.Height / 2);
+        var grabY = gutterBox!.Y + 24; // clear of the centred toggle
+        await page.Mouse.MoveAsync(gutterBox.X + gutterBox.Width / 2, grabY);
         await page.Mouse.DownAsync();
-        await page.Mouse.MoveAsync(gutterBox.X - 100, gutterBox.Y + gutterBox.Height / 2);
-        await page.Mouse.MoveAsync(620, gutterBox.Y + gutterBox.Height / 2); // several steps: the handler is on mousemove
+        await page.Mouse.MoveAsync(gutterBox.X - 100, grabY);
+        await page.Mouse.MoveAsync(620, grabY); // several steps: the handler is on mousemove
         await page.Mouse.UpAsync();
 
-        var pane = page.Locator("[data-pane='preview']");
         var paneBox = await pane.BoundingBoxAsync();
         Assert.NotNull(paneBox);
 
-        // Precondition, so a failure to narrow can't let the containment assertion pass vacuously: the pane must
-        // actually be too small for the toolbar to fit on one line.
-        Assert.True(paneBox!.Width < 420, $"expected the preview pane to be narrow, it is {paneBox.Width}px wide");
+        // The precondition, so a failure to narrow cannot let the containment assertion pass vacuously. It
+        // compares against the width BEFORE the drag rather than against a constant: the old form asserted
+        // `Width < 420`, which the DEFAULT layout already satisfies (368px on a 1280px viewport, from
+        // DEFAULTS tree 240 + list 300 + chat 340). So the one guard written to catch a failed narrowing was
+        // itself satisfied by the unnarrowed pane, and the test reported success while exercising nothing.
+        Assert.True(paneBox!.Width < before!.Width - 50,
+            $"the drag did not narrow the preview pane — it was {before.Width:F0}px and is {paneBox.Width:F0}px, "
+            + "so this test would assert containment against a pane that was never squeezed");
+        Assert.True(paneBox.Width < 420, $"expected the preview pane to be narrow, it is {paneBox.Width}px wide");
 
-        var controls = page.Locator(".wb-pv-findbar button, .wb-pv-findbar .mud-input-control");
-        var count = await controls.CountAsync();
-        Assert.True(count > 5, $"expected the full toolbar, found {count} controls");
+        // ALL the geometry in ONE layout pass (#1164). Read control-by-control, the pane box and each control
+        // box come from SEPARATE round trips, so any re-layout in between — the preview settling, a toolbar
+        // group appearing — yields two measurements from two different moments and an overflow that never
+        // existed at any single instant. That is the shape of a failure that appears only under load and never
+        // in isolation, which is exactly what CI reported here.
+        var geometry = await page.EvaluateAsync<System.Text.Json.JsonElement>(
+            """
+            () => {
+                const pane = document.querySelector("[data-pane='preview']").getBoundingClientRect();
+                const controls = [...document.querySelectorAll(".wb-pv-findbar button, .wb-pv-findbar .mud-input-control")]
+                    .filter(e => e.getClientRects().length > 0)
+                    .map(e => { const r = e.getBoundingClientRect(); return { x: r.x, right: r.right, cls: e.className }; });
+                return { paneX: pane.x, paneRight: pane.right, controls };
+            }
+            """);
 
-        var paneRight = paneBox.X + paneBox.Width;
-        for (var i = 0; i < count; i++)
+        var paneLeft = geometry.GetProperty("paneX").GetDouble();
+        var paneRight = geometry.GetProperty("paneRight").GetDouble();
+        var visible = geometry.GetProperty("controls").EnumerateArray().ToList();
+        Assert.True(visible.Count > 5, $"expected the full toolbar, found {visible.Count} visible controls");
+
+        for (var i = 0; i < visible.Count; i++)
         {
-            var control = controls.Nth(i);
-            if (!await control.IsVisibleAsync())
-            {
-                continue;
-            }
-
-            var box = await control.BoundingBoxAsync();
-            if (box is null)
-            {
-                continue;
-            }
+            var x = visible[i].GetProperty("x").GetDouble();
+            var right = visible[i].GetProperty("right").GetDouble();
 
             // 1px for sub-pixel rounding of the border — not a tolerance for a control genuinely hanging out.
-            Assert.True(box.X + box.Width <= paneRight + 1,
-                $"toolbar control {i} ends at {box.X + box.Width:F0}px, past the preview pane's right edge at {paneRight:F0}px "
+            Assert.True(right <= paneRight + 1,
+                $"toolbar control {i} ends at {right:F0}px, past the preview pane's right edge at {paneRight:F0}px "
                 + "— it is drawn over the chat pane (#419)");
-            Assert.True(box.X >= paneBox.X - 1,
-                $"toolbar control {i} starts at {box.X:F0}px, left of the preview pane's edge at {paneBox.X:F0}px (#419)");
+            Assert.True(x >= paneLeft - 1,
+                $"toolbar control {i} starts at {x:F0}px, left of the preview pane's edge at {paneLeft:F0}px (#419)");
         }
     }
 }
