@@ -36,6 +36,7 @@ public class ServiceAccountsController : ControllerBase
     private readonly IUserSystemRightsResolver _userSystemRights;
     private readonly IOpenIddictApplicationManager _applicationManager;
     private readonly IAuditRecorder _audit;
+    private readonly Concurrency.ServiceAccountVerbs _serviceAccounts;
 
     public ServiceAccountsController(
         SimplArchiveDbContext dbContext,
@@ -44,7 +45,8 @@ public class ServiceAccountsController : ControllerBase
         ICurrentUserAccessor currentUserAccessor,
         IUserSystemRightsResolver userSystemRights,
         IOpenIddictApplicationManager applicationManager,
-        IAuditRecorder audit)
+        IAuditRecorder audit,
+        Concurrency.ServiceAccountVerbs serviceAccounts)
     {
         _dbContext = dbContext;
         _currentTenantAccessor = currentTenantAccessor;
@@ -53,6 +55,7 @@ public class ServiceAccountsController : ControllerBase
         _userSystemRights = userSystemRights;
         _applicationManager = applicationManager;
         _audit = audit;
+        _serviceAccounts = serviceAccounts;
     }
 
     // Plain mutable classes, not records — System.Xml.Serialization.XmlSerializer (ADR "JSON/XML content
@@ -435,38 +438,41 @@ public class ServiceAccountsController : ControllerBase
             return NotFound();
         }
 
-        serviceAccount.Name = request.Name;
-        serviceAccount.CanManageRepositories = request.CanManageRepositories;
-        serviceAccount.CanManageMasks = request.CanManageMasks;
-        serviceAccount.CanManageServiceAccounts = request.CanManageServiceAccounts;
-        serviceAccount.CanImport = request.CanImport;
-        serviceAccount.CanExport = request.CanExport;
-        serviceAccount.CanBlockResources = request.CanBlockResources;
-
-        // This PUT is a FULL REPLACE, which is what makes it the sharpest lost-update surface in the app
-        // (#1083): two admins editing one integration account's grants from stale forms silently clobber each
-        // other. Honoured when the caller sends a token; absent, this stays today's last-write-wins until the
-        // clients send one (the staged rollout).
-        Concurrency.ConcurrencyHeaders.ApplyIfMatch(_dbContext, Request, serviceAccount);
-
+        // Through this entity's verb contract (ADR 0795): the precondition is honoured, the change commits in ONE
+        // transaction, and the audit event fires only AFTER that commit. This PUT is a FULL REPLACE, which makes
+        // it the sharpest lost-update surface in the app (#1083) — two admins editing one integration account's
+        // grants from stale forms silently clobbered each other.
         try
         {
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
-        // BEFORE the DbUpdateException below, and that order is load-bearing: DbUpdateConcurrencyException
-        // DERIVES from DbUpdateException, so the broader catch would swallow a stale-token conflict and report
-        // it as a name collision — an error naming a cause that never happened, which is worse than none.
-        catch (DbUpdateConcurrencyException)
-        {
-            throw Errors.Exceptions.Concurrency.EtagMismatchException.ForServiceAccount();
+            await _serviceAccounts.MutateAsync(
+                Request,
+                serviceAccount,
+                apply: () =>
+                {
+                    serviceAccount.Name = request.Name;
+                    serviceAccount.CanManageRepositories = request.CanManageRepositories;
+                    serviceAccount.CanManageMasks = request.CanManageMasks;
+                    serviceAccount.CanManageServiceAccounts = request.CanManageServiceAccounts;
+                    serviceAccount.CanImport = request.CanImport;
+                    serviceAccount.CanExport = request.CanExport;
+                    serviceAccount.CanBlockResources = request.CanBlockResources;
+                    return Task.CompletedTask;
+                },
+                afterCommit: () => _audit.RecordAsync(
+                    AuditActions.ServiceAccountUpdated, "ServiceAccount", serviceAccount.Id, serviceAccount.Name,
+                    cancellationToken: cancellationToken),
+                cancellationToken: cancellationToken);
         }
         catch (DbUpdateException)
         {
             // (TenantId, Name) is a real DB unique index — a rename onto an existing name collides here.
+            //
+            // No ordering trap left to get wrong: DbUpdateConcurrencyException DERIVES from DbUpdateException,
+            // and this catch used to have to sit BELOW one for it or a stale token would be reported as a name
+            // collision. The contract converts the concurrency failure inside, so anything reaching here is the
+            // collision — which is the kind of correctness an envelope buys that a helper cannot.
             throw new ServiceAccountNameConflictException();
         }
-
-        await _audit.RecordAsync(AuditActions.ServiceAccountUpdated, "ServiceAccount", serviceAccount.Id, serviceAccount.Name, cancellationToken: cancellationToken);
 
         return Ok(BuildResource(serviceAccount));
     }

@@ -283,6 +283,16 @@ builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentPurger>();
 // The caller-facing access questions every Document-scope controller asks (issue #466) — one implementation
 // where each controller used to carry its own copy of GetCallerRightsAsync.
 builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentAccessService>();
+
+// One named verb contract per concurrency-tracked entity (ADR 0795). They are what a controller TAKES in order
+// to mutate that entity, so a mutation that writes one without taking its contract is visible here and
+// greppable by a guard — the property a shared helper cannot have.
+builder.Services.AddScoped<SimplArchive.Api.Concurrency.DocumentVerbs>();
+builder.Services.AddScoped<SimplArchive.Api.Concurrency.TenantVerbs>();
+builder.Services.AddScoped<SimplArchive.Api.Concurrency.UserVerbs>();
+builder.Services.AddScoped<SimplArchive.Api.Concurrency.ServiceAccountVerbs>();
+builder.Services.AddScoped<SimplArchive.Api.Concurrency.AclEntryVerbs>();
+builder.Services.AddScoped<SimplArchive.Api.Concurrency.WorkflowStateVerbs>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentResourceLinks>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.MachineStatusEvaluator>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.ModuleActionEvaluator>();
