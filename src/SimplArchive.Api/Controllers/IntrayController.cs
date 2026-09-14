@@ -720,7 +720,12 @@ public class IntrayController : ControllerBase
         var versionId = Guid.NewGuid();
         var objectKey = ObjectKeyBuilder.Build(tenantId, now, storageFolderId, versionId, extension);
         await _objectStorageClient.CopyObjectAsync(intrayKey, objectKey, cancellationToken);
-        await _objectStorageClient.DeleteObjectAsync(intrayKey, cancellationToken);
+
+        // The intray copy is deleted AFTER the filing commits, not here (#1171). Filing can still be REFUSED
+        // below — the finalizer is where the destination's admission rules become answerable (#644) — and
+        // deleting first meant a refusal took the item out of the intray anyway: the user was told no AND lost
+        // the thing they were filing, with only an unreferenced blob at a key nothing points to. Copy early,
+        // delete late: an orphaned object is recoverable waste, the user's only copy is not.
 
         var documentId = Guid.NewGuid();
         var document = new Document
@@ -748,6 +753,16 @@ public class IntrayController : ControllerBase
             Comment = string.IsNullOrWhiteSpace(request.Comment) ? null : request.Comment.Trim(),
         };
 
+        // ONE transaction for one filing (#1171). The rows were committed here and the finalizer committed
+        // again, so a refusal below left a document and a version behind that nobody asked for — the husk
+        // DavWrites already had to learn to purge on its own refused-booking path.
+        //
+        // Owned only when nothing is already in flight (ADR 0781, the BookingsController.Book shape).
+        var owned = _dbContext.Database.CurrentTransaction is null
+            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        await using var transaction = owned;
+
         _dbContext.Documents.Add(document);
         _dbContext.DocumentVersions.Add(version);
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -764,8 +779,19 @@ public class IntrayController : ControllerBase
         }
         catch (Domain.Documents.PersonalSpaceStructureException e)
         {
+            // The transaction is disposed un-committed, so the document and version never existed. The intray
+            // item is still there too, because its deletion now happens after the commit — so a refused filing
+            // leaves the user exactly where they started, which is the only honest answer to "no".
             throw new Errors.Exceptions.Documents.PersonalSpaceStructureException(e.Message);
         }
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        // Only now is the item really filed, so only now does it leave the intray.
+        await _objectStorageClient.DeleteObjectAsync(intrayKey, cancellationToken);
 
         // The item left the intray — sweep its staged-mask sidecar + cached preview artifacts so they don't orphan.
         await PurgeItemArtifactsAsync(prefix, name, cancellationToken);
