@@ -24,6 +24,7 @@ namespace SimplArchive.Api.Controllers;
 public class DocumentExternalLinksController : ControllerBase
 {
     private readonly SimplArchiveDbContext _dbContext;
+    private readonly ILogger<DocumentExternalLinksController> _logger;
     private readonly IEffectiveRightsCalculator _rights;
     private readonly IUserSystemRightsResolver _userSystemRights;
     private readonly ICurrentUserAccessor _currentUser;
@@ -42,8 +43,10 @@ public class DocumentExternalLinksController : ControllerBase
         ICurrentTenantAccessor tenant,
         IAuditRecorder audit,
         IDocumentThumbnailService thumbnails,
+        ILogger<DocumentExternalLinksController> logger,
         TimeProvider clock)
     {
+        _logger = logger;
         _dbContext = dbContext;
         _rights = rights;
         _userSystemRights = userSystemRights;
@@ -268,15 +271,32 @@ public class DocumentExternalLinksController : ControllerBase
         // take a moment — rather than when a stranger opens the link and would otherwise watch an empty card
         // rasterise (issue #476). Best-effort throughout: a share must never fail because a picture could not be
         // drawn, so a null here simply leaves the page as it was before this feature existed.
-        if (await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, documentId, document.CurrentVersionId, cancellationToken) is { } version
-            && version.ObjectKey is { Length: > 0 } versionKey
-            && await _thumbnails.EnsureThumbnailAsync(versionKey, cancellationToken) is { PageCount: { } pageCount })
+        //
+        // Deliberately its own transaction AFTER the one above rather than inside it (#1171 flagged the second
+        // commit; it stays). Merging them would mean a picture that could not be drawn ROLLS BACK the share the
+        // user asked for, which is the opposite of what the paragraph above promises.
+        //
+        // The catch is what makes "best-effort" true rather than merely claimed. EnsureThumbnailAsync swallows
+        // its own failures, but the version lookup and the write of the count sit OUTSIDE it — so a database
+        // hiccup here used to surface as a 500 on a share that had already been created and committed. The
+        // caller then believes the share failed, holds no URL, and shares again: reporting failure for
+        // something that succeeded is worse than losing a page-count badge.
+        try
         {
-            // Stored on the VERSION, so a document shared twice does not count its pages twice, and so the badge
-            // survives without re-reading the PDF on every page load. Only written when the count was actually
-            // determined — null keeps meaning "not determined", never "no pages".
-            version.PageCount = pageCount;
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            if (await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, documentId, document.CurrentVersionId, cancellationToken) is { } version
+                && version.ObjectKey is { Length: > 0 } versionKey
+                && await _thumbnails.EnsureThumbnailAsync(versionKey, cancellationToken) is { PageCount: { } pageCount })
+            {
+                // Stored on the VERSION, so a document shared twice does not count its pages twice, and so the
+                // badge survives without re-reading the PDF on every page load. Only written when the count was
+                // actually determined — null keeps meaning "not determined", never "no pages".
+                version.PageCount = pageCount;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+        }
+        catch (Exception e)
+        {
+            _logger.LogWarning(e, "External link {LinkId} was created, but its page count could not be stored.", link.Id);
         }
 
         SetETag(link.ConcurrencyToken);
