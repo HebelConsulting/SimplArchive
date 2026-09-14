@@ -200,8 +200,21 @@ public class SavedSearchesController : ControllerBase
         };
         _dbContext.SavedSearches.Add(saved);
 
+        // ONE transaction for one Save click (#1171): the search and the shares the user picked commit together
+        // or not at all. Separately committed, a failure on the second left a saved search with NONE of its
+        // shares — and no error the user could act on.
+        //
+        // Owned only when nothing is already in flight — the BookingsController.Book precedent (ADR 0781).
+        var owned = _dbContext.Database.CurrentTransaction is null
+            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        await using var transaction = owned;
+
         try
         {
+            // The shares need the search's id, which the tracked entity already has — so both are staged and
+            // committed in one go rather than saved in sequence.
+            await ApplySharesAsync(saved.Id, tenantId, scope, request.Shares, cancellationToken);
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateException)
@@ -209,7 +222,10 @@ public class SavedSearchesController : ControllerBase
             throw new SavedSearchNameConflictException(); // the unique (TenantId, UserId, Name) index
         }
 
-        await ApplySharesAsync(saved.Id, tenantId, scope, request.Shares, cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
 
         return CreatedAtAction(nameof(List), new SavedSearchResource
         {
@@ -229,6 +245,10 @@ public class SavedSearchesController : ControllerBase
     // Replaces a search's specific-principal grants. Clears any existing rows, then (only when Specific) inserts a
     // row per requested principal that resolves to a real active user / group in the tenant (unknown ones are
     // dropped). A non-Specific scope clears the grants entirely.
+    //
+    // It does NOT commit (#1171). It used to, after its caller had already committed the search itself — two
+    // transactions for one Save click, so a failure on the second left a saved search with NONE of the shares
+    // the user had selected. The caller now commits once, with both in it.
     private async Task ApplySharesAsync(Guid savedSearchId, Guid tenantId, ShareScope scope, List<SharePrincipal>? shares, CancellationToken cancellationToken)
     {
         var existing = await _dbContext.SavedSearchShares.Where(s => s.SavedSearchId == savedSearchId).ToListAsync(cancellationToken);
@@ -255,7 +275,6 @@ public class SavedSearchesController : ControllerBase
             }
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     // Owner-only edit (rename / re-query / share-unshare). A non-owner (incl. of a shared search they can see)
@@ -286,8 +305,16 @@ public class SavedSearchesController : ControllerBase
         saved.QueryString = query;
         saved.ShareScope = scope;
 
+        // ONE transaction, as Create above (#1171): the rename/re-query and the share set are one Save click,
+        // so a failure must leave the search exactly as it was rather than renamed with its old shares.
+        var owned = _dbContext.Database.CurrentTransaction is null
+            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        await using var transaction = owned;
+
         try
         {
+            await ApplySharesAsync(saved.Id, saved.TenantId, scope, request.Shares, cancellationToken);
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateException)
@@ -295,7 +322,10 @@ public class SavedSearchesController : ControllerBase
             throw new SavedSearchNameConflictException();
         }
 
-        await ApplySharesAsync(saved.Id, saved.TenantId, scope, request.Shares, cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
 
         return Ok(new SavedSearchResource
         {
