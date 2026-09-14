@@ -124,7 +124,6 @@ public partial class ConcurrencyContractRatchetTests
         "DocumentExternalLinksController.cs:Document",
         "DocumentItemSourceController.cs:Document",
         "DocumentLifecycleController.cs:User",
-        "DocumentMetadataController.cs:Document",
         "DocumentOriginController.cs:Document",
         "DocumentRemindersController.cs:User",
         "DocumentTransferController.cs:Document",

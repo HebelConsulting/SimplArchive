@@ -39,6 +39,7 @@ public class DocumentMetadataController : ControllerBase
     private readonly Documents.MailboxAddressClaims _mailboxAddressClaims;
     private readonly Documents.IndexDataWriter _indexData;
     private readonly Documents.OcrLanguageWriter _ocrLanguages;
+    private readonly Concurrency.DocumentVerbs _documents;
 
     public DocumentMetadataController(
         IWormLockService wormLock,
@@ -50,7 +51,8 @@ public class DocumentMetadataController : ControllerBase
         IObjectStorageClient objectStorage,
         Documents.MailboxAddressClaims mailboxAddressClaims,
         Documents.IndexDataWriter indexData,
-        Documents.OcrLanguageWriter ocrLanguages)
+        Documents.OcrLanguageWriter ocrLanguages,
+        Concurrency.DocumentVerbs documents)
     {
         _wormLock = wormLock;
         _dbContext = dbContext;
@@ -62,6 +64,7 @@ public class DocumentMetadataController : ControllerBase
         _mailboxAddressClaims = mailboxAddressClaims;
         _indexData = indexData;
         _ocrLanguages = ocrLanguages;
+        _documents = documents;
     }
 
     // Plain mutable class, not a record — same XmlSerializer rationale as elsewhere.
@@ -150,20 +153,17 @@ public class DocumentMetadataController : ControllerBase
 
         document.MaskVersionId = mask.VersionId;
 
-        HonourIfMatch(document);
-
         try
         {
-            // Translating save (#562/#564, and now ADR 0672): the refusals SaveChanges raises for containment,
-            // personal-space structure and an immutable folder type must NOT reach the catch below, which
-            // reports every InvalidOperationException as a missing required field.
-            await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
+            // Through the document's verb contract (ADR 0795), which owns the precondition, the single
+            // transaction and the stale-token translation. The containment refusals (#562/#564, ADR 0672) are
+            // translated AROUND it by the shared mapping — they must not reach the catch below, which reports
+            // every InvalidOperationException as a missing required field.
+            await _documents.MutateAsync(Request, document, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
         }
-        // BEFORE the InvalidOperationException catch: a stale token must not be reported as a missing required
-        // field — an error naming a cause that never happened is worse than none.
-        catch (DbUpdateConcurrencyException)
+        catch (Exception e) when (Documents.TypedFolderSave.Translate(e) is { } translated)
         {
-            throw Errors.Exceptions.Concurrency.EtagMismatchException.ForDocument();
+            throw translated;
         }
         catch (InvalidOperationException ex)
         {
@@ -217,8 +217,7 @@ public class DocumentMetadataController : ControllerBase
         }
 
         document.ContentsSortOrder = request.SortOrder;
-        HonourIfMatch(document);
-        await SaveHonouringEtagAsync(cancellationToken);
+        await _documents.MutateAsync(Request, document, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
 
         await _audit.RecordAsync(AuditActions.DocumentContentsSortOrderChanged, "Document", documentId, document.Name, $"Contents sort order set to {request.SortOrder}", cancellationToken: cancellationToken);
 
@@ -276,8 +275,7 @@ public class DocumentMetadataController : ControllerBase
         await _access.EnsureNotCheckedOutByOtherAsync(documentId, cancellationToken);
 
         document.SensitivityLabelId = request.LabelId;
-        HonourIfMatch(document);
-        await SaveHonouringEtagAsync(cancellationToken);
+        await _documents.MutateAsync(Request, document, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
 
         await _queue.EnqueueAsync(documentId, cancellationToken);
         await _audit.RecordAsync(AuditActions.DocumentSensitivityChanged, "Document", documentId, document.Name, $"Sensitivity set to {labelName ?? "None"}", cancellationToken: cancellationToken);
@@ -304,17 +302,15 @@ public class DocumentMetadataController : ControllerBase
         await _access.EnsureNotCheckedOutByOtherAsync(documentId, cancellationToken);
 
         document.MaskVersionId = null;
-        HonourIfMatch(document);
-
         // Clearing is a change: an untyped Mailbox breaks the projection exactly as a re-typed one does
         // (ADR 0672), so this path is refused for the same folders and needs the same translation.
         try
         {
-            await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
+            await _documents.MutateAsync(Request, document, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
         }
-        catch (DbUpdateConcurrencyException)
+        catch (Exception e) when (Documents.TypedFolderSave.Translate(e) is { } translated)
         {
-            throw Errors.Exceptions.Concurrency.EtagMismatchException.ForDocument();
+            throw translated;
         }
 
         await _queue.EnqueueAsync(documentId, cancellationToken);
@@ -560,17 +556,9 @@ public class DocumentMetadataController : ControllerBase
         // too. What stays here is the envelope: who may write, the precondition, the save, the side effects.
         await _indexData.ApplyAsync(document, request.Fields, request.ConfirmDuplicateClaims, cancellationToken);
 
-        HonourIfMatch(document);
-
         try
         {
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
-        // BEFORE the InvalidOperationException catch: a stale token must not be reported as an invalid field
-        // value — an error naming a cause that never happened.
-        catch (DbUpdateConcurrencyException)
-        {
-            throw Errors.Exceptions.Concurrency.EtagMismatchException.ForDocument();
+            await _documents.MutateAsync(Request, document, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
         }
         catch (InvalidOperationException ex)
         {
@@ -682,45 +670,12 @@ public class DocumentMetadataController : ControllerBase
         return Guid.TryParse(headerValue.Trim('"'), out token);
     }
 
-    /// <summary>
-    /// Honours the caller's <c>If-Match</c> when it sent one (#1083): EF then compares that value to the stored
-    /// column and raises <see cref="DbUpdateConcurrencyException"/> — rendered as 412 — if somebody else wrote
-    /// in between. A no-op when no header was sent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This controller had <see cref="SetETag"/> and <see cref="TryParseETag"/> written and called from NOWHERE:
-    /// the whole apparatus existed as dead code while six mutations of a TRACKED entity — including
-    /// <c>PUT index-data</c>, the one two people editing the same document actually collide on — emitted no tag
-    /// and checked no precondition. A tracked entity whose endpoints never check the token is no better than an
-    /// untracked one.
-    /// </para>
-    /// <para>
-    /// HONOURED, not required. The web client calls these four addresses with a plain <c>PutAsJsonAsync</c> and
-    /// sends no header at all, so demanding one would answer 428 to every save today. Requiring it is a later
-    /// step, once both clients send it.
-    /// </para>
-    /// </remarks>
-    private void HonourIfMatch(Domain.Documents.Document document)
-    {
-        if (Request.Headers.TryGetValue("If-Match", out var values) && TryParseETag(values.ToString(), out var token))
-        {
-            _dbContext.Entry(document).Property(d => d.ConcurrencyToken).OriginalValue = token;
-        }
-    }
-
-
-    /// <summary>SaveChanges, rendering a stale <c>If-Match</c> as 412 rather than a raw 500 (#1083).</summary>
-    private async Task SaveHonouringEtagAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            throw Errors.Exceptions.Concurrency.EtagMismatchException.ForDocument();
-        }
-    }
-
+    // HonourIfMatch and SaveHonouringEtagAsync lived here and are GONE (#1175): every mutation on this
+    // controller now goes through DocumentVerbs, which owns the precondition, the single transaction and the
+    // stale-token translation alike.
+    //
+    // Worth remembering what they were. This controller had SetETag and TryParseETag written and called from
+    // NOWHERE — the whole apparatus as dead code, while six mutations of a TRACKED entity emitted no tag and
+    // checked no precondition. That is the failure ADR 0795 exists to make impossible: a helper you forget to
+    // call is invisible, and a controller that does not TAKE its entity's contract is not.
 }
