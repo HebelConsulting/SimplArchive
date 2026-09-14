@@ -72,14 +72,55 @@ public class DocumentFinalizer
     // the worker OCRs it only if it's a scanned image-only document (ADRs "Searchable PDF successor for TIFFs"
     // and "Scanned image-only PDF detection"). The enqueue is a cheap outbox insert; detection is off the
     // request path, so a born-digital PDF just costs a no-op job the worker drops.
+    // Reported ONCE per call site, not once per document. The demo seeders call this in a loop, so a plain
+    // warning emitted a line per filed document at every fixture startup — hundreds of them, on a suite whose
+    // desktop leg is already timing-sensitive. It showed up as three DIFFERENT desktop tests failing across
+    // three runs of the same branch, which is what sent me looking.
+    //
+    // The information wanted here is WHICH CALL SITES are unwrapped, and that is a set of about twenty; the
+    // per-document repetition added nothing and buried it. A guard that floods is a guard people suppress
+    // rather than read.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> UnwrappedCallSites = new();
+
     private static readonly HashSet<string> SearchablePdfSourceExtensions =
         new(StringComparer.OrdinalIgnoreCase) { ".tif", ".tiff", ".pdf" };
 
-    public async Task FinalizeAsync(DocumentVersion version, CancellationToken cancellationToken, StagedClassification? staged = null)
+    /// <param name="callerFile">Filled by the compiler — see the transaction warning below. Never passed.</param>
+    /// <param name="callerLine">Filled by the compiler — see the transaction warning below. Never passed.</param>
+    public async Task FinalizeAsync(
+        DocumentVersion version,
+        CancellationToken cancellationToken,
+        StagedClassification? staged = null,
+        [System.Runtime.CompilerServices.CallerFilePath] string callerFile = "",
+        [System.Runtime.CompilerServices.CallerLineNumber] int callerLine = 0)
     {
         if (version.Status == DocumentVersionStatus.Confirmed)
         {
             return; // idempotent — see ADR "DocumentVersionsController resource-oriented redesign"
+        }
+
+        // This method COMMITS — seven times, and it opens no transaction of its own. So a caller that saved
+        // before calling it has already made that save separately durable, and a failure in here leaves a
+        // half-filed document: a row with no version, a version with no mask, a check-in whose lock was never
+        // released. That is the standing principle's case exactly — one user action is ONE transaction — and it
+        // is invisible, because every one of those partial states looks like a successful write to the caller.
+        //
+        // The transaction cannot be opened HERE: by the time this runs, the caller's first commit has already
+        // happened. It has to be opened by the caller, which is why this only reports rather than repairs.
+        //
+        // STAGE ONE of making it mandatory (#1171, owner-decided): warn, naming the caller so the list of
+        // unwrapped paths is discoverable from a log rather than from the next audit — 20 files call this and
+        // only BookingsController and CheckoutsController wrap it. Once they are converted this becomes a
+        // throw, and an unwrapped filing path stops being possible rather than merely being noticed.
+        if (_dbContext.Database.CurrentTransaction is null && UnwrappedCallSites.TryAdd($"{callerFile}:{callerLine}", true))
+        {
+            _logger.LogWarning(
+                "Document finalization ran OUTSIDE a transaction, from {CallerFile}:{CallerLine} (version "
+                + "{VersionId}). This method commits several times and the caller has usually committed once "
+                + "already, so a failure part-way leaves a half-filed document. Wrap the call in one "
+                + "conditionally-owned transaction (see BookingsController.Book) — this will be refused "
+                + "outright once the remaining paths are converted (#1171).",
+                callerFile, callerLine, version.Id);
         }
 
         // Re-fetch and re-hash the object server-side rather than trusting a client-supplied hash.
