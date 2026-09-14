@@ -3351,26 +3351,17 @@
   <data name="FolderSortNoPermission" xml:space="preserve">
     <value>Sie sind nicht berechtigt, die Sortierung dieses Ordners zu ändern.</value>
   </data>
-  <data name="SaveFailName" xml:space="preserve">
-    <value>Name</value>
-  </data>
   <data name="SaveFailNameConflict" xml:space="preserve">
     <value>Name (existiert hier bereits)</value>
   </data>
-  <data name="SaveFailDocumentDate" xml:space="preserve">
-    <value>Dokumentdatum</value>
+  <data name="SaveFailDocumentTime" xml:space="preserve">
+    <value>Uhrzeit (erwartet HH:mm)</value>
   </data>
-  <data name="SaveFailOcrLanguages" xml:space="preserve">
-    <value>OCR-Sprachen</value>
+  <data name="SaveFailSave" xml:space="preserve">
+    <value>die Änderungen konnten nicht gespeichert werden (Pflicht- und Formatfelder prüfen)</value>
   </data>
-  <data name="SaveFailSensitivity" xml:space="preserve">
-    <value>Vertraulichkeit</value>
-  </data>
-  <data name="SaveFailTags" xml:space="preserve">
-    <value>Schlagwörter</value>
-  </data>
-  <data name="SaveFailMaskIndexData" xml:space="preserve">
-    <value>Maske / Indexdaten (Pflicht- und Formatfelder prüfen)</value>
+  <data name="SaveFailChangedElsewhere" xml:space="preserve">
+    <value>jemand anderes hat dieses Dokument während Ihrer Bearbeitung geändert — neu laden und erneut versuchen</value>
   </data>
   <data name="FolderSortSaveFailed" xml:space="preserve">
     <value>Sortierung konnte nicht gespeichert werden.</value>

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SimplArchive.DesktopClient.Services;
@@ -48,6 +49,12 @@ public sealed partial class MainWindowViewModel
 
     private Guid? _originalMaskId;
     private string _originalName = string.Empty;
+
+    // The detail as it stood when the pencil opened, kept WHOLE rather than field by field: the save is a PUT
+    // of the full detail, so an aspect this pane does not show must still be echoed back — omitting it would
+    // clear it.
+    private JsonElement? _detailBaseline;
+    private string? _detailEtag;
     private DateTime? _originalDocumentDate;
     private string? _originalDocumentTime;
     private bool _loadingMaskEdit;
@@ -67,6 +74,11 @@ public sealed partial class MainWindowViewModel
 
             // Snapshot the read-write system fields so Save can persist only what actually changed and Cancel
             // can restore them.
+            // The read that fills the form, and the tag a save is measured against (ADR 0794). Taken HERE
+            // because the user cannot have edited anything before opening the pencil, so "as it was when I
+            // opened the form" is exactly what this asserts.
+            (_detailBaseline, _detailEtag) = await _api.Documents.GetDetailAsync(DetailHref("detail"));
+
             _originalName = SysName;
             _originalDocumentDate = SysDocumentDate;
             _originalDocumentTime = SysDocumentTime;
@@ -178,147 +190,64 @@ public sealed partial class MainWindowViewModel
             return;
         }
 
-        var failures = new List<string>();
-        var nameChanged = false;
-
-        // Name (rename).
-        var newName = SysName?.Trim() ?? "";
-        if (newName.Length > 0 && newName != _originalName)
+        // The typed time is the one thing that can be wrong before anything is sent (ADR 0758), so it is
+        // checked here rather than becoming a refusal from the server.
+        if (!DocumentDateFormat.TryParseTypedTime(DocumentTimeEntry, out var parsedTime))
         {
-            try
-            {
-                await _api.Documents.RenameAsync(DetailHref("self"), newName);
-                DetailTitle = newName;
-                _originalName = newName;
-                nameChanged = true;
-            }
-            catch (Exception e) { failures.Add($"name ({e.Message})"); }
+            ReportError(string.Format(Strings.Get("StErrSaveJoin"), Strings.Get("SaveFailDocumentTime")));
+            return;
         }
 
-        // Document date + its optional UTC time (on the current version). The time is TYPED (ADR 0758 /
-        // keyboard-first): normalize it, and PUT when the date OR the time changed.
-        if (_sysDocumentDateHref is { } dateHref && SysDocumentDate is { } date)
-        {
-            if (!DocumentDateFormat.TryParseTypedTime(DocumentTimeEntry, out var parsedTime))
-            {
-                failures.Add("document time (expected HH:mm)");
-            }
-            else
-            {
-                var timeStr = DocumentDateFormat.FormatTime(parsedTime);
-                if (date != _originalDocumentDate || !string.Equals(timeStr, _originalDocumentTime, StringComparison.Ordinal))
-                {
-                    try
-                    {
-                        await _api.Versions.SetDocumentDateAsync(dateHref, date.ToString("yyyy-MM-dd"), timeStr);
-                        _originalDocumentDate = date;
-                        SysDocumentTime = _originalDocumentTime = timeStr;
-                        DocumentTimeEntry = timeStr ?? string.Empty;
-                    }
-                    catch (Exception e) { failures.Add($"document date ({e.Message})"); }
-                }
-            }
-        }
-
-        // OCR languages (only if the ordered selection changed — this re-runs the searchable-PDF conversion).
-        if (SysOcrCandidate && !_stagedOcrCodes.SequenceEqual(_sysOcrCodes))
-        {
-            try
-            {
-                await _api.Documents.SetOcrLanguagesAsync(DetailHref("ocr-languages"), _stagedOcrCodes);
-                _sysOcrCodes = _stagedOcrCodes;
-            }
-            catch (Exception e) { failures.Add($"OCR languages ({e.Message})"); }
-        }
-
-        // Sensitivity label (ADR "Configurable sensitivity labels + upload defaults").
-        var chosenLabelId = SelectedSensitivityItem?.Id;
-        if (chosenLabelId != DetailSensitivityId)
-        {
-            try
-            {
-                await _api.Documents.SetSensitivityAsync(DetailHref("sensitivity"), chosenLabelId);
-                var lbl = SensitivityCatalog.FirstOrDefault(l => l.Id == chosenLabelId);
-                _detailSensitivityName = lbl?.Name ?? "";
-                _detailSensitivityColor = lbl?.Color;
-                _detailSensitivityWatermark = lbl?.Watermark ?? false;
-                DetailSensitivityId = chosenLabelId;
-                Preview.WatermarkText = _detailSensitivityWatermark ? $"{_detailSensitivityName} · {UserDisplayName}" : "";
-            }
-            catch (Exception e) { failures.Add($"sensitivity ({e.Message})"); }
-        }
-
-        // Free-form tags (ADR "Document tags"): PUT-replaces the whole set (the server normalizes/dedupes).
+        var newName = SysName?.Trim() ?? string.Empty;
+        var nameChanged = newName.Length > 0 && newName != _originalName;
+        var timeStr = DocumentDateFormat.FormatTime(parsedTime);
         var editTags = EditTags.Select(t => t.Trim().ToLowerInvariant()).Where(t => t.Length is > 0 and <= 100).Distinct().ToList();
-        if (!editTags.OrderBy(t => t).SequenceEqual(_origTags.OrderBy(t => t)))
-        {
-            try
-            {
-                var stored = await _api.Tags.SetTagsAsync(DetailHref("tags"), editTags);
-                DetailTags.Clear();
-                foreach (var t in stored) DetailTags.Add(t);
-                HasDetailTags = DetailTags.Count > 0;
-                _origTags = [.. DetailTags];
-            }
-            catch (Exception e) { failures.Add($"tags ({e.Message})"); }
-        }
+        var chosenLabelId = SelectedSensitivityItem?.Id;
+        var newMaskId = SelectedMaskChoice?.MaskId;
+        var sortOrderChanged = _detailIsFolder && EditSortOrder != _detailSortOrder;
 
-        // Mask + index data.
+        // ONE request for the whole pencil (ADR 0794). It is a PUT of the full detail, so every aspect is
+        // stated: the edited ones from the form, the rest echoed from the baseline this edit opened with — an
+        // omitted aspect is a request to CLEAR it, not to leave it alone.
+        string? Baseline(string property) =>
+            _detailBaseline?.TryGetProperty(property, out var value) == true && value.ValueKind != JsonValueKind.Null
+                ? value.GetString()
+                : null;
+
+        object Body(bool confirmDuplicateClaims) => new
+        {
+            name = newName.Length > 0 ? newName : Baseline("name"),
+            documentDate = SysDocumentDate?.ToString("yyyy-MM-dd") ?? Baseline("documentDate"),
+            documentTime = timeStr ?? Baseline("documentTime"),
+            ocrLanguages = _stagedOcrCodes,
+            sensitivityLabelId = chosenLabelId,
+            tags = editTags,
+            fields = MaskEditFields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.ToValues() }),
+            maskId = newMaskId,
+            contentsSortOrder = sortOrderChanged ? (int?)EditSortOrder : null,
+            confirmDuplicateClaims,
+        };
+
+        JsonElement saved;
         try
         {
-            var newMaskId = SelectedMaskChoice?.MaskId;
-            if (newMaskId is null)
-            {
-                if (_originalMaskId is not null)
-                {
-                    await _api.Masks.ClearMaskAsync(DetailHref("mask"));
-                    _originalMaskId = null;
-                }
-            }
-            else
-            {
-                // Fill index data first, then (re)assign the mask — assigning re-checks required fields, so
-                // the values must already be in place (ADR "Document metadata (index data) endpoints").
-                // The duplicate-claim ask-and-retry (#703) is the client's; this only wires the dialog in. A
-                // decline throws, skipping the mask assignment below — its re-check of required fields would
-                // run against index data that never landed.
-                await _api.Documents.SetIndexDataAsync(DetailHref("index-data"), MaskEditFields.Select(f => (f.FieldDefinitionId, f.ToValues())), ConfirmDuplicateClaimDialog);
-                if (newMaskId != _originalMaskId)
-                {
-                    await _api.Masks.SetMaskAsync(DetailHref("mask"), newMaskId.Value);
-                    _originalMaskId = newMaskId;
-                }
-            }
+            saved = await _api.Documents.SaveDetailAsync(
+                DetailHref("detail"), Body, _detailEtag, ConfirmDuplicateClaimDialog);
         }
-        catch (ApiActionException e) { failures.Add(e.Message); } // required field missing / invalid value
-        catch (DuplicateAddressClaimException e) { failures.Add(e.Message); } // declined the fan-out question
-        catch (Exception e) { failures.Add($"mask ({e.Message})"); }
-
-        // A folder's contents order commits with everything else, from the same Save (issue #408). Skipped for a
-        // document, which lists nothing, and when unchanged — so an ordinary edit sends no extra request.
-        if (_detailIsFolder && EditSortOrder != _detailSortOrder)
+        catch (Exception e) when (e is ApiActionException or DuplicateAddressClaimException or DetailChangedElsewhereException)
         {
-            try
-            {
-                await _api.Documents.SetContentsSortOrderAsync(DetailHref("contents-sort-order"), EditSortOrder);
-                _detailSortOrder = EditSortOrder;
-                OnPropertyChanged(nameof(DetailSortText));
-
-                // The OPEN folder's listing re-sorts only when it is the folder that changed.
-                if (_currentFolderId == documentId)
-                {
-                    _folderSortOrder = EditSortOrder;
-                    _headerSortActive = false;
-                }
-            }
-            catch (Exception e) { failures.Add($"contents sort order ({e.Message})"); }
+            // Stay in edit mode so the rejected value can be corrected — and so a 412 leaves the user's typing
+            // in front of them rather than discarding it along with the save.
+            ReportError(string.Format(Strings.Get("StErrSaveJoin"), e.Message));
+            return;
         }
-
-        if (failures.Count > 0)
+        catch (Exception e)
         {
-            ReportError(string.Format(Strings.Get("StErrSaveJoin"), string.Join("; ", failures)));
-            return; // stay in edit mode so the user can correct the rejected field(s)
+            ReportError(string.Format(Strings.Get("StErrSaveJoin"), e.Message));
+            return;
         }
+
+        AdoptSavedDetail(saved, chosenLabelId, timeStr, newMaskId, editTags, sortOrderChanged, documentId);
 
         IsEditing = false;
         Status = Strings.Get("StSaved");
@@ -327,6 +256,52 @@ public sealed partial class MainWindowViewModel
         {
             await ReloadTreeAsync();
             await LoadFolderContentsAsync(_currentFolderId ?? documentId);
+        }
+    }
+
+    // Takes the SAVED detail as the pane's new truth, so nothing is left describing what was merely sent.
+    private void AdoptSavedDetail(
+        JsonElement saved, Guid? labelId, string? timeStr, Guid? maskId, List<string> tags, bool sortOrderChanged, Guid documentId)
+    {
+        DetailTitle = _originalName = saved.TryGetProperty("name", out var name) && name.ValueKind != JsonValueKind.Null
+            ? name.GetString() ?? _originalName
+            : _originalName;
+
+        _originalDocumentDate = SysDocumentDate;
+        SysDocumentTime = _originalDocumentTime = timeStr;
+        DocumentTimeEntry = timeStr ?? string.Empty;
+        _sysOcrCodes = _stagedOcrCodes;
+
+        var label = SensitivityCatalog.FirstOrDefault(l => l.Id == labelId);
+        _detailSensitivityName = label?.Name ?? string.Empty;
+        _detailSensitivityColor = label?.Color;
+        _detailSensitivityWatermark = label?.Watermark ?? false;
+        DetailSensitivityId = labelId;
+        Preview.WatermarkText = _detailSensitivityWatermark ? $"{_detailSensitivityName} · {UserDisplayName}" : "";
+
+        DetailTags.Clear();
+        foreach (var tag in saved.TryGetProperty("tags", out var stored) && stored.ValueKind == JsonValueKind.Array
+                     ? stored.EnumerateArray().Select(t => t.GetString() ?? string.Empty)
+                     : tags)
+        {
+            DetailTags.Add(tag);
+        }
+        HasDetailTags = DetailTags.Count > 0;
+        _origTags = [.. DetailTags];
+
+        _originalMaskId = maskId;
+
+        if (sortOrderChanged)
+        {
+            _detailSortOrder = EditSortOrder;
+            OnPropertyChanged(nameof(DetailSortText));
+
+            // The OPEN folder's listing re-sorts only when it is the folder that changed.
+            if (_currentFolderId == documentId)
+            {
+                _folderSortOrder = EditSortOrder;
+                _headerSortActive = false;
+            }
         }
     }
 

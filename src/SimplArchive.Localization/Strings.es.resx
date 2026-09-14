@@ -3351,26 +3351,17 @@
   <data name="FolderSortNoPermission" xml:space="preserve">
     <value>No tienes permiso para cambiar el orden de esta carpeta.</value>
   </data>
-  <data name="SaveFailName" xml:space="preserve">
-    <value>nombre</value>
-  </data>
   <data name="SaveFailNameConflict" xml:space="preserve">
     <value>nombre (ya existe aquí)</value>
   </data>
-  <data name="SaveFailDocumentDate" xml:space="preserve">
-    <value>fecha del documento</value>
+  <data name="SaveFailDocumentTime" xml:space="preserve">
+    <value>hora (se espera HH:mm)</value>
   </data>
-  <data name="SaveFailOcrLanguages" xml:space="preserve">
-    <value>idiomas de OCR</value>
+  <data name="SaveFailSave" xml:space="preserve">
+    <value>no se pudieron guardar los cambios (revise los campos obligatorios y con formato)</value>
   </data>
-  <data name="SaveFailSensitivity" xml:space="preserve">
-    <value>confidencialidad</value>
-  </data>
-  <data name="SaveFailTags" xml:space="preserve">
-    <value>etiquetas</value>
-  </data>
-  <data name="SaveFailMaskIndexData" xml:space="preserve">
-    <value>máscara / datos de índice (revise los campos obligatorios y con formato)</value>
+  <data name="SaveFailChangedElsewhere" xml:space="preserve">
+    <value>otra persona cambió este documento mientras lo editaba: vuelva a cargarlo e inténtelo de nuevo</value>
   </data>
   <data name="FolderSortSaveFailed" xml:space="preserve">
     <value>No se pudo guardar el orden.</value>

@@ -182,6 +182,22 @@ public sealed class DetailState
         VersionNumber = mask?.VersionNumber;
     }
 
+    /// <summary>
+    /// The detail resource as it was when the pencil opened, and the tag that read carried (ADR 0794).
+    /// </summary>
+    /// <remarks>
+    /// Kept whole rather than field by field because the save is a <c>PUT</c> of the full detail: an aspect the
+    /// pane does not show must still be sent back as it was, since omitting it would CLEAR it. Edited values
+    /// override it; everything else is echoed from here.
+    ///
+    /// The tag is taken at BEGIN, not before the write. "I edited the document as it was when I opened the
+    /// form" is the claim worth making — a tag re-read moments before saving asserts nothing and can never
+    /// fail, which is what the eight-write version did.
+    /// </remarks>
+    public System.Text.Json.JsonElement? EditBaseline { get; set; }
+
+    public string? EditEtag { get; set; }
+
     public int? VersionNumber { get; set; }
     public int VersionCount { get; set; }
     public List<FieldGroup>? IndexData { get; set; }

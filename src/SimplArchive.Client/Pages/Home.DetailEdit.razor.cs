@@ -114,18 +114,13 @@ public partial class Home
         }
     }
 
-    // The two sort-order refusals reuse the keys the folder-order picker already had; the rest are new, because
-    // until now they were not translated at all.
+    // Three cases now, where there were eight: the save is ONE request (ADR 0794), so there is no per-aspect
+    // refusal left to report. The two that survive are the ones a user can ACT on — a name a sibling already
+    // has, and somebody else having written while this form was open.
     private static string SaveFailureKey(DetailSaveFailure failure) => failure switch
     {
         DetailSaveFailure.NameConflict => "SaveFailNameConflict",
-        DetailSaveFailure.DocumentDate => "SaveFailDocumentDate",
-        DetailSaveFailure.OcrLanguages => "SaveFailOcrLanguages",
-        DetailSaveFailure.Sensitivity => "SaveFailSensitivity",
-        DetailSaveFailure.Tags => "SaveFailTags",
-        DetailSaveFailure.MaskAndIndexData => "SaveFailMaskIndexData",
-        DetailSaveFailure.ContentsSortOrder => "FolderSortSaveFailed",
-        DetailSaveFailure.ContentsSortOrderForbidden => "FolderSortNoPermission",
-        _ => "SaveFailName",
+        DetailSaveFailure.ChangedElsewhere => "SaveFailChangedElsewhere",
+        _ => "SaveFailSave",
     };
 }

@@ -45,6 +45,16 @@ public sealed class ReviewerHasPendingReviewsException(string message) : Excepti
 // confirmDuplicateClaims rather than reporting an error.
 public sealed class DuplicateAddressClaimException(string message) : Exception(message);
 
+/// <summary>
+/// Somebody else wrote the document while this form was open — the 412 the combined detail save can now
+/// actually raise (ADR 0794), because its precondition is the tag the form was LOADED with.
+/// </summary>
+/// <remarks>
+/// Its own type rather than a bare <see cref="ApiActionException"/> so the pane can offer the one action that
+/// helps — reload and try again — instead of reporting it as a save that merely failed.
+/// </remarks>
+public sealed class DetailChangedElsewhereException(string message) : Exception(message);
+
 // Thin HTTP client over the SimplArchive Api (the same endpoints the Blazor client uses). See ADR
 // "Cross-platform desktop fat client (Avalonia)" and "Desktop workbench UI".
 public sealed class SimplArchiveApiClient

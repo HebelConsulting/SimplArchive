@@ -24,6 +24,16 @@ public partial class NoServerDetailInClientsTests
     [GeneratedRegex(@"\.Detail\b")]
     private static partial Regex TypedDetailAccess();
 
+    // A hypermedia REL that happens to be spelled "detail" is not the API's problem-detail prose — it is a URL
+    // lookup, and the string is a rel NAME (ADR 0543 makes rel names the compatibility surface). ADR 0794's
+    // combined document detail introduced one, so the client follows `Href("detail")`, and without this the
+    // guard would have counted a URL as a leaked English message.
+    //
+    // Excluded by SHAPE rather than licensed by count, deliberately: a per-file allowance would have let a real
+    // leak into the same file pass unnoticed, which is the opposite of what this test is for.
+    [GeneratedRegex(@"(?:Href|Required)\([^)]*""detail""", RegexOptions.IgnoreCase)]
+    private static partial Regex RelNamedDetail();
+
     // The licensed reads, counted per file exactly (the ApiRoot way): a new read must either flow through
     // these or argue its own license here.
     //
@@ -68,6 +78,11 @@ public partial class NoServerDetailInClientsTests
             {
                 line++;
                 if (!JsonDetailAccess().IsMatch(raw) && !TypedDetailAccess().IsMatch(raw))
+                {
+                    continue;
+                }
+
+                if (RelNamedDetail().IsMatch(raw))
                 {
                     continue;
                 }

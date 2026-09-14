@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using SimplArchive.Client.Hypermedia;
 using SimplArchive.Client.Models;
 
@@ -16,19 +17,22 @@ namespace SimplArchive.Client.Services;
 /// </remarks>
 public enum DetailSaveFailure
 {
-    Name,
+    /// <summary>The one save was refused. There is no per-aspect case any more, because there is no per-aspect
+    /// REQUEST any more (ADR 0794) — the edit either lands whole or not at all.</summary>
+    Save,
 
     /// <summary>The name is taken by a sibling — distinct because it is the one the user can act on.</summary>
     NameConflict,
-    DocumentDate,
-    OcrLanguages,
-    Sensitivity,
-    Tags,
-    MaskAndIndexData,
-    ContentsSortOrder,
 
-    /// <summary>The caller may not set this folder's order (403), as opposed to the save simply failing.</summary>
-    ContentsSortOrderForbidden,
+    /// <summary>
+    /// Somebody else wrote this document while the form was open (412).
+    /// </summary>
+    /// <remarks>
+    /// Reachable for the first time. The precondition is now the tag the form was LOADED with, so it can
+    /// actually detect a concurrent edit; the previous code re-read the tag immediately before writing, which
+    /// asked "has it changed in the last five milliseconds?" and was therefore always satisfied.
+    /// </remarks>
+    ChangedElsewhere,
 }
 
 /// <summary>
@@ -64,13 +68,16 @@ public sealed record DetailSaveOutcome(
 /// to lose.
 /// </para>
 /// <para>
-/// It deliberately does NOT report to the user. Save is partial by design — each field is its own request, and
-/// one refusal must not discard the rest — so the outcome is a LIST of what failed, which the caller localizes
-/// and shows. Nor does it re-select, re-list or reload the tree; it says what changed and the shell decides what
-/// that costs.
+/// It deliberately does NOT report to the user: the outcome says what failed and the caller localizes and shows
+/// it. Nor does it re-select, re-list or reload the tree; it says what changed and the shell decides what that
+/// costs.
+///
+/// Save is no longer partial. It is ONE request over the whole detail (ADR 0794), so the edit lands whole or
+/// not at all — where before each field was its own write and a refusal part-way left the document half-saved
+/// with no transaction and, for seven of the eight writes, no precondition either.
 /// </para>
 /// </remarks>
-public sealed class DetailEditor(HttpClient http, DetailState detail, DetailCatalogs catalogs, DocumentActions actions)
+public sealed class DetailEditor(HttpClient http, DetailState detail, DetailCatalogs catalogs)
 {
     /// <summary>
     /// Whether the pane can enter edit: there is a subject, no edit is already open, and — the part that was
@@ -137,6 +144,16 @@ public sealed class DetailEditor(HttpClient http, DetailState detail, DetailCata
                         proposal.Label ?? string.Empty,
                         [.. (proposal.Items ?? []).Select(i => new DetailState.ProposalOfferItem(i.Value ?? string.Empty, i.Label ?? string.Empty, i.Detail))]);
                 }
+            }
+
+            // The read that fills the form, and the tag a save is measured against (ADR 0794). Taken HERE
+            // because the user cannot have edited anything before clicking the pencil, so "as it was when I
+            // opened the form" is exactly what this asserts.
+            using (var response = await http.GetAsync(Href("detail")))
+            {
+                response.EnsureSuccessStatusCode();
+                detail.EditBaseline = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                detail.EditEtag = response.Headers.ETag?.Tag;
             }
 
             detail.IsEditing = true;
@@ -237,157 +254,133 @@ public sealed class DetailEditor(HttpClient http, DetailState detail, DetailCata
 
         detail.Busy = true;
         var failures = new List<DetailSaveFailure>();
-        var nameChanged = false;
-        var sortOrderChanged = false;
         string? duplicateClaim = null;
         try
         {
             var newName = detail.EditName.Trim();
-            if (newName.Length > 0 && newName != detail.OrigName)
-            {
-                var etag = await actions.GetETagAsync(Href("self"));
-                using var req = new HttpRequestMessage(HttpMethod.Put, Href("self")) { Content = JsonContent.Create(new { name = newName }) };
-                if (etag is not null)
-                {
-                    req.Headers.TryAddWithoutValidation("If-Match", etag);
-                }
+            var nameChanged = newName.Length > 0 && newName != detail.OrigName;
 
-                var resp = await http.SendAsync(req);
-                if (resp.IsSuccessStatusCode) { detail.SysName = detail.OrigName = newName; nameChanged = true; }
-                else if (resp.StatusCode == HttpStatusCode.Conflict) { failures.Add(DetailSaveFailure.NameConflict); }
-                else { failures.Add(DetailSaveFailure.Name); }
+            var editTags = detail.EditTags
+                .Select(t => t.Trim().ToLowerInvariant())
+                .Where(t => t.Length is > 0 and <= 100)
+                .Distinct()
+                .ToList();
+            var sortOrderChanged = item.IsFolder && detail.EditSortOrder != detail.SortOrder;
+
+            // ONE request for the whole pencil (ADR 0794). It is a PUT of the full detail, so every aspect is
+            // stated: the edited ones from the form, the rest echoed from the baseline this edit opened with —
+            // an omitted aspect would be a request to CLEAR it, not to leave it alone.
+            var body = Body(newName.Length > 0 ? newName : null, editTags, confirmDuplicateClaims, sortOrderChanged);
+
+            using var request = new HttpRequestMessage(HttpMethod.Put, Href("detail")) { Content = JsonContent.Create(body) };
+            if (detail.EditEtag is { } etag)
+            {
+                request.Headers.TryAddWithoutValidation("If-Match", etag);
             }
 
-            // The address is the one the current version's row advertised when the detail loaded (`document-date`,
-            // captured in DeriveSystemFields) — its absence means the row offered no such edit here (ADR 0543).
-            if (detail.SysHasVersion && detail.SysDocumentDateHref is { } ddHref && detail.EditDocumentDate is { } dd)
+            var response = await http.SendAsync(request);
+
+            if (response.StatusCode == HttpStatusCode.Conflict
+                && await ProblemAsync(response) is { ErrorCode: "DUPLICATE_ADDRESS_CLAIM" } claim)
             {
-                // The time is TYPED (ADR 0758 / the keyboard-first principle); normalize it, and PUT when the
-                // date OR the time changed. A malformed typed time is a save failure the user corrects inline.
-                if (!DocumentDateFormat.TryParseTypedTime(detail.EditDocumentTime, out var parsedTime))
-                {
-                    failures.Add(DetailSaveFailure.DocumentDate);
-                }
-                else
-                {
-                    var timeStr = DocumentDateFormat.FormatTime(parsedTime);
-                    if (dd != detail.OrigDocumentDate || !string.Equals(timeStr, detail.OrigDocumentTime, StringComparison.Ordinal))
-                    {
-                        var resp = await http.PutAsJsonAsync(ddHref, new { documentDate = dd.ToString("yyyy-MM-dd"), documentTime = timeStr });
-                        if (resp.IsSuccessStatusCode)
-                        {
-                            detail.SysDocumentDate = detail.OrigDocumentDate = dd;
-                            detail.SysDocumentTime = detail.OrigDocumentTime = detail.EditDocumentTime = timeStr;
-                        }
-                        else { failures.Add(DetailSaveFailure.DocumentDate); }
-                    }
-                }
+                // Not a refusal — a question, composed HERE from the response's claimedBy extension rather than
+                // surfacing the server's English prose (issue #424). In one transaction NOTHING was written by
+                // the attempt that asked it, so the retry is simply this same request with the flag set; the
+                // old per-aspect path had already committed the earlier fields and relied on change detection
+                // to skip them.
+                duplicateClaim = string.Format(SimplArchive.Localization.Strings.Get("DupClaimBody"), claim.ClaimedBy ?? "?");
+
+                return new DetailSaveOutcome(failures, false, false, duplicateClaim);
             }
 
-            if (detail.SysOcrCandidate && !detail.EditOcrCodes.SequenceEqual(detail.OrigOcrCodes))
+            if (response.StatusCode == HttpStatusCode.PreconditionFailed)
             {
-                var resp = await http.PutAsJsonAsync(Href("ocr-languages"), new { languages = detail.EditOcrCodes });
-                if (resp.IsSuccessStatusCode) { detail.SysOcrCodes = [.. detail.EditOcrCodes]; detail.OrigOcrCodes = [.. detail.EditOcrCodes]; }
-                else { failures.Add(DetailSaveFailure.OcrLanguages); }
+                // Somebody else wrote while this form was open. Reachable for the first time (ADR 0794): the
+                // tag is the one the form was LOADED with, where the old code re-read it moments before writing
+                // and so asked a question whose answer was always yes.
+                failures.Add(DetailSaveFailure.ChangedElsewhere);
+
+                return new DetailSaveOutcome(failures, false, false);
             }
 
-            if (detail.EditSensitivityId != detail.SensitivityId)
+            if (!response.IsSuccessStatusCode)
             {
-                var resp = await http.PutAsJsonAsync(Href("sensitivity"), new { labelId = detail.EditSensitivityId });
-                if (resp.IsSuccessStatusCode)
-                {
-                    detail.SensitivityId = detail.EditSensitivityId;
-                    var lbl = catalogs.Sensitivity.FirstOrDefault(l => l.Id == detail.EditSensitivityId);
-                    detail.SensitivityName = lbl?.Name ?? "";
-                    detail.SensitivityColor = lbl?.Color;
-                    detail.SensitivityWatermark = lbl?.Watermark ?? false;
-                }
-                else { failures.Add(DetailSaveFailure.Sensitivity); }
+                failures.Add(response.StatusCode == HttpStatusCode.Conflict
+                    ? DetailSaveFailure.NameConflict
+                    : DetailSaveFailure.Save);
+
+                return new DetailSaveOutcome(failures, false, false);
             }
 
-            // Free-form tags (ADR "Document tags"): PUT-replaces the whole set; the server normalizes/dedupes.
-            var editTags = detail.EditTags.Select(t => t.Trim().ToLowerInvariant()).Where(t => t.Length is > 0 and <= 100).Distinct().ToList();
-            if (!editTags.OrderBy(t => t).SequenceEqual(detail.OrigTags.OrderBy(t => t)))
-            {
-                var resp = await http.PutAsJsonAsync(Href("tags"), new { tags = editTags });
-                if (resp.IsSuccessStatusCode)
-                {
-                    detail.Tags = (await resp.Content.ReadFromJsonAsync<TagsResponse>())?.Tags ?? [];
-                    detail.OrigTags = [.. detail.Tags];
-                }
-                else { failures.Add(DetailSaveFailure.Tags); }
-            }
+            var saved = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+            Adopt(saved);
+            detail.IsEditing = false;
 
-            try
-            {
-                if (detail.EditMaskId is null)
-                {
-                    if (detail.OrigMaskId is not null)
-                    {
-                        (await http.DeleteAsync(Href("mask"))).EnsureSuccessStatusCode();
-                    }
-                }
-                else
-                {
-                    // Fill index data first, then (re)assign the mask (which re-checks required fields).
-                    var body = new { fields = detail.EditFields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.ToValues() }), confirmDuplicateClaims };
-                    var indexResp = await http.PutAsJsonAsync(Href("index-data"), body);
-                    if (indexResp.StatusCode == HttpStatusCode.Conflict
-                        && await ProblemAsync(indexResp) is { ErrorCode: "DUPLICATE_ADDRESS_CLAIM" } problem)
-                    {
-                        // Not a refusal — a question, composed HERE from the response's claimedBy extension
-                        // rather than surfacing the server's English prose (issue #424). The shell shows it
-                        // and re-saves with the confirmation; every field already saved above was committed
-                        // and its change detection makes the retry skip it.
-                        duplicateClaim = string.Format(SimplArchive.Localization.Strings.Get("DupClaimBody"), problem.ClaimedBy ?? "?");
-                    }
-                    else
-                    {
-                        indexResp.EnsureSuccessStatusCode();
-                        if (detail.EditMaskId != detail.OrigMaskId)
-                        {
-                            (await http.PutAsJsonAsync(Href("mask"), new { maskId = detail.EditMaskId })).EnsureSuccessStatusCode();
-                        }
-                    }
-                }
-            }
-            catch (HttpRequestException)
-            {
-                failures.Add(DetailSaveFailure.MaskAndIndexData);
-            }
+            return new DetailSaveOutcome(failures, nameChanged, sortOrderChanged);
+        }
+        catch (HttpRequestException)
+        {
+            failures.Add(DetailSaveFailure.Save);
 
-            // A folder's contents order commits with everything else, from the same pencil (issue #408). Skipped
-            // for a document, which lists nothing, and when unchanged — so an ordinary edit sends no extra request.
-            if (item.IsFolder && detail.EditSortOrder != detail.SortOrder)
-            {
-                var resp = await http.PutAsJsonAsync(Href("contents-sort-order"), new { sortOrder = (int)detail.EditSortOrder });
-                if (resp.IsSuccessStatusCode)
-                {
-                    detail.SortOrder = detail.EditSortOrder;
-                    sortOrderChanged = true;
-                }
-                else
-                {
-                    failures.Add(resp.StatusCode == HttpStatusCode.Forbidden
-                        ? DetailSaveFailure.ContentsSortOrderForbidden
-                        : DetailSaveFailure.ContentsSortOrder);
-                }
-            }
-
-            // Stays open on a failure (so the rejected field can be fixed) AND on the duplicate-claim
-            // question — the shell asks and re-saves with the confirmation; everything already committed is
-            // skipped by its own change detection on the retry.
-            if (failures.Count == 0 && duplicateClaim is null)
-            {
-                detail.IsEditing = false;
-            }
-
-            return new DetailSaveOutcome(failures, nameChanged, sortOrderChanged, duplicateClaim);
+            return new DetailSaveOutcome(failures, false, false);
         }
         finally
         {
             detail.Busy = false;
         }
+    }
+
+    /// <summary>
+    /// The full intended detail: what the user edited, over what this edit opened with.
+    /// </summary>
+    private object Body(string? name, List<string> tags, bool confirmDuplicateClaims, bool sortOrderChanged)
+    {
+        var baseline = detail.EditBaseline;
+
+        string? Text(string property) =>
+            baseline?.TryGetProperty(property, out var value) == true && value.ValueKind != JsonValueKind.Null
+                ? value.GetString()
+                : null;
+
+        return new
+        {
+            name = name ?? Text("name"),
+            documentDate = detail.EditDocumentDate?.ToString("yyyy-MM-dd") ?? Text("documentDate"),
+            documentTime = detail.EditDocumentTime ?? Text("documentTime"),
+            ocrLanguages = detail.EditOcrCodes,
+            sensitivityLabelId = detail.EditSensitivityId,
+            tags,
+            fields = detail.EditFields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.ToValues() }),
+            maskId = detail.EditMaskId,
+            // Folder-only, and only when it actually moved — a document has no contents to order, and the
+            // server treats null as "leave it alone" rather than as the enum's first value.
+            contentsSortOrder = sortOrderChanged ? (int?)detail.EditSortOrder : null,
+            confirmDuplicateClaims,
+        };
+    }
+
+    /// <summary>Takes the saved detail as the pane's new truth, so nothing is left describing the old one.</summary>
+    private void Adopt(JsonElement saved)
+    {
+        string? Text(string property) =>
+            saved.TryGetProperty(property, out var value) && value.ValueKind != JsonValueKind.Null ? value.GetString() : null;
+
+        detail.SysName = detail.OrigName = Text("name") ?? detail.SysName;
+        detail.OrigDocumentDate = detail.SysDocumentDate = detail.EditDocumentDate;
+        detail.OrigDocumentTime = detail.SysDocumentTime = detail.EditDocumentTime;
+        detail.SysOcrCodes = [.. detail.EditOcrCodes];
+        detail.OrigOcrCodes = [.. detail.EditOcrCodes];
+        detail.SensitivityId = detail.EditSensitivityId;
+        var label = catalogs.Sensitivity.FirstOrDefault(l => l.Id == detail.EditSensitivityId);
+        detail.SensitivityName = label?.Name ?? string.Empty;
+        detail.SensitivityColor = label?.Color;
+        detail.SensitivityWatermark = label?.Watermark ?? false;
+        detail.Tags = saved.TryGetProperty("tags", out var tags) && tags.ValueKind == JsonValueKind.Array
+            ? [.. tags.EnumerateArray().Select(t => t.GetString() ?? string.Empty)]
+            : detail.Tags;
+        detail.OrigTags = [.. (detail.Tags ?? [])];
+        detail.SortOrder = detail.EditSortOrder;
+        detail.EditEtag = Text("etag") is { } fresh ? $"\"{fresh}\"" : detail.EditEtag;
     }
 
     private sealed record ProblemBody(string? ErrorCode, string? ClaimedBy);
