@@ -516,6 +516,21 @@ public class CheckoutsController : ControllerBase
             DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
         };
 
+        // ONE transaction for one check-in (#1171). This filed the version, let the finalizer commit, and then
+        // released the lock in a THIRD commit — so a failure in between left a new version filed while the
+        // document was still checked out and the stash still populated: a state the user never asked for, and
+        // one they cannot undo from the UI.
+        //
+        // Several SaveChanges INSIDE one transaction is not the thing the standing principle forbids — none of
+        // them is separately durable. What it forbids is several COMMITS, which is what these were.
+        //
+        // Owned only when nothing is already in flight (ADR 0781, the BookingsController.Book shape): a module
+        // read-model context can enlist ours, and beginning a second inside it would throw.
+        var owned = _dbContext.Database.CurrentTransaction is null
+            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        await using var transaction = owned;
+
         _dbContext.DocumentVersions.Add(version);
         await _dbContext.SaveChangesAsync(cancellationToken);
         await _finalizer.FinalizeAsync(version, cancellationToken); // no staged draft — the existing document keeps its mask
@@ -525,8 +540,20 @@ public class CheckoutsController : ControllerBase
         document.CheckedOutAt = null;
         document.CheckoutReminderSentAt = null;
         await _dbContext.SaveChangesAsync(cancellationToken);
-        await _objectStorage.DeleteObjectAsync(stashKey, cancellationToken);
 
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        // AFTER the commit, both of them. Deleting the stash before it would destroy the user's only copy of
+        // work the database might then roll back; recording the audit before it would report a check-in that
+        // did not happen.
+        //
+        // The stash-to-object COPY above stays before the transaction: it must, since the version row points at
+        // the key it writes. A rollback therefore leaves an unreferenced blob, which the incomplete-upload
+        // sweep collects — an orphaned object is recoverable waste, a lost check-in is not.
+        await _objectStorage.DeleteObjectAsync(stashKey, cancellationToken);
         await _audit.RecordAsync(AuditActions.DocumentCheckedIn, "Document", documentId, document.Name, cancellationToken: cancellationToken);
         return NoContent();
     }

@@ -561,6 +561,18 @@ public class TypedItemsController : ControllerBase
             // once the bytes are there, and a typed folder admits only those. Stamping anything here would be
             // guessing at what classification is about to decide (ADR 0641's lesson, from the other side).
         };
+        // ONE transaction for one create (#1171). This committed the bare document row, wrote the blob, committed
+        // the version, and let the finalizer commit again — so a failure part-way left an EMPTY, MASKLESS,
+        // VERSION-LESS document sitting in the folder, which is not a state any caller asked for and not one the
+        // user can tell from a slow create.
+        //
+        // Owned only when nothing is already in flight (ADR 0781, the BookingsController.Book shape): a module
+        // read-model context can enlist ours, and beginning a second inside it would throw.
+        var owned = _dbContext.Database.CurrentTransaction is null
+            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        await using var transaction = owned;
+
         _dbContext.Documents.Add(document);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -585,6 +597,16 @@ public class TypedItemsController : ControllerBase
         await _dbContext.SaveChangesAsync(cancellationToken);
         await _finalizer.FinalizeAsync(version, cancellationToken);
 
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        // AFTER the commit: an audit event written before it would record a creation that then rolled back.
+        //
+        // The blob PUT above stays inside, before the commit — the version row points at the key it writes, so
+        // it cannot come later. A rollback therefore leaves an unreferenced object, which the incomplete-upload
+        // sweep collects: orphaned storage is recoverable waste, a phantom document in somebody's folder is not.
         await _audit.RecordAsync(AuditActions.DocumentCreated, "Document", document.Id, document.Name, cancellationToken: cancellationToken);
 
         // A completed unit of work with its outcome. The UID is deliberately NOT logged: it is the correlation
