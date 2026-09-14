@@ -29,15 +29,18 @@ namespace SimplArchive.Api.Controllers;
 public class DocumentOriginController : ControllerBase
 {
     private readonly SimplArchiveDbContext _dbContext;
+    private readonly Concurrency.DocumentVerbs _documents;
     private readonly Documents.DocumentAccessService _access;
     private readonly IAuditRecorder _audit;
 
     public DocumentOriginController(
         SimplArchiveDbContext dbContext,
         Documents.DocumentAccessService access,
-        IAuditRecorder audit)
+        IAuditRecorder audit,
+        Concurrency.DocumentVerbs documents)
     {
         _dbContext = dbContext;
+        _documents = documents;
         _access = access;
         _audit = audit;
     }
@@ -82,23 +85,13 @@ public class DocumentOriginController : ControllerBase
 
         await _access.EnsureNotFrozenAsync(documentId, cancellationToken);
 
-        if (!Request.Headers.TryGetValue("If-Match", out var ifMatchValues) || !TryParseETag(ifMatchValues.ToString(), out var ifMatchToken))
-        {
-            throw new IfMatchRequiredException();
-        }
+        // 428 when absent: the origin key identifies a document across an import, so overwriting one blind is
+        // exactly the case a precondition is for.
+        _documents.RequireIfMatch(Request);
 
         document.OriginTenantId = request.OriginTenantId;
         document.OriginDocumentId = request.OriginDocumentId;
-        _dbContext.Entry(document).Property(d => d.ConcurrencyToken).OriginalValue = ifMatchToken;
-
-        try
-        {
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            throw EtagMismatchException.ForDocument();
-        }
+        await _documents.MutateAsync(Request, document, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
 
         await _audit.RecordAsync(AuditActions.DocumentOriginSet, "Document", documentId, document.Name,
             $"Origin set to {request.OriginTenantId}/{request.OriginDocumentId}", cancellationToken: cancellationToken);
@@ -161,23 +154,13 @@ public class DocumentOriginController : ControllerBase
 
         await _access.EnsureNotFrozenAsync(documentId, cancellationToken);
 
-        if (!Request.Headers.TryGetValue("If-Match", out var ifMatchValues) || !TryParseETag(ifMatchValues.ToString(), out var ifMatchToken))
-        {
-            throw new IfMatchRequiredException();
-        }
+        // 428 when absent: the origin key identifies a document across an import, so overwriting one blind is
+        // exactly the case a precondition is for.
+        _documents.RequireIfMatch(Request);
 
         document.OriginTenantId = null;
         document.OriginDocumentId = null;
-        _dbContext.Entry(document).Property(d => d.ConcurrencyToken).OriginalValue = ifMatchToken;
-
-        try
-        {
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            throw EtagMismatchException.ForDocument();
-        }
+        await _documents.MutateAsync(Request, document, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
 
         await _audit.RecordAsync(AuditActions.DocumentOriginCleared, "Document", documentId, document.Name, "Origin cleared", cancellationToken: cancellationToken);
         SetETag(document.ConcurrencyToken);

@@ -29,6 +29,7 @@ public class RetentionController : ControllerBase
     private const int MaxItems = 500;
 
     private readonly SimplArchiveDbContext _dbContext;
+    private readonly Concurrency.DocumentVerbs _documents;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly IUserSystemRightsResolver _userSystemRights;
@@ -43,9 +44,11 @@ public class RetentionController : ControllerBase
         IUserSystemRightsResolver userSystemRights,
         ILegalHoldService legalHold,
         IDocumentIndexQueue indexQueue,
-        IAuditRecorder audit)
+        IAuditRecorder audit,
+        Concurrency.DocumentVerbs documents)
     {
         _dbContext = dbContext;
+        _documents = documents;
         _currentUserAccessor = currentUserAccessor;
         _currentTenantAccessor = currentTenantAccessor;
         _userSystemRights = userSystemRights;
@@ -206,8 +209,12 @@ public class RetentionController : ControllerBase
             throw new DocumentUnderLegalHoldException(); // compliance overrides disposition
         }
 
+        // Through the document's verb contract (ADR 0795). Disposition and extension are the two halves of one
+        // compliance decision, and they race each other by design: a reviewer disposes while a colleague
+        // extends, and last-write-wins decides whether the document survives. Tolerant of an absent If-Match —
+        // the clients do not send one yet — but honoured when it is there.
         document.DeletedAt = DateTimeOffset.UtcNow;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _documents.MutateAsync(Request, document, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
 
         await _indexQueue.EnqueueAsync(documentId, cancellationToken);
         await _audit.RecordAsync(AuditActions.DocumentRetentionDisposed, "Document", documentId, document.Name, "Disposed on review", cancellationToken: cancellationToken);
@@ -237,7 +244,7 @@ public class RetentionController : ControllerBase
         }
 
         document.RetentionOverrideUntil = until;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _documents.MutateAsync(Request, document, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
 
         await _audit.RecordAsync(AuditActions.DocumentRetentionExtended, "Document", documentId, document.Name, $"Retained until {until:yyyy-MM-dd}", cancellationToken: cancellationToken);
         return NoContent();
