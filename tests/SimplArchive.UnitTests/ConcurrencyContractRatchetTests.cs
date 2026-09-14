@@ -143,7 +143,6 @@ public partial class ConcurrencyContractRatchetTests
         "DocumentOriginController.cs:Document",
         "DocumentRemindersController.cs:User",
         "DocumentTransferController.cs:Document",
-        "DocumentVersionsController.cs:Document",
         "DocumentVersionsController.cs:User",
         "DocumentVersionsController.cs:WorkflowState",
         "DocumentsController.cs:Document",

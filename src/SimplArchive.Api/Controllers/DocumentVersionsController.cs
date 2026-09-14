@@ -40,6 +40,7 @@ public class DocumentVersionsController : ControllerBase
     private static readonly TimeSpan PresignedUrlExpiry = TimeSpan.FromMinutes(15);
 
     private readonly SimplArchiveDbContext _dbContext;
+    private readonly Concurrency.DocumentVerbs _documents;
     private readonly IObjectStorageClient _objectStorageClient;
     private readonly IDocumentPreviewService _documentPreviewService;
     private readonly IDocumentTextLayoutService _textLayoutService;
@@ -58,9 +59,11 @@ public class DocumentVersionsController : ControllerBase
         IStorageQuotaService storageQuota,
         IAuditRecorder audit,
         IDocumentVersionComparer comparer,
-        Documents.DocumentAccessService access)
+        Documents.DocumentAccessService access,
+        Concurrency.DocumentVerbs documents)
     {
         _dbContext = dbContext;
+        _documents = documents;
         _objectStorageClient = objectStorageClient;
         _documentPreviewService = documentPreviewService;
         _textLayoutService = textLayoutService;
@@ -698,7 +701,11 @@ public class DocumentVersionsController : ControllerBase
         if (document.CurrentVersionId != source.Id)
         {
             document.CurrentVersionId = source.Id;
-            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            // Through the document's verb contract (ADR 0795). Restoring pins which version IS the document's
+            // content, so two people restoring different versions is a straight race whose loser is silent —
+            // and the winner is whoever saved last, not whoever the user watched succeed.
+            await _documents.MutateAsync(Request, document, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
             await _queue.EnqueueAsync(documentId, cancellationToken);            // the indexed "current" content changed
             await _wormLock.ReconcileAsync(documentId, cancellationToken);        // the retention anchor (current version's date) moved
 
