@@ -233,6 +233,17 @@ public partial class DocumentItemSourceController : ControllerBase
             CreatedAt = now,
             DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
         };
+        // ONE transaction for one edit (#1171). This committed the version, let the finalizer commit again,
+        // and then committed the shared token move — THREE separately durable commits for a single save. A
+        // failure between them left a new version filed whose token had not moved, so the If-Match the next
+        // save sends is judged against a document that only half changed.
+        //
+        // Owned only when nothing is already in flight (ADR 0781, the BookingsController.Book shape).
+        var owned = _dbContext.Database.CurrentTransaction is null
+            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        await using var transaction = owned;
+
         _dbContext.DocumentVersions.Add(version);
         await _dbContext.SaveChangesAsync(cancellationToken);
         await _finalizer.FinalizeAsync(version, cancellationToken);
@@ -241,6 +252,11 @@ public partial class DocumentItemSourceController : ControllerBase
         // If-Match here is enforced and inert, and a race between two raw saves loses somebody's whole item
         // rather than one field. See StructuredItemVersioning.
         await StructuredItemVersioning.MarkContentChangedAsync(_dbContext, document, cancellationToken);
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
 
         _logger.LogInformation(
             "Replaced the raw {Format} of {DocumentId} with {Bytes} bytes as version {VersionId}",
