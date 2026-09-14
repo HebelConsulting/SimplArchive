@@ -73,6 +73,11 @@ public sealed class DocumentResourceLinks
             new("ancestors", url.Action(nameof(DocumentsController.ListAncestors), "Documents", new { documentId })!, "GET"),
             new("mask", url.Action(nameof(DocumentMetadataController.GetMask), "DocumentMetadata", new { documentId })!, "GET"),
             new("index-data", url.Action(nameof(DocumentMetadataController.GetIndexData), "DocumentMetadata", new { documentId })!, "GET"),
+            // Everything the pencil edits, read and written together (ADRs 0794/0796). ONE rel for both methods
+            // on one address (ADR 0719): GET fills the form and carries the tag a save is measured against, PUT
+            // replaces the whole detail in one transaction. The per-aspect rels above stay for callers that
+            // genuinely want one aspect — this is the rel a client that EDITS follows.
+            new("detail", url.Action(nameof(DocumentDetailController.Get), "DocumentDetail", new { documentId })!, "GET"),
             new("versions", $"/api/documents/{documentId}/versions", "GET"),
             // The document's collaboration thread (issue #382). Its absence is why renaming the route from
             // /comments to /chat broke both clients at all: with the rel, a route move is invisible to them.

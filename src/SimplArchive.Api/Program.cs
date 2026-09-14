@@ -300,6 +300,7 @@ builder.Services.AddScoped<SimplArchive.Api.Documents.MailboxAddressClaims>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.IndexDataWriter>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.TagSetWriter>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.OcrLanguageWriter>();
+builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentDetailWriter>();
 // Restore of recycle-bin documents — shared by DocumentsController (per-item) and RecycleBinController (bulk).
 // See ADR "Bulk restore from the recycle bin".
 builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentMover>();
