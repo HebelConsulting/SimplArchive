@@ -44,57 +44,101 @@ public partial class ConcurrencyContractRatchetTests
     // belong here, and guessing would defeat the point of the reason.
     private static readonly Dictionary<string, string> PermanentlyExempt = new();
 
-    // The ADR 0795 conversion debt — every controller the coarse detector above flags today. It started at 47
-    // deliberately: recording the real number is what makes the next tranche measurable, and what stops the
-    // first convenient moment from quietly becoming the new baseline. THIS LIST MAY ONLY GET SHORTER.
+    // Pairs where the controller only ever READS that entity — it names the DbSet to resolve a name, check
+    // existence or list candidates, and writes no column on it. The detector cannot tell a read from a write
+    // (see above), so without this the pair could never be paid off and the debt list would quietly become a
+    // list of MENTIONS, which is the rot this guard exists to prevent.
+    //
+    // An entry here is a CLAIM, and it is checked from the other side: if the pair stops being flagged, the
+    // claim is removed rather than left standing unverifiable.
+    private static readonly Dictionary<string, string> ReadsOnly = new(StringComparer.Ordinal)
+    {
+        ["AclEntriesController.cs:User"] =
+            "Reads only: resolves display names for the entry rows, collects tenant-admin ids, and checks a "
+            + "principal exists. Projections and AnyAsync — no user column is written.",
+        ["AclEntriesController.cs:ServiceAccount"] =
+            "Reads only: resolves one service account's name for an audit line, and checks a principal exists. "
+            + "No service-account column is written.",
+    };
+
+    // The ADR 0795 conversion debt, one entry per (controller, ENTITY) pair. Recording the real number is what
+    // makes the next tranche measurable, and what stops the first convenient moment from quietly becoming the
+    // new baseline. THIS LIST MAY ONLY GET SHORTER.
+    //
+    // Pairs, not controllers, because per controller the debt could not be PAID: AclEntriesController mutates
+    // AclEntry and Document and merely READS User and ServiceAccount, so converting everything it writes still
+    // left it flagged, and an entry that cannot be removed stops meaning "not yet converted".
     private static readonly HashSet<string> NotYetConverted = new(StringComparer.Ordinal)
     {
-        "AclEntriesController.cs",
-        "AdminController.cs",
-        "AuditEventsController.cs",
-        "AuthorizationController.cs",
-        "BookingsController.cs",
-        "CheckoutsController.cs",
-        "DocumentAnnotationsController.cs",
-        "DocumentAppointmentController.cs",
-        "DocumentBulkController.cs",
-        "DocumentChatController.cs",
-        "DocumentChildrenController.cs",
-        "DocumentContactCardController.cs",
-        "DocumentExternalLinksController.cs",
-        "DocumentItemSourceController.cs",
-        "DocumentLifecycleController.cs",
-        "DocumentMetadataController.cs",
-        "DocumentOriginController.cs",
-        "DocumentReferencesController.cs",
-        "DocumentRemindersController.cs",
-        "DocumentSearchableController.cs",
-        "DocumentSubscriptionsController.cs",
-        "DocumentTagsController.cs",
-        "DocumentTransferController.cs",
-        "DocumentVersionsController.cs",
-        "DocumentsController.cs",
-        "GroupsController.cs",
-        "ImapAccessController.cs",
-        "IntrayController.cs",
-        "LegalHoldsController.cs",
-        "MachineTransitionsController.cs",
-        "MasksController.cs",
-        "MeController.cs",
-        "NotebookController.cs",
-        "PasskeysController.cs",
-        "PersonalRepositoryController.cs",
-        "RecycleBinController.cs",
-        "RepositoriesController.cs",
-        "RetentionController.cs",
-        "SavedSearchesController.cs",
-        "TenantsController.cs",
-        "TokenController.cs",
-        "TypedItemsController.cs",
-        "UserMfaController.cs",
-        "UsersController.cs",
-        "WebDavAccessController.cs",
-        "WorkflowController.cs",
+        "AdminController.cs:Document",
+        "AuditEventsController.cs:ServiceAccount",
+        "AuditEventsController.cs:Tenant",
+        "AuthorizationController.cs:User",
+        "BookingsController.cs:Document",
+        "CheckoutsController.cs:Document",
+        "CheckoutsController.cs:Tenant",
+        "DocumentAnnotationsController.cs:Document",
+        "DocumentAnnotationsController.cs:ServiceAccount",
+        "DocumentAnnotationsController.cs:User",
+        "DocumentAppointmentController.cs:Document",
+        "DocumentBulkController.cs:Document",
+        "DocumentBulkController.cs:ServiceAccount",
+        "DocumentChatController.cs:Document",
+        "DocumentChatController.cs:ServiceAccount",
+        "DocumentChatController.cs:User",
+        "DocumentChildrenController.cs:Document",
+        "DocumentContactCardController.cs:Document",
+        "DocumentExternalLinksController.cs:Document",
+        "DocumentExternalLinksController.cs:Tenant",
+        "DocumentItemSourceController.cs:Document",
+        "DocumentLifecycleController.cs:Document",
+        "DocumentLifecycleController.cs:User",
+        "DocumentMetadataController.cs:Document",
+        "DocumentOriginController.cs:Document",
+        "DocumentReferencesController.cs:Document",
+        "DocumentRemindersController.cs:Document",
+        "DocumentRemindersController.cs:User",
+        "DocumentSearchableController.cs:Document",
+        "DocumentSubscriptionsController.cs:Document",
+        "DocumentTagsController.cs:Document",
+        "DocumentTransferController.cs:Document",
+        "DocumentVersionsController.cs:Document",
+        "DocumentVersionsController.cs:ServiceAccount",
+        "DocumentVersionsController.cs:User",
+        "DocumentVersionsController.cs:WorkflowState",
+        "DocumentsController.cs:Document",
+        "DocumentsController.cs:Tenant",
+        "DocumentsController.cs:User",
+        "GroupsController.cs:ServiceAccount",
+        "GroupsController.cs:User",
+        "ImapAccessController.cs:User",
+        "IntrayController.cs:Document",
+        "LegalHoldsController.cs:Document",
+        "MachineTransitionsController.cs:Document",
+        "MasksController.cs:ServiceAccount",
+        "MeController.cs:User",
+        "NotebookController.cs:Document",
+        "PasskeysController.cs:User",
+        "PersonalRepositoryController.cs:Document",
+        "RecycleBinController.cs:Document",
+        "RepositoriesController.cs:Document",
+        "RepositoriesController.cs:ServiceAccount",
+        "RetentionController.cs:Document",
+        "SavedSearchesController.cs:User",
+        "TenantsController.cs:Tenant",
+        "TokenController.cs:ServiceAccount",
+        "TokenController.cs:Tenant",
+        "TokenController.cs:User",
+        "TypedItemsController.cs:Document",
+        "UserMfaController.cs:User",
+        "UsersController.cs:Document",
+        "UsersController.cs:ServiceAccount",
+        "UsersController.cs:Tenant",
+        "UsersController.cs:WorkflowState",
+        "WebDavAccessController.cs:User",
+        "WorkflowController.cs:Document",
+        "WorkflowController.cs:ServiceAccount",
+        "WorkflowController.cs:User",
     };
 
     [GeneratedRegex(@"\[Http(Post|Put|Delete|Patch)")]
@@ -116,28 +160,35 @@ public partial class ConcurrencyContractRatchetTests
         var flagged = controllers
             .Select(path => (Name: Path.GetFileName(path), Text: File.ReadAllText(path)))
             .Where(c => MutatingAction().IsMatch(c.Text))
-            .Where(c => ContractByEntity.Any(e =>
-                MentionsEntitySet(c.Text, e.Key) && !c.Text.Contains(e.Value, StringComparison.Ordinal)))
-            .Select(c => c.Name)
+            .SelectMany(c => ContractByEntity
+                .Where(e => MentionsEntitySet(c.Text, e.Key) && !c.Text.Contains(e.Value, StringComparison.Ordinal))
+                .Select(e => $"{c.Name}:{e.Key}"))
             .OrderBy(n => n, StringComparer.Ordinal)
             .ToList();
 
         var appeared = flagged
-            .Where(n => !NotYetConverted.Contains(n) && !PermanentlyExempt.ContainsKey(n))
+            .Where(n => !NotYetConverted.Contains(n) && !ReadsOnly.ContainsKey(n) && !PermanentlyExempt.ContainsKey(n))
             .ToList();
         Assert.True(appeared.Count == 0,
             "These controllers mutate a concurrency-tracked entity without going through its verb contract\n"
-            + "(ADR 0795), and are on neither list:\n"
+            + "(ADR 0795), and are on none of the lists:\n"
             + string.Join("\n", appeared.Select(n => $"  {n}"))
-            + "\n\nTake the entity's *Verbs contract and mutate through it — or, if this controller must never"
-            + "\nconvert, add it to PermanentlyExempt WITH THE REASON, in this same commit.");
+            + "\n\nTake the entity's *Verbs contract and mutate through it — or, if this pair only ever READS"
+            + "\nthat entity, add it to ReadsOnly WITH THE REASON, in this same commit.");
 
         // The other direction, which is what makes it a ratchet rather than a list that rots.
         var paid = NotYetConverted.Where(n => !flagged.Contains(n)).OrderBy(n => n, StringComparer.Ordinal).ToList();
         Assert.True(paid.Count == 0,
-            "These controllers now use their entity's verb contract and must be REMOVED from NotYetConverted\n"
+            "These pairs now use the entity's verb contract and must be REMOVED from NotYetConverted\n"
             + "in the same commit that converted them:\n"
             + string.Join("\n", paid.Select(n => $"  {n}")));
+
+        // A ReadsOnly claim that is no longer flagged is a claim nobody is checking any more — the controller
+        // took the contract, or stopped naming the DbSet. Either way the sentence beside it has gone stale.
+        var stale = ReadsOnly.Keys.Where(n => !flagged.Contains(n)).OrderBy(n => n, StringComparer.Ordinal).ToList();
+        Assert.True(stale.Count == 0,
+            "These ReadsOnly entries are no longer flagged, so their stated reason is unverifiable. Remove them:\n"
+            + string.Join("\n", stale.Select(n => $"  {n}")));
     }
 
     // A whole-word DbSet mention, so `User` does not match `UserId` or `CurrentUserAccessor`, and `Document`

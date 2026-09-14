@@ -37,6 +37,8 @@ public class AclEntriesController : ControllerBase
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly IDocumentIndexQueue _indexQueue;
     private readonly IAuditRecorder _audit;
+    private readonly Concurrency.AclEntryVerbs _aclEntries;
+    private readonly Concurrency.DocumentVerbs _documents;
     private readonly INotificationService _notifications;
 
     public AclEntriesController(
@@ -46,7 +48,9 @@ public class AclEntriesController : ControllerBase
         ICurrentUserAccessor currentUserAccessor,
         IDocumentIndexQueue indexQueue,
         IAuditRecorder audit,
-        INotificationService notifications)
+        INotificationService notifications,
+        Concurrency.AclEntryVerbs aclEntries,
+        Concurrency.DocumentVerbs documents)
     {
         _dbContext = dbContext;
         _effectiveRightsCalculator = effectiveRightsCalculator;
@@ -55,6 +59,8 @@ public class AclEntriesController : ControllerBase
         _indexQueue = indexQueue;
         _audit = audit;
         _notifications = notifications;
+        _aclEntries = aclEntries;
+        _documents = documents;
     }
 
     // Plain mutable classes, not records — System.Xml.Serialization.XmlSerializer (ADR "JSON/XML content
@@ -84,21 +90,13 @@ public class AclEntriesController : ControllerBase
         public bool CanMove { get; set; }
 
         public bool CanAnnotate { get; set; }
+
+        // The token the caller sends back as If-Match. Without it the precondition this controller now honours
+        // would be one no client could satisfy, which is decoration rather than a guarantee.
+        public string Etag { get; set; } = string.Empty;
     }
 
     // The picker catalog for the Manage-access dialog (ADR "Manage-access UI for document/folder ACLs").
-    public class GrantablePrincipalsResource : HypermediaResource
-    {
-        public List<GrantablePrincipal> Principals { get; set; } = [];
-    }
-
-    public class GrantablePrincipal : HypermediaResource
-    {
-        public string Type { get; set; } = string.Empty;   // users | groups | service-accounts
-        public Guid Id { get; set; }
-        public string Name { get; set; } = string.Empty;
-    }
-
     public class AclEntriesListResource : HypermediaResource
     {
         public List<AclEntryResource> Entries { get; set; } = [];
@@ -245,7 +243,7 @@ public class AclEntriesController : ControllerBase
         var links = new List<Link>
         {
             new("self", Url.Action(nameof(List), new { documentId, cursor, limit = pageSize })!, "GET"),
-            new("grantable-principals", Url.Action(nameof(GrantablePrincipals), new { documentId })!, "GET"),
+            new("grantable-principals", Url.Action(nameof(AclGrantablePrincipalsController.GrantablePrincipals), "AclGrantablePrincipals", new { documentId })!, "GET"),
             new("effective", Url.Action(nameof(Effective), new { documentId })!, "GET"),
         };
 
@@ -290,56 +288,6 @@ public class AclEntriesController : ControllerBase
         }
 
         return NoContent();
-    }
-
-    // The users/groups/service-accounts a manager can grant to (ADR "Manage-access UI for document/folder ACLs")
-    // — gated on CanManagePermissions on THIS document (not CanManageUsers), so a permissions manager who isn't a
-    // user-admin can still populate the picker (same reasoning as assignable-reviewers). Bounded, not paginated.
-    [HttpGet("grantable-principals")]
-    public async Task<IActionResult> GrantablePrincipals(Guid documentId, CancellationToken cancellationToken)
-    {
-        if (!await _dbContext.Documents.AnyAsync(d => d.Id == documentId, cancellationToken))
-        {
-            return NotFound();
-        }
-
-        if (!await CanManagePermissionsAsync(documentId, cancellationToken))
-        {
-            return Forbid();
-        }
-
-        var groups = await _dbContext.Groups.OrderBy(g => g.Name)
-            .Select(g => new GrantablePrincipal { Type = "groups", Id = g.Id, Name = g.Name })
-            .ToListAsync(cancellationToken);
-        var users = await _dbContext.Users.Where(u => u.IsActive).OrderBy(u => u.DisplayName)
-            .Select(u => new GrantablePrincipal { Type = "users", Id = u.Id, Name = u.DisplayName })
-            .ToListAsync(cancellationToken);
-        var serviceAccounts = await _dbContext.ServiceAccounts.Where(s => s.IsActive).OrderBy(s => s.Name)
-            .Select(s => new GrantablePrincipal { Type = "service-accounts", Id = s.Id, Name = s.Name })
-            .ToListAsync(cancellationToken);
-
-        var principals = new List<GrantablePrincipal>([.. groups, .. users, .. serviceAccounts]);
-
-        // The address at which a grant FOR THIS PRINCIPAL is written (issue #416). A new grant has no resource
-        // yet, so there is nothing else that could carry its address — putting it on the picker's own rows is
-        // what lets the dialog save without composing /acl-entries/{type}/{id} from the selection.
-        foreach (var principal in principals)
-        {
-            principal.Links = [new Link("grant", $"/api/documents/{documentId}/acl-entries/{principal.Type}/{principal.Id}", "PUT")];
-        }
-
-        return Ok(new GrantablePrincipalsResource { Principals = principals });
-    }
-
-    [HttpHead("grantable-principals")]
-    public async Task<IActionResult> HeadGrantablePrincipals(Guid documentId, CancellationToken cancellationToken)
-    {
-        if (!await _dbContext.Documents.AnyAsync(d => d.Id == documentId, cancellationToken))
-        {
-            return NotFound();
-        }
-
-        return await CanManagePermissionsAsync(documentId, cancellationToken) ? NoContent() : Forbid();
     }
 
     [HttpGet("{principalType}/{principalId:guid}")]
@@ -460,19 +408,14 @@ public class AclEntriesController : ControllerBase
             throw InsufficientRightsToGrantException.OnDocument();
         }
 
-        // Two admins on one document's permission dialog each rewrite the SAME principal's grant set, and the
-        // later write silently replaces the earlier one (#1083). Honoured when the caller sends a token; an
-        // entry being CREATED here has no prior version to conflict with, so this only ever guards a rewrite.
-        Concurrency.ConcurrencyHeaders.ApplyIfMatch(_dbContext, Request, entry);
-
-        try
-        {
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            throw Errors.Exceptions.Concurrency.EtagMismatchException.ForAclEntry();
-        }
+        // Two admins on one permission dialog each rewrite the SAME principal's grant set, and the later write
+        // silently replaces the earlier one (#1083). Through the entry's verb contract (ADR 0795), which owns
+        // the precondition, the transaction and the 412. touchEntity is FALSE on purpose: every path above
+        // writes the entry's own columns, so the token regenerates anyway — and an entry being ADDED has no
+        // prior version to conflict with, so this only ever guards a rewrite.
+        await _aclEntries.MutateAsync(
+            Request, entry, apply: () => Task.CompletedTask, touchEntity: false, cancellationToken: cancellationToken);
+        _aclEntries.EmitETag(Response, entry);
 
         // The grant changed this document's (and its inheriting descendants') indexed visibility — reindex
         // the subtree (ADR "Indexed ACL in search").
@@ -517,8 +460,12 @@ public class AclEntriesController : ControllerBase
             return NotFound();
         }
 
+        // Revoking access is destructive and had NO precondition (#1172): two admins on one dialog, and the
+        // second revoke silently undoes a grant the first just re-made. The contract compares the caller's
+        // token against the row the DELETE targets. Still tolerant of an absent header — emit before enforce.
         _dbContext.AclEntries.Remove(entry);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _aclEntries.MutateAsync(
+            Request, entry, apply: () => Task.CompletedTask, touchEntity: false, cancellationToken: cancellationToken);
 
         await EnqueueSubtreeAsync(documentId, cancellationToken);
 
@@ -600,7 +547,10 @@ public class AclEntriesController : ControllerBase
             document.BreaksInheritance = false;
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        // The DOCUMENT's contract, not the entry's: this writes a column on the document, and the ACL rows it
+        // copies down or discards are its children. One transaction, so a failure part-way can no longer leave
+        // BreaksInheritance disagreeing with the rows underneath it.
+        await _documents.MutateAsync(Request, document, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
 
         // Changing inheritance changes the resolved visibility of this document and its inheriting descendants.
         await EnqueueSubtreeAsync(documentId, cancellationToken);
@@ -946,6 +896,7 @@ public class AclEntriesController : ControllerBase
             CanManagePermissions = entry.CanManagePermissions,
             CanMove = entry.CanMove,
             CanAnnotate = entry.CanAnnotate,
+            Etag = entry.ConcurrencyToken.ToString(),
             // The grant's own address, advertised ONCE: read it with GET, replace it with PUT, remove it with
             // DELETE (ADR 0719). `edit` and `remove` were the same URL under two more names, and the method
             // already said which was which. Reaching this collection at all requires CanManagePermissions, so
