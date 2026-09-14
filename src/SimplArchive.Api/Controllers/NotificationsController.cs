@@ -132,7 +132,7 @@ public class NotificationsController : ControllerBase
         // still something read-all would clear, and hiding the rel there would make the button lie.
         if (unreadCount > 0)
         {
-            links.Add(new Link("read-all", Url.Action(nameof(MarkAllRead))!, "POST"));
+            links.Add(new Link("read-all", Url.Action(nameof(MarkAllRead))!, "PUT"));
         }
         if (hasMore)
         {
@@ -171,7 +171,7 @@ public class NotificationsController : ControllerBase
 
     // Marks one of the caller's notifications read (idempotent). A POST action sub-resource — a state change,
     // not a create/replace.
-    [HttpPost("{id:guid}/read")]
+    [HttpPut("{id:guid}/read")]
     public async Task<IActionResult> MarkRead(Guid id, CancellationToken cancellationToken)
     {
         if (_currentUserAccessor.UserId is not { } userId)
@@ -195,7 +195,7 @@ public class NotificationsController : ControllerBase
     }
 
     // Marks all of the caller's unread notifications read.
-    [HttpPost("read-all")]
+    [HttpPut("read")]
     public async Task<IActionResult> MarkAllRead(CancellationToken cancellationToken)
     {
         if (_currentUserAccessor.UserId is not { } userId)
@@ -313,7 +313,7 @@ public class NotificationsController : ControllerBase
         var links = new List<Link>();
         if (n.ReadAt is null)
         {
-            links.Add(new Link("read", $"/api/notifications/{n.Id}/read", "POST"));
+            links.Add(new Link("read", $"/api/notifications/{n.Id}/read", "PUT"));
         }
 
         if (n.DocumentId is { } documentId)

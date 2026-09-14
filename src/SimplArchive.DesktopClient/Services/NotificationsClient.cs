@@ -61,14 +61,14 @@ public sealed class NotificationsClient(ApiCore core)
     /// <summary>Marks one notification read at the address its own row advertised (ADR 0555).</summary>
     public async Task MarkNotificationReadAsync(NotificationInfo notification, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsync(RequireHref(notification, "read"), null, cancellationToken);
+        using var response = await _core.Http.PutAsync(RequireHref(notification, "read"), null, cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 
     /// <summary>Marks everything read at the collection's own `read-all` address (ADR 0555).</summary>
     public async Task MarkAllNotificationsReadAsync(string readAllHref, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsync(readAllHref, null, cancellationToken);
+        using var response = await _core.Http.PutAsync(readAllHref, null, cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 }

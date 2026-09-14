@@ -71,7 +71,7 @@ public class IntrayPagesController(
         // scan fed upside-down is exactly what the affordance exists for.
         if (info.PageCount > 0 && !info.Signed)
         {
-            links.Add(new Link("sort", Href(name, "pages/order", group, user), "POST"));
+            links.Add(new Link("sort", Href(name, "pages/order", group, user), "PUT"));
         }
 
         // Straightening needs only a page, not several — and it is offered for a signed document never, for the
@@ -148,7 +148,7 @@ public class IntrayPagesController(
     /// landed once, so this cannot be the idempotent replace that PUT promises. It is a transition, which is
     /// exactly the case CLAUDE.md keeps POST on an action sub-resource for.
     /// </remarks>
-    [HttpPost("{name}/pages/order")]
+    [HttpPut("{name}/pages/order")]
     public async Task<IActionResult> Sort(
         string name,
         [FromQuery] Guid? group,

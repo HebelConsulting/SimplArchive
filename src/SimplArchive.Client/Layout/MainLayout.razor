@@ -393,7 +393,7 @@
             return;
         }
 
-        try { await Http.PostAsync(_readAllHref, null); } catch (Exception) { }
+        try { await Http.PutAsync(_readAllHref, null); } catch (Exception) { }
         foreach (var n in _notifications) { n.IsRead = true; n.Links = []; }
         _readAllHref = null;
         _unreadCount = 0;

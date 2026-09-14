@@ -42,7 +42,7 @@ public class BulkActionsTests
         // Set sensitivity = Confidential on all three (by label id).
         var confidentialId = (await TestJson.Get(owner, "/api/sensitivity-labels")).GetProperty("labels").EnumerateArray()
             .Single(l => l.GetProperty("name").GetString() == "Confidential").GetProperty("id").GetGuid();
-        var classified = await TestJson.Post(owner, "/api/documents/bulk/sensitivity", new { ids, labelId = confidentialId });
+        var classified = await TestJson.Put(owner, "/api/documents/bulk/sensitivity", new { ids, labelId = confidentialId });
         Assert.Equal(3, classified.GetProperty("succeeded").GetInt32());
         foreach (var id in ids)
         {
@@ -50,14 +50,14 @@ public class BulkActionsTests
         }
 
         // Move the first two into the Target folder.
-        var moved = await TestJson.Post(owner, "/api/documents/bulk/move", new { ids = ids.Take(2), parentId = targetId });
+        var moved = await TestJson.Put(owner, "/api/documents/bulk/parent", new { ids = ids.Take(2), parentId = targetId });
         Assert.Equal(2, moved.GetProperty("succeeded").GetInt32());
         var targetChildren = (await TestJson.Get(owner, $"/api/documents/{targetId}/children")).GetProperty("children").EnumerateArray().Select(c => c.GetProperty("id").GetGuid()).ToHashSet();
         Assert.Contains(ids[0], targetChildren);
         Assert.Contains(ids[1], targetChildren);
 
         // Delete all three (soft-delete to recycle bin).
-        var deleted = await TestJson.Post(owner, "/api/documents/bulk/delete", new { ids });
+        var deleted = await TestJson.Delete(owner, "/api/documents/bulk", new { ids });
         Assert.Equal(3, deleted.GetProperty("succeeded").GetInt32());
         foreach (var id in ids)
         {
@@ -101,13 +101,13 @@ public class BulkActionsTests
         }
 
         // Reference all three into the folder (shortcuts — the items stay under the repo).
-        var referenced = await TestJson.Post(owner, "/api/documents/bulk/reference", new { ids, parentId = folderId });
+        var referenced = await TestJson.Post(owner, "/api/documents/bulk/references", new { ids, parentId = folderId });
         Assert.Equal(3, referenced.GetProperty("succeeded").GetInt32());
         Assert.Equal(0, referenced.GetProperty("skipped").GetInt32());
         Assert.Equal(3, (await TestJson.Get(owner, $"/api/documents/{folderId}/references")).GetProperty("references").GetArrayLength());
 
         // Idempotent: the same references already exist → all skipped.
-        var again = await TestJson.Post(owner, "/api/documents/bulk/reference", new { ids, parentId = folderId });
+        var again = await TestJson.Post(owner, "/api/documents/bulk/references", new { ids, parentId = folderId });
         Assert.Equal(0, again.GetProperty("succeeded").GetInt32());
         Assert.Equal(3, again.GetProperty("skipped").GetInt32());
     }
@@ -130,12 +130,12 @@ public class BulkActionsTests
         using var mover = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, password));
 
         // Moving the repository root is skipped without CanManageRepositories (the ACL rights alone aren't enough).
-        var blocked = await TestJson.Post(mover, "/api/documents/bulk/move", new { ids = new[] { repoA }, parentId = repoB });
+        var blocked = await TestJson.Put(mover, "/api/documents/bulk/parent", new { ids = new[] { repoA }, parentId = repoB });
         Assert.Equal(0, blocked.GetProperty("succeeded").GetInt32());
         Assert.Equal(1, blocked.GetProperty("skipped").GetInt32());
 
         // The owner (CanManageRepositories) can demote it into repoB.
-        var ok = await TestJson.Post(owner, "/api/documents/bulk/move", new { ids = new[] { repoA }, parentId = repoB });
+        var ok = await TestJson.Put(owner, "/api/documents/bulk/parent", new { ids = new[] { repoA }, parentId = repoB });
         Assert.Equal(1, ok.GetProperty("succeeded").GetInt32());
         var children = (await TestJson.Get(owner, $"/api/documents/{repoB}/children")).GetProperty("children").EnumerateArray().Select(c => c.GetProperty("id").GetGuid()).ToHashSet();
         Assert.Contains(repoA, children);

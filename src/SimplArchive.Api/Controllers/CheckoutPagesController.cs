@@ -67,7 +67,7 @@ public class CheckoutPagesController(
         // signed working copy, because any rewrite voids the signature.
         if (info.PageCount > 0 && !info.Signed)
         {
-            links.Add(new Link("sort", Href(documentId, "pages/order"), "POST"));
+            links.Add(new Link("sort", Href(documentId, "pages/order"), "PUT"));
         }
 
         return Ok(new CheckoutPagesResource
@@ -87,7 +87,7 @@ public class CheckoutPagesController(
     }
 
     /// <summary>One whole-file rewrite of the working copy: reorder + delete (omission) + rotate.</summary>
-    [HttpPost("{documentId:guid}/working-copy/pages/order")]
+    [HttpPut("{documentId:guid}/working-copy/pages/order")]
     public async Task<IActionResult> Sort(
         Guid documentId,
         [FromBody] CheckoutPageOrderRequest request,

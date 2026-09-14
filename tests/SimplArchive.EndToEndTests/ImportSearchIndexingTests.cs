@@ -46,7 +46,7 @@ public class ImportSearchIndexingTests
             var file = new ByteArrayContent(zip);
             file.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
             content.Add(file, "file", "import.zip");
-            var import = await api.PostAsync("/api/repositories/import?includePermissions=true", content);
+            var import = await api.PostAsync("/api/repositories/imports?includePermissions=true", content);
             import.EnsureSuccessStatusCode();
         }
 

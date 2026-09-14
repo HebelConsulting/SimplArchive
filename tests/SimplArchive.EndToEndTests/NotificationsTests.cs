@@ -54,9 +54,9 @@ public class NotificationsTests
         Assert.False(review.GetProperty("isRead").GetBoolean());
 
         // Mark one read → unread drops to 1; mark-all read → 0.
-        (await reviewer.PostAsync($"/api/notifications/{review.GetProperty("id").GetGuid()}/read", null)).EnsureSuccessStatusCode();
+        (await reviewer.PutAsync($"/api/notifications/{review.GetProperty("id").GetGuid()}/read", null)).EnsureSuccessStatusCode();
         Assert.Equal(1, (await TestJson.Get(reviewer, "/api/notifications/unread-count")).GetProperty("unreadCount").GetInt32());
-        (await reviewer.PostAsync("/api/notifications/read-all", null)).EnsureSuccessStatusCode();
+        (await reviewer.PutAsync("/api/notifications/read", null)).EnsureSuccessStatusCode();
         Assert.Equal(0, (await TestJson.Get(reviewer, "/api/notifications/unread-count")).GetProperty("unreadCount").GetInt32());
 
         // The owner (a ServiceAccount) has no intray at all — the notifications endpoint is User-only.

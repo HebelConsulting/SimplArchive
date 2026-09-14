@@ -880,7 +880,7 @@ public class RepositoriesController : ControllerBase
     // A real export/migration archive can be gigabytes (a whole legacy-DMS subtree of scanned TIFFs/PDFs), so lift the
     // default 30 MB Kestrel + multipart limits on this upload — CanImport already gates it. ASP.NET buffers the
     // large IFormFile to a temp file, so this doesn't hold the archive in memory.
-    [HttpPost("import")]
+    [HttpPost("imports")]
     [DisableRequestSizeLimit]
     [RequestFormLimits(MultipartBodyLengthLimit = long.MaxValue)]
     public async Task<IActionResult> Import(IFormFile file, [FromQuery] bool updateExisting, [FromQuery] bool includePermissions, CancellationToken cancellationToken)

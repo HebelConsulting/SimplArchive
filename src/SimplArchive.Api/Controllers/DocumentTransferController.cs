@@ -116,7 +116,7 @@ public class DocumentTransferController : ControllerBase
     // an existing child.
     // A real migration archive can be gigabytes, so lift the default 30 MB Kestrel + multipart limits (CanImport
     // gates it; the large IFormFile buffers to a temp file, not memory).
-    [HttpPost("import")]
+    [HttpPost("imports")]
     [DisableRequestSizeLimit]
     [RequestFormLimits(MultipartBodyLengthLimit = long.MaxValue)]
     public async Task<IActionResult> Import(Guid documentId, IFormFile file, [FromQuery] bool updateExisting, [FromQuery] bool includePermissions, [FromQuery] bool merge, [FromQuery] string? leafConflict, CancellationToken cancellationToken)

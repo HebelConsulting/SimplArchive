@@ -190,7 +190,7 @@ public sealed class CheckoutClient(ApiCore core)
 
     public async Task SaveWorkingCopyAsync(CheckoutItem checkout, byte[] bytes, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsJsonAsync(RequireHref(checkout, "working-copy"), new { }, cancellationToken);
+        using var response = await _core.Http.PutAsJsonAsync(RequireHref(checkout, "working-copy"), new { }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't hold the check-out on this document.");

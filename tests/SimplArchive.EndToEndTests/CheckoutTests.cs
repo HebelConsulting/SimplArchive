@@ -110,7 +110,7 @@ public class CheckoutTests
         Assert.False(before.GetProperty("isModified").GetBoolean());
 
         // Save to cloud: get a presigned PUT and upload the in-progress working copy.
-        var uploadUrl = (await TestJson.Post(holder, $"/api/checkouts/{docId}/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
+        var uploadUrl = (await TestJson.Put(holder, $"/api/checkouts/{docId}/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
         using var storage = new HttpClient();
         var wip = "work in progress edits";
         (await storage.PutAsync(uploadUrl, new ByteArrayContent(Encoding.UTF8.GetBytes(wip)))).EnsureSuccessStatusCode();
@@ -131,7 +131,7 @@ public class CheckoutTests
 
         // A non-holder can't stash a working copy.
         var (_, bystander) = await SeedAdminAsync(tenantId);
-        Assert.Equal(HttpStatusCode.Forbidden, (await bystander.PostAsJsonAsync($"/api/checkouts/{docId}/working-copy", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await bystander.PutAsJsonAsync($"/api/checkouts/{docId}/working-copy", new { })).StatusCode);
     }
 
     [Fact]
@@ -151,7 +151,7 @@ public class CheckoutTests
         Assert.Equal(HttpStatusCode.BadRequest, (await holder.PostAsJsonAsync($"/api/checkouts/{docId}/checkin", new { })).StatusCode);
 
         // Upload the edited working copy to the stash, then check in from it.
-        var uploadUrl = (await TestJson.Post(holder, $"/api/checkouts/{docId}/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
+        var uploadUrl = (await TestJson.Put(holder, $"/api/checkouts/{docId}/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
         using var storage = new HttpClient();
         (await storage.PutAsync(uploadUrl, new ByteArrayContent(Encoding.UTF8.GetBytes("web-edited v2")))).EnsureSuccessStatusCode();
         (await holder.PostAsJsonAsync($"/api/checkouts/{docId}/checkin", new { })).EnsureSuccessStatusCode();
@@ -186,7 +186,7 @@ public class CheckoutTests
 
         // Check out + Save to cloud → exactly one stash object appears for this document.
         await holder.PutAsync($"/api/documents/{docId}/checkout", null);
-        var uploadUrl = (await TestJson.Post(holder, $"/api/checkouts/{docId}/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
+        var uploadUrl = (await TestJson.Put(holder, $"/api/checkouts/{docId}/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
         using var storage = new HttpClient();
         (await storage.PutAsync(uploadUrl, new ByteArrayContent(Encoding.UTF8.GetBytes("wip")))).EnsureSuccessStatusCode();
         Assert.Contains(await _factory.ListObjectKeysAsync(checkoutPrefix), k => k.EndsWith(docId.ToString()));
@@ -197,7 +197,7 @@ public class CheckoutTests
 
         // Same again, but released by OVERRIDE — the (different) releasing user still clears the holder's stash.
         await holder.PutAsync($"/api/documents/{docId}/checkout", null);
-        var uploadUrl2 = (await TestJson.Post(holder, $"/api/checkouts/{docId}/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
+        var uploadUrl2 = (await TestJson.Put(holder, $"/api/checkouts/{docId}/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
         (await storage.PutAsync(uploadUrl2, new ByteArrayContent(Encoding.UTF8.GetBytes("wip2")))).EnsureSuccessStatusCode();
         Assert.Contains(await _factory.ListObjectKeysAsync(checkoutPrefix), k => k.EndsWith(docId.ToString()));
 
@@ -267,7 +267,7 @@ public class CheckoutTests
         Assert.False((await TestJson.Get(holder, $"/api/checkouts/{docId}/compare")).GetProperty("available").GetBoolean());
 
         // Stash an edited working copy (middle line changed).
-        var uploadUrl = (await TestJson.Post(holder, $"/api/checkouts/{docId}/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
+        var uploadUrl = (await TestJson.Put(holder, $"/api/checkouts/{docId}/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
         using var storage = new HttpClient();
         (await storage.PutAsync(uploadUrl, new ByteArrayContent(Encoding.UTF8.GetBytes("line one\nline two CHANGED\nline three\n")))).EnsureSuccessStatusCode();
 

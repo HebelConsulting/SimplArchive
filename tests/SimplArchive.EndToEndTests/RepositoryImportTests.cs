@@ -53,14 +53,14 @@ public class RepositoryImportTests
         // A non-admin can't import.
         using (var refused = MultipartOf(zip))
         {
-            Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsync("/api/repositories/import", refused)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsync("/api/repositories/imports", refused)).StatusCode);
         }
 
         // Import as a new repository.
         JsonElement result;
         using (var content = MultipartOf(zip))
         {
-            var response = await admin.PostAsync("/api/repositories/import", content);
+            var response = await admin.PostAsync("/api/repositories/imports", content);
             var body = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
             {
@@ -118,11 +118,11 @@ public class RepositoryImportTests
         JsonElement First, Second;
         using (var c = MultipartOf(zip))
         {
-            First = await (await admin.PostAsync("/api/repositories/import", c)).Content.ReadFromJsonAsync<JsonElement>();
+            First = await (await admin.PostAsync("/api/repositories/imports", c)).Content.ReadFromJsonAsync<JsonElement>();
         }
         using (var c = MultipartOf(zip))
         {
-            Second = await (await admin.PostAsync("/api/repositories/import", c)).Content.ReadFromJsonAsync<JsonElement>();
+            Second = await (await admin.PostAsync("/api/repositories/imports", c)).Content.ReadFromJsonAsync<JsonElement>();
         }
 
         // The second import matched the same root by origin — no duplicate, everything skipped.
@@ -154,7 +154,7 @@ public class RepositoryImportTests
         JsonElement imported;
         using (var c = MultipartOf(zip))
         {
-            imported = await (await admin.PostAsync("/api/repositories/import?includePermissions=true", c)).Content.ReadFromJsonAsync<JsonElement>();
+            imported = await (await admin.PostAsync("/api/repositories/imports?includePermissions=true", c)).Content.ReadFromJsonAsync<JsonElement>();
         }
 
         // The imported root carries the grant to the same user (matched by email within the tenant).
@@ -196,7 +196,7 @@ public class RepositoryImportTests
         var zip = await (await admin.GetAsync($"/api/documents/{srcSharedId}/export?versions=all")).Content.ReadAsByteArrayAsync();
         using (var c = MultipartOf(zip))
         {
-            (await admin.PostAsync($"/api/documents/{destId}/import?merge=true", c)).EnsureSuccessStatusCode();
+            (await admin.PostAsync($"/api/documents/{destId}/imports?merge=true", c)).EnsureSuccessStatusCode();
         }
 
         // The destination still has exactly one "Shared" (the pre-existing one), now holding both documents.
@@ -246,7 +246,7 @@ public class RepositoryImportTests
         var zip = await (await admin.GetAsync($"/api/documents/{srcSharedId}/export?versions=all")).Content.ReadAsByteArrayAsync();
         using (var c = MultipartOf(zip))
         {
-            (await admin.PostAsync($"/api/documents/{destId}/import?merge=true&leafConflict=newVersion", c)).EnsureSuccessStatusCode();
+            (await admin.PostAsync($"/api/documents/{destId}/imports?merge=true&leafConflict=newVersion", c)).EnsureSuccessStatusCode();
         }
 
         // Still exactly one "CommonDoc" under the shared folder…
@@ -292,7 +292,7 @@ public class RepositoryImportTests
         JsonElement result;
         using (var content = MultipartOf(zip))
         {
-            var response = await admin.PostAsync("/api/repositories/import", content);
+            var response = await admin.PostAsync("/api/repositories/imports", content);
             response.EnsureSuccessStatusCode();
             result = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
         }

@@ -15,7 +15,8 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
 {
     private SimplArchiveApiClient? _api;
 
-    // What the BIN itself offers — restore-selected / purge-selected / purge-all — captured where the
+    // What the BIN itself offers — restore-selected, and the one purge rel (ADR 0797: emptying the bin and
+    // purging a selection are one destructive act on one collection, the ids being an argument) — captured where the
     // collection is read, so a tab full of buttons costs no extra request (ADR 0557).
     private IReadOnlyDictionary<string, string> _binLinks = new Dictionary<string, string>();
 
@@ -293,7 +294,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
 
         try
         {
-            var (purged, skipped) = await _api.RecycleBin.PurgeManyAsync(BinRel("purge-selected"), ids);
+            var (purged, skipped) = await _api.RecycleBin.PurgeManyAsync(BinRel("purge"), ids);
             Report(skipped > 0 ? $"Permanently deleted {purged} item(s), skipped {skipped} (legal hold / locked)." : $"Permanently deleted {purged} item(s).");
             await LoadAsync();
         }
@@ -339,7 +340,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
 
         try
         {
-            await _api.RecycleBin.PurgeRecycleBinAsync(BinRel("purge-all"));
+            await _api.RecycleBin.PurgeRecycleBinAsync(BinRel("purge"));
             Report("The recycle bin was permanently emptied.");
             await LoadAsync();
         }

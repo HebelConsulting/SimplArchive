@@ -32,7 +32,7 @@ public class CheckoutPageOperationsTests
         Assert.Equal(3, pages.GetProperty("pageCount").GetInt32());
 
         // Keep pages 3 and 1 (dropping 2), rotate the kept page 1 a quarter turn — one request, into the stash.
-        var response = await holder.PostAsJsonAsync(Rel(pages, "sort"), new
+        var response = await holder.PutAsJsonAsync(Rel(pages, "sort"), new
         {
             pageOrder = new[] { 3, 1 },
             rotations = new[] { new { page = 1, degrees = 90 } },
@@ -49,12 +49,12 @@ public class CheckoutPageOperationsTests
         // A second operation reads the STASH, not the archive: reversing the two survivors proves the source.
         pages = await TestJson.Get(holder, Rel(row, "pages"));
         Assert.Equal(2, pages.GetProperty("pageCount").GetInt32());
-        (await holder.PostAsJsonAsync(Rel(pages, "sort"), new { pageOrder = new[] { 2, 1 } })).EnsureSuccessStatusCode();
+        (await holder.PutAsJsonAsync(Rel(pages, "sort"), new { pageOrder = new[] { 2, 1 } })).EnsureSuccessStatusCode();
         row = await CheckoutRowAsync(holder, docId);
         Assert.Equal([800, 500], await WidthsAsync(row.GetProperty("stashDownloadUrl").GetString()!));
 
         // An invalid order (a duplicate) is refused whole and changes nothing.
-        var refused = await holder.PostAsJsonAsync(Rel(pages, "sort"), new { pageOrder = new[] { 1, 1 } });
+        var refused = await holder.PutAsJsonAsync(Rel(pages, "sort"), new { pageOrder = new[] { 1, 1 } });
         Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
         Assert.Equal("CHECKOUT_PAGE_ORDER_INVALID",
             (await refused.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
@@ -82,7 +82,7 @@ public class CheckoutPageOperationsTests
         // Another user — even a tenant admin — is not the holder: both actions are refused, nothing is written.
         var (_, other) = await SeedAdminAsync(tenantId);
         Assert.Equal(HttpStatusCode.Forbidden, (await other.GetAsync(pagesHref)).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await other.PostAsJsonAsync(sortHref, new { pageOrder = new[] { 2, 1 } })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await other.PutAsJsonAsync(sortHref, new { pageOrder = new[] { 2, 1 } })).StatusCode);
         Assert.False((await CheckoutRowAsync(holder, docId)).GetProperty("hasStash").GetBoolean());
     }
 

@@ -289,7 +289,7 @@ public class CheckoutsController : ControllerBase
                     // deliberately while the only clients following it are in this repository.
                     new Link("checkin", $"/api/checkouts/{d.Id}/checkin", "POST"),
                     new Link("cancel-checkout", $"/api/documents/{d.Id}/checkout", "DELETE"),
-                    new Link("working-copy", $"/api/checkouts/{d.Id}/working-copy", "POST"),
+                    new Link("working-copy", $"/api/checkouts/{d.Id}/working-copy", "PUT"),
                     new Link("extend", $"/api/checkouts/{d.Id}/extend", "POST"),
                     // The working copy against the current version (ADR 0517) — a rel, so the compare dialog
                     // stops rebuilding /checkouts/{id}/compare from an id it was handed (issue #416).
@@ -383,7 +383,7 @@ public class CheckoutsController : ControllerBase
     // "Save to cloud" — a presigned PUT to the working-copy stash, so in-progress edits survive logout/close and
     // are re-downloaded on next login (ADR "Check-out working-copy stash + exit guard"). Holder-only: the caller
     // must currently hold the lock on this document.
-    [HttpPost("{documentId:guid}/working-copy")]
+    [HttpPut("{documentId:guid}/working-copy")]
     public async Task<IActionResult> UploadWorkingCopy(Guid documentId, CancellationToken cancellationToken)
     {
         if (_currentUserAccessor.UserId is not { } userId || _currentTenantAccessor.TenantId is not { } tenantId)
@@ -410,7 +410,7 @@ public class CheckoutsController : ControllerBase
         return Ok(new WorkingCopyUploadResource
         {
             UploadUrl = uploadUrl,
-            Links = [new Link("self", $"/api/checkouts/{documentId}/working-copy", "POST")],
+            Links = [new Link("self", $"/api/checkouts/{documentId}/working-copy", "PUT")],
         });
     }
 

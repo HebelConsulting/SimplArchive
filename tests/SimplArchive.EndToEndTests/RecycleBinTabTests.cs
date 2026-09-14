@@ -232,10 +232,10 @@ public class RecycleBinTabTests
         var plainEmail = $"pbulk-plain-{Guid.NewGuid():N}@e2e.local";
         await _factory.SeedUserAsync(tenantId, plainEmail, password, "Plain");
         using var plain = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(plainEmail, password));
-        Assert.Equal(HttpStatusCode.Forbidden, (await plain.PostAsJsonAsync("/api/recycle-bin/purge-selected", new { ids = new[] { aId } })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await plain.PostAsJsonAsync("/api/recycle-bin/purge", new { ids = new[] { aId } })).StatusCode);
 
         // Purge A + B → 2 purged; both gone (read endpoints 404), C still in the bin.
-        var result = await TestJson.Post(admin, "/api/recycle-bin/purge-selected", new { ids = new[] { aId, bId } });
+        var result = await TestJson.Post(admin, "/api/recycle-bin/purge", new { ids = new[] { aId, bId } });
         Assert.Equal(2, result.GetProperty("purged").GetInt32());
         Assert.Equal(0, result.GetProperty("skipped").GetInt32());
         Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync($"/api/documents/{aId}/index-data")).StatusCode);
@@ -243,7 +243,7 @@ public class RecycleBinTabTests
         Assert.Contains((await TestJson.Get(admin, "/api/recycle-bin")).GetProperty("items").EnumerateArray(), i => i.GetProperty("id").GetGuid() == cId);
 
         // Purging C + an active (not-deleted) repo + a bogus id → 1 purged (C), 2 skipped (active + gone).
-        var mixed = await TestJson.Post(admin, "/api/recycle-bin/purge-selected", new { ids = new[] { cId, repoId, Guid.NewGuid() } });
+        var mixed = await TestJson.Post(admin, "/api/recycle-bin/purge", new { ids = new[] { cId, repoId, Guid.NewGuid() } });
         Assert.Equal(1, mixed.GetProperty("purged").GetInt32());
         Assert.Equal(2, mixed.GetProperty("skipped").GetInt32());
         Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync($"/api/documents/{repoId}")).StatusCode); // the active repo untouched

@@ -44,7 +44,7 @@ public sealed partial class DocumentsClient
     /// advertised make-searchable rel; the successor arrives via the worker.</summary>
     public async Task MakeSearchableAsync(string makeSearchableHref, CancellationToken cancellationToken = default)
     {
-        var response = await _core.Http.PostAsync(makeSearchableHref, null, cancellationToken);
+        var response = await _core.Http.PutAsync(makeSearchableHref, null, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             throw new ApiActionException(SimplArchive.Localization.ApiErrorText.For(await ApiCore.ErrorCodeAsync(response, cancellationToken)));

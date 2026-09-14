@@ -198,8 +198,8 @@
             // The bulk actions belong to the COLLECTION, so they are captured here rather than rebuilt at
             // each button (ADR 0557).
             _restoreSelectedHref = response?.Href("restore-selected");
-            _purgeSelectedHref = response?.Href("purge-selected");
-            _purgeAllHref = response?.Href("purge-all");
+            _purgeSelectedHref = response?.Href("purge");
+            _purgeAllHref = response?.Href("purge");
             _recycleBinItems.Clear();
             if (response?.Items is { } items)
             {

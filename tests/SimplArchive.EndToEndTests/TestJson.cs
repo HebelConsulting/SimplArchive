@@ -13,6 +13,18 @@ internal static class TestJson
     public static async Task<JsonElement> Put(HttpClient client, string url, object body) =>
         await Read(await client.PutAsJsonAsync(url, body));
 
+    // DELETE carrying a body, which a bulk delete needs: the selection is the request's content, and RFC 9110
+    // permits it. HttpClient has no DeleteAsJsonAsync, so the request is built by hand.
+    public static async Task<JsonElement> Delete(HttpClient client, string url, object body)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Delete, url)
+        {
+            Content = System.Net.Http.Json.JsonContent.Create(body),
+        };
+
+        return await Read(await client.SendAsync(request));
+    }
+
     public static async Task<JsonElement> Get(HttpClient client, string url) =>
         await Read(await client.GetAsync(url));
 

@@ -59,15 +59,15 @@ public class ExportImportRightsTests
         // no-rights user are refused.
         using (var refused = MultipartOf(zip))
         {
-            Assert.Equal(HttpStatusCode.Forbidden, (await exporter.PostAsync("/api/repositories/import", refused)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await exporter.PostAsync("/api/repositories/imports", refused)).StatusCode);
         }
         using (var refused = MultipartOf(zip))
         {
-            Assert.Equal(HttpStatusCode.Forbidden, (await nobody.PostAsync("/api/repositories/import", refused)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await nobody.PostAsync("/api/repositories/imports", refused)).StatusCode);
         }
         using (var content = MultipartOf(zip))
         {
-            (await importer.PostAsync("/api/repositories/import", content)).EnsureSuccessStatusCode();
+            (await importer.PostAsync("/api/repositories/imports", content)).EnsureSuccessStatusCode();
         }
     }
 

@@ -48,25 +48,25 @@ public class IntrayMoveTests
         // 1) Bob sends an own item into the GROUP intray → it leaves his own, and Admin (a member) sees it there.
         var toGroup = $"g-{Guid.NewGuid():N}.txt";
         await UploadToOwnAsync(bob, toGroup);
-        (await bob.PostAsJsonAsync($"/api/intray/{toGroup}/move", new { targetGroupId = groupId })).EnsureSuccessStatusCode();
+        (await bob.PutAsJsonAsync($"/api/intray/{toGroup}/parent", new { targetGroupId = groupId })).EnsureSuccessStatusCode();
         Assert.DoesNotContain(toGroup, await NamesAsync(bob, "/api/intray"));                       // gone from Bob's own
         Assert.Contains(toGroup, await NamesAsync(admin, "/api/intray?includeGroups=true"));        // now in the group
 
         // 2) Bob sends an own item into CAROL's intray (a hand-off) → Carol sees it as her own.
         var toCarol = $"u-{Guid.NewGuid():N}.txt";
         await UploadToOwnAsync(bob, toCarol);
-        (await bob.PostAsJsonAsync($"/api/intray/{toCarol}/move", new { targetUserId = carolId })).EnsureSuccessStatusCode();
+        (await bob.PutAsJsonAsync($"/api/intray/{toCarol}/parent", new { targetUserId = carolId })).EnsureSuccessStatusCode();
         Assert.DoesNotContain(toCarol, await NamesAsync(bob, "/api/intray"));
         Assert.Contains(toCarol, await NamesAsync(carol, "/api/intray"));
 
         // 3) A member claims the group item into their OWN intray (source = ?group=, target = self).
-        (await admin.PostAsJsonAsync($"/api/intray/{toGroup}/move?group={groupId}", new { targetUserId = adminId })).EnsureSuccessStatusCode();
+        (await admin.PutAsJsonAsync($"/api/intray/{toGroup}/parent?group={groupId}", new { targetUserId = adminId })).EnsureSuccessStatusCode();
         Assert.Contains(toGroup, await NamesAsync(admin, "/api/intray"));                           // now in Admin's own
         Assert.DoesNotContain(toGroup, await NamesAsync(bob, "/api/intray?includeGroups=true"));    // left the group (Bob, a member, no longer sees it)
 
         // 4) Admin (CanManageIntrays) opens Carol's intray via ?user= and claims the handed-off item.
         Assert.Contains(toCarol, await NamesAsync(admin, $"/api/intray?user={carolId}"));
-        (await admin.PostAsJsonAsync($"/api/intray/{toCarol}/move?user={carolId}", new { targetUserId = adminId })).EnsureSuccessStatusCode();
+        (await admin.PutAsJsonAsync($"/api/intray/{toCarol}/parent?user={carolId}", new { targetUserId = adminId })).EnsureSuccessStatusCode();
         Assert.DoesNotContain(toCarol, await NamesAsync(carol, "/api/intray"));                     // left Carol's
         Assert.Contains(toCarol, await NamesAsync(admin, "/api/intray"));                           // now Admin's
 

@@ -162,7 +162,7 @@ public class ListAndEmailFieldApiTests
         Guid importedRoot;
         using (var content = MultipartOf(zip))
         {
-            var response = await api.PostAsync("/api/repositories/import", content);
+            var response = await api.PostAsync("/api/repositories/imports", content);
             Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
             importedRoot = (await TestJson.Read(response)).GetProperty("rootId").GetGuid();
 

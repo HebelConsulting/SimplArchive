@@ -1,6 +1,7 @@
 using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Errors.Exceptions.Documents;
 using SimplArchive.Api.Hypermedia;
@@ -162,8 +163,11 @@ public class RecycleBinController : ControllerBase
         {
             new("self", "/api/recycle-bin", "GET"),
             new("restore-selected", "/api/recycle-bin/restore", "POST"),
-            new("purge-selected", "/api/recycle-bin/purge-selected", "POST"),
-            new("purge-all", "/api/recycle-bin/purge", "POST"),
+
+            // ONE rel for the one address (ADR 0719). Emptying the bin and purging a selection were two routes
+            // and two rels for the same destructive act on the same collection; the selection is an ARGUMENT,
+            // not a different action, so it moved into the body (ADR 0797).
+            new("purge", "/api/recycle-bin/purge", "POST"),
         };
 
         return Ok(new RecycleBinResource { Items = items, Truncated = truncated, Links = links });
@@ -228,11 +232,20 @@ public class RecycleBinController : ControllerBase
     // irreversibly. Tenant-admin-only; skips any item somehow under a legal hold. See ADR "Manual hard-delete /
     // purge" / "Recycle bin tab".
     [HttpPost("purge")]
-    public async Task<IActionResult> EmptyRecycleBin(CancellationToken cancellationToken)
+    public async Task<IActionResult> Purge(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] PurgeSelectedRequest? request,
+        CancellationToken cancellationToken)
     {
         if (!await IsTenantAdminAsync(cancellationToken))
         {
             return Forbid();
+        }
+
+        // A selection purges exactly those roots; no body empties the whole bin. One route, because it is one
+        // destructive act on one collection and the ids are an argument (ADR 0797).
+        if (request?.Ids is { Count: > 0 })
+        {
+            return await PurgeSelectedAsync(request, cancellationToken);
         }
 
         var softDeleted = await _dbContext.Documents
@@ -269,14 +282,8 @@ public class RecycleBinController : ControllerBase
     // requested recycle-bin root + its subtree, irreversibly. Tenant-admin-only. A selected id that's gone, still
     // active (not in the bin), under an active legal hold, or WORM-locked is **silently skipped** (not the whole
     // request refused), reporting { purged, skipped }. Purged per-id so one protected item can't abort the batch.
-    [HttpPost("purge-selected")]
-    public async Task<IActionResult> PurgeSelected([FromBody] PurgeSelectedRequest request, CancellationToken cancellationToken)
+    private async Task<IActionResult> PurgeSelectedAsync(PurgeSelectedRequest request, CancellationToken cancellationToken)
     {
-        if (!await IsTenantAdminAsync(cancellationToken))
-        {
-            return Forbid();
-        }
-
         var purged = 0;
         var skipped = 0;
         foreach (var id in request.Ids.Distinct())

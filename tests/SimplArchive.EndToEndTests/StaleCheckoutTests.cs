@@ -38,7 +38,7 @@ public class StaleCheckoutTests
         var holderId = (await TestJson.Get(holder, "/api/diagnostics/whoami")).GetProperty("userId").GetGuid();
         (await holder.PutAsync($"/api/documents/{docId}/checkout", null)).EnsureSuccessStatusCode();
 
-        var stashUrl = (await TestJson.Post(holder, $"/api/checkouts/{docId}/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
+        var stashUrl = (await TestJson.Put(holder, $"/api/checkouts/{docId}/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
         using (var storage = new HttpClient())
         {
             (await storage.PutAsync(stashUrl, new ByteArrayContent(Encoding.UTF8.GetBytes("in-progress edits")))).EnsureSuccessStatusCode();

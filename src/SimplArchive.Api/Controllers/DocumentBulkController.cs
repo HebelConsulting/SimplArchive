@@ -75,6 +75,9 @@ public class DocumentBulkController : ControllerBase
     /// serving something else is worse than refusing, so any unreadable or non-combinable item refuses the
     /// whole request with the reason.
     /// </summary>
+    // STAYS POST (ADR 0797). It IS a read, which is the honest objection — but the thing being read is
+    // identified by N document ids, and a GET carries them only in the query string, which servers and proxies
+    // length-limit. A read whose selection does not fit in a URL is the textbook case for POST.
     [HttpPost("export")]
     public async Task<IActionResult> Export([FromBody] BulkExportRequest request, CancellationToken cancellationToken)
     {
@@ -177,11 +180,11 @@ public class DocumentBulkController : ControllerBase
         Links =
         [
             new Link("self", "/api/documents/bulk", "GET"),
-            new Link("move", "/api/documents/bulk/move", "POST"),
-            new Link("reference", "/api/documents/bulk/reference", "POST"),
-            new Link("delete", "/api/documents/bulk/delete", "POST"),
+            new Link("move", "/api/documents/bulk/parent", "PUT"),
+            new Link("reference", "/api/documents/bulk/references", "POST"),
+            new Link("delete", "/api/documents/bulk", "DELETE"),
             new Link("tags", "/api/documents/bulk/tags", "POST"),
-            new Link("sensitivity", "/api/documents/bulk/sensitivity", "POST"),
+            new Link("sensitivity", "/api/documents/bulk/sensitivity", "PUT"),
             new Link("export", "/api/documents/bulk/export", "POST"),
         ],
     });
@@ -191,7 +194,7 @@ public class DocumentBulkController : ControllerBase
 
     public class BulkIndexResource : HypermediaResource;
 
-    [HttpPost("move")]
+    [HttpPut("parent")]
     public async Task<IActionResult> Move([FromBody] BulkMoveRequest request, CancellationToken cancellationToken)
     {
         var ids = Distinct(request.Ids);
@@ -263,7 +266,7 @@ public class DocumentBulkController : ControllerBase
     // CanCreateSubItems are validated once; each item needs CanSee, must not reference into itself / the folder's own
     // subtree, and must not already be referenced there — else skipped. No repository right is needed (a reference
     // leaves the item where it is, unlike a move).
-    [HttpPost("reference")]
+    [HttpPost("references")]
     public async Task<IActionResult> Reference([FromBody] BulkReferenceRequest request, CancellationToken cancellationToken)
     {
         var ids = Distinct(request.Ids);
@@ -325,7 +328,7 @@ public class DocumentBulkController : ControllerBase
 
     // Soft-delete every selected item (each cascading its whole subtree) to the recycle bin. An item needing
     // CanDelete, or whose subtree is under a legal hold / checked out by another, is skipped.
-    [HttpPost("delete")]
+    [HttpDelete]
     public async Task<IActionResult> Delete([FromBody] BulkDeleteRequest request, CancellationToken cancellationToken)
     {
         var succeeded = 0;
@@ -370,6 +373,11 @@ public class DocumentBulkController : ControllerBase
 
     // Add one or more tags to every selected document (union — keeps existing tags; ADR "Document tags"). An
     // item needing CanEditIndexData is skipped. Adding a tag a document already carries is a no-op for it.
+    //
+    // STAYS POST while its siblings became PUT/DELETE (ADR 0797), and that is the correct shape rather than a
+    // leftover: this ADDS to a set, and POST to a collection is exactly how "add to this" is spelled. A PUT
+    // would claim the request states the full tag set — which it does not — and would invite a caller to erase
+    // somebody's tags by omitting them.
     [HttpPost("tags")]
     public async Task<IActionResult> AddTags([FromBody] BulkTagsRequest request, CancellationToken cancellationToken)
     {
@@ -416,7 +424,7 @@ public class DocumentBulkController : ControllerBase
 
     // Set the sensitivity label on every selected document (ADR "Data classification / sensitivity labels"). An
     // item needing CanEditIndexData, or frozen / checked out by another, is skipped.
-    [HttpPost("sensitivity")]
+    [HttpPut("sensitivity")]
     public async Task<IActionResult> SetSensitivity([FromBody] BulkSensitivityRequest request, CancellationToken cancellationToken)
     {
         string? labelName = null;

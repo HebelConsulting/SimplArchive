@@ -27,7 +27,7 @@ public class WebRealtimeNotificationsTests
         admin.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await Ui.GetUserTokenAsync(_app.BaseUrl));
 
         // Zero the admin's unread so the badge is hidden at login (the demo seed leaves one review notification).
-        (await admin.PostAsync("api/notifications/read-all", null)).EnsureSuccessStatusCode();
+        (await admin.PutAsync("api/notifications/read", null)).EnsureSuccessStatusCode();
 
         // A second user, granted access, will act on an admin-owned document.
         var email = $"rt-{suffix}@example.test";

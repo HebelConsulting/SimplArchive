@@ -118,7 +118,7 @@ public class CheckoutPreviewTests
 
     private static async Task SaveWorkingCopyAsync(HttpClient user, Guid docId, string content)
     {
-        var upload = await TestJson.Post(user, $"/api/checkouts/{docId}/working-copy", new { });
+        var upload = await TestJson.Put(user, $"/api/checkouts/{docId}/working-copy", new { });
         using var storage = new HttpClient();
         (await storage.PutAsync(upload.GetProperty("uploadUrl").GetString()!,
             new ByteArrayContent(Encoding.UTF8.GetBytes(content)))).EnsureSuccessStatusCode();

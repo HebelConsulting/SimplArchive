@@ -29,7 +29,7 @@ public class AuditWebhookTestDeliveryTests
         var name = (await TestJson.Get(admin, "/api/tenant-settings")).GetProperty("name").GetString();
 
         // Before a webhook is configured, a test is rejected.
-        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsync("/api/tenant-settings/audit-webhook/test", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsync("/api/tenant-settings/audit-webhook/test-deliveries", null)).StatusCode);
 
         // Stand up a stub SIEM receiver + configure the tenant's webhook to point at it.
         const string signingSecret = "test-signing-secret";
@@ -46,7 +46,7 @@ public class AuditWebhookTestDeliveryTests
         });
 
         // The test delivery succeeds.
-        var result = await TestJson.Post(admin, "/api/tenant-settings/audit-webhook/test", new { });
+        var result = await TestJson.Post(admin, "/api/tenant-settings/audit-webhook/test-deliveries", new { });
         Assert.True(result.GetProperty("success").GetBoolean());
 
         // The receiver got the synthetic event, correctly HMAC-signed with the saved secret.
@@ -56,7 +56,7 @@ public class AuditWebhookTestDeliveryTests
         Assert.Equal(expected, signature);
 
         // A non-admin can't trigger a test delivery.
-        Assert.Equal(HttpStatusCode.Forbidden, (await sa.PostAsync("/api/tenant-settings/audit-webhook/test", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await sa.PostAsync("/api/tenant-settings/audit-webhook/test-deliveries", null)).StatusCode);
     }
 
     private static async Task<(string Body, string? Signature)> CaptureOneAsync(HttpListener listener)

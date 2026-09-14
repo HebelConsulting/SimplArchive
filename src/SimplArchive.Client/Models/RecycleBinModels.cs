@@ -4,7 +4,8 @@ namespace SimplArchive.Client.Models;
 
 /// <summary>The tenant-wide recycle bin: what is deleted, and what may be done to the collection as a whole.</summary>
 /// <remarks>
-/// The envelope's own links carry the bulk actions — restore-selected, purge-selected, purge-all — because they
+/// The envelope's own links carry the bulk actions — restore-selected and purge (one rel for one address,
+/// ADR 0797: emptying the bin and purging a selection differ only by an argument) — because they
 /// belong to the collection rather than to any row. Captured where the collection is read, so no caller has to
 /// rebuild them (ADR 0557).
 /// </remarks>

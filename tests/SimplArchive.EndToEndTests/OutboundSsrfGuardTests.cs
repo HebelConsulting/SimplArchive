@@ -91,7 +91,7 @@ public class OutboundSsrfGuardTests
 
         Assert.Equal(HttpStatusCode.OK, (await SetWebhookAsync(admin, $"http://localhost:{port}/redirect")).StatusCode);
 
-        var result = await TestJson.Post(admin, "/api/tenant-settings/audit-webhook/test", new { });
+        var result = await TestJson.Post(admin, "/api/tenant-settings/audit-webhook/test-deliveries", new { });
 
         Assert.False(result.GetProperty("success").GetBoolean());
 
@@ -124,7 +124,7 @@ public class OutboundSsrfGuardTests
             await db.SaveChangesAsync();
         }
 
-        var result = await TestJson.Post(admin, "/api/tenant-settings/audit-webhook/test", new { });
+        var result = await TestJson.Post(admin, "/api/tenant-settings/audit-webhook/test-deliveries", new { });
 
         Assert.False(result.GetProperty("success").GetBoolean());
 

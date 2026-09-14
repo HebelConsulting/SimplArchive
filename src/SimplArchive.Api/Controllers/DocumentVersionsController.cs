@@ -901,7 +901,7 @@ public class DocumentVersionsController : ControllerBase
             // break the signature). DocumentSearchableController is the enforcer of the same predicate.
             if (DocumentSearchableController.IsOcrCandidate(version.ObjectKey) && version.IsSigned != true)
             {
-                links.Add(new Link("make-searchable", $"/api/documents/{version.DocumentId}/versions/{version.Id}/searchable", "POST"));
+                links.Add(new Link("make-searchable", $"/api/documents/{version.DocumentId}/versions/{version.Id}/searchable", "PUT"));
             }
         }
 

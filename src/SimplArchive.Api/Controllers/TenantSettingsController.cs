@@ -573,7 +573,7 @@ public class TenantSettingsController : ControllerBase
     // (ADR "Audit trail export") with a marked Webhook.Test action + Sequence -1, HMAC-SHA256-signed with the
     // stored secret — the same signing the dispatcher does. Returns the delivery outcome (200 even on a failed
     // delivery: the request succeeded; Success/Error report whether the endpoint accepted it). Tenant-admin only.
-    [HttpPost("audit-webhook/test")]
+    [HttpPost("audit-webhook/test-deliveries")]
     public async Task<IActionResult> TestAuditWebhook(CancellationToken cancellationToken)
     {
         if (!await IsTenantAdminAsync(cancellationToken))
@@ -669,7 +669,7 @@ public class TenantSettingsController : ControllerBase
             // because tenant-settings is where a tenant administrator already is.
             new Link("modules", "/api/modules", "GET"),
             new Link("recompute-storage", "/api/tenant-settings/recompute-storage", "POST"),
-            new Link("audit-webhook-test", "/api/tenant-settings/audit-webhook/test", "POST"),
+            new Link("audit-webhook-test", "/api/tenant-settings/audit-webhook/test-deliveries", "POST"),
         ],
     };
 }

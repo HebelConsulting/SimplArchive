@@ -365,7 +365,7 @@ public class IntrayController : ControllerBase
                     new Link("preview", ItemHref(name, "preview", group, user), "GET"),
                     new Link("mask", ItemHref(name, "mask", group, user), "GET"),
                     new Link("file", ItemHref(name, "file", group, user), "POST"),
-                    new Link("move", ItemHref(name, "move", group, user), "POST"),
+                    new Link("move", ItemHref(name, "parent", group, user), "PUT"),
                     new Link("self", ItemHref(name, "", group, user), "DELETE"),
                     // Page operations (ADR 0575) — advertised from the NAME, which is all a listing can afford
                     // to know: reading every item's bytes to count pages would make opening the intray cost one
@@ -884,7 +884,7 @@ public class IntrayController : ControllerBase
     // Moves an intray item from its source (own / a group I'm a member of / a user's — admin) into a target intray:
     // any group or any user in the tenant (ADR 0532). A move — the object + its staged-mask sidecar relocate; the
     // source's cached preview artifacts are swept. Idempotent under contention (a vanished source → 404).
-    [HttpPost("{name}/move")]
+    [HttpPut("{name}/parent")]
     public async Task<IActionResult> Move(string name, [FromQuery] Guid? group, [FromQuery] Guid? user, [FromBody] MoveIntrayRequest request, CancellationToken cancellationToken)
     {
         if (await ResolveScopeAsync(group, user, name, cancellationToken) is not { } scope)

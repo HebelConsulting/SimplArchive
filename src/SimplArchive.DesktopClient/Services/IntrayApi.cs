@@ -239,7 +239,7 @@ public sealed class IntrayApi(ApiCore core)
         object body = rotations is { Count: > 0 }
             ? new { pageOrder, rotations = rotations.Select(r => new { page = r.Key, degrees = r.Value }).ToList() }
             : new { pageOrder };
-        using var response = await core.Http.PostAsJsonAsync(sortHref.TrimStart('/'), body, cancellationToken);
+        using var response = await core.Http.PutAsJsonAsync(sortHref.TrimStart('/'), body, cancellationToken);
         await ApiCore.ThrowIfProblemAsync(response, Strings.Get("ApiErrGeneric"), cancellationToken);
     }
 

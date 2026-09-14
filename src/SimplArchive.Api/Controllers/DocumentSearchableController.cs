@@ -48,7 +48,7 @@ public class DocumentSearchableController : ControllerBase
     internal static bool IsOcrCandidate(string objectKey) =>
         Path.GetExtension(objectKey).ToLowerInvariant() is ".tif" or ".tiff" or ".pdf";
 
-    [HttpPost]
+    [HttpPut]
     public async Task<IActionResult> MakeSearchable(Guid documentId, Guid versionId, CancellationToken cancellationToken)
     {
         var documentName = await _dbContext.Documents.Where(d => d.Id == documentId).Select(d => d.Name).SingleOrDefaultAsync(cancellationToken);

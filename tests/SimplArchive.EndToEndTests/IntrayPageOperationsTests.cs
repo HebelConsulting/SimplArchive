@@ -84,7 +84,7 @@ public class IntrayPageOperationsTests
         var pages = await FollowAsync(client, await ItemLinksAsync(client, name), "pages");
         var sort = Rel(pages, "sort");
 
-        (await client.PostAsJsonAsync(sort, new { pageOrder = new[] { 3, 1, 2 } })).EnsureSuccessStatusCode();
+        (await client.PutAsJsonAsync(sort, new { pageOrder = new[] { 3, 1, 2 } })).EnsureSuccessStatusCode();
 
         // Same item, same page count, new order — and no second copy left behind to clean up.
         Assert.Equal([500, 300, 400], await PageWidthsAsync(client, name));
@@ -123,7 +123,7 @@ public class IntrayPageOperationsTests
         var name = await StageAsync(client, Pdf(300, 400, 500));
 
         var pages = await FollowAsync(client, await ItemLinksAsync(client, name), "pages");
-        (await client.PostAsJsonAsync(Rel(pages, "sort"), new { pageOrder = new[] { 3, 1 } })).EnsureSuccessStatusCode();
+        (await client.PutAsJsonAsync(Rel(pages, "sort"), new { pageOrder = new[] { 3, 1 } })).EnsureSuccessStatusCode();
 
         // The middle page is gone, the survivors are in the order asked for, and there is no second item left
         // behind — a sort still produces exactly one document.
@@ -142,7 +142,7 @@ public class IntrayPageOperationsTests
 
         // Page 2 listed TWICE. Dropping a page is now legitimate, but duplicating one is not a choice anybody
         // makes on purpose — and it is refused before anything is written, because the sort replaces in place.
-        var response = await client.PostAsJsonAsync(sort, new { pageOrder = new[] { 1, 2, 2 } });
+        var response = await client.PutAsJsonAsync(sort, new { pageOrder = new[] { 1, 2, 2 } });
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
 
         Assert.Equal([300, 400, 500], await PageWidthsAsync(client, name));
@@ -229,7 +229,7 @@ public class IntrayPageOperationsTests
         var pages = await FollowAsync(client, await ItemLinksAsync(client, name), "pages");
         var sort = Rel(pages, "sort");
 
-        (await client.PostAsJsonAsync(sort, new
+        (await client.PutAsJsonAsync(sort, new
         {
             pageOrder = new[] { 2, 1 },
             rotations = new[] { new { page = 2, degrees = 90 } },
@@ -242,7 +242,7 @@ public class IntrayPageOperationsTests
 
         // Turn the same (now first) page again: 90 + 90 composes to 180 rather than resetting.
         var again = await FollowAsync(client, await ItemLinksAsync(client, name), "pages");
-        (await client.PostAsJsonAsync(Rel(again, "sort"), new
+        (await client.PutAsJsonAsync(Rel(again, "sort"), new
         {
             pageOrder = new[] { 1, 2 },
             rotations = new[] { new { page = 1, degrees = 90 } },
@@ -261,7 +261,7 @@ public class IntrayPageOperationsTests
         var name = await StageAsync(client, Tiff((300, 500), (400, 500)), ".tif");
 
         var pages = await FollowAsync(client, await ItemLinksAsync(client, name), "pages");
-        (await client.PostAsJsonAsync(Rel(pages, "sort"), new
+        (await client.PutAsJsonAsync(Rel(pages, "sort"), new
         {
             pageOrder = new[] { 1, 2 },
             rotations = new[] { new { page = 1, degrees = 90 } },
@@ -286,14 +286,14 @@ public class IntrayPageOperationsTests
         var pages = await FollowAsync(client, await ItemLinksAsync(client, name), "pages");
         var sort = Rel(pages, "sort");
 
-        var crooked = await client.PostAsJsonAsync(sort, new
+        var crooked = await client.PutAsJsonAsync(sort, new
         {
             pageOrder = new[] { 1, 2 },
             rotations = new[] { new { page = 1, degrees = 45 } },
         });
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, crooked.StatusCode);
 
-        var dropped = await client.PostAsJsonAsync(sort, new
+        var dropped = await client.PutAsJsonAsync(sort, new
         {
             pageOrder = new[] { 1 },
             rotations = new[] { new { page = 2, degrees = 90 } },
