@@ -35,6 +35,7 @@ public class TenantSettingsController : ControllerBase
     private readonly IAuditWebhookSender _webhookSender;
     private readonly IOutboundAddressPolicy _outbound;
     private readonly IAuditRecorder _audit;
+    private readonly Concurrency.TenantVerbs _tenants;
     private readonly Microsoft.Extensions.Options.IOptions<Imap.ImapOptions> _imapOptions;
 
     public TenantSettingsController(
@@ -47,8 +48,10 @@ public class TenantSettingsController : ControllerBase
         IAuditWebhookSender webhookSender,
         IOutboundAddressPolicy outbound,
         IAuditRecorder audit,
-        Microsoft.Extensions.Options.IOptions<Imap.ImapOptions> imapOptions)
+        Microsoft.Extensions.Options.IOptions<Imap.ImapOptions> imapOptions,
+        Concurrency.TenantVerbs tenants)
     {
+        _tenants = tenants;
         _dbContext = dbContext;
         _currentTenantAccessor = currentTenantAccessor;
         _currentUserAccessor = currentUserAccessor;
@@ -240,21 +243,20 @@ public class TenantSettingsController : ControllerBase
         // Every settings PUT lands HERE, which is why one line covers all nine (#1083). Two admins in Settings
         // write the same row: saving the Security tab reverts whatever a colleague just saved on Storage, with
         // no error and nothing to point at. Honoured when the caller sends a token.
-        Concurrency.ConcurrencyHeaders.ApplyIfMatch(_dbContext, Request, tenant);
-
+        // Through the tenant's verb contract (ADR 0795): the precondition is honoured, the change commits in ONE
+        // transaction, and a stale token is translated there rather than here. Every settings PUT funnels into
+        // this method, so one call covers all nine.
         try
         {
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
-        // BEFORE the DbUpdateException below: DbUpdateConcurrencyException derives from it, so the broader
-        // catch would report a stale-token conflict as a name collision.
-        catch (DbUpdateConcurrencyException)
-        {
-            throw Errors.Exceptions.Concurrency.EtagMismatchException.ForTenant();
+            await _tenants.MutateAsync(Request, tenant, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
         }
         catch (DbUpdateException) when (nameConflictPossible)
         {
             // Tenant.Name's partial unique index among Active tenants (ADR "Tenant name uniqueness").
+            //
+            // No ordering trap left: DbUpdateConcurrencyException DERIVES from DbUpdateException, so this catch
+            // used to have to sit BELOW one for it or a stale token was reported as a name collision. The
+            // contract converts that inside, so anything reaching here IS the collision.
             throw TenantNameConflictException.OnRename();
         }
 

@@ -44,7 +44,7 @@ public partial class ConcurrencyContractRatchetTests
     // belong here, and guessing would defeat the point of the reason.
     private static readonly Dictionary<string, string> PermanentlyExempt = new();
 
-    // The ADR 0795 conversion debt — every controller the coarse detector above flags today. It starts at 47
+    // The ADR 0795 conversion debt — every controller the coarse detector above flags today. It started at 47
     // deliberately: recording the real number is what makes the next tranche measurable, and what stops the
     // first convenient moment from quietly becoming the new baseline. THIS LIST MAY ONLY GET SHORTER.
     private static readonly HashSet<string> NotYetConverted = new(StringComparer.Ordinal)
@@ -88,7 +88,6 @@ public partial class ConcurrencyContractRatchetTests
         "RepositoriesController.cs",
         "RetentionController.cs",
         "SavedSearchesController.cs",
-        "TenantSettingsController.cs",
         "TenantsController.cs",
         "TokenController.cs",
         "TypedItemsController.cs",

@@ -39,6 +39,7 @@ public class UsersController : ControllerBase
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly IUserSystemRightsResolver _userSystemRights;
     private readonly IAuditRecorder _audit;
+    private readonly Concurrency.UserVerbs _users;
     private readonly INotificationService _notifications;
     private readonly Authentication.MfaService _mfa;
     private readonly PasswordHasher<User> _passwordHasher = new();
@@ -57,7 +58,8 @@ public class UsersController : ControllerBase
         Authentication.MfaService mfa,
         ITransitEncryptor transit,
         IConfiguration configuration,
-        Documents.PersonalRepositoryProvisioner personalSpaces)
+        Documents.PersonalRepositoryProvisioner personalSpaces,
+        Concurrency.UserVerbs users)
     {
         _emailEditable = !configuration.GetValue<bool>("App:IsKiosk");
         _personalSpaces = personalSpaces;
@@ -68,6 +70,7 @@ public class UsersController : ControllerBase
         _userSystemRights = userSystemRights;
         _clearanceResolver = clearanceResolver;
         _audit = audit;
+        _users = users;
         _notifications = notifications;
         _mfa = mfa;
         _transit = transit;
@@ -969,15 +972,9 @@ public class UsersController : ControllerBase
     /// </remarks>
     private async Task SaveUserAsync(User user, CancellationToken cancellationToken)
     {
-        Concurrency.ConcurrencyHeaders.ApplyIfMatch(_dbContext, Request, user);
-        try
-        {
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            throw Errors.Exceptions.Concurrency.EtagMismatchException.ForUser();
-        }
+        // Through the user's verb contract (ADR 0795) — the precondition, the single transaction and the stale-
+        // token translation belong to it now, so each of the seven mutations is one forwarding line.
+        await _users.MutateAsync(Request, user, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
     }
 
 }

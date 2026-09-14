@@ -35,6 +35,7 @@ public class WorkflowController : ControllerBase
     private readonly IEffectiveRightsCalculator _effectiveRightsCalculator;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly IAuditRecorder _audit;
+    private readonly Concurrency.WorkflowStateVerbs _workflows;
     private readonly INotificationService _notifications;
     private readonly Documents.DocumentAccessService _access;
 
@@ -44,8 +45,10 @@ public class WorkflowController : ControllerBase
         ICurrentUserAccessor currentUserAccessor,
         IAuditRecorder audit,
         INotificationService notifications,
-        Documents.DocumentAccessService access)
+        Documents.DocumentAccessService access,
+        Concurrency.WorkflowStateVerbs workflows)
     {
+        _workflows = workflows;
         _dbContext = dbContext;
         _effectiveRightsCalculator = effectiveRightsCalculator;
         _currentUserAccessor = currentUserAccessor;
@@ -533,17 +536,9 @@ public class WorkflowController : ControllerBase
     /// transition log records both, and the final status is whoever wrote last. One method rather than the
     /// same block at each transition — the standing rule about N copies.
     /// </remarks>
-    private async Task SaveStateAsync(Domain.Workflow.WorkflowState state, CancellationToken cancellationToken)
-    {
-        Concurrency.ConcurrencyHeaders.ApplyIfMatch(_dbContext, Request, state);
-        try
-        {
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            throw Errors.Exceptions.Concurrency.EtagMismatchException.ForWorkflow();
-        }
-    }
+    // Through the workflow's verb contract (ADR 0795) — the precondition, the single transaction and the stale-
+    // token translation all belong to it now, so this is one forwarding line per transition.
+    private Task SaveStateAsync(Domain.Workflow.WorkflowState state, CancellationToken cancellationToken) =>
+        _workflows.MutateAsync(Request, state, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
 
 }
