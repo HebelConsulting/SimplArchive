@@ -62,4 +62,49 @@ public static class Links
         links is not null && links.TryGetValue(rel, out var href)
             ? href
             : throw new InvalidOperationException($"The '{rel}' rel was not advertised (ADR 0543).");
+
+    /// <summary>
+    /// Sends AT a rel: the address and the METHOD both come from the link the server advertised, so the two
+    /// cannot disagree.
+    /// </summary>
+    /// <remarks>
+    /// ADR 0543 says rel names are the compatibility surface, and #1173 proved the address half — fourteen
+    /// routes moved and no client learned a new one. The method half was never true: a <see cref="Link"/>
+    /// carries a <c>Method</c> and every call site named the verb itself, so a route that kept its rel and
+    /// changed its verb still broke every client. Nine had to be corrected by hand.
+    ///
+    /// The point of this helper is that a caller CANNOT name a verb, which is the same move ADR 0795 made on
+    /// the server: turn a silent omission into something impossible to write rather than merely discouraged.
+    ///
+    /// Throws when the rel was not advertised — a missing rel means "not available to you, here, now", so a
+    /// caller that reached here without checking has a bug, and composing a fallback would hide it.
+    /// </remarks>
+    public static async Task<HttpResponseMessage> SendAsync(
+        HttpClient http, List<LinkResponse>? links, string rel, object? body = null, CancellationToken cancellationToken = default)
+    {
+        if (links?.FirstOrDefault(l => l.Rel == rel) is not { } link || Href(links, rel) is not { } href)
+        {
+            throw new InvalidOperationException($"The '{rel}' rel was not advertised (ADR 0543).");
+        }
+
+        using var request = new HttpRequestMessage(Method(link, rel), href);
+        if (body is not null)
+        {
+            request.Content = System.Net.Http.Json.JsonContent.Create(body);
+        }
+
+        return await http.SendAsync(request, cancellationToken);
+    }
+
+    // An advertised method the client does not recognise is a refusal, not a default: guessing POST is how a
+    // client comes to write where the server meant it to read.
+    private static HttpMethod Method(LinkResponse link, string rel) => link.Method.ToUpperInvariant() switch
+    {
+        "GET" => HttpMethod.Get,
+        "PUT" => HttpMethod.Put,
+        "POST" => HttpMethod.Post,
+        "DELETE" => HttpMethod.Delete,
+        "HEAD" => HttpMethod.Head,
+        _ => throw new InvalidOperationException($"The '{rel}' rel advertised no usable method ('{link.Method}')."),
+    };
 }

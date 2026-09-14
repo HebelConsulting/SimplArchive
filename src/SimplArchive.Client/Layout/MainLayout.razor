@@ -115,7 +115,7 @@
                     else
                     {
                         @* Disabled straight off the rel: no "read-all" advertised means nothing is unread (ADR 0543). *@
-                        <MudMenuItem Icon="@Icons.Material.Filled.DoneAll" Disabled="@(_readAllHref is null)" OnClick="MarkAllNotificationsReadAsync">@Strings.Get("MarkAllRead")</MudMenuItem>
+                        <MudMenuItem Icon="@Icons.Material.Filled.DoneAll" Disabled="@(!HasReadAll)" OnClick="MarkAllNotificationsReadAsync">@Strings.Get("MarkAllRead")</MudMenuItem>
                         <MudDivider />
                         @foreach (var n in _notifications)
                         {
@@ -330,9 +330,12 @@
     private int _unreadCount;
     private readonly List<NotificationDto> _notifications = new();
 
-    // The collection's own "read-all" rel, captured when the menu loads. Null means the server is not offering it
-    // (nothing unread), which is what disables the button — rather than the client deciding for itself.
-    private string? _readAllHref;
+    // The collection's own links, captured when the menu loads. No "read-all" among them means the server is
+    // not offering it (nothing unread), which is what disables the button — rather than the client deciding for
+    // itself. The LINKS rather than the href alone, because the verb is the server's to state too (#1192).
+    private List<LinkResponse>? _readAllLinks;
+
+    private bool HasReadAll => _readAllLinks?.Any(l => l.Rel == "read-all") == true;
 
     private Task OpenNotificationsAsync(MouseEventArgs e) => LoadNotificationsAsync().ContinueWith(_ => _notifMenu.OpenMenuAsync(e)).Unwrap();
 
@@ -356,7 +359,8 @@
             _unreadCount = page?.UnreadCount ?? 0;
             // "Mark all read" is the collection's rel, so the menu offers it only while the server says there is
             // something to clear — the affordance and the outcome can't disagree (ADR 0543).
-            _readAllHref = page?.Links.FirstOrDefault(l => l.Rel == "read-all")?.Href.TrimStart('/');
+            // The LINKS, not just the href: the verb is the server's to state too (#1192).
+            _readAllLinks = page?.Links;
             StateHasChanged();
         }
         catch (Exception) { }
@@ -365,10 +369,11 @@
     private async Task MarkNotificationReadAsync(NotificationDto n)
     {
         // The item carries its own `read` rel while unread; its absence IS "already read", so there is nothing
-        // left to POST and no path to compose (issue #416).
-        if (n.Links.FirstOrDefault(l => l.Rel == "read")?.Href is { } href)
+        // left to send and no path to compose (issue #416). Sent AT the rel, so the verb is the server's too
+        // (#1192) — this call site named POST, and the route became a PUT in #1173.
+        if (n.Links.Any(l => l.Rel == "read"))
         {
-            try { await Http.PostAsync(href.TrimStart('/'), null); } catch (Exception) { }
+            try { await Links.SendAsync(Http, n.Links, "read"); } catch (Exception) { }
             n.IsRead = true;
             n.Links = [];
             if (_unreadCount > 0) _unreadCount--;
@@ -388,14 +393,15 @@
 
     private async Task MarkAllNotificationsReadAsync()
     {
-        if (_readAllHref is null)
+        if (!HasReadAll)
         {
             return;
         }
 
-        try { await Http.PutAsync(_readAllHref, null); } catch (Exception) { }
+        // Sent AT the rel (#1192): this call site named POST, and the route became a PUT in #1173.
+        try { await Links.SendAsync(Http, _readAllLinks, "read-all"); } catch (Exception) { }
         foreach (var n in _notifications) { n.IsRead = true; n.Links = []; }
-        _readAllHref = null;
+        _readAllLinks = null;
         _unreadCount = 0;
     }
 

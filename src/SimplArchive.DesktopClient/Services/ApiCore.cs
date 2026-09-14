@@ -291,6 +291,70 @@ public sealed class ApiCore
         }
     }
 
+    /// <summary>
+    /// Sends AT a rel on a resource the client just read: the address and the METHOD both come from the link
+    /// the server advertised, so the two cannot disagree.
+    /// </summary>
+    /// <remarks>
+    /// ADR 0543 makes rel names the compatibility surface, and #1173 proved the address half — fourteen routes
+    /// moved and no client learned a new one. The method half was never true: <see cref="ParseLinks"/> returns
+    /// rel → href and throws the METHOD away entirely, so every call site named the verb itself and a route
+    /// that kept its rel and changed its verb still broke this client.
+    ///
+    /// A caller of this cannot name a verb, which is the point (#1192).
+    /// </remarks>
+    public async Task<HttpResponseMessage> SendRelAsync(
+        JsonElement resource, string rel, object? body = null, CancellationToken cancellationToken = default)
+    {
+        var (href, method) = RelLink(resource, rel);
+        if (href is null)
+        {
+            throw new InvalidOperationException($"The '{rel}' rel was not advertised (ADR 0543).");
+        }
+
+        using var request = new HttpRequestMessage(Verb(method, rel), href);
+        if (body is not null)
+        {
+            request.Content = System.Net.Http.Json.JsonContent.Create(body);
+        }
+
+        return await Http.SendAsync(request, cancellationToken);
+    }
+
+    // The href AND the method for one rel. ParseLinks deliberately keeps its rel → href shape: 77 call sites
+    // read it for navigation and do not need the verb, and widening that return type would be a large change
+    // for no gain at those sites.
+    public static (string? Href, string? Method) RelLink(JsonElement resource, string rel)
+    {
+        if (!resource.TryGetProperty("links", out var links) || links.ValueKind != JsonValueKind.Array)
+        {
+            return (null, null);
+        }
+
+        foreach (var link in links.EnumerateArray())
+        {
+            if (link.TryGetProperty("rel", out var r) && r.GetString() == rel
+                && link.TryGetProperty("href", out var h) && h.GetString() is { Length: > 0 } href)
+            {
+                return (href.TrimStart('/'), link.TryGetProperty("method", out var m) ? m.GetString() : null);
+            }
+        }
+
+        return (null, null);
+    }
+
+    // An advertised method the client does not recognise is a refusal, not a default: guessing POST is how a
+    // client comes to write where the server meant it to read.
+    private static HttpMethod Verb(string? method, string rel) => method?.ToUpperInvariant() switch
+    {
+        "GET" => HttpMethod.Get,
+        "PUT" => HttpMethod.Put,
+        "POST" => HttpMethod.Post,
+        "DELETE" => HttpMethod.Delete,
+        "HEAD" => HttpMethod.Head,
+        _ => throw new InvalidOperationException($"The '{rel}' rel advertised no usable method ('{method}')."),
+    };
+
     public static string? RelHref(JsonElement resource, string rel)
     {
         if (!resource.TryGetProperty("links", out var links) || links.ValueKind != JsonValueKind.Array)
