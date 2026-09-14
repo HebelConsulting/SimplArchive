@@ -26,17 +26,20 @@ public class DocumentTagsController : ControllerBase
     private readonly IDocumentIndexQueue _queue;
     private readonly IAuditRecorder _audit;
     private readonly Documents.DocumentAccessService _access;
+    private readonly Documents.TagSetWriter _tags;
 
     public DocumentTagsController(
         SimplArchiveDbContext dbContext,
         IDocumentIndexQueue queue,
         IAuditRecorder audit,
-        Documents.DocumentAccessService access)
+        Documents.DocumentAccessService access,
+        Documents.TagSetWriter tags)
     {
         _dbContext = dbContext;
         _queue = queue;
         _audit = audit;
         _access = access;
+        _tags = tags;
     }
 
     public class TagsResource : HypermediaResource
@@ -82,7 +85,9 @@ public class DocumentTagsController : ControllerBase
     [HttpPut]
     public async Task<IActionResult> Set(Guid documentId, [FromBody] SetTagsRequest request, CancellationToken cancellationToken)
     {
-        var document = await _dbContext.Documents.Where(d => d.Id == documentId).Select(d => new { d.TenantId, d.Name }).SingleOrDefaultAsync(cancellationToken);
+        // The ENTITY rather than a projection: TagSetWriter takes the document so the combined
+        // PUT .../detail (ADR 0794) can hand it the one it already loaded. Tags write no column on it.
+        var document = await _dbContext.Documents.SingleOrDefaultAsync(d => d.Id == documentId, cancellationToken);
         if (document is null)
         {
             return NotFound();
@@ -93,40 +98,10 @@ public class DocumentTagsController : ControllerBase
             return Forbid();
         }
 
-        var normalized = (request.Tags ?? [])
-            .Select(t => (t ?? "").Trim().ToLowerInvariant())
-            .Where(t => t.Length is > 0 and <= 100)
-            .Distinct()
-            .OrderBy(t => t, StringComparer.Ordinal)
-            .ToList();
+        // Normalization, the tag catalog and the row rewrite belong to TagSetWriter, which ADR 0794's
+        // combined PUT .../detail calls too. What stays here is the envelope.
+        var normalized = await _tags.ApplyAsync(document, request.Tags, cancellationToken);
 
-        // Tag-catalog enforcement (ADR "Tag controlled vocabulary"): when the tenant restricts tagging, every tag
-        // must already be in the active catalog; otherwise a newly-typed tag is added to the catalog so it curates
-        // itself going forward.
-        var restrict = await _dbContext.Tenants.Where(t => t.Id == document.TenantId).Select(t => t.RestrictTagsToCatalog).SingleAsync(cancellationToken);
-        var activeCatalog = (await _dbContext.TagDefinitions.Where(t => t.RetiredAt == null).Select(t => t.Name).ToListAsync(cancellationToken)).ToHashSet();
-        if (restrict)
-        {
-            if (normalized.FirstOrDefault(t => !activeCatalog.Contains(t)) is { } unknown)
-            {
-                throw new UnknownTagException(unknown);
-            }
-        }
-        else
-        {
-            foreach (var tag in normalized.Where(t => !activeCatalog.Contains(t)))
-            {
-                _dbContext.TagDefinitions.Add(new TagDefinition { Id = Guid.NewGuid(), TenantId = document.TenantId, Name = tag, CreatedAt = DateTimeOffset.UtcNow });
-            }
-        }
-
-        var existing = await _dbContext.DocumentTags.Where(t => t.DocumentId == documentId).ToListAsync(cancellationToken);
-        _dbContext.DocumentTags.RemoveRange(existing);
-        var now = DateTimeOffset.UtcNow;
-        foreach (var tag in normalized)
-        {
-            _dbContext.DocumentTags.Add(new DocumentTag { Id = Guid.NewGuid(), TenantId = document.TenantId, DocumentId = documentId, Tag = tag, CreatedAt = now });
-        }
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         await _queue.EnqueueAsync(documentId, cancellationToken);

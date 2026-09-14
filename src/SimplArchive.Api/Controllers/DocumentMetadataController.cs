@@ -37,6 +37,8 @@ public class DocumentMetadataController : ControllerBase
     private readonly ISearchablePdfQueue _searchablePdfQueue;
     private readonly IObjectStorageClient _objectStorage;
     private readonly Documents.MailboxAddressClaims _mailboxAddressClaims;
+    private readonly Documents.IndexDataWriter _indexData;
+    private readonly Documents.OcrLanguageWriter _ocrLanguages;
 
     public DocumentMetadataController(
         IWormLockService wormLock,
@@ -46,7 +48,9 @@ public class DocumentMetadataController : ControllerBase
         IDocumentIndexQueue queue,
         ISearchablePdfQueue searchablePdfQueue,
         IObjectStorageClient objectStorage,
-        Documents.MailboxAddressClaims mailboxAddressClaims)
+        Documents.MailboxAddressClaims mailboxAddressClaims,
+        Documents.IndexDataWriter indexData,
+        Documents.OcrLanguageWriter ocrLanguages)
     {
         _wormLock = wormLock;
         _dbContext = dbContext;
@@ -56,6 +60,8 @@ public class DocumentMetadataController : ControllerBase
         _searchablePdfQueue = searchablePdfQueue;
         _objectStorage = objectStorage;
         _mailboxAddressClaims = mailboxAddressClaims;
+        _indexData = indexData;
+        _ocrLanguages = ocrLanguages;
     }
 
     // Plain mutable class, not a record — same XmlSerializer rationale as elsewhere.
@@ -138,17 +144,11 @@ public class DocumentMetadataController : ControllerBase
         await _access.EnsureNotFrozenAsync(documentId, cancellationToken);
         await _access.EnsureNotCheckedOutByOtherAsync(documentId, cancellationToken);
 
-        var mask = await _dbContext.MaskVersions
-            .Where(v => v.MaskId == request.MaskId && v.IsCurrent)
-            .Select(v => new { v.Id, v.Name })
-            .SingleOrDefaultAsync(cancellationToken);
+        // Which version is current, and the refusal when there is none, is MaskAssignment's — shared with
+        // ADR 0794's combined PUT .../detail. The assignment itself stays here: it is one line.
+        var mask = await Documents.MaskAssignment.ResolveCurrentVersionAsync(_dbContext, request.MaskId, cancellationToken);
 
-        if (mask is null)
-        {
-            throw new MaskNotFoundException();
-        }
-
-        document.MaskVersionId = mask.Id;
+        document.MaskVersionId = mask.VersionId;
 
         HonourIfMatch(document);
 
@@ -177,7 +177,7 @@ public class DocumentMetadataController : ControllerBase
         await _wormLock.ReconcileAsync(documentId, cancellationToken); // the mask's retention may now apply
         await _audit.RecordAsync(AuditActions.DocumentMaskAssigned, "Document", documentId, document.Name, $"Mask set to '{mask.Name}'", cancellationToken: cancellationToken);
 
-        return Ok(await BuildMaskResourceAsync(documentId, mask.Id, cancellationToken));
+        return Ok(await BuildMaskResourceAsync(documentId, mask.VersionId, cancellationToken));
     }
 
     public class SetContentsSortOrderRequest
@@ -351,31 +351,11 @@ public class DocumentMetadataController : ControllerBase
         await _access.EnsureNotFrozenAsync(documentId, cancellationToken);
         await _access.EnsureNotCheckedOutByOtherAsync(documentId, cancellationToken);
 
-        // Validate every code against the fixed catalog, preserving the caller's order (Tesseract priority).
+        // Validation, the source-version choice and the assignment belong to OcrLanguageWriter, which ADR
+        // 0794's combined PUT .../detail calls too. It hands the version back so the re-conversion is
+        // enqueued AFTER the commit, by whoever owns it.
         var codes = request.Languages.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).ToList();
-        var known = OcrLanguages.Supported.Select(l => l.Code).ToHashSet(StringComparer.Ordinal);
-        var unknown = codes.FirstOrDefault(c => !known.Contains(c));
-        if (unknown is not null)
-        {
-            throw UnknownOcrLanguageException.Unsupported(unknown);
-        }
-
-        // The conversion source: the latest confirmed OCR-candidate version — TIFF or PDF since #999 (the
-        // TIFF-only gate predated scanned-PDF support and was exactly why an image-only PDF could never get
-        // its languages set). Signed versions are excluded: OCR would break the signature, so the affordance
-        // is absent for them and this enforcer matches (ADR 0543).
-        var sourceVersion = await _dbContext.DocumentVersions
-            .Where(v => v.DocumentId == documentId && v.Status == DocumentVersionStatus.Confirmed && v.IsSigned != true)
-            .OrderByDescending(v => v.VersionNumber)
-            .FirstOrDefaultAsync(v => v.ObjectKey.ToLower().EndsWith(".tif") || v.ObjectKey.ToLower().EndsWith(".tiff")
-                || v.ObjectKey.ToLower().EndsWith(".pdf"), cancellationToken);
-
-        if (sourceVersion is null)
-        {
-            throw new NoOcrSourceVersionException();
-        }
-
-        sourceVersion.OcrLanguages = codes.Count == 0 ? null : string.Join('+', codes);
+        var sourceVersion = await _ocrLanguages.ApplyAsync(documentId, request.Languages, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         // Re-run the conversion with the new languages → a new searchable-PDF version (no-op when the OCR
@@ -575,97 +555,12 @@ public class DocumentMetadataController : ControllerBase
         await _access.EnsureNotFrozenAsync(documentId, cancellationToken);
         await _access.EnsureNotCheckedOutByOtherAsync(documentId, cancellationToken);
 
-        var fieldDefinitionIds = request.Fields.Select(f => f.FieldDefinitionId).ToList();
-        var fieldDefinitions = await _dbContext.FieldDefinitions
-            .Where(f => fieldDefinitionIds.Contains(f.Id))
-            .ToDictionaryAsync(f => f.Id, cancellationToken);
+        // The whole replacement — validation, the mail-routing claims, the classifier-owned guard, and the
+        // rewrite of the rows — belongs to IndexDataWriter, which ADR 0794's combined PUT .../detail calls
+        // too. What stays here is the envelope: who may write, the precondition, the save, the side effects.
+        await _indexData.ApplyAsync(document, request.Fields, request.ConfirmDuplicateClaims, cancellationToken);
 
-        foreach (var field in request.Fields)
-        {
-            if (!fieldDefinitions.TryGetValue(field.FieldDefinitionId, out var definition))
-            {
-                throw new FieldDefinitionNotFoundException($"Field definition '{field.FieldDefinitionId}' does not exist.");
-            }
-
-            // New validation this endpoint introduces — never had to be enforced before, since FieldValue
-            // rows only ever came from direct DbContext seeding in tests/verification scripts.
-            //
-            // Multiplicity now comes from EITHER the flag or the type (#703): `IsList` says so for any basic
-            // type, and MultiSelect is a list by virtue of being one — grandfathered, so an existing
-            // MultiSelect field keeps accepting many values without anybody having to set the flag on it.
-            if (!definition.IsList && definition.DataType != FieldDataType.MultiSelect && field.Values.Count > 1)
-            {
-                throw new MultipleValuesNotAllowedException($"Field '{definition.Name}' does not allow multiple values.");
-            }
-        }
-
-        // The mail-routing rules (#703): who may write a Mailbox's address list, and which claims it may
-        // carry. Before the rewrite below, because it compares the request against the STORED list.
-        await _mailboxAddressClaims.EnforceAsync(documentId, document.Name, fieldDefinitions, request.Fields, request.ConfirmDuplicateClaims, cancellationToken);
-
-        var existingValues = await _dbContext.FieldValues.Where(v => v.DocumentId == documentId).ToListAsync(cancellationToken);
-
-        // The classifier-owned projection fields (ADRs 0743/0744) are read-only HERE, at the one entrance
-        // index data is written through — the clients also hide the edit, but a rule enforced only there is
-        // not a rule. This PUT is a full replacement, so both directions are guarded: a CHANGED owned value
-        // and an OMITTED one (which the replacement would silently erase) are refused alike; echoing the
-        // current values back — what an honest client does with a read-only row — passes untouched.
-        var documentMask = await _dbContext.Documents
-            .Where(d => d.Id == documentId)
-            .Join(_dbContext.MaskVersions, d => d.MaskVersionId, v => (Guid?)v.Id, (d, v) => new { v.MaskId, MaskVersionId = v.Id })
-            .FirstOrDefaultAsync(cancellationToken);
-        if (documentMask is not null && WellKnownMaskIds.ClassifierOwnedFields.TryGetValue(documentMask.MaskId, out var ownedFields))
-        {
-            // Scoped to the document's OWN mask version — "Start" on some other mask is somebody else's field.
-            var ownedDefinitionIds = await _dbContext.FieldDefinitions
-                .Where(f => f.MaskVersionId == documentMask.MaskVersionId && ownedFields.Contains(f.Name))
-                .Select(f => new { f.Id, f.Name })
-                .ToListAsync(cancellationToken);
-            foreach (var owned in ownedDefinitionIds)
-            {
-                var stored = existingValues
-                    .Where(v => v.FieldDefinitionId == owned.Id)
-                    .OrderBy(v => v.Ordinal).ThenBy(v => v.Id)
-                    .Select(v => v.Value)
-                    .ToList();
-                var submitted = request.Fields.FirstOrDefault(f => f.FieldDefinitionId == owned.Id)?.Values ?? [];
-                if (!stored.SequenceEqual(submitted))
-                {
-                    throw new ClassifierOwnedFieldException(owned.Name);
-                }
-            }
-        }
-
-        _dbContext.FieldValues.RemoveRange(existingValues);
-
-        foreach (var field in request.Fields)
-        {
-            // Stamped in the order the caller sent them (#703) — a list is what the user typed, so its order
-            // is theirs. Without it the read came back in whatever order the database chose, and that order
-            // changed between reads.
-            for (var ordinal = 0; ordinal < field.Values.Count; ordinal++)
-            {
-                _dbContext.FieldValues.Add(new FieldValue
-                {
-                    Id = Guid.NewGuid(),
-                    TenantId = document.TenantId,
-                    DocumentId = documentId,
-                    FieldDefinitionId = field.FieldDefinitionId,
-                    Value = field.Values[ordinal],
-                    Ordinal = ordinal,
-                });
-            }
-        }
-
-        // Editing index data IS an edit to the document, and saying so is what makes it guardable (#1083).
-        // This endpoint writes FieldValue CHILD rows; EF checks a concurrency token only on rows it is actually
-        // updating, so while the Document row stayed untouched the parent's token never fired and the most
-        // collision-prone edit in the app — two people on one document's fields — was unguarded. Marking the
-        // token modified brings the row into the UPDATE, so the caller's If-Match is compared and a fresh token
-        // is issued. It also means ONE version covers name, mask, sensitivity and fields alike, which is how
-        // the pencil commits them anyway (ADR 0278).
         HonourIfMatch(document);
-        _dbContext.Entry(document).Property(d => d.ConcurrencyToken).IsModified = true;
 
         try
         {
