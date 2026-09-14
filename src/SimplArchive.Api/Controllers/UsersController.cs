@@ -327,6 +327,8 @@ public class UsersController : ControllerBase
             return NotFound();
         }
 
+        // The token the caller sends back as If-Match (#1083).
+        Concurrency.ConcurrencyHeaders.EmitETag(Response, user);
         return Ok(BuildResource(user, _emailEditable));
     }
 
@@ -363,7 +365,7 @@ public class UsersController : ControllerBase
         }
 
         user.DisplayName = request.DisplayName;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await SaveUserAsync(user, cancellationToken);
 
         return Ok(BuildResource(user, _emailEditable));
     }
@@ -439,7 +441,7 @@ public class UsersController : ControllerBase
         }
 
         user.IsActive = false;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await SaveUserAsync(user, cancellationToken);
         await _audit.RecordAsync(AuditActions.UserDeactivated, "User", user.Id, user.DisplayName, cancellationToken: cancellationToken);
 
         if (replacement is not null)
@@ -473,7 +475,7 @@ public class UsersController : ControllerBase
         }
 
         user.IsActive = true;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await SaveUserAsync(user, cancellationToken);
         await _audit.RecordAsync(AuditActions.UserReactivated, "User", user.Id, user.DisplayName, cancellationToken: cancellationToken);
 
         return Ok(BuildResource(user, _emailEditable));
@@ -506,7 +508,7 @@ public class UsersController : ControllerBase
         }
 
         Users.SystemRightsMapping.Apply(user, request);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await SaveUserAsync(user, cancellationToken);
         await _audit.RecordAsync(AuditActions.UserRightsChanged, "User", user.Id, user.DisplayName, Users.SystemRightsMapping.Describe(request), cancellationToken: cancellationToken);
 
         return Ok(BuildResource(user, _emailEditable));
@@ -571,7 +573,7 @@ public class UsersController : ControllerBase
         }
 
         user.Email = email; // the setter derives NormalizedEmail — never assign that column here
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await SaveUserAsync(user, cancellationToken);
         await _audit.RecordAsync(AuditActions.UserEmailChanged, "User", user.Id, user.DisplayName,
             $"{previous} → {email}", cancellationToken: cancellationToken);
 
@@ -598,7 +600,7 @@ public class UsersController : ControllerBase
         }
 
         user.PasswordHash = _passwordHasher.HashPassword(user, request.NewPassword);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await SaveUserAsync(user, cancellationToken);
         await _audit.RecordAsync(AuditActions.UserPasswordChanged, "User", user.Id, user.DisplayName, cancellationToken: cancellationToken);
 
         return NoContent();
@@ -630,7 +632,7 @@ public class UsersController : ControllerBase
 
         var password = Convert.ToBase64String(RandomNumberGenerator.GetBytes(18));
         user.PasswordHash = _passwordHasher.HashPassword(user, password);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await SaveUserAsync(user, cancellationToken);
         await _audit.RecordAsync(AuditActions.UserPasswordReset, "User", user.Id, user.DisplayName, cancellationToken: cancellationToken);
 
         return Ok(new ResetPasswordResponse { Password = password });
@@ -952,6 +954,30 @@ public class UsersController : ControllerBase
         }
 
         return false;
+    }
+
+
+    /// <summary>
+    /// Saves a change to an EXISTING user, honouring the caller's <c>If-Match</c> when it sent one (#1083).
+    /// </summary>
+    /// <remarks>
+    /// One method rather than the same block at each of the seven mutations — the standing rule about N copies,
+    /// and the practical reason behind it: the seventh copy is where the <c>DbUpdateConcurrencyException</c>
+    /// catch gets forgotten and a stale write reports as a success. The User row is written from BOTH sides —
+    /// an admin changing rights while the user themself changes their scan defaults or IMAP settings — which is
+    /// what makes it worth guarding at every one of them.
+    /// </remarks>
+    private async Task SaveUserAsync(User user, CancellationToken cancellationToken)
+    {
+        Concurrency.ConcurrencyHeaders.ApplyIfMatch(_dbContext, Request, user);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw Errors.Exceptions.Concurrency.EtagMismatchException.ForUser();
+        }
     }
 
 }

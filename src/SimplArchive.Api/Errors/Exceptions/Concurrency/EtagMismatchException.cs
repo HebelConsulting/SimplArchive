@@ -22,4 +22,21 @@ public sealed class EtagMismatchException : ConcurrencyException
 
     public static EtagMismatchException ForBooking() =>
         new("The booking has been modified since it was last read.");
+
+    // The entities tracked by #1083. Each names its own resource, because "it changed" is only actionable if
+    // the reader knows WHAT changed — a settings page and a permission dialog need different next steps.
+    public static EtagMismatchException ForTenant() =>
+        new("The tenant's settings have been modified since they were last read.");
+
+    public static EtagMismatchException ForUser() =>
+        new("The user has been modified since they were last read.");
+
+    public static EtagMismatchException ForServiceAccount() =>
+        new("The service account has been modified since it was last read.");
+
+    public static EtagMismatchException ForAclEntry() =>
+        new("The permissions have been modified since they were last read.");
+
+    public static EtagMismatchException ForWorkflow() =>
+        new("The workflow has been modified since it was last read.");
 }

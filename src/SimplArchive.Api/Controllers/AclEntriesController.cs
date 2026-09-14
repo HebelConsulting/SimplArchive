@@ -460,7 +460,19 @@ public class AclEntriesController : ControllerBase
             throw InsufficientRightsToGrantException.OnDocument();
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        // Two admins on one document's permission dialog each rewrite the SAME principal's grant set, and the
+        // later write silently replaces the earlier one (#1083). Honoured when the caller sends a token; an
+        // entry being CREATED here has no prior version to conflict with, so this only ever guards a rewrite.
+        Concurrency.ConcurrencyHeaders.ApplyIfMatch(_dbContext, Request, entry);
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw Errors.Exceptions.Concurrency.EtagMismatchException.ForAclEntry();
+        }
 
         // The grant changed this document's (and its inheriting descendants') indexed visibility — reindex
         // the subtree (ADR "Indexed ACL in search").

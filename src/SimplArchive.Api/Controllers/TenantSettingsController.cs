@@ -237,9 +237,20 @@ public class TenantSettingsController : ControllerBase
 
         await applyAsync(tenant);
 
+        // Every settings PUT lands HERE, which is why one line covers all nine (#1083). Two admins in Settings
+        // write the same row: saving the Security tab reverts whatever a colleague just saved on Storage, with
+        // no error and nothing to point at. Honoured when the caller sends a token.
+        Concurrency.ConcurrencyHeaders.ApplyIfMatch(_dbContext, Request, tenant);
+
         try
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        // BEFORE the DbUpdateException below: DbUpdateConcurrencyException derives from it, so the broader
+        // catch would report a stale-token conflict as a name collision.
+        catch (DbUpdateConcurrencyException)
+        {
+            throw Errors.Exceptions.Concurrency.EtagMismatchException.ForTenant();
         }
         catch (DbUpdateException) when (nameConflictPossible)
         {
@@ -267,6 +278,9 @@ public class TenantSettingsController : ControllerBase
             await _audit.RecordAsync(auditAction, "Tenant", tenant.Id, tenant.Name, string.Join("; ", changes), cancellationToken: cancellationToken);
         }
 
+        // The token the caller sends back as If-Match (#1083) — emitted on the read AND on the write's
+        // response, so a client doing two edits in a row need not re-read between them.
+        Concurrency.ConcurrencyHeaders.EmitETag(Response, tenant);
         return Ok(ToResource(tenant));
     }
 
@@ -540,6 +554,9 @@ public class TenantSettingsController : ControllerBase
         tenant.StorageUsedBytes = total;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        // The token the caller sends back as If-Match (#1083) — emitted on the read AND on the write's
+        // response, so a client doing two edits in a row need not re-read between them.
+        Concurrency.ConcurrencyHeaders.EmitETag(Response, tenant);
         return Ok(ToResource(tenant));
     }
 

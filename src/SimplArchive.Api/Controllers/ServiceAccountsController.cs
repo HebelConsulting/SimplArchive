@@ -383,6 +383,8 @@ public class ServiceAccountsController : ControllerBase
             return NotFound();
         }
 
+        // The token the caller sends back as If-Match (#1083).
+        Concurrency.ConcurrencyHeaders.EmitETag(Response, serviceAccount);
         return Ok(BuildResource(serviceAccount));
     }
 
@@ -441,9 +443,22 @@ public class ServiceAccountsController : ControllerBase
         serviceAccount.CanExport = request.CanExport;
         serviceAccount.CanBlockResources = request.CanBlockResources;
 
+        // This PUT is a FULL REPLACE, which is what makes it the sharpest lost-update surface in the app
+        // (#1083): two admins editing one integration account's grants from stale forms silently clobber each
+        // other. Honoured when the caller sends a token; absent, this stays today's last-write-wins until the
+        // clients send one (the staged rollout).
+        Concurrency.ConcurrencyHeaders.ApplyIfMatch(_dbContext, Request, serviceAccount);
+
         try
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        // BEFORE the DbUpdateException below, and that order is load-bearing: DbUpdateConcurrencyException
+        // DERIVES from DbUpdateException, so the broader catch would swallow a stale-token conflict and report
+        // it as a name collision — an error naming a cause that never happened, which is worse than none.
+        catch (DbUpdateConcurrencyException)
+        {
+            throw Errors.Exceptions.Concurrency.EtagMismatchException.ForServiceAccount();
         }
         catch (DbUpdateException)
         {

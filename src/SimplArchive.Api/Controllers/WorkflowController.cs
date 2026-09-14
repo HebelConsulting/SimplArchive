@@ -177,7 +177,7 @@ public class WorkflowController : ControllerBase
         }
 
         AddTransition(state, from, WorkflowStatus.InReview, assignedToUserId: reviewer.Id);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await SaveStateAsync(state, cancellationToken);
         var docName = await DocumentNameAsync(documentId, cancellationToken);
         await _audit.RecordAsync(AuditActions.WorkflowSubmitted, "Document", documentId, docName, $"reviewer: {reviewer.DisplayName}", cancellationToken: cancellationToken);
         await _notifications.NotifyAsync(reviewer.Id, NotificationType.ReviewAssigned, "Review requested", $"You've been asked to review '{docName}'.", documentId, cancellationToken);
@@ -230,7 +230,7 @@ public class WorkflowController : ControllerBase
         state.AssignedToUserId = null; // resolved — no longer a pending task
         state.UpdatedAt = DateTimeOffset.UtcNow;
         AddTransition(state, WorkflowStatus.InReview, to, rejectionReason: to == WorkflowStatus.Rejected ? reason!.Trim() : null);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await SaveStateAsync(state, cancellationToken);
         var docName = await DocumentNameAsync(documentId, cancellationToken);
         await _audit.RecordAsync(to == WorkflowStatus.Approved ? AuditActions.WorkflowApproved : AuditActions.WorkflowRejected,
             "Document", documentId, docName,
@@ -282,7 +282,7 @@ public class WorkflowController : ControllerBase
         state.Status = WorkflowStatus.Released;
         state.UpdatedAt = DateTimeOffset.UtcNow;
         AddTransition(state, WorkflowStatus.Approved, WorkflowStatus.Released);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await SaveStateAsync(state, cancellationToken);
         var docName = await DocumentNameAsync(documentId, cancellationToken);
         await _audit.RecordAsync(AuditActions.WorkflowReleased, "Document", documentId, docName, cancellationToken: cancellationToken);
 
@@ -354,7 +354,7 @@ public class WorkflowController : ControllerBase
         state.UpdatedAt = DateTimeOffset.UtcNow;
         state.ReminderSentAt = null; // the new reviewer gets a fresh pre-deadline reminder; DueAt (the document's) stands
         AddTransition(state, WorkflowStatus.InReview, WorkflowStatus.InReview, assignedToUserId: reviewer.Id);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await SaveStateAsync(state, cancellationToken);
 
         var docName = await DocumentNameAsync(documentId, cancellationToken);
         await _audit.RecordAsync(AuditActions.WorkflowReassigned, "Document", documentId, docName, $"reviewer: {reviewer.DisplayName}", cancellationToken: cancellationToken);
@@ -524,4 +524,26 @@ public class WorkflowController : ControllerBase
         public string? PerformedByName { get; set; }
         public DateTimeOffset CreatedAt { get; set; }
     }
+
+    /// <summary>
+    /// Saves a workflow transition, honouring the caller's <c>If-Match</c> when it sent one (#1083).
+    /// </summary>
+    /// <remarks>
+    /// Two approvers can resolve ONE workflow near-simultaneously: <c>state.Status = to</c> runs twice, the
+    /// transition log records both, and the final status is whoever wrote last. One method rather than the
+    /// same block at each transition — the standing rule about N copies.
+    /// </remarks>
+    private async Task SaveStateAsync(Domain.Workflow.WorkflowState state, CancellationToken cancellationToken)
+    {
+        Concurrency.ConcurrencyHeaders.ApplyIfMatch(_dbContext, Request, state);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw Errors.Exceptions.Concurrency.EtagMismatchException.ForWorkflow();
+        }
+    }
+
 }
