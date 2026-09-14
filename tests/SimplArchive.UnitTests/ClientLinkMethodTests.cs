@@ -17,116 +17,121 @@ namespace SimplArchive.UnitTests;
 // only go DOWN; converting a site lowers it in the same commit, and a file that reaches zero loses its entry.
 // A number that goes UP is a NEW site written the old way, which is what this exists to stop.
 //
-// IT SHIPPED AT 181, AND THAT NUMBER WAS THE PROBLEM. The first detector required the address to be a
-// RECOGNISABLE rel-derived expression at the call site, so it saw `Http.PostAsJsonAsync(Href(links, "x"), …)`
-// and missed every site that passes the address through a PARAMETER (`MoveIntrayItemAsync(moveUrl, …)`), a
-// HELPER (`PostBulkAsync(url, …)`, one method hardcoding POST for five operations), a CHAINED expression
-// (`rel.GetProperty("href").GetString()`), or a rel resolved elsewhere (`await ApiRoot.RequireAsync("intray")`).
+// IT SHIPPED AT 181, THEN 247, AND BOTH NUMBERS WERE WRONG IN DIFFERENT WAYS.
 //
-// That was not a harmless undercount. It was blind in exactly the shape that broke: when ADR 0797 changed six
-// routes' METHODS, five call sites kept the old verb and answered 405 — the intray send and three of the five
-// bulk operations, in BOTH clients, in shipped features — and none of the five was in this ledger. A guard that
-// reads as complete while omitting the dangerous cases is worse than one that admits it is partial.
+// 181 was too NARROW: the detector wanted a recognisable rel-derived expression at the call site, so it missed
+// every address passed through a parameter (`MoveIntrayItemAsync(moveUrl, …)`), a helper (`PostBulkAsync`, one
+// method hardcoding POST for five operations), or a chained expression. When ADR 0797 changed six routes'
+// METHODS, five call sites kept the old verb and answered 405 — in BOTH clients, in shipped features — and not
+// one of the five was in the ledger.
 //
-// So the detector now keys on the RECEIVER being an http client and counts every address that is not a literal.
-// 251 sends, 4 of them literal URLs — which are ADR 0543's violation and ClientHypermediaTests' business, not
-// this one's — leaving 247.
+// 247 was too BROAD, and that is the more dangerous error, because it pointed at work that must not be done.
+// It counted every non-literal address, but most rels are NOT an instruction about the verb:
+//
+//   * A rel advertised with a WRITE is the server stating the action — `sort` is a PUT, `purge` a POST, the
+//     bulk `delete` a DELETE. A client naming its own verb there can DISAGREE with the server, and did.
+//   * A rel advertised as GET is an ADDRESS, and the verb is the caller's intent. ADR 0719 mandates exactly
+//     that — one rel per resource, the method says which action — so `mask`, `index-data`, `parent`,
+//     `notificationPreferences` and `webdavPassword` are advertised GET while clients legitimately PUT, POST
+//     and DELETE to them. Measured: 81 of 158 rels are GET-only.
+//   * A rel advertised with SEVERAL methods (`self`, `tags`, `settings`) cannot tell a caller which it wants.
+//
+// Converting a GET-advertised site is not merely wasted work: it sends a GET where a PUT was meant, which is
+// how a notification-preferences save started failing. The over-broad ledger actively caused that.
+//
+// So this counts ONLY sites whose address names a rel the server advertises with exactly one method, that
+// method being a write. 42 across 19 files.
+//
+// WHAT IT STILL CANNOT SEE, measured rather than assumed: the rel name must appear IN the sending line. A site
+// that resolves the rel on a previous line — `var href = RelHref(row, "make-searchable"); … PostAsync(href)` —
+// is invisible, and a control run confirms it. So 42 is a floor, not a total. Widening it would mean tracking
+// a local across statements, which a text scan cannot do honestly; the alternative of guessing would put this
+// straight back into the over-broad failure above.
+
 public partial class ClientLinkMethodTests
 {
-    // A mutating send ON AN HTTP CLIENT, capturing the address it is given.
+    // A mutating send ON AN HTTP CLIENT, capturing the address expression it is given.
     //
-    // The receiver matters, and its absence is what made the first version of this ledger wrong in BOTH
-    // directions. Without it the pattern also matched method DECLARATIONS — `Task PutAsync(HttpClient http, …)`,
-    // `Task PostAsync(int pageIndex, …)` — which inflated a trial count to 284; with it, 251.
-    [GeneratedRegex(@"\b(?:_?[Hh]ttp|[Cc]lient|api|core\.Http|_core\.Http|Http)\s*\.\s*(Post|Put|Delete)(?:AsJson)?Async\(\s*([^,)]+)")]
+    // The receiver matters, and its absence made an earlier version of this wrong in BOTH directions: without
+    // it the pattern also matched method DECLARATIONS — `Task PutAsync(HttpClient http, …)` — which inflated a
+    // trial count to 284.
+    [GeneratedRegex(@"\b(?:_?[Hh]ttp|[Cc]lient|api|core\.Http|_core\.Http|Http)\s*\.\s*(Post|Put|Delete)(?:AsJson)?Async\(\s*([^;]{0,160})")]
     private static partial Regex MutatingSend();
 
-    // A LITERAL address is not this guard's business — a composed URL is ADR 0543's violation and
-    // ClientHypermediaTests owns it. Everything else came from somewhere: a rel, a row, a parameter, a field.
-    [GeneratedRegex(@"^\s*(\$?""|@\$?"")")]
-    private static partial Regex LiteralAddress();
+    [GeneratedRegex(@"""([a-zA-Z][\w:-]*)""")]
+    private static partial Regex QuotedName();
+
+    // How the server advertises each rel, read from the Link(...) literals in the Api project.
+    [GeneratedRegex(@"Link\(\s*""([a-zA-Z][\w:-]*)""\s*,[^,]+,\s*""(GET|PUT|POST|DELETE|HEAD)""")]
+    private static partial Regex AdvertisedLink();
 
     // Sites that still name their own verb, per file. THIS MAY ONLY GO DOWN.
     private static readonly Dictionary<string, int> Budget = new(StringComparer.Ordinal)
     {
-        ["src/SimplArchive.Client/Components/Tabs/AuditTab.razor"] = 2,
-        ["src/SimplArchive.Client/Components/Tabs/CheckoutTab.razor"] = 9,
-        ["src/SimplArchive.Client/Components/Tabs/IntrayPageOperations.razor"] = 6,
-        ["src/SimplArchive.Client/Components/Tabs/IntrayTab.ItemActions.razor.cs"] = 3,
-        ["src/SimplArchive.Client/Components/Tabs/IntrayTab.razor"] = 3,
-        ["src/SimplArchive.Client/Components/Tabs/LegalHoldsTab.razor"] = 3,
-        ["src/SimplArchive.Client/Components/Tabs/RecycleBinTab.razor"] = 5,
-        ["src/SimplArchive.Client/Components/Tabs/RetentionTab.razor"] = 2,
-        ["src/SimplArchive.Client/Components/Tabs/SearchTab.razor"] = 3,
-        ["src/SimplArchive.Client/Components/Tabs/TagsTab.razor"] = 5,
-        ["src/SimplArchive.Client/Components/Tabs/TenantTab.razor"] = 3,
-        ["src/SimplArchive.Client/Components/Tabs/UsersGroupsTab.razor"] = 10,
-        ["src/SimplArchive.Client/Components/UserEmailField.razor"] = 1,
-        ["src/SimplArchive.Client/Dialogs/ActivateModuleDialog.razor"] = 1,
-        ["src/SimplArchive.Client/Dialogs/BookingsDialog.razor"] = 1,
+        ["src/SimplArchive.Client/Components/Tabs/CheckoutTab.razor"] = 6,
+        ["src/SimplArchive.Client/Components/Tabs/LegalHoldsTab.razor"] = 2,
         ["src/SimplArchive.Client/Dialogs/ChangePasswordDialog.razor"] = 1,
-        ["src/SimplArchive.Client/Dialogs/ExternalLinksDialog.razor"] = 1,
-        ["src/SimplArchive.Client/Dialogs/ImapDialog.razor"] = 3,
-        ["src/SimplArchive.Client/Dialogs/MailDomainsDialog.razor"] = 3,
-        ["src/SimplArchive.Client/Dialogs/ManageAccessDialog.razor"] = 3,
         ["src/SimplArchive.Client/Dialogs/MfaSetupDialog.razor"] = 2,
-        ["src/SimplArchive.Client/Dialogs/ModuleSettingsDialog.razor"] = 1,
-        ["src/SimplArchive.Client/Dialogs/NotificationPreferencesDialog.razor"] = 1,
-        ["src/SimplArchive.Client/Dialogs/PasskeysDialog.razor"] = 3,
-        ["src/SimplArchive.Client/Dialogs/ReminderDialog.razor"] = 2,
-        ["src/SimplArchive.Client/Dialogs/SensitivityLabelsDialog.razor"] = 4,
-        ["src/SimplArchive.Client/Dialogs/ServiceAccountsDialog.razor"] = 4,
-        ["src/SimplArchive.Client/Dialogs/VersionsDialog.razor"] = 1,
-        ["src/SimplArchive.Client/Dialogs/WebDavDialog.razor"] = 2,
-        ["src/SimplArchive.Client/Dialogs/WorkflowDialog.razor"] = 1,
-        ["src/SimplArchive.Client/Layout/MainLayout.razor"] = 1,
-        ["src/SimplArchive.Client/Pages/Home.Chat.razor.cs"] = 2,
-        ["src/SimplArchive.Client/Pages/Home.Filing.razor.cs"] = 8,
-        ["src/SimplArchive.Client/Pages/Home.Navigation.razor.cs"] = 1,
-        ["src/SimplArchive.Client/Pages/Home.RowActions.razor.cs"] = 2,
-        ["src/SimplArchive.Client/Pages/Home.TiffBackfill.razor.cs"] = 1,
-        ["src/SimplArchive.Client/Pages/Home.razor"] = 1,
-        ["src/SimplArchive.Client/Services/AnnotationEditor.cs"] = 1,
+        ["src/SimplArchive.Client/Dialogs/PasskeysDialog.razor"] = 2,
+        ["src/SimplArchive.Client/Dialogs/ServiceAccountsDialog.razor"] = 1,
         ["src/SimplArchive.Client/Services/BrowseService.cs"] = 1,
-        ["src/SimplArchive.Client/Services/DocumentActions.cs"] = 11,
-        ["src/SimplArchive.Client/Services/IntrayUploads.cs"] = 2,
-        ["src/SimplArchive.Client/Services/ProfilePhotoUpload.cs"] = 1,
-        ["src/SimplArchive.Client/Services/StructuredEditors.cs"] = 1,
-        ["src/SimplArchive.Client/Services/UploadConflictResolver.cs"] = 3,
-        ["src/SimplArchive.DesktopClient/Services/AdminClient.cs"] = 27,
-        ["src/SimplArchive.DesktopClient/Services/AnnotationsClient.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/ApiCore.cs"] = 2,
-        ["src/SimplArchive.DesktopClient/Services/AuditClient.cs"] = 2,
-        ["src/SimplArchive.DesktopClient/Services/BookingsClient.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/CheckoutClient.cs"] = 5,
-        ["src/SimplArchive.DesktopClient/Services/DavCollectionsClient.cs"] = 2,
-        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.Acl.cs"] = 3,
-        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.Export.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.Folders.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.GenericActions.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.ModuleActions.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.SystemFields.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.Tags.cs"] = 4,
-        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 10,
-        ["src/SimplArchive.DesktopClient/Services/ExternalLinksClient.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/IndexDataWrites.cs"] = 2,
-        ["src/SimplArchive.DesktopClient/Services/IntrayApi.cs"] = 14,
-        ["src/SimplArchive.DesktopClient/Services/LegalHoldsClient.cs"] = 5,
-        ["src/SimplArchive.DesktopClient/Services/MasksClient.cs"] = 2,
-        ["src/SimplArchive.DesktopClient/Services/NotificationsClient.cs"] = 2,
-        ["src/SimplArchive.DesktopClient/Services/OidcLoopbackAuthenticator.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/ProfileClient.cs"] = 12,
-        ["src/SimplArchive.DesktopClient/Services/RecycleBinClient.cs"] = 5,
-        ["src/SimplArchive.DesktopClient/Services/ReferencesClient.cs"] = 2,
-        ["src/SimplArchive.DesktopClient/Services/RemindersClient.cs"] = 4,
-        ["src/SimplArchive.DesktopClient/Services/RepositoryArchiveClient.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/SearchClient.cs"] = 2,
-        ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/StructuredEditorClient.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/TagsClient.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/VersionsClient.cs"] = 2,
-        ["src/SimplArchive.DesktopClient/Services/WorkflowClient.cs"] = 2,
+        ["src/SimplArchive.Client/Services/DocumentActions.cs"] = 1,
+        ["src/SimplArchive.DesktopClient/Services/AdminClient.cs"] = 6,
+        ["src/SimplArchive.DesktopClient/Services/AuditClient.cs"] = 1,
+        ["src/SimplArchive.DesktopClient/Services/CheckoutClient.cs"] = 3,
+        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.Tags.cs"] = 2,
+        ["src/SimplArchive.DesktopClient/Services/LegalHoldsClient.cs"] = 4,
+        ["src/SimplArchive.DesktopClient/Services/NotificationsClient.cs"] = 1,
+        ["src/SimplArchive.DesktopClient/Services/ProfileClient.cs"] = 4,
+        ["src/SimplArchive.DesktopClient/Services/RecycleBinClient.cs"] = 2,
+        ["src/SimplArchive.DesktopClient/Services/RemindersClient.cs"] = 1,
+        ["src/SimplArchive.DesktopClient/Services/SearchClient.cs"] = 1,
+        ["src/SimplArchive.DesktopClient/Services/VersionsClient.cs"] = 1,
     };
+
+    /// <summary>
+    /// The rels that NAME AN ACTION: advertised with exactly one method, and that method is a write.
+    /// </summary>
+    /// <remarks>
+    /// This is the distinction the first version of this guard did not make, and getting it wrong cost real
+    /// bugs in both directions.
+    ///
+    /// A rel advertised with a WRITE is the server stating the verb — `sort` is a PUT, `purge` a POST, the bulk
+    /// `delete` a DELETE. A client that names its own verb there can disagree with the server, and did: when
+    /// ADR 0797 changed six routes' methods, five such call sites kept the old verb and answered 405.
+    ///
+    /// A rel advertised as GET is an ADDRESS, and the verb is the caller's intent. ADR 0719 mandates exactly
+    /// that — one rel per resource, the method says which action — so `mask`, `index-data`, `parent`,
+    /// `notificationPreferences` and `webdavPassword` are all advertised GET while clients legitimately PUT,
+    /// POST and DELETE to them. Counting those as debt is not merely noise: CONVERTING one sends a GET where a
+    /// PUT was meant, which is how a notification-preferences save started failing.
+    ///
+    /// Rels advertised with SEVERAL methods (`self`, `tags`, `settings`) are excluded for the same reason —
+    /// the link cannot tell a caller which of them it wants.
+    /// </remarks>
+    private static HashSet<string> ActionRels(string root)
+    {
+        var byRel = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        foreach (var file in Directory.EnumerateFiles(Path.Combine(root, "src", "SimplArchive.Api"), "*.cs", SearchOption.AllDirectories))
+        {
+            if (file.Replace(Path.DirectorySeparatorChar, '/').Contains("/obj/", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            foreach (Match m in AdvertisedLink().Matches(File.ReadAllText(file)))
+            {
+                if (!byRel.TryGetValue(m.Groups[1].Value, out var methods))
+                {
+                    byRel[m.Groups[1].Value] = methods = new HashSet<string>(StringComparer.Ordinal);
+                }
+
+                methods.Add(m.Groups[2].Value);
+            }
+        }
+
+        return [.. byRel.Where(r => r.Value.Count == 1 && !r.Value.Contains("GET") && !r.Value.Contains("HEAD")).Select(r => r.Key)];
+    }
 
     [Fact]
     public void No_client_pairs_an_advertised_address_with_a_verb_of_its_own()
@@ -135,6 +140,11 @@ public partial class ClientLinkMethodTests
         {
             return;
         }
+
+        var actionRels = ActionRels(root);
+        Assert.True(actionRels.Count > 40,
+            $"Only {actionRels.Count} action rels found — the Link(...) scan stopped seeing the Api, which would "
+            + "make this pass vacuously.");
 
         var counted = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var client in new[] { "SimplArchive.Client", "SimplArchive.DesktopClient" })
@@ -163,7 +173,8 @@ public partial class ClientLinkMethodTests
                         continue;
                     }
 
-                    if (MutatingSend().Match(line) is { Success: true } m && !LiteralAddress().IsMatch(m.Groups[2].Value))
+                    if (MutatingSend().Match(line) is { Success: true } m
+                        && QuotedName().Matches(m.Groups[2].Value).Any(q => actionRels.Contains(q.Groups[1].Value)))
                     {
                         n++;
                     }
