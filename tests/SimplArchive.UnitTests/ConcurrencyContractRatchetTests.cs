@@ -132,7 +132,6 @@ public partial class ConcurrencyContractRatchetTests
         "AdminController.cs:Document",
         "AuthorizationController.cs:User",
         "BookingsController.cs:Document",
-        "CheckoutsController.cs:Document",
         "DocumentAppointmentController.cs:Document",
         "DocumentBulkController.cs:Document",
         "DocumentChatController.cs:User",

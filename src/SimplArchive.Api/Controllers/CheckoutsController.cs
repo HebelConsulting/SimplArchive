@@ -27,6 +27,7 @@ public class CheckoutsController : ControllerBase
     private static readonly TimeSpan PresignedUrlExpiry = TimeSpan.FromMinutes(15);
 
     private readonly SimplArchiveDbContext _dbContext;
+    private readonly Concurrency.DocumentVerbs _documents;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly IObjectStorageClient _objectStorage;
@@ -47,9 +48,11 @@ public class CheckoutsController : ControllerBase
         IAuditRecorder audit,
         IUserSystemRightsResolver userSystemRights,
         IDocumentVersionComparer comparer,
-        IDocumentPreviewService documentPreviewService)
+        IDocumentPreviewService documentPreviewService,
+        Concurrency.DocumentVerbs documents)
     {
         _dbContext = dbContext;
+        _documents = documents;
         _currentUserAccessor = currentUserAccessor;
         _currentTenantAccessor = currentTenantAccessor;
         _objectStorage = objectStorage;
@@ -446,7 +449,10 @@ public class CheckoutsController : ControllerBase
 
         document.CheckedOutAt = DateTimeOffset.UtcNow;
         document.CheckoutReminderSentAt = null; // clears the "expiring soon" grace warning so it can re-fire later
-        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // Through the document's verb contract (ADR 0795). Extending races the sweep that expires a stale lock
+        // and the holder's own check-in, so "who wrote last" decided whether the lock survived.
+        await _documents.MutateAsync(Request, document, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
 
         var holderName = await _dbContext.Users.Where(u => u.Id == holder).Select(u => u.DisplayName).FirstOrDefaultAsync(cancellationToken);
         await _audit.RecordAsync(
@@ -539,7 +545,12 @@ public class CheckoutsController : ControllerBase
         document.CheckedOutByUserId = null;
         document.CheckedOutAt = null;
         document.CheckoutReminderSentAt = null;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // Through the contract, which here does NOT open a transaction: one is already in flight, so it applies
+        // the precondition and saves, leaving the single commit below where #1181 put it. That is the point of
+        // the conditionally-owned shape — the contract composes inside a caller that owns the transaction
+        // rather than fighting it.
+        await _documents.MutateAsync(Request, document, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
 
         if (transaction is not null)
         {
