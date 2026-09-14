@@ -208,6 +208,53 @@ public class ImapBodyStructureTests
         Assert.Contains("(\"ATTACHMENT\" (\"FILENAME\" \"invoice.pdf\"))", response, StringComparison.Ordinal);
     }
 
+    // BODY[HEADER] must carry the message's own Content-Type — the root cause of "attachments never show in
+    // macOS Mail" (#1158). Rebuilt from MimeMessage.Headers it was missing it (MimeKit keeps Content-Type on
+    // the body entity), so the served header had MIME-Version but no `Content-Type: multipart/mixed`. Per
+    // RFC 2045 that IS text/plain, so a client parsing structure from the header (macOS Mail) saw a plain
+    // message and showed no attachment; iOS Mail trusts BODYSTRUCTURE and was fine. Asserting the multipart
+    // Content-Type is present in BODY[HEADER] is what stops the message.Headers rebuild from returning.
+    [Fact]
+    public async Task Body_header_carries_the_multipart_content_type()
+    {
+        var world = await SeedAsync("invoice.pdf");
+
+        var response = await FetchAsync(world, "BODY.PEEK[HEADER]");
+
+        Assert.Contains("Content-Type: multipart/mixed", response, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // And HEADER.FIELDS must be able to return that Content-Type too — it filters the same raw header block,
+    // so a client asking for it specifically is not handed an empty result (#1158).
+    [Fact]
+    public async Task Header_fields_can_return_the_content_type()
+    {
+        var world = await SeedAsync("invoice.pdf");
+
+        var response = await FetchAsync(world, "BODY.PEEK[HEADER.FIELDS (CONTENT-TYPE)]");
+
+        Assert.Contains("multipart/mixed", response, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // The inline rule is text/PLAIN, not text/* — a regression corrected in #1155. text/calendar (.ics) and
+    // text/vcard (.vcf) are STRUCTURED objects a mail client renders specially (an event to add, a contact
+    // card), so they must keep their typed part; inlined as a plain body they arrive as raw VCALENDAR/VCARD
+    // text with nothing for the client to recognise. A flight-log entry is an .ics, which is how the
+    // regression was found. Asserting the CALENDAR media type AND the multipart shape is what stops the
+    // over-broad text/* rule from coming back.
+    [Theory]
+    [InlineData("entry.ics", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:log-1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n", "\"TEXT\" \"CALENDAR\"")]
+    [InlineData("card.vcf", "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Otto\r\nEND:VCARD\r\n", "\"TEXT\" \"VCARD\"")]
+    public async Task A_structured_text_document_keeps_its_typed_part(string fileName, string body, string expectedMediaType)
+    {
+        var world = await SeedAsync(fileName, body);
+
+        var response = await FetchAsync(world, "BODYSTRUCTURE");
+
+        Assert.Contains(expectedMediaType, response, StringComparison.Ordinal);
+        Assert.Contains("\"MIXED\"", response, StringComparison.Ordinal);
+    }
+
     // body-fld-lines is a COUNT, and we used to answer it with size/60 (#1141). For the synthetic detail body
     // that said 3 where the truth was 10.
     //

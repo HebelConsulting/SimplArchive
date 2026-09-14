@@ -263,18 +263,43 @@ internal static class ImapFetch
         var message = await mimeAsync();
         if (upper == "HEADER")
         {
-            return Encoding.Latin1.GetBytes(string.Concat(message.Headers.Select(h => $"{h.Field}: {h.Value}\r\n")) + "\r\n");
+            // The message's OWN serialized header block, not a list rebuilt from message.Headers — and that
+            // distinction is the whole bug behind "attachments never show in macOS Mail" (#1158). MimeKit keeps
+            // a MimeMessage's Content-Type on the BODY entity, NOT in message.Headers, so a header rebuilt from
+            // message.Headers carried MIME-Version but NO `Content-Type: multipart/mixed; boundary=…`. Per
+            // RFC 2045 a message with no Content-Type IS text/plain, so a client that parses structure from the
+            // header — macOS Mail does — saw a plain-text message, showed BODY[1], and never rendered the
+            // attachment. iPad trusts BODYSTRUCTURE instead, which is why the SAME message worked there and hid
+            // every attachment (of every size) on macOS. Serving raw[..headerEnd] gives the real header the
+            // whole-message serializer already writes — Content-Type included — so both parsing strategies agree.
+            var raw = await bytesAsync();
+            var end = FindHeaderEnd(raw);
+            return end < 0 ? raw : raw[..end];
         }
 
         if (upper.StartsWith("HEADER.FIELDS"))
         {
+            // Filter the RAW header block, not message.Headers, for the same reason as HEADER above: a client
+            // asking HEADER.FIELDS (Content-Type …) must get the body's Content-Type, which message.Headers omits.
             var open = section.IndexOf('(');
             var wanted = section[(open + 1)..section.LastIndexOf(')')]
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries)
                 .Select(f => f.ToUpperInvariant())
                 .ToHashSet();
-            var selected = message.Headers.Where(h => wanted.Contains(h.Field.ToUpperInvariant()));
-            return Encoding.Latin1.GetBytes(string.Concat(selected.Select(h => $"{h.Field}: {h.Value}\r\n")) + "\r\n");
+            var raw = await bytesAsync();
+            var end = FindHeaderEnd(raw);
+            var headerBlock = Encoding.Latin1.GetString(end < 0 ? raw : raw[..end]);
+            var kept = new StringBuilder();
+            foreach (var line in UnfoldHeaderLines(headerBlock))
+            {
+                var colon = line.IndexOf(':');
+                if (colon > 0 && wanted.Contains(line[..colon].Trim().ToUpperInvariant()))
+                {
+                    kept.Append(line).Append("\r\n");
+                }
+            }
+
+            return Encoding.Latin1.GetBytes(kept.Append("\r\n").ToString());
         }
 
         if (upper == "TEXT")
@@ -390,6 +415,39 @@ internal static class ImapFetch
         }
     }
 
+    // Header lines, unfolded (RFC 5322 §2.2.3): a line beginning with SP/HTAB continues the previous field,
+    // so a folded Content-Type stays one logical line when HEADER.FIELDS filters by field name.
+    private static IEnumerable<string> UnfoldHeaderLines(string headerBlock)
+    {
+        string? current = null;
+        foreach (var line in headerBlock.Split("\r\n"))
+        {
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            if ((line[0] == ' ' || line[0] == '\t') && current is not null)
+            {
+                current += "\r\n" + line;
+            }
+            else
+            {
+                if (current is not null)
+                {
+                    yield return current;
+                }
+
+                current = line;
+            }
+        }
+
+        if (current is not null)
+        {
+            yield return current;
+        }
+    }
+
     private static int FindHeaderEnd(byte[] raw)
     {
         for (var i = 0; i + 3 < raw.Length; i++)
@@ -463,7 +521,16 @@ internal static class ImapFetch
         // The signature stays (#783): it trails the content in the SAME text body rather than living in a
         // sibling, keeping the whole message a single text part — no BODY[2] to be misnumbered (#766) and
         // nothing for Apple to defer.
-        if (mimeType.StartsWith("text/", StringComparison.OrdinalIgnoreCase))
+        //
+        // text/PLAIN only, NOT text/* — and that distinction is a shipped regression corrected (#1155). The
+        // first cut inlined every text/* type, which swept in the two text types that are STRUCTURED OBJECTS a
+        // mail client handles specially rather than text to read: text/calendar (.ics) and text/vcard (.vcf).
+        // A flight-log entry is an .ics; inlined as a plain body it arrived as a raw VCALENDAR dumped in the
+        // message, with no calendar part for the client to recognise or add — the very .ics-ness that is the
+        // point of it, gone. Those keep their typed part (below), where a client sees an event/contact; only
+        // genuinely-plain text (a NOTAM briefing, a .txt) becomes the body. text/html would render as source
+        // if inlined, so it stays a part too — text/plain is the whole of what "read as the body" means here.
+        if (mimeType.Equals("text/plain", StringComparison.OrdinalIgnoreCase))
         {
             // UTF-8 with replacement on invalid bytes rather than a throw: a mis-encoded text document should
             // degrade to readable-ish text, never 500 a mailbox listing.
