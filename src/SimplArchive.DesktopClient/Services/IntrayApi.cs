@@ -289,9 +289,12 @@ public sealed class IntrayApi(ApiCore core)
 
     // Moves an intray item into another intray (ADR 0532): exactly one target — a group or a user. moveUrl is the
     // item's server-built move action (its source `?group=`/`?user=` already baked in).
+    //
+    // PUT, not POST: ADR 0797 made this a replace of the item's `parent`, mirroring the document form. This
+    // method hardcoded POST and answered 405 in the CLIENT the moment the route moved — #1192's point exactly.
     public async Task MoveIntrayItemAsync(string moveUrl, Guid? targetGroupId, Guid? targetUserId, CancellationToken cancellationToken = default)
     {
-        using var response = await core.Http.PostAsJsonAsync(moveUrl, new { targetGroupId, targetUserId }, cancellationToken);
+        using var response = await core.Http.PutAsJsonAsync(moveUrl, new { targetGroupId, targetUserId }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to move that item there.");

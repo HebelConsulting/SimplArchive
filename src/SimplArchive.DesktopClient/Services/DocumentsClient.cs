@@ -31,7 +31,7 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
     private readonly Func<RemindersClient> _reminders = reminders;
 
     // The bulk collection's advertised action links (ADR 0557: a structurally fixed rel set may be cached).
-    private IReadOnlyDictionary<string, string>? _bulkLinks;
+    private JsonElement? _bulkIndex;
     private readonly SemaphoreSlim _bulkGate = new(1, 1);
 
     public sealed record GrantablePrincipalInfo(string Type, Guid Id, string Name,
@@ -241,13 +241,13 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
 
 
     public async Task<BulkResult> BulkMoveAsync(IEnumerable<Guid> ids, Guid parentId, CancellationToken cancellationToken = default) =>
-        await PostBulkAsync(await BulkRelAsync("move", cancellationToken), new { ids = ids.ToArray(), parentId }, cancellationToken);
+        await SendBulkAsync("move", new { ids = ids.ToArray(), parentId }, cancellationToken);
 
     public async Task<BulkResult> BulkDeleteAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default) =>
-        await PostBulkAsync(await BulkRelAsync("delete", cancellationToken), new { ids = ids.ToArray() }, cancellationToken);
+        await SendBulkAsync("delete", new { ids = ids.ToArray() }, cancellationToken);
 
     public async Task<BulkResult> BulkSetSensitivityAsync(IEnumerable<Guid> ids, Guid? labelId, CancellationToken cancellationToken = default) =>
-        await PostBulkAsync(await BulkRelAsync("sensitivity", cancellationToken), new { ids = ids.ToArray(), labelId }, cancellationToken);
+        await SendBulkAsync("sensitivity", new { ids = ids.ToArray(), labelId }, cancellationToken);
 
     // The latest confirmed version's workflow (null if the document has no confirmed version).
     public async Task<WorkflowClient.WorkflowInfo?> GetWorkflowAsync(string versionsHref, CancellationToken cancellationToken = default)
@@ -728,16 +728,15 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
     // ids belongs to no single resource, so there was nowhere else for them to hang (ADR 0543, issue #416).
     // Read once and cached, like the API root's own rels and the audit log's: five fixed addresses that do not
     // change between calls, so a screenful of bulk clicks does not re-read the index each time (ADR 0557).
-    private async Task<string> BulkRelAsync(string rel, CancellationToken cancellationToken)
+    private async Task<JsonElement> BulkIndexAsync(CancellationToken cancellationToken)
     {
-        if (_bulkLinks is null)
+        if (_bulkIndex is null)
         {
             await _bulkGate.WaitAsync(cancellationToken);
             try
             {
-                _bulkLinks ??= ApiCore.ParseLinks(await _core.Http.GetFromJsonAsync<JsonElement>(
-                    await _core.RootHrefAsync("documentsBulk", cancellationToken), cancellationToken))
-                    ?? new Dictionary<string, string>();
+                _bulkIndex ??= await _core.Http.GetFromJsonAsync<JsonElement>(
+                    await _core.RootHrefAsync("documentsBulk", cancellationToken), cancellationToken);
             }
             finally
             {
@@ -745,14 +744,18 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
             }
         }
 
-        return _bulkLinks.TryGetValue(rel, out var href)
-            ? href
-            : throw new InvalidOperationException($"The bulk index advertised no '{rel}' rel (ADR 0543).");
+        return _bulkIndex.Value;
     }
 
-    private async Task<BulkResult> PostBulkAsync(string url, object body, CancellationToken cancellationToken)
+    /// <summary>Sends AT the bulk rel, so the METHOD is the server's too (#1192).</summary>
+    /// <remarks>
+    /// This used to be PostBulkAsync, and it hardcoded POST for all five operations. When ADR 0797 made move a
+    /// PUT, sensitivity a PUT and delete a DELETE, three of the five started answering 405 — in the CLIENT, not
+    /// in a test. That is the concrete cost of ignoring a link's Method, and the reason #1192 exists.
+    /// </remarks>
+    private async Task<BulkResult> SendBulkAsync(string rel, object body, CancellationToken cancellationToken)
     {
-        var response = await _core.Http.PostAsJsonAsync(url, body, cancellationToken);
+        var response = await _core.SendRelAsync(await BulkIndexAsync(cancellationToken), rel, body, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             throw new ApiActionException($"The bulk action failed ({(int)response.StatusCode}).");
@@ -823,10 +826,10 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
 
 
     public async Task<BulkResult> BulkReferenceAsync(IEnumerable<Guid> ids, Guid parentId, CancellationToken cancellationToken = default) =>
-        await PostBulkAsync(await BulkRelAsync("reference", cancellationToken), new { ids = ids.ToArray(), parentId }, cancellationToken);
+        await SendBulkAsync("reference", new { ids = ids.ToArray(), parentId }, cancellationToken);
 
     public async Task<BulkResult> BulkAddTagsAsync(IEnumerable<Guid> ids, IEnumerable<string> tags, CancellationToken cancellationToken = default) =>
-        await PostBulkAsync(await BulkRelAsync("tags", cancellationToken), new { ids = ids.ToArray(), tags = tags.ToArray() }, cancellationToken);
+        await SendBulkAsync("tags", new { ids = ids.ToArray(), tags = tags.ToArray() }, cancellationToken);
 
     // The latest confirmed version's preview + download links plus whether the preview is a converted rendition.
     public async Task<Preview> GetPreviewAsync(string versionsHref, CancellationToken cancellationToken = default)

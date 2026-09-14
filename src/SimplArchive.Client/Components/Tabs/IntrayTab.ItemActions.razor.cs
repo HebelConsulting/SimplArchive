@@ -58,7 +58,10 @@ public partial class IntrayTab
         {
             if (NotOffered(item.MoveHref)) { return; }
 
-            var response = await Http.PostAsJsonAsync(item.MoveHref, new { targetGroupId, targetUserId });
+            // PUT, not POST: ADR 0797 made this a replace of the item's `parent`. The record carries MoveHref as a
+            // bare string, so the method was the client's guess — and it guessed wrong the moment the route moved
+            // (#1192).
+            var response = await Http.PutAsJsonAsync(item.MoveHref, new { targetGroupId, targetUserId });
             if (!response.IsSuccessStatusCode)
             {
                 Snackbar.Add(string.Format(Strings.Get("StErrMoveItemStatus"), (int)response.StatusCode), Severity.Error);

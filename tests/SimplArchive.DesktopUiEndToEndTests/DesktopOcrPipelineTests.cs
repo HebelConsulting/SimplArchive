@@ -94,7 +94,7 @@ public class DesktopOcrPipelineTests : IAsyncLifetime
         // The user overrules the detector (Make searchable): follow the rel the version advertises. This is
         // the escape hatch for the detector-blind field case — a verdict is advice, not a verdict on appeal.
         var rel = v1.GetProperty("links").EnumerateArray().Single(l => l.GetProperty("rel").GetString() == "make-searchable");
-        (await http.PostAsync(rel.GetProperty("href").GetString(), null)).EnsureSuccessStatusCode();
+        (await http.PutAsync(rel.GetProperty("href").GetString(), null)).EnsureSuccessStatusCode();
 
         var forced = await WaitForAsync(http, docId, v => v.GetArrayLength() >= 2);
         Assert.True(forced is not null, "The forced conversion produced no successor — the force path is broken.");

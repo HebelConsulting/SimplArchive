@@ -19,7 +19,7 @@ namespace SimplArchive.Client.Services;
 /// </remarks>
 public sealed class BulkActions(HttpClient http, IDialogService dialogs, ISnackbar snackbar, DocumentActions actions, ApiRoot apiRoot, IJSRuntime js)
 {
-    private IReadOnlyDictionary<string, string>? _rels;
+    private List<LinkResponse>? _links;
 
     /// <summary>
     /// The bulk collection's own actions, read once from the address the API root advertises.
@@ -33,13 +33,15 @@ public sealed class BulkActions(HttpClient http, IDialogService dialogs, ISnackb
     /// disguise (the client would be asserting the API's path structure, ADR 0557); re-reading the collection
     /// per action is a request spent re-learning something fixed.
     /// </remarks>
-    private async Task<string> HrefAsync(string rel)
+    // The LINKS, not a rel -> href map: the METHOD is the server's to state, and throwing it away here is what
+    // made every bulk action a hardcoded POST — so when ADR 0797 turned move, sensitivity and delete into
+    // PUT/PUT/DELETE, three of the five answered 405 in the CLIENT (#1192).
+    private async Task<List<LinkResponse>> LinksAsync()
     {
-        _rels ??= (await http.GetFromJsonAsync<BulkCollectionDto>(await apiRoot.RequireAsync("documentsBulk")))?.RelMap()
+        _links ??= (await http.GetFromJsonAsync<BulkCollectionDto>(await apiRoot.RequireAsync("documentsBulk")))?.Links
             ?? throw new InvalidOperationException("The bulk collection advertised no actions (ADR 0543).");
-        return _rels.TryGetValue(rel, out var href)
-            ? href
-            : throw new InvalidOperationException($"The bulk collection advertised no '{rel}' rel (ADR 0543).");
+
+        return _links;
     }
 
     /// <summary>The combinable kind of a selection — "Contact" or "Appointment" when EVERY selected row is
@@ -56,7 +58,7 @@ public sealed class BulkActions(HttpClient http, IDialogService dialogs, ISnackb
     /// authed HttpClient and only the finished file reaches the DOM.</summary>
     public async Task ExportAsync(IReadOnlyCollection<Guid> ids, string stem)
     {
-        using var response = await http.PostAsJsonAsync(await HrefAsync("export"), new { ids = ids.ToList(), name = stem });
+        using var response = await Hypermedia.Links.SendAsync(http, await LinksAsync(), "export", new { ids = ids.ToList(), name = stem });
         if (!response.IsSuccessStatusCode)
         {
             snackbar.Add(Strings.Get("BulkExportFailed"), Severity.Error);
@@ -81,7 +83,7 @@ public sealed class BulkActions(HttpClient http, IDialogService dialogs, ISnackb
             return false;
         }
 
-        return await RunAsync(await HrefAsync("move"), new { ids = ids.ToList(), parentId = folderId }, "moved");
+        return await RunAsync("move", new { ids = ids.ToList(), parentId = folderId }, "moved");
     }
 
     /// <summary>Send the selected items to the recycle bin, after confirmation.</summary>
@@ -99,7 +101,7 @@ public sealed class BulkActions(HttpClient http, IDialogService dialogs, ISnackb
             return false;
         }
 
-        return await RunAsync(await HrefAsync("delete"), new { ids = ids.ToList() }, "deleted");
+        return await RunAsync("delete", new { ids = ids.ToList() }, "deleted");
     }
 
     /// <summary>Add tags, chosen in a dialog, to every selected item.</summary>
@@ -107,7 +109,7 @@ public sealed class BulkActions(HttpClient http, IDialogService dialogs, ISnackb
     {
         var dialog = await dialogs.ShowAsync<BulkTagsDialog>(Strings.Get("BulkTagsConfirm"));
         return (await dialog.Result) is { Canceled: false, Data: List<string> tags } && tags.Count > 0
-            && await RunAsync(await HrefAsync("tags"), new { ids = ids.ToList(), tags }, "tagged");
+            && await RunAsync("tags", new { ids = ids.ToList(), tags }, "tagged");
     }
 
     /// <summary>Apply one sensitivity label to every selected item.</summary>
@@ -115,7 +117,7 @@ public sealed class BulkActions(HttpClient http, IDialogService dialogs, ISnackb
     {
         var dialog = await dialogs.ShowAsync<BulkSensitivityDialog>(Strings.Get("BulkSensTitle"));
         return (await dialog.Result) is { Canceled: false, Data: int label }
-            && await RunAsync(await HrefAsync("sensitivity"), new { ids = ids.ToList(), label }, "classified");
+            && await RunAsync("sensitivity", new { ids = ids.ToList(), label }, "classified");
     }
 
     /// <summary>
@@ -124,11 +126,12 @@ public sealed class BulkActions(HttpClient http, IDialogService dialogs, ISnackb
     /// is exactly the kind of copy that drifts.
     /// </summary>
     /// <returns>True when the request succeeded and the caller should refresh.</returns>
-    public async Task<bool> RunAsync(string url, object body, string verb)
+    /// <remarks>Takes the REL, not a URL: the method comes from the advertised link (#1192).</remarks>
+    public async Task<bool> RunAsync(string rel, object body, string verb)
     {
         try
         {
-            var response = await http.PostAsJsonAsync(url, body);
+            var response = await Hypermedia.Links.SendAsync(http, await LinksAsync(), rel, body);
             if (!response.IsSuccessStatusCode)
             {
                 snackbar.Add(string.Format(Strings.Get("StBulkFailedStatus"), (int)response.StatusCode), Severity.Error);
@@ -155,7 +158,7 @@ public sealed class BulkActions(HttpClient http, IDialogService dialogs, ISnackb
     /// move or a reference without going through the bulk bar.
     /// </summary>
     public async Task<bool> RunRelAsync(string rel, object body, string verb) =>
-        await RunAsync(await HrefAsync(rel), body, verb);
+        await RunAsync(rel, body, verb);
 
     private sealed record BulkCollectionDto
     {

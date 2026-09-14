@@ -45,7 +45,7 @@ public class OcrVerdictTests
 
         // Following the rel answers 202 — the conversion is the worker's job, off the request path.
         var rel = version.GetProperty("links").EnumerateArray().Single(l => l.GetProperty("rel").GetString() == "make-searchable");
-        var forced = await api.PostAsync(rel.GetProperty("href").GetString(), null);
+        var forced = await api.PutAsync(rel.GetProperty("href").GetString(), null);
         Assert.Equal(HttpStatusCode.Accepted, forced.StatusCode);
 
         api.Dispose();
