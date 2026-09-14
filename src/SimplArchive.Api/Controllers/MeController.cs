@@ -36,11 +36,13 @@ public class MeController : ControllerBase
 {
     private readonly ICurrentUserAccessor _currentUser;
     private readonly SimplArchiveDbContext _dbContext;
+    private readonly Concurrency.UserVerbs _users;
 
-    public MeController(ICurrentUserAccessor currentUser, SimplArchiveDbContext dbContext)
+    public MeController(ICurrentUserAccessor currentUser, SimplArchiveDbContext dbContext, Concurrency.UserVerbs users)
     {
         _currentUser = currentUser;
         _dbContext = dbContext;
+        _users = users;
     }
 
     public class MeResource : HypermediaResource
@@ -188,8 +190,12 @@ public class MeController : ControllerBase
             return NotFound();
         }
 
+        // Through the user's verb contract (ADR 0795) — one call covering all three preferences, since every
+        // one of them funnels here. They are the caller's OWN settings, so a collision is rarer than on an
+        // admin screen, but the same session open in two tabs is enough.
         apply(user, request.Enabled);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _users.MutateAsync(Request, user, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
+
         return NoContent();
     }
 

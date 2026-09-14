@@ -26,6 +26,11 @@ namespace SimplArchive.Api.Controllers;
 public class ImapAccessController : ControllerBase
 {
     private readonly SimplArchiveDbContext _dbContext;
+    // Through the user's verb contract (ADR 0795): every write here is a column on the USER row, and a
+    // IMAP credential is exactly the kind two admin sessions can clobber — one issues while the other
+    // revokes, and last-write-wins decides whether a long-lived password that bypasses interactive login
+    // still exists. Tolerant of an absent If-Match, so no caller breaks.
+    private readonly Concurrency.UserVerbs _users;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly IOptions<ImapOptions> _options;
     private readonly IConfiguration _configuration;
@@ -41,9 +46,11 @@ public class ImapAccessController : ControllerBase
         IOptions<ImapOptions> options,
         IConfiguration configuration,
         PersonalMailboxProvisioner mailbox,
-        IAuditRecorder audit)
+        IAuditRecorder audit,
+        Concurrency.UserVerbs users)
     {
         _dbContext = dbContext;
+        _users = users;
         _currentUserAccessor = currentUserAccessor;
         _currentTenantAccessor = currentTenantAccessor;
         _options = options;
@@ -102,7 +109,7 @@ public class ImapAccessController : ControllerBase
 
         var password = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
         user.ImapPasswordHash = _passwordHasher.HashPassword(user, password);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _users.MutateAsync(Request, user, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
 
         // A long-lived credential that bypasses the interactive login and its MFA (#1092). The password is
         // never logged — the event records that one was issued, to whom, and when.
@@ -134,7 +141,7 @@ public class ImapAccessController : ControllerBase
         }
 
         user.ImapPasswordHash = null;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _users.MutateAsync(Request, user, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
 
         await _audit.RecordAsync(AuditActions.ImapPasswordIssued, "User", user.Id, user.Email,
             "Revoked", cancellationToken: cancellationToken);
@@ -152,7 +159,7 @@ public class ImapAccessController : ControllerBase
         }
 
         user.ImapShowAllDocuments = request.ShowAllDocuments;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _users.MutateAsync(Request, user, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
         return NoContent();
     }
 

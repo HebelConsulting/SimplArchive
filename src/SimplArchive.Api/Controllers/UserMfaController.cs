@@ -28,8 +28,14 @@ public class UserMfaController(
     IUserSystemRightsResolver userSystemRights,
     IAuditRecorder audit,
     ITransitEncryptor transit,
-    Authentication.MfaService mfa) : ControllerBase
+    Authentication.MfaService mfa,
+    Concurrency.UserVerbs users) : ControllerBase
 {
+    // Every write here is a column on the USER row — the TOTP secret, the enabled stamp — so all of them go
+    // through the user's verb contract (ADR 0795). The enable path also rewrites the recovery codes as CHILD
+    // rows, and those now commit in the SAME transaction as the stamp that makes them meaningful: before, a
+    // failure between the two could leave MFA enabled with the old codes, or fresh codes with MFA off.
+    //
     // ---- Two-factor authentication (ADR "MFA (interactive login, TOTP)") --------------------------------
     // Self-service TOTP enrollment: enroll generates a secret (stored but not yet active), enable confirms it
     // with a code and returns the one-time recovery codes, delete disables. An admin with CanResetMfa can
@@ -71,7 +77,7 @@ public class UserMfaController(
         var secret = mfa.GenerateSecret();
         user.TotpSecret = await transit.EncryptAsync(secret, cancellationToken); // encrypted at rest (OpenBao transit)
         user.MfaEnabledAt = null; // not active until confirmed
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await users.MutateAsync(Request, user, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
 
         var otpauth = mfa.BuildOtpauthUri(secret, user.Email);
         var qr = Convert.ToBase64String(mfa.GenerateQrPng(otpauth));
@@ -125,7 +131,7 @@ public class UserMfaController(
             });
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await users.MutateAsync(Request, user, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
         await audit.RecordAsync(AuditActions.UserMfaEnabled, "User", user.Id, user.DisplayName, cancellationToken: cancellationToken);
 
         return Ok(new MfaRecoveryCodesResponse { RecoveryCodes = codes.Select(c => c.Plaintext).ToList() });
@@ -179,7 +185,7 @@ public class UserMfaController(
         user.MfaEnabledAt = null;
         var codes = await dbContext.UserRecoveryCodes.Where(c => c.UserId == user.Id).ToListAsync(cancellationToken);
         dbContext.UserRecoveryCodes.RemoveRange(codes);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await users.MutateAsync(Request, user, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
     }
 
     // CanResetMfa is a User-only right (a ServiceAccount has no equivalent), so a ServiceAccount caller can't

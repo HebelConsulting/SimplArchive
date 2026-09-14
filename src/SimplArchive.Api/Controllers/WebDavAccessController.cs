@@ -24,14 +24,21 @@ namespace SimplArchive.Api.Controllers;
 public class WebDavAccessController : ControllerBase
 {
     private readonly SimplArchiveDbContext _dbContext;
+    // Through the user's verb contract (ADR 0795): every write here is a column on the USER row, and a
+    // WebDAV credential is exactly the kind two admin sessions can clobber — one issues while the other
+    // revokes, and last-write-wins decides whether a long-lived password that bypasses interactive login
+    // still exists. Tolerant of an absent If-Match, so no caller breaks.
+    private readonly Concurrency.UserVerbs _users;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly IConfiguration _configuration;
     private readonly PasswordHasher<User> _passwordHasher = new();
     private readonly IAuditRecorder _audit;
 
-    public WebDavAccessController(SimplArchiveDbContext dbContext, ICurrentUserAccessor currentUserAccessor, IConfiguration configuration, IAuditRecorder audit)
+    public WebDavAccessController(SimplArchiveDbContext dbContext, ICurrentUserAccessor currentUserAccessor, IConfiguration configuration, IAuditRecorder audit,
+        Concurrency.UserVerbs users)
     {
         _dbContext = dbContext;
+        _users = users;
         _currentUserAccessor = currentUserAccessor;
         _configuration = configuration;
         _audit = audit;
@@ -77,7 +84,7 @@ public class WebDavAccessController : ControllerBase
         // A URL/Basic-auth-safe password (hex — no +/=/: characters to escape).
         var password = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
         user.WebDavPasswordHash = _passwordHasher.HashPassword(user, password);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _users.MutateAsync(Request, user, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
 
         // Issuing one hands out a long-lived password that bypasses the interactive login and every MFA
         // policy attached to it (#1092) — precisely what a SIEM watches for, and until now unrecorded. The
@@ -98,7 +105,7 @@ public class WebDavAccessController : ControllerBase
         }
 
         user.WebDavPasswordHash = null;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _users.MutateAsync(Request, user, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
 
         // The revocation matters as much as the issue: it is what an incident response does, and a trail
         // showing the credential issued but never withdrawn tells the wrong story.
