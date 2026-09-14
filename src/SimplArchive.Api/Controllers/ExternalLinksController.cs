@@ -145,6 +145,11 @@ public class ExternalLinksController : ControllerBase
     /// loading and the button being pressed — but the access count is NOT incremented: this is the delivery half
     /// of a redemption already counted, and counting it twice would halve every cap an administrator set.
     /// </remarks>
+    // No companion HEAD, for the same reason as Redeem and Thumbnail: it resolves a TOKEN, so a bodiless HEAD
+    // would be a cheaper existence oracle for probing which tokens are live than the GET is (ADR 0546). The
+    // reasoning was written on its two siblings and not on this one, which left the omission looking like an
+    // oversight — an undocumented deliberate choice is indistinguishable from a mistake, and the next sweep
+    // duly reported it as one (#1173).
     [HttpGet("{token}/content")]
     public async Task<IActionResult> Content(string token, [FromQuery] bool download, CancellationToken cancellationToken)
     {

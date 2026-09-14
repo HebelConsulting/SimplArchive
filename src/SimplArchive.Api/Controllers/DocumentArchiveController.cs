@@ -120,6 +120,59 @@ public class DocumentArchiveController : ControllerBase
             : throw new NotAnArchiveException();
     }
 
+    // Standing convention: every GET action gets a companion HEAD action — its own action, not ASP.NET Core
+    // stripping a GET's body. This route was the one that lacked one while its sibling listing route above had
+    // it, which is what marks it as an oversight rather than a decision (#1173): the omissions that ARE
+    // decisions say so, as ExternalLinksController's token routes do.
+    //
+    // It runs every check the GET runs, INCLUDING reading the entry, because the entry's existence and its size
+    // are exactly what a HEAD is asked for — answering from the zip's presence alone would report 200 for a
+    // path the GET then 404s. There is no cheaper-oracle concern here: the caller is authenticated and already
+    // holds CanReadContent on the document, so a HEAD tells them nothing a GET would not.
+    [HttpHead("content")]
+    public async Task<IActionResult> HeadEntry(Guid documentId, [FromQuery] string path, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new ArchiveEntryRequiredException();
+        }
+
+        var objectKey = await ResolveZipObjectKeyAsync(documentId, cancellationToken);
+        if (objectKey is null)
+        {
+            return NotFound();
+        }
+
+        if (!await CanReadContentAsync(documentId, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (!IsZip(objectKey))
+        {
+            throw new NotAnArchiveException();
+        }
+
+        await using var buffer = await BufferAsync(objectKey, cancellationToken);
+        byte[]? bytes;
+        try
+        {
+            bytes = _archiveReader.ReadEntry(buffer, path);
+        }
+        catch (InvalidOperationException e)
+        {
+            throw new ArchiveEntryTooLargeException(e.Message);
+        }
+
+        if (bytes is null)
+        {
+            return NotFound();
+        }
+
+        Response.ContentLength = bytes.Length;
+        return NoContent();
+    }
+
     [HttpGet("content")]
     public async Task<IActionResult> DownloadEntry(Guid documentId, [FromQuery] string path, CancellationToken cancellationToken)
     {
