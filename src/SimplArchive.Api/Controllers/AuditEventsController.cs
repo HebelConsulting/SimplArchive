@@ -27,6 +27,7 @@ namespace SimplArchive.Api.Controllers;
 public class AuditEventsController : ControllerBase
 {
     private readonly SimplArchiveDbContext _dbContext;
+    private readonly Concurrency.TenantVerbs _tenants;
     private readonly ICurrentServiceAccountAccessor _currentServiceAccountAccessor;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
@@ -44,9 +45,11 @@ public class AuditEventsController : ControllerBase
         IAuditChainVerifier chainVerifier,
         IAuditWormVerifier wormVerifier,
         IAuditRetentionService retentionService,
-        IObjectStorageClient objectStorage)
+        IObjectStorageClient objectStorage,
+        Concurrency.TenantVerbs tenants)
     {
         _dbContext = dbContext;
+        _tenants = tenants;
         _currentServiceAccountAccessor = currentServiceAccountAccessor;
         _currentUserAccessor = currentUserAccessor;
         _currentTenantAccessor = currentTenantAccessor;
@@ -314,7 +317,12 @@ public class AuditEventsController : ControllerBase
         }
 
         tenant.AuditRetentionDays = request.RetentionDays;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // Through the tenant's verb contract (ADR 0795). This is a tenant SETTING, and two admins on the audit
+        // page each rewriting it is precisely the silent lost update #1083 is about — the later write reverts
+        // the earlier one with no error and nothing to point at. Tolerant of an absent If-Match, so no caller
+        // breaks; honoured when one is sent.
+        await _tenants.MutateAsync(Request, tenant, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
 
         return Ok(new RetentionResource
         {

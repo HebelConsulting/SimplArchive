@@ -84,6 +84,17 @@ public partial class ConcurrencyContractRatchetTests
             "Reads only: TagSetWriter writes DocumentTag / TagDefinition rows and the document row is untouched. "
             + "Tags are deliberately the weakest of the metadata (ADR 0796) and are edited from the same pencil, "
             + "so moving the token here would invalidate the very form that just wrote them.",
+        ["AuditEventsController.cs:ServiceAccount"] =
+            "Reads only: one CanViewAuditLog projection, gating a service-account caller.",
+        ["CheckoutsController.cs:Tenant"] =
+            "Reads only: one CheckoutTtlDays projection, to date the lock.",
+        ["DocumentBulkController.cs:ServiceAccount"] =
+            "Reads only: one CanManageRepositories projection, gating the bulk move of a repository root.",
+        ["DocumentExternalLinksController.cs:Tenant"] =
+            "Reads only: CurrentTenantAsync materialises the tenant to read its external-link policy "
+            + "(AllowExternalLinks, ExternalLinkMaxDays, ExternalLinkDefaultAccesses). No property is assigned.",
+        ["DocumentVersionsController.cs:ServiceAccount"] =
+            "Reads only: one Name projection, naming a version's author.",
         ["AclEntriesController.cs:User"] =
             "Reads only: resolves display names for the entry rows, collects tenant-admin ids, and checks a "
             + "principal exists. Projections and AnyAsync — no user column is written.",
@@ -102,20 +113,15 @@ public partial class ConcurrencyContractRatchetTests
     private static readonly HashSet<string> NotYetConverted = new(StringComparer.Ordinal)
     {
         "AdminController.cs:Document",
-        "AuditEventsController.cs:ServiceAccount",
-        "AuditEventsController.cs:Tenant",
         "AuthorizationController.cs:User",
         "BookingsController.cs:Document",
         "CheckoutsController.cs:Document",
-        "CheckoutsController.cs:Tenant",
         "DocumentAppointmentController.cs:Document",
         "DocumentBulkController.cs:Document",
-        "DocumentBulkController.cs:ServiceAccount",
         "DocumentChatController.cs:User",
         "DocumentChildrenController.cs:Document",
         "DocumentContactCardController.cs:Document",
         "DocumentExternalLinksController.cs:Document",
-        "DocumentExternalLinksController.cs:Tenant",
         "DocumentItemSourceController.cs:Document",
         "DocumentLifecycleController.cs:User",
         "DocumentMetadataController.cs:Document",
@@ -123,7 +129,6 @@ public partial class ConcurrencyContractRatchetTests
         "DocumentRemindersController.cs:User",
         "DocumentTransferController.cs:Document",
         "DocumentVersionsController.cs:Document",
-        "DocumentVersionsController.cs:ServiceAccount",
         "DocumentVersionsController.cs:User",
         "DocumentVersionsController.cs:WorkflowState",
         "DocumentsController.cs:Document",
