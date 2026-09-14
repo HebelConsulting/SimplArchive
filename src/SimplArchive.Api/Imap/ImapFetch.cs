@@ -495,8 +495,10 @@ internal static class ImapFetch
         mime.From.Add(new MailboxAddress("SimplArchive", "no-reply@simplarchive.local"));
         mime.Subject = message.Name + message.Extension;
         mime.Date = message.InternalDate;
-        // Stable per document — clients dedupe by Message-ID, and a regenerated synthetic must be the SAME message.
-        mime.MessageId = $"{message.DocumentId}@simplarchive";
+        // Stable per document — clients dedupe by Message-ID, and a regenerated synthetic must be the SAME
+        // message. Self-identifying (#782): a re-filed export of this wrapper is recognised by SyntheticMessageId
+        // and offered as a reference to the original rather than becoming a silent duplicate.
+        mime.MessageId = SyntheticMessageId.For(message.DocumentId);
 
         // The same values the body renders, as headers a client can filter on. Header-safe by construction:
         // MimeKit would fold or reject an embedded newline, so every value is flattened to one line.

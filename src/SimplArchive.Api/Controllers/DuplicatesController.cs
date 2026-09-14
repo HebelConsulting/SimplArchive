@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Hypermedia;
+using SimplArchive.Api.Imap;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Documents;
 using SimplArchive.Domain.Masks;
@@ -93,9 +94,25 @@ public class DuplicatesController : ControllerBase
                 .Distinct()
                 .ToListAsync(cancellationToken);
 
-        var entryCandidateSet = entryCandidates.ToHashSet();
+        // A re-filed SYNTHETIC WRAPPER (#782): when a non-.eml document is read over IMAP it is served as a
+        // fabricated mail whose Message-ID we mint as `<{documentId}@simplarchive>` — self-identifying, so a
+        // re-filed export names the EXACT document it wraps. That document is not an eMail, so the mask-scoped
+        // probe above cannot see it, and today the archive silently grows a mail-shaped clone of what it holds.
+        // Resolve it directly and offer it as a match, so the interactive filer is prompted to file a REFERENCE.
+        //
+        // A HINT only, never an authorisation (#782's trap): the id rode in a header a user can edit and carry
+        // between tenants, so it is re-verified below by exactly the two gates every other candidate passes —
+        // the tenant query filter on the Documents read, and CanSee. A `<{guid}@simplarchive>` lifted into
+        // another tenant, or naming a document this caller cannot see, resolves to nothing, as if it named
+        // nothing.
+        var syntheticCandidates = SyntheticMessageId.DocumentIdOf(entryId) is { } wrapped ? new[] { wrapped } : [];
+
+        // Identity matches (Entry ID, synthetic wrapper) are candidates whatever their CURRENT bytes are — the
+        // whole point is that the stored content differs from the re-filed wrapper's; only the hash key gets the
+        // current-content rule below.
+        var entryCandidateSet = entryCandidates.Concat(syntheticCandidates).ToHashSet();
         var results = new List<DuplicateResource>();
-        foreach (var docId in hashCandidates.Concat(entryCandidates).Distinct())
+        foreach (var docId in hashCandidates.Concat(entryCandidates).Concat(syntheticCandidates).Distinct())
         {
             // The current-content rule applies to the HASH key only: an Entry-ID hit is a candidate whatever
             // its current bytes are — the whole point is that the bytes differ.
