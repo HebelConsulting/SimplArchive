@@ -43,6 +43,21 @@ public static class StructuredItemVersioning
         SimplArchiveDbContext dbContext, Document document, CancellationToken cancellationToken)
     {
         dbContext.Entry(document).State = EntityState.Modified;
-        await dbContext.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Somebody else wrote the document between the If-Match check at the top of the request and this
+            // save. That is the very race the check exists for, and until now NOTHING caught it here: there is
+            // no global handler for DbUpdateConcurrencyException, so it surfaced as an unhandled 500 on the one
+            // path whose whole purpose is to answer 412.
+            //
+            // The check at the top stays and is not redundant: it refuses a stale tag before any object-storage
+            // write happens, which is cheaper and gives a cleaner answer. This closes the window after it.
+            throw Errors.Exceptions.Concurrency.EtagMismatchException.ForDocument();
+        }
     }
 }
