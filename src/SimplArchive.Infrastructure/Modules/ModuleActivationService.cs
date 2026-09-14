@@ -39,7 +39,9 @@ public sealed class ModuleActivationService
         CancellationToken cancellationToken = default)
     {
         var license = ModuleLicenseVerifier.Parse(licenseJson);
-        ModuleLicenseVerifier.Verify(license, module, tenantId);
+        // Which of the module's keys accepted it (ABI 0.25, ADR 0793) — recorded below, so a compromised key's
+        // activations are a query. With one key this is simply that key's thumbprint.
+        var verifiedByKeyThumbprint = ModuleLicenseVerifier.Verify(license, module, tenantId);
 
         // Masks first (idempotent, heals on upgrade) — a tenant whose activation row exists but whose
         // masks are missing would be activated in name only.
@@ -62,6 +64,10 @@ public sealed class ModuleActivationService
         activation.LicenseDocumentId = licenseDocumentId;
         activation.ActivatedByUserId = actorUserId;
         activation.ActivatedAt = DateTimeOffset.UtcNow;
+        // Re-stamped on every (re)activation, like the end date beside it: a renewal signed under the NEW key
+        // must move this row off the old one, or the rotation would look incomplete for a tenant who has
+        // already renewed.
+        activation.VerifiedByKeyThumbprint = verifiedByKeyThumbprint;
         // Re-arm the escalation ladder from the new end date (usually to 0) — a renewal is answered by
         // silence, not by a fresh announcement (the storage-warning re-arm shape).
         activation.EscalationLevel = ModuleActivationPolicy.EscalationLevelFor(activation, activation.ActivatedAt);

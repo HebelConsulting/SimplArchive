@@ -16,6 +16,13 @@ public class ModuleActivationConfiguration : IEntityTypeConfiguration<ModuleActi
             .IsRequired()
             .HasMaxLength(128);
 
+        // The verifying key's SHA-256 thumbprint as lowercase hex — 64 chars, fixed by the hash (ADR 0793).
+        // NULLABLE on purpose: a row activated before this existed genuinely does not know which key it was,
+        // and NULL says that where any default would invent an answer. Deliberately UNINDEXED — one row per
+        // (tenant, module), so the compromise question is a scan of a table measured in tens of rows.
+        builder.Property(a => a.VerifiedByKeyThumbprint)
+            .HasMaxLength(64);
+
         // One activation per (tenant, module) — renewal UPDATES the row (ADR 0740); the filed license
         // documents and the audit trail are the history.
         builder.HasIndex(a => new { a.TenantId, a.ModuleId }).IsUnique();

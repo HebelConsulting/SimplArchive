@@ -66,6 +66,31 @@ public interface IIndustryModule
     string LicenseVerifyKeyPem { get; }
 
     /// <summary>
+    /// EVERY key a license may be signed under, so a vendor can rotate with an OVERLAP (ABI 0.25, ADR 0793).
+    /// Defaults to just <see cref="LicenseVerifyKeyPem"/>, so a module that has never thought about rotation
+    /// is unchanged and this costs it nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A single key makes rotation a HARD CUTOVER: the release that swaps it instantly invalidates every
+    /// not-yet-activated license signed with the old one, forcing re-issue at the vendor's release moment
+    /// rather than at each customer's renewal. That is the wrong shape for a compromised-key response, where
+    /// new licenses must be issued on the new key WHILE old, uncompromised-window licenses still activate
+    /// through a stated overlap.
+    /// </para>
+    /// <para>
+    /// So the list IS the overlap window, and its length is the vendor's policy: retiring a key means shipping
+    /// a release without it. A license verifies if ANY listed key accepts its signature, and the activation
+    /// records WHICH one did — so after a compromise the affected activations are a query, not an audit trawl.
+    /// </para>
+    /// <para>
+    /// Order it newest-first: verification tries the keys in order, so the key most licenses are signed under
+    /// should be first. Correctness does not depend on the order — only the work done before a match.
+    /// </para>
+    /// </remarks>
+    IReadOnlyList<string> LicenseVerifyKeysPem => [LicenseVerifyKeyPem];
+
+    /// <summary>
     /// The masks this module contributes. Seeded into a tenant at activation, idempotently, and healed on
     /// upgrade the way the core's own well-known masks are. Permanent tenant data once seeded (ADR 0740).
     /// </summary>

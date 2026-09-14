@@ -46,5 +46,19 @@ public class ModuleActivation : ITenantScoped, IConcurrencyTracked
     /// </summary>
     public int EscalationLevel { get; set; }
 
+    /// <summary>
+    /// WHICH of the module's verify keys accepted this license's signature — the SHA-256 of the key's
+    /// SubjectPublicKeyInfo, lowercase hex (ABI 0.25, ADR 0793). Null on a row activated before this was
+    /// recorded, which is the honest answer: we do not know, rather than a guess.
+    /// </summary>
+    /// <remarks>
+    /// Stored because a vendor's rotation overlap is only useful if a COMPROMISED key's activations can be
+    /// found: with several keys accepted, "who is on the bad one" stops being derivable from the license
+    /// document alone, and a re-verification after the key is withdrawn would answer for the module as it is
+    /// NOW rather than as it was at activation. The claims stay authoritative once stamped (no phone-home,
+    /// ADR 0743) — this is a record of provenance, not a live gate.
+    /// </remarks>
+    public string? VerifiedByKeyThumbprint { get; set; }
+
     public Guid ConcurrencyToken { get; set; }
 }

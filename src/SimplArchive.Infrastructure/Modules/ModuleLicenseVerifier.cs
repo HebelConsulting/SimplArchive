@@ -35,9 +35,16 @@ public static class ModuleLicenseVerifier
     /// the first that fails. Order is deliberate: the signature first — an unsigned artefact's other
     /// claims are not worth reading — then module, tenant, ABI major.
     /// </summary>
-    public static void Verify(ModuleLicense license, IIndustryModule module, Guid tenantId)
+    /// <returns>
+    /// The <see cref="KeyThumbprint"/> of the key that accepted the signature (ABI 0.25, ADR 0793) — the
+    /// activation records it, so after a key compromise the affected activations are a query rather than an
+    /// audit trawl.
+    /// </returns>
+    public static string Verify(ModuleLicense license, IIndustryModule module, Guid tenantId)
     {
-        if (!SignatureVerifies(license, module.LicenseVerifyKeyPem))
+        // ANY of the module's keys may have signed it — the list is the vendor's rotation overlap window
+        // (ADR 0793). Tried in declaration order; the first that accepts wins, and its identity is returned.
+        if (VerifyingKey(license, module.LicenseVerifyKeysPem) is not { } verifyingKeyPem)
         {
             throw ModuleLicenseException.BadSignature(module.ModuleId);
         }
@@ -56,7 +63,33 @@ public static class ModuleLicenseVerifier
         {
             throw ModuleLicenseException.AbiMismatch(license.AbiMajorVersion, ModuleAbiVersion.Major);
         }
+
+        return KeyThumbprint(verifyingKeyPem);
     }
+
+    /// <summary>
+    /// A stable, short identity for a verify key: the SHA-256 of its <c>SubjectPublicKeyInfo</c> DER, as
+    /// lowercase hex. Of the KEY, not of the PEM text — so whitespace, line endings or a re-export do not
+    /// change it, and two modules shipping the same key agree on its name. Empty when the PEM cannot be read,
+    /// which only a key that verifies nothing can be.
+    /// </summary>
+    public static string KeyThumbprint(string verifyKeyPem)
+    {
+        try
+        {
+            using var key = ECDsa.Create();
+            key.ImportFromPem(verifyKeyPem);
+            return Convert.ToHexString(SHA256.HashData(key.ExportSubjectPublicKeyInfo())).ToLowerInvariant();
+        }
+        catch (Exception exception) when (exception is ArgumentException or CryptographicException)
+        {
+            return string.Empty;
+        }
+    }
+
+    /// <summary>The first listed key whose signature check passes, or null when none does.</summary>
+    private static string? VerifyingKey(ModuleLicense license, IReadOnlyList<string> verifyKeysPem) =>
+        verifyKeysPem.FirstOrDefault(pem => SignatureVerifies(license, pem));
 
     private static bool SignatureVerifies(ModuleLicense license, string verifyKeyPem)
     {

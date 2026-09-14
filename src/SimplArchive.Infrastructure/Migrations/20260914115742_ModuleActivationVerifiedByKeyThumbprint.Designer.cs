@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SimplArchive.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using SimplArchive.Infrastructure.Persistence;
 namespace SimplArchive.Infrastructure.Migrations
 {
     [DbContext(typeof(SimplArchiveDbContext))]
-    partial class SimplArchiveDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260914115742_ModuleActivationVerifiedByKeyThumbprint")]
+    partial class ModuleActivationVerifiedByKeyThumbprint
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -281,10 +284,6 @@ namespace SimplArchive.Infrastructure.Migrations
 
                     b.Property<bool>("CanSee")
                         .HasColumnType("boolean");
-
-                    b.Property<Guid>("ConcurrencyToken")
-                        .IsConcurrencyToken()
-                        .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -2249,10 +2248,6 @@ namespace SimplArchive.Infrastructure.Migrations
                     b.Property<int>("ClearanceRank")
                         .HasColumnType("integer");
 
-                    b.Property<Guid>("ConcurrencyToken")
-                        .IsConcurrencyToken()
-                        .HasColumnType("uuid");
-
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2357,10 +2352,6 @@ namespace SimplArchive.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(1);
-
-                    b.Property<Guid>("ConcurrencyToken")
-                        .IsConcurrencyToken()
-                        .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -2549,10 +2540,6 @@ namespace SimplArchive.Infrastructure.Migrations
                     b.Property<int>("ClearanceRank")
                         .HasColumnType("integer");
 
-                    b.Property<Guid>("ConcurrencyToken")
-                        .IsConcurrencyToken()
-                        .HasColumnType("uuid");
-
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2730,10 +2717,6 @@ namespace SimplArchive.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<Guid?>("AssignedToUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ConcurrencyToken")
-                        .IsConcurrencyToken()
                         .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("CreatedAt")

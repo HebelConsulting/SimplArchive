@@ -251,4 +251,87 @@ public class ModuleActivationTests
         Assert.Empty(await context.ModuleActivations.ToListAsync());
         Assert.Null(await context.Masks.SingleOrDefaultAsync(m => m.Id == TestModule.TestModule.CertificateMaskId));
     }
+
+    [Fact]
+    public async Task The_activation_records_which_key_verified_it()
+    {
+        // The rotation record (ABI 0.25, ADR 0793) reaching the ROW, not just the verifier's return value: it
+        // is what turns "who is on the compromised key" into a query.
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var (tenantId, userId) = await SeedTenantAsync(connection);
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        TestModule.TestModule.VerifyKeyPem = vendorKey.ExportSubjectPublicKeyInfoPem();
+
+        using (var context = CreateContext(connection, tenantId))
+        {
+            await new WellKnownMaskSeeder(context, NullLogger<WellKnownMaskSeeder>.Instance).EnsureWellKnownMasksAsync(tenantId);
+            var documentId = await FileDocumentAsync(context, tenantId, userId, "licensed.json");
+            await CreateService(context, userId).ActivateAsync(
+                new TestModule.TestModule(), LicenseJson(vendorKey, tenantId, new DateOnly(2027, 3, 1)), documentId, tenantId, userId);
+        }
+
+        using var check = CreateContext(connection, tenantId);
+        var activation = await check.ModuleActivations.SingleAsync();
+        Assert.Equal(
+            ModuleLicenseVerifier.KeyThumbprint(vendorKey.ExportSubjectPublicKeyInfoPem()),
+            activation.VerifiedByKeyThumbprint);
+    }
+
+    [Fact]
+    public async Task A_renewal_signed_by_the_new_key_moves_the_row_off_the_old_one()
+    {
+        // The half that makes the record USEFUL: a tenant who has renewed under the new key must stop counting
+        // as affected, or the rotation would look permanently incomplete.
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var (tenantId, userId) = await SeedTenantAsync(connection);
+        using var retiring = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var current = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var module = new RotatingModule(current.ExportSubjectPublicKeyInfoPem(), retiring.ExportSubjectPublicKeyInfoPem());
+
+        using (var context = CreateContext(connection, tenantId))
+        {
+            await new WellKnownMaskSeeder(context, NullLogger<WellKnownMaskSeeder>.Instance).EnsureWellKnownMasksAsync(tenantId);
+            var service = CreateService(context, userId);
+
+            // Activated during the overlap on the RETIRING key…
+            var oldDocumentId = await FileDocumentAsync(context, tenantId, userId, "licensed-old-key.json");
+            await service.ActivateAsync(module, LicenseJson(retiring, tenantId, new DateOnly(2027, 3, 1)), oldDocumentId, tenantId, userId);
+            Assert.Equal(
+                ModuleLicenseVerifier.KeyThumbprint(retiring.ExportSubjectPublicKeyInfoPem()),
+                (await context.ModuleActivations.SingleAsync()).VerifiedByKeyThumbprint);
+
+            // …then renewed on the CURRENT one.
+            var newDocumentId = await FileDocumentAsync(context, tenantId, userId, "licensed-new-key.json");
+            await service.ActivateAsync(module, LicenseJson(current, tenantId, new DateOnly(2028, 3, 1)), newDocumentId, tenantId, userId);
+        }
+
+        using var check = CreateContext(connection, tenantId);
+        var activation = await check.ModuleActivations.SingleAsync(); // still ONE row — renewal replaces
+        Assert.Equal(
+            ModuleLicenseVerifier.KeyThumbprint(current.ExportSubjectPublicKeyInfoPem()),
+            activation.VerifiedByKeyThumbprint);
+    }
+
+    // A module mid-rotation: two verify keys, newest first. Its ModuleId matches LicenseJson's so the same
+    // helper signs for it; it contributes no masks, which keeps this about the activation row.
+    private sealed class RotatingModule(params string[] keysPem) : IIndustryModule
+    {
+        public string ModuleId => "test-module";
+
+        public string DisplayName => "Rotating module";
+
+        public int AbiMajorVersion => ModuleAbiVersion.Major;
+
+        public string LicenseVerifyKeyPem => keysPem[0];
+
+        public IReadOnlyList<string> LicenseVerifyKeysPem { get; } = keysPem;
+
+        public IReadOnlyList<ModuleMaskSeed> Masks => [];
+
+        public void ConfigureServices(Microsoft.Extensions.DependencyInjection.IServiceCollection services)
+        {
+        }
+    }
 }
