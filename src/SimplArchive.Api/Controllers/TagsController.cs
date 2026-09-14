@@ -138,6 +138,8 @@ public partial class TagsController : ControllerBase
             throw new TagNotFoundException();
         }
 
+        List<Guid> reindex = [];
+
         if (request.Color is not null || (request.Name is null && request.Color is null))
         {
             ValidateColor(request.Color);
@@ -155,12 +157,35 @@ public partial class TagsController : ControllerBase
                     throw new TagNameConflictException();
                 }
 
-                await RetagAsync(tag.Name, newName, cancellationToken);
+                reindex = await RetagAsync(tag.Name, newName, cancellationToken);
                 tag.Name = newName;
             }
         }
 
+        // ONE transaction for one user action (#1170): the re-pointed DocumentTag rows and the definition's new
+        // name commit together or not at all. Separately committed, a failure on the second left every affected
+        // document carrying a tag name whose definition did not exist.
+        //
+        // Owned only when nothing is already in flight — the BookingsController.Book precedent (ADR 0781): a
+        // module read-model context can enlist this one, and beginning a second transaction inside that throws.
+        var owned = _dbContext.Database.CurrentTransaction is null
+            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        await using var transaction = owned;
+
         await _dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        // AFTER the commit. Enqueued before it, the index is told a name the database may still roll back —
+        // which is how a search index comes to hold a version that never existed.
+        if (reindex.Count > 0)
+        {
+            await _queue.EnqueueManyAsync(reindex, cancellationToken);
+        }
+
         return Ok(new TagResource { Id = tag.Id, Name = tag.Name, Color = tag.Color });
     }
 
@@ -192,9 +217,28 @@ public partial class TagsController : ControllerBase
             throw new TagNotFoundException();
         }
 
-        await RetagAsync(source.Name, target.Name, cancellationToken);
+        var reindex = await RetagAsync(source.Name, target.Name, cancellationToken);
         _dbContext.TagDefinitions.Remove(source);
+
+        // ONE transaction, as the rename above (#1170): the re-pointed rows and the source's removal commit
+        // together. Separately committed, a failure left the documents moved to the target while the source
+        // definition survived with nothing on it.
+        var owned = _dbContext.Database.CurrentTransaction is null
+            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        await using var transaction = owned;
+
         await _dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        if (reindex.Count > 0)
+        {
+            await _queue.EnqueueManyAsync(reindex, cancellationToken); // after the commit, never before
+        }
+
         return NoContent();
     }
 
@@ -216,14 +260,24 @@ public partial class TagsController : ControllerBase
         return NoContent();
     }
 
-    // Re-points every DocumentTag row with `oldName` to `newName`, deduping per document (a document that already
-    // has newName drops the old row instead of colliding on the unique index), then re-indexes the affected docs.
-    private async Task RetagAsync(string oldName, string newName, CancellationToken cancellationToken)
+    /// <summary>
+    /// Re-points every <c>DocumentTag</c> row with <paramref name="oldName"/> to <paramref name="newName"/>,
+    /// deduping per document (one that already carries the target drops the old row rather than colliding on the
+    /// unique index). Returns the affected document ids for the caller to reindex.
+    /// </summary>
+    /// <remarks>
+    /// It neither COMMITS nor ENQUEUES any more (#1170). It used to do both, before the caller had written the
+    /// <c>TagDefinition</c> — so a failure on that second commit left every affected document carrying a tag name
+    /// whose definition did not exist, with the search index already told the new name. Two defects in one
+    /// method: a second transaction for one user action, and a side effect fired ahead of the commit it
+    /// describes. The caller now owns the transaction, commits once, and reindexes after.
+    /// </remarks>
+    private async Task<List<Guid>> RetagAsync(string oldName, string newName, CancellationToken cancellationToken)
     {
         var affected = await _dbContext.DocumentTags.Where(t => t.Tag == oldName).ToListAsync(cancellationToken);
         if (affected.Count == 0)
         {
-            return;
+            return [];
         }
 
         var docIds = affected.Select(t => t.DocumentId).Distinct().ToList();
@@ -244,8 +298,7 @@ public partial class TagsController : ControllerBase
             }
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        await _queue.EnqueueManyAsync(docIds, cancellationToken);
+        return docIds;
     }
 
     private static string Normalize(string name) => (name ?? "").Trim().ToLowerInvariant();
