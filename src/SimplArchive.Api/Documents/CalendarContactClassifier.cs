@@ -4,7 +4,6 @@ using SimplArchive.Api.Errors;
 using SimplArchive.Api.Errors.Exceptions.Booking;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Booking;
-using SimplArchive.Domain.CalDav;
 using SimplArchive.Domain.Documents;
 using SimplArchive.Domain.Masks;
 using SimplArchive.Domain.Notifications;
@@ -32,6 +31,7 @@ public sealed class CalendarContactClassifier
     private readonly IContactCardComposer _contacts;
     private readonly ILogger<CalendarContactClassifier> _logger;
     private readonly IAuditRecorder _audit;
+    private readonly IDavCollectionKindRegistry _kinds;
 
     // The booking primitive's write side (ADRs 0744/0778/0780), split out when the third collection took this
     // class past the size limit. Constructed here rather than injected: it is this class's private
@@ -43,13 +43,14 @@ public sealed class CalendarContactClassifier
         SimplArchiveDbContext dbContext, IObjectStorageClient objectStorageClient,
         IContactCardComposer contacts, ILogger<CalendarContactClassifier> logger, IAuditRecorder audit,
         IUserSystemRightsResolver userSystemRights, INotificationService notifications,
-        IBookingAdmissionReviewer? admission = null)
+        IDavCollectionKindRegistry kinds, IBookingAdmissionReviewer? admission = null)
     {
         _dbContext = dbContext;
         _objectStorageClient = objectStorageClient;
         _contacts = contacts;
         _logger = logger;
         _audit = audit;
+        _kinds = kinds;
         _resources = new ResourceCollectionWriter(dbContext, userSystemRights, notifications, admission);
     }
 
@@ -114,9 +115,9 @@ public sealed class CalendarContactClassifier
             .Select(v => (Guid?)v.MaskId)
             .FirstOrDefaultAsync(cancellationToken);
 
-        // The refreshable set is DERIVED from the collection kinds, not restated — a module that declares
-        // a new kind (ADR 0744's recipe) gets edit-refresh for free instead of silently stale fields.
-        if (maskId is not { } mask || !DavCollectionKinds.All.Any(k => k.ItemMaskId == mask && k.Extension == extension))
+        // The refreshable set is DERIVED from the kind registry, not restated — a module that declares a new
+        // kind (ADR 0791's recipe) gets edit-refresh for free instead of silently stale fields.
+        if (maskId is not { } mask || !_kinds.All.Any(k => k.ItemMaskId == mask && k.Extension == extension))
         {
             return false;
         }

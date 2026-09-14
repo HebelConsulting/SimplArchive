@@ -80,7 +80,33 @@ public sealed record ModuleMaskSeed(
     /// </para>
     /// </remarks>
     public bool NameVocabularyIsMultiple { get; init; }
+
+    /// <summary>
+    /// Declares that documents wearing this FOLDER mask are a DAV collection — a CalDAV calendar (<c>.ics</c>)
+    /// or CardDAV addressbook (<c>.vcf</c>) — so they subscribe on phones and mail clients exactly as the
+    /// core's own calendars do (ABI 0.24, ADR 0791). Null (the default) leaves the folder a plain folder.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The reason this exists: a folder is a DAV collection only if the core recognises its mask, and the core
+    /// recognises a FIXED list of its own masks. A module's calendar-shaped folder — a flight-log Logbook
+    /// holding <c>.ics</c> entries — was invisible to every CalDAV client with no way to say otherwise. This is
+    /// that way: the core merges each active module's declaration into the one kind registry the whole DAV
+    /// layer reads.
+    /// </para>
+    /// <para>
+    /// INIT-ONLY, per the binary-additive rule (ADR 0789): a module built against 0.23 keeps loading.
+    /// </para>
+    /// </remarks>
+    public ModuleDavCollection? DavCollection { get; init; }
 }
+
+/// <summary>
+/// A module folder mask's DAV-collection declaration (ABI 0.24, ADR 0791): its items' file extension
+/// (<c>.ics</c>/<c>.vcf</c>), the mask those items wear, the item field the resource name derives from, and
+/// whether the collection is read-only (append-only history a client may only read, like a logbook).
+/// </summary>
+public sealed record ModuleDavCollection(string Extension, Guid ItemMaskId, string UidFieldName, bool ReadOnly);
 
 /// <summary>
 /// The handful of CORE mask ids the ABI promises to a module's containment declarations (ABI 0.8) — an

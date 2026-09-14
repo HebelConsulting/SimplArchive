@@ -63,7 +63,17 @@ internal static class DavWrites
             return new NotFoundResult();
         }
 
-        var existing = await DavTree.ItemAsync(db, protocol, context.UserId, folderId, resourceName, context.Cancellation);
+        // A module may declare a collection that is append-only history — a flight-log Logbook (ADR 0791): its
+        // entries are written by the module, and a client may only READ them. Refused explicitly, before any
+        // rights check, for the same reason the feed and person-schedule guards above refuse: a write here would
+        // be a second entrance to filling a collection the module owns, and a rule enforced at one entrance is
+        // not a rule.
+        if (await ReadOnlyRefusalAsync(context, folder, resourceName) is { } refused)
+        {
+            return refused;
+        }
+
+        var existing = await DavTree.ItemAsync(db, protocol, context.Kinds, context.UserId, folderId, resourceName, context.Cancellation);
         var folderRights = await rights.GetEffectiveRightsAsync(context.UserId, folderId);
 
         // Creating needs CanCreateSubItems on the collection; replacing needs CanEditContent on the item.
@@ -214,14 +224,14 @@ internal static class DavWrites
 
         // The change log is written AFTER the finalizer, because the resource name comes from the UID that
         // classification fills in — logging earlier would record a name no client will ever ask for (ADR 0622).
-        var stored0 = await DavTree.ItemAsync(db, protocol, context.UserId, folderId, resourceName, context.Cancellation);
+        var stored0 = await DavTree.ItemAsync(db, protocol, context.Kinds, context.UserId, folderId, resourceName, context.Cancellation);
         var sequence = await DavChangeLog.RecordAsync(db, context.TenantId, folderId, document.Id,
             stored0?.ResourceName ?? resourceName,
             existing is null ? DavChangeType.Created : DavChangeType.Modified, context.Cancellation);
         await NotifyAsync(services, folderId, sequence, context.Cancellation);
 
         // Re-read the document for the ETag: the finalizer's save regenerated the concurrency token.
-        var stored = await DavTree.ItemAsync(db, protocol, context.UserId, folderId, resourceName, context.Cancellation);
+        var stored = await DavTree.ItemAsync(db, protocol, context.Kinds, context.UserId, folderId, resourceName, context.Cancellation);
         if (stored is not null)
         {
             context.Response.Headers.ETag = $"\"{stored.ETag}\"";
@@ -266,7 +276,15 @@ internal static class DavWrites
             return new ForbidResult(Authentication.DavAuthenticationDefaults.Scheme);
         }
 
-        var item = await DavTree.ItemAsync(db, protocol, context.UserId, folderId, resourceName, context.Cancellation);
+        // A module's read-only history collection (ADR 0791) refuses DELETE for the same reason it refuses PUT:
+        // its entries are the module's to write, and a client may only read them.
+        var folder = await db.Documents.FirstOrDefaultAsync(d => d.Id == folderId, context.Cancellation);
+        if (folder is not null && await ReadOnlyRefusalAsync(context, folder, resourceName) is { } refused)
+        {
+            return refused;
+        }
+
+        var item = await DavTree.ItemAsync(db, protocol, context.Kinds, context.UserId, folderId, resourceName, context.Cancellation);
         if (item is null)
         {
             return new NotFoundResult();
@@ -307,6 +325,36 @@ internal static class DavWrites
             $"Deleted over {protocol.NamespacePrefix}DAV", cancellationToken: context.Cancellation);
 
         return new NoContentResult();
+    }
+
+    /// <summary>
+    /// A refusal when the collection is a module's read-only history (ADR 0791), else null — a read-only kind
+    /// refuses PUT and DELETE alike, so both write paths call this. The kind is resolved from the folder's mask;
+    /// core collections are writable, so this is a no-op for them.
+    /// </summary>
+    private static async Task<IActionResult?> ReadOnlyRefusalAsync(DavControllerContext context, Document folder, string resourceName)
+    {
+        if (folder.MaskVersionId is not { } maskVersionId)
+        {
+            return null;
+        }
+
+        var maskId = await context.Db.MaskVersions
+            .Where(v => v.Id == maskVersionId)
+            .Select(v => (Guid?)v.MaskId)
+            .FirstOrDefaultAsync(context.Cancellation);
+
+        if (context.Kinds.ForFolderMask(maskId) is not { ReadOnly: true } kind)
+        {
+            return null;
+        }
+
+        context.Log?.LogWarning(
+            "Refused a {Method} on {Resource} in the read-only {Kind} collection {FolderId} for {UserId}. This "
+            + "collection is append-only history a client may only read (ADR 0791); enable Trace on this source "
+            + "to see the exchange",
+            context.Request.Method, resourceName, kind.Name, folder.Id, context.UserId);
+        return new ForbidResult(Authentication.DavAuthenticationDefaults.Scheme);
     }
 
     /// <summary>

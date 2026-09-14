@@ -18,7 +18,13 @@ namespace SimplArchive.Domain.CalDav;
 /// kind itself rather than in a map beside the listing, because a map beside the listing is precisely the
 /// hand-written mask list that left Maintenance and Availability unusable in the first place.
 /// </remarks>
-public sealed record DavCollectionKind(Guid FolderMaskId, Guid ItemMaskId, string Extension, string UidFieldName, string Name);
+/// <param name="ReadOnly">
+/// When true, CalDAV/CardDAV writes (PUT/DELETE) to this collection are refused — the collection is
+/// append-only history a client may only read (a flight-log Logbook, ADR 0791). Core collections are
+/// writable (the default), so a Schedule booking or a calendar appointment can still be created over DAV.
+/// </param>
+public sealed record DavCollectionKind(
+    Guid FolderMaskId, Guid ItemMaskId, string Extension, string UidFieldName, string Name, bool ReadOnly = false);
 
 /// <summary>
 /// The collection kinds, stated ONCE in the Domain (#806). The Api's protocol objects carry the wire half

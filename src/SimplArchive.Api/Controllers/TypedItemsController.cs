@@ -7,7 +7,6 @@ using SimplArchive.Api.Hypermedia;
 using SimplArchive.Api.Pagination;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Booking;
-using SimplArchive.Domain.CalDav;
 using SimplArchive.Domain.Documents;
 using SimplArchive.Domain.Masks;
 using SimplArchive.Infrastructure.Persistence;
@@ -52,6 +51,7 @@ public class TypedItemsController : ControllerBase
     private readonly IContactCardComposer _contacts;
     private readonly IAppointmentComposer _appointments;
     private readonly IAuditRecorder _audit;
+    private readonly IDavCollectionKindRegistry _kinds;
     private readonly ILogger<TypedItemsController> _logger;
 
     public TypedItemsController(
@@ -62,6 +62,7 @@ public class TypedItemsController : ControllerBase
         IContactCardComposer contacts,
         IAppointmentComposer appointments,
         IAuditRecorder audit,
+        IDavCollectionKindRegistry kinds,
         ILogger<TypedItemsController> logger)
     {
         _logger = logger;
@@ -72,6 +73,7 @@ public class TypedItemsController : ControllerBase
         _contacts = contacts;
         _appointments = appointments;
         _audit = audit;
+        _kinds = kinds;
     }
 
     [HttpPost("contacts")]
@@ -489,17 +491,22 @@ public class TypedItemsController : ControllerBase
     // so its entries must list — and a create THERE is a booking, classified and conflict-checked by the
     // same finalizer pass every .ics write goes through.
     //
-    // DERIVED from the kind list, not written out (#1122). Written out, it said [Calendar, Schedule] and went
-    // on saying it when Maintenance (ADR 0778) and Availability (ADR 0780) arrived — so this endpoint 404'd
-    // both LISTING and CREATING in those two collections, which is the server half of the same omission
+    // DERIVED from the kind registry, not written out (#1122). Written out, it said [Calendar, Schedule] and
+    // went on saying it when Maintenance (ADR 0778) and Availability (ADR 0780) arrived — so this endpoint
+    // 404'd both LISTING and CREATING in those two collections, which is the server half of the same omission
     // ChildCreationPolicy.AdmitsCalendarEntries had made on the advertising side. Fixing only the advertising
     // half would have been worse than neither: a create rel the server then refuses is exactly the affordance
     // ADR 0543 exists to prevent.
     //
+    // READ-ONLY kinds are excluded: this endpoint both lists AND creates, and a module's Logbook (ADR 0791)
+    // is append-only history nobody creates entries in from the app — its entries are the module's to write.
+    // So the writable .ics kinds are the appointments surface; the read-only ones are served over CalDAV for
+    // subscription and are addressed there, not here.
+    //
     // The items themselves stay maskless at creation — the classifier reads the bytes and the parent and
-    // decides, so a new kind needs nothing here beyond being in the list.
-    private static readonly Guid[] CalendarFamily =
-        [.. DavCollectionKinds.All.Where(kind => kind.Extension == ".ics").Select(kind => kind.FolderMaskId)];
+    // decides, so a new kind needs nothing here beyond being in the registry.
+    private Guid[] CalendarFamily =>
+        [.. _kinds.All.Where(kind => kind.Extension == ".ics" && !kind.ReadOnly).Select(kind => kind.FolderMaskId)];
 
     private async Task<Document?> RequireFolderAsync(Guid documentId, IReadOnlyList<Guid> maskIds, CancellationToken cancellationToken)
     {

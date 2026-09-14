@@ -5,7 +5,6 @@ using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Hypermedia;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Documents;
-using SimplArchive.Domain.CalDav;
 using SimplArchive.Domain.Masks;
 using SimplArchive.Infrastructure.Persistence;
 
@@ -29,13 +28,16 @@ public class DavCollectionsController : ControllerBase
     private readonly SimplArchiveDbContext _dbContext;
     private readonly IEffectiveRightsCalculator _rights;
     private readonly ICurrentUserAccessor _currentUserAccessor;
+    private readonly IDavCollectionKindRegistry _kinds;
 
     public DavCollectionsController(
-        SimplArchiveDbContext dbContext, IEffectiveRightsCalculator rights, ICurrentUserAccessor currentUserAccessor)
+        SimplArchiveDbContext dbContext, IEffectiveRightsCalculator rights, ICurrentUserAccessor currentUserAccessor,
+        IDavCollectionKindRegistry kinds)
     {
         _dbContext = dbContext;
         _rights = rights;
         _currentUserAccessor = currentUserAccessor;
+        _kinds = kinds;
     }
 
     public class DavCollectionResource : HypermediaResource
@@ -100,23 +102,19 @@ public class DavCollectionsController : ControllerBase
         }
 
         // A resource's Schedule, Maintenance and Availability are calendars to every client of this listing
-        // (ADRs 0744/0778/0780): they list in the Calendar tab and subscribe over CalDAV like any other —
-        // what differs is what each admits.
+        // (ADRs 0744/0778/0780), and so is a module's read-only Logbook (ADR 0791): they list in the Calendar
+        // tab and subscribe over CalDAV like any other — what differs is what each admits.
         //
-        // DERIVED from the kind table by extension, never hand-written. The list here used to name its masks
-        // one by one, so Maintenance and Availability — added to DavCollectionKinds.All when their slices
-        // landed — never reached it: both collections existed, were served over CalDAV, and were invisible in
-        // both clients' Calendar tabs. That is the SECOND place this exact trap fired; DavProtocol carries the
-        // first, with a comment saying so. A list that must be kept in step with a table is a list that will
-        // not be.
-        static Guid[] FolderMasksFor(string extension) =>
-            [.. DavCollectionKinds.All.Where(k => k.Extension == extension).Select(k => k.FolderMaskId)];
-
+        // DERIVED from the kind registry by extension, never hand-written. The list here used to name its masks
+        // one by one, so Maintenance and Availability — added when their slices landed — never reached it: both
+        // collections existed, were served over CalDAV, and were invisible in both clients' Calendar tabs. That
+        // is the SECOND place this exact trap fired; DavProtocol carried the first. A list that must be kept in
+        // step with a table is a list that will not be — and a module's kind is one this file could never name.
         var wanted = kind?.ToLowerInvariant() switch
         {
-            "addressbook" => FolderMasksFor(".vcf"),
-            "calendar" => FolderMasksFor(".ics"),
-            _ => [.. DavCollectionKinds.All.Select(k => k.FolderMaskId)],
+            "addressbook" => _kinds.FolderMaskIds(".vcf"),
+            "calendar" => _kinds.FolderMaskIds(".ics"),
+            _ => [.. _kinds.All.Select(k => k.FolderMaskId)],
         };
 
         var maskVersions = await _dbContext.MaskVersions
@@ -153,10 +151,10 @@ public class DavCollectionsController : ControllerBase
         var kindByMaskVersion = maskVersions.ToDictionary(
             v => v.Id, v => v.MaskId == WellKnownMaskIds.Addressbook ? "addressbook" : "calendar");
 
-        // The narrower answer, straight off the kind list (#1122) — see CollectionKind for why both exist.
+        // The narrower answer, straight off the kind registry (#1122) — see CollectionKind for why both exist.
         var collectionKindByMaskVersion = maskVersions.ToDictionary(
             v => v.Id,
-            v => DavCollectionKinds.All.FirstOrDefault(k => k.FolderMaskId == v.MaskId)?.Name ?? string.Empty);
+            v => _kinds.ForFolderMask(v.MaskId)?.Name ?? string.Empty);
 
         // The per-KIND fallback colour (ADR 0650's shared-display-rule home). Without it a resource's three
         // calendars all drew in the client's one default, so overlaying them produced an undifferentiated

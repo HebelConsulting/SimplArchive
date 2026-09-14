@@ -429,6 +429,11 @@ modules = healthyModules;
 builder.Services.AddSingleton(machineCatalog);
 builder.Services.AddSingleton<IReadOnlyList<SimplArchive.Infrastructure.Modules.ModuleLoader.LoadedModule>>(modules);
 
+// The DAV collection kinds the whole DAV layer reads — core kinds plus each module's declared kinds (ABI 0.24,
+// ADR 0791), so a module's calendar-shaped folder (a flight-log Logbook) subscribes like the core's calendars.
+builder.Services.AddSingleton<SimplArchive.Application.Abstractions.IDavCollectionKindRegistry>(
+    new SimplArchive.Infrastructure.Modules.DavCollectionKindRegistry(modules));
+
 // Module-owned read models (ADR 0738): each declared context registered on the CORE context's own
 // connection — one connection, one transaction, one commit — with its own migrations history. Migration
 // happens beside the core's (below), through the same owner-connection discipline.

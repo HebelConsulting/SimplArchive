@@ -3,6 +3,7 @@
 // RESOURCE NAME, and that name is derived from the item's UID, which classification fills in after the row
 // exists — a DbContext-level hook would fire before the item is addressable.
 using Microsoft.EntityFrameworkCore;
+using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.CalDav;
 using SimplArchive.Infrastructure.Persistence;
 
@@ -59,11 +60,12 @@ internal static class DavChangeLog
     /// </para>
     /// </remarks>
     internal static async Task ReconcileAsync(
-        SimplArchiveDbContext db, DavProtocol protocol, Guid tenantId, Guid folderId, CancellationToken cancellationToken)
+        SimplArchiveDbContext db, DavProtocol protocol, IDavCollectionKindRegistry registry, Guid tenantId, Guid folderId, CancellationToken cancellationToken)
     {
+        var itemMaskIds = registry.ItemMaskIds(protocol.Extension);
         var items = await db.Documents
             .Where(d => d.ParentId == folderId && d.MaskVersionId != null
-                && db.MaskVersions.Any(v => v.Id == d.MaskVersionId && protocol.ItemMaskIds.Contains(v.MaskId)))
+                && db.MaskVersions.Any(v => v.Id == d.MaskVersionId && itemMaskIds.Contains(v.MaskId)))
             .Select(d => new
             {
                 d.Id,
@@ -74,7 +76,7 @@ internal static class DavChangeLog
                     .Where(fv => fv.DocumentId == d.Id
                         && db.FieldDefinitions.Any(f => f.Id == fv.FieldDefinitionId
                             && f.Name == protocol.UidFieldName
-                            && db.MaskVersions.Any(mv => mv.Id == f.MaskVersionId && protocol.ItemMaskIds.Contains(mv.MaskId))))
+                            && db.MaskVersions.Any(mv => mv.Id == f.MaskVersionId && itemMaskIds.Contains(mv.MaskId))))
                     .Select(fv => fv.Value)
                     .FirstOrDefault(),
             })

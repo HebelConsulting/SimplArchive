@@ -50,19 +50,31 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
     // Recording is unconditional, the doorbell optional — see DavChangeRecorder (#806).
     private readonly IDavChangeNotifier? _davChangeNotifier;
 
+    // The DAV collection kinds — core plus any module-declared (ABI 0.24, ADR 0791). Optional so the design-time
+    // factory + tests that construct the context directly (with no DI) still work: when absent, the change
+    // recorder falls back to the CORE kinds, which is exactly what those hosts serve. The Api registers the
+    // module-aware registry, so a module's Logbook entries generate change-log rows there.
+    private readonly IDavCollectionKindRegistry? _davCollectionKinds;
+
     public SimplArchiveDbContext(
         DbContextOptions<SimplArchiveDbContext> options,
         ICurrentTenantAccessor currentTenantAccessor,
         IRealtimeNotifier? realtimeNotifier = null,
         IMaskContainmentProvider? containmentProvider = null,
-        IDavChangeNotifier? davChangeNotifier = null)
+        IDavChangeNotifier? davChangeNotifier = null,
+        IDavCollectionKindRegistry? davCollectionKinds = null)
         : base(options)
     {
         _currentTenantAccessor = currentTenantAccessor;
         _realtimeNotifier = realtimeNotifier;
         _containmentProvider = containmentProvider ?? new MaskContainmentProvider();
         _davChangeNotifier = davChangeNotifier;
+        _davCollectionKinds = davCollectionKinds;
     }
+
+    /// <summary>The kinds the change recorder records against — the registry's when present, else the core set.</summary>
+    private IReadOnlyList<SimplArchive.Domain.CalDav.DavCollectionKind> DavKinds =>
+        _davCollectionKinds?.All ?? SimplArchive.Domain.CalDav.DavCollectionKinds.All;
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
 
@@ -271,7 +283,7 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
         ValidateResourceBookingsAsync(CancellationToken.None).GetAwaiter().GetResult();
         SyncResourcePrincipalsAsync(CancellationToken.None).GetAwaiter().GetResult();
         PrepareMaskVersionsAsync(CancellationToken.None).GetAwaiter().GetResult();
-        DavChangeRecorder.RecordAsync(this, CancellationToken.None).GetAwaiter().GetResult();
+        DavChangeRecorder.RecordAsync(this, DavKinds, CancellationToken.None).GetAwaiter().GetResult();
         RegenerateConcurrencyTokens();
         return base.SaveChanges();
     }
@@ -296,7 +308,7 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
         await PrepareMaskVersionsAsync(cancellationToken);
 
         // DAV collection changes, recorded at the one door every write path uses (#806, DavChangeRecorder).
-        var davChanges = await DavChangeRecorder.RecordAsync(this, cancellationToken);
+        var davChanges = await DavChangeRecorder.RecordAsync(this, DavKinds, cancellationToken);
 
         RegenerateConcurrencyTokens();
 

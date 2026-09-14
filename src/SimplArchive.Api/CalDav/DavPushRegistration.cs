@@ -20,7 +20,7 @@ internal static class DavPushRegistration
         // Not-available and not-permitted answer alike: whether a collection exists is not something an
         // unauthorised caller should learn from the push endpoint either.
         if (!push.IsEnabled
-            || await DavTree.CollectionAsync(context.Db, context.Rights, context.UserId, context.Protocol, folderId, context.Cancellation) is null)
+            || await DavTree.CollectionAsync(context.Db, context.Rights, context.UserId, context.Protocol, context.Kinds, folderId, context.Cancellation) is null)
         {
             return PushNotAvailable();
         }

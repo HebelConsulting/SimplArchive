@@ -41,9 +41,10 @@ internal static class DavTree
     /// personal defaults a client should see at the top), then alphabetically by display name.
     /// </summary>
     internal static async Task<List<DavCollection>> CollectionsAsync(
-        SimplArchiveDbContext db, IEffectiveRightsCalculator rights, Guid userId, DavProtocol protocol, CancellationToken cancellationToken)
+        SimplArchiveDbContext db, IEffectiveRightsCalculator rights, Guid userId, DavProtocol protocol,
+        IDavCollectionKindRegistry registry, CancellationToken cancellationToken)
     {
-        var candidates = await FolderQuery(db, protocol)
+        var candidates = await FolderQuery(db, protocol, registry)
             .Select(d => new FolderRow(d.Id, d.Name, d.ParentId))
             .ToListAsync(cancellationToken);
 
@@ -71,7 +72,7 @@ internal static class DavTree
                 parent?.PersonalOfUserId == userId));
         }
 
-        var colors = await ColorsAsync(db, userId, protocol, collections.Select(c => c.Collection.FolderId).ToList(), cancellationToken);
+        var colors = await ColorsAsync(db, userId, protocol, registry, collections.Select(c => c.Collection.FolderId).ToList(), cancellationToken);
 
         var ordered = collections
             .OrderByDescending(c => c.IsPersonalDefault)
@@ -100,7 +101,8 @@ internal static class DavTree
     /// DIRECTLY (two small queries and one rights check), because every item request goes through here.
     /// </summary>
     internal static async Task<DavCollection?> CollectionAsync(
-        SimplArchiveDbContext db, IEffectiveRightsCalculator rights, Guid userId, DavProtocol protocol, Guid folderId, CancellationToken cancellationToken)
+        SimplArchiveDbContext db, IEffectiveRightsCalculator rights, Guid userId, DavProtocol protocol,
+        IDavCollectionKindRegistry registry, Guid folderId, CancellationToken cancellationToken)
     {
         // A task feed first: its id belongs to no document, so every query below would miss it — and the ACL
         // walk would not merely miss it but throw, since it resolves a document's ancestors.
@@ -118,7 +120,7 @@ internal static class DavTree
                 .FirstOrDefault(c => c.FolderId == folderId);
         }
 
-        var folder = await FolderQuery(db, protocol)
+        var folder = await FolderQuery(db, protocol, registry)
             .Where(d => d.Id == folderId)
             .Select(d => new FolderRow(d.Id, d.Name, d.ParentId))
             .FirstOrDefaultAsync(cancellationToken);
@@ -139,7 +141,7 @@ internal static class DavTree
                 .FirstOrDefaultAsync(cancellationToken)
             : null;
 
-        var colors = await ColorsAsync(db, userId, protocol, [folder.Id], cancellationToken);
+        var colors = await ColorsAsync(db, userId, protocol, registry, [folder.Id], cancellationToken);
         return new DavCollection(folder.Id, DisplayName(folder, parent), effective.CanEditContent, colors.GetValueOrDefault(folder.Id));
     }
 
@@ -149,8 +151,8 @@ internal static class DavTree
     /// when it creates one itself, so server-side and client-side items are indistinguishable.
     /// </summary>
     internal static async Task<List<DavItem>> ItemsAsync(
-        SimplArchiveDbContext db, DavProtocol protocol, Guid userId, Guid folderId, CancellationToken cancellationToken,
-        ILogger? logger = null)
+        SimplArchiveDbContext db, DavProtocol protocol, IDavCollectionKindRegistry registry, Guid userId, Guid folderId,
+        CancellationToken cancellationToken, ILogger? logger = null)
     {
         if (protocol == DavProtocol.CalDav && TaskFeeds.KindOf(userId, folderId) is { } feed)
         {
@@ -171,14 +173,14 @@ internal static class DavTree
                 .Select(d => new ItemRow(d.Id, d.CurrentVersionId, d.ConcurrencyToken))
                 .ToListAsync(cancellationToken);
 
-            return await ComposeItemsAsync(db, protocol, folderId, claimedDocuments, cancellationToken, logger);
+            return await ComposeItemsAsync(db, protocol, registry, folderId, claimedDocuments, cancellationToken, logger);
         }
 
-        var documents = await ItemQuery(db, protocol, folderId)
+        var documents = await ItemQuery(db, protocol, registry, folderId)
             .Select(d => new ItemRow(d.Id, d.CurrentVersionId, d.ConcurrencyToken))
             .ToListAsync(cancellationToken);
 
-        return await ComposeItemsAsync(db, protocol, folderId, documents, cancellationToken, logger);
+        return await ComposeItemsAsync(db, protocol, registry, folderId, documents, cancellationToken, logger);
     }
 
     /// <summary>Documents to DAV items: their UID names in one query, then one item each.</summary>
@@ -189,11 +191,11 @@ internal static class DavTree
     /// the pilot's, and a syncing client would treat them as two events.
     /// </remarks>
     private static async Task<List<DavItem>> ComposeItemsAsync(
-        SimplArchiveDbContext db, DavProtocol protocol, Guid folderId, List<ItemRow> documents,
+        SimplArchiveDbContext db, DavProtocol protocol, IDavCollectionKindRegistry registry, Guid folderId, List<ItemRow> documents,
         CancellationToken cancellationToken, ILogger? logger)
     {
         // The UID values for the whole collection in one query — the resource name comes from them.
-        var uidFieldIds = await UidFieldIdsAsync(db, protocol, cancellationToken);
+        var uidFieldIds = await UidFieldIdsAsync(db, protocol, registry, cancellationToken);
         var documentIds = documents.Select(d => d.Id).ToList();
         var uids = await db.FieldValues
             .Where(fv => documentIds.Contains(fv.DocumentId) && uidFieldIds.Contains(fv.FieldDefinitionId))
@@ -218,7 +220,8 @@ internal static class DavTree
     /// with no UID is named after).
     /// </summary>
     internal static async Task<DavItem?> ItemAsync(
-        SimplArchiveDbContext db, DavProtocol protocol, Guid userId, Guid folderId, string resourceName, CancellationToken cancellationToken)
+        SimplArchiveDbContext db, DavProtocol protocol, IDavCollectionKindRegistry registry, Guid userId, Guid folderId,
+        string resourceName, CancellationToken cancellationToken)
     {
         // A person's schedule (ADR 0775) resolves one item by listing and matching, rather than with a
         // targeted query. A person holds tens of flights, not thousands, and composing the list is the same
@@ -228,7 +231,7 @@ internal static class DavTree
         if (protocol == DavProtocol.CalDav
             && await PersonSchedules.ResourceForAsync(db, userId, folderId, cancellationToken) is not null)
         {
-            return (await ItemsAsync(db, protocol, userId, folderId, cancellationToken))
+            return (await ItemsAsync(db, protocol, registry, userId, folderId, cancellationToken))
                 .FirstOrDefault(i => string.Equals(i.ResourceName, resourceName, StringComparison.OrdinalIgnoreCase));
         }
 
@@ -243,10 +246,10 @@ internal static class DavTree
         }
 
         var uid = resourceName[..^protocol.Extension.Length];
-        var uidFieldIds = await UidFieldIdsAsync(db, protocol, cancellationToken);
+        var uidFieldIds = await UidFieldIdsAsync(db, protocol, registry, cancellationToken);
         var fallbackId = Guid.TryParse(uid, out var parsed) ? parsed : (Guid?)null;
 
-        var document = await ItemQuery(db, protocol, folderId)
+        var document = await ItemQuery(db, protocol, registry, folderId)
             .Where(d => db.FieldValues.Any(fv => fv.DocumentId == d.Id && uidFieldIds.Contains(fv.FieldDefinitionId) && fv.Value == uid)
                 || (fallbackId != null && d.Id == fallbackId))
             .Select(d => new ItemRow(d.Id, d.CurrentVersionId, d.ConcurrencyToken))
@@ -262,11 +265,13 @@ internal static class DavTree
     /// delete rather than a write (ADR 0620).
     /// </summary>
     private static async Task<Dictionary<Guid, string>> ColorsAsync(
-        SimplArchiveDbContext db, Guid userId, DavProtocol protocol, IReadOnlyList<Guid> folderIds, CancellationToken cancellationToken)
+        SimplArchiveDbContext db, Guid userId, DavProtocol protocol, IDavCollectionKindRegistry registry,
+        IReadOnlyList<Guid> folderIds, CancellationToken cancellationToken)
     {
+        var folderMaskIds = registry.FolderMaskIds(protocol.Extension);
         var colorFieldIds = await db.FieldDefinitions
             .Where(f => f.Name == ColorFieldName
-                && db.MaskVersions.Any(v => v.Id == f.MaskVersionId && protocol.FolderMaskIds.Contains(v.MaskId)))
+                && db.MaskVersions.Any(v => v.Id == f.MaskVersionId && folderMaskIds.Contains(v.MaskId)))
             .Select(f => f.Id)
             .ToListAsync(cancellationToken);
 
@@ -302,20 +307,29 @@ internal static class DavTree
     private static string DisplayName(FolderRow folder, ParentRow? parent) =>
         parent is null ? folder.Name : $"{parent.Name} / {folder.Name}";
 
-    private static IQueryable<Document> FolderQuery(SimplArchiveDbContext db, DavProtocol protocol) =>
-        db.Documents.Where(d => d.MaskVersionId != null
-            && db.MaskVersions.Any(v => v.Id == d.MaskVersionId && protocol.FolderMaskIds.Contains(v.MaskId)));
+    private static IQueryable<Document> FolderQuery(SimplArchiveDbContext db, DavProtocol protocol, IDavCollectionKindRegistry registry)
+    {
+        var folderMaskIds = registry.FolderMaskIds(protocol.Extension);
+        return db.Documents.Where(d => d.MaskVersionId != null
+            && db.MaskVersions.Any(v => v.Id == d.MaskVersionId && folderMaskIds.Contains(v.MaskId)));
+    }
 
-    private static IQueryable<Document> ItemQuery(SimplArchiveDbContext db, DavProtocol protocol, Guid folderId) =>
-        db.Documents.Where(d => d.ParentId == folderId && d.MaskVersionId != null
-            && db.MaskVersions.Any(v => v.Id == d.MaskVersionId && protocol.ItemMaskIds.Contains(v.MaskId)));
+    private static IQueryable<Document> ItemQuery(SimplArchiveDbContext db, DavProtocol protocol, IDavCollectionKindRegistry registry, Guid folderId)
+    {
+        var itemMaskIds = registry.ItemMaskIds(protocol.Extension);
+        return db.Documents.Where(d => d.ParentId == folderId && d.MaskVersionId != null
+            && db.MaskVersions.Any(v => v.Id == d.MaskVersionId && itemMaskIds.Contains(v.MaskId)));
+    }
 
-    private static async Task<List<Guid>> UidFieldIdsAsync(SimplArchiveDbContext db, DavProtocol protocol, CancellationToken cancellationToken) =>
-        await db.FieldDefinitions
+    private static async Task<List<Guid>> UidFieldIdsAsync(SimplArchiveDbContext db, DavProtocol protocol, IDavCollectionKindRegistry registry, CancellationToken cancellationToken)
+    {
+        var itemMaskIds = registry.ItemMaskIds(protocol.Extension);
+        return await db.FieldDefinitions
             .Where(f => f.Name == protocol.UidFieldName
-                && db.MaskVersions.Any(v => v.Id == f.MaskVersionId && protocol.ItemMaskIds.Contains(v.MaskId)))
+                && db.MaskVersions.Any(v => v.Id == f.MaskVersionId && itemMaskIds.Contains(v.MaskId)))
             .Select(f => f.Id)
             .ToListAsync(cancellationToken);
+    }
 
     private static async Task<DavItem?> ToItemAsync(
         SimplArchiveDbContext db, DavProtocol protocol, Guid folderId, ItemRow document, string? uid, CancellationToken cancellationToken,

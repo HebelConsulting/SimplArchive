@@ -28,6 +28,7 @@ public class DocumentFinalizer
     private readonly CalendarContactClassifier _calendarContactClassifier;
     private readonly SimplArchive.Infrastructure.Masks.IMaskContainmentProvider _containment;
     private readonly IAuditRecorder _audit;
+    private readonly IDavCollectionKindRegistry _kinds;
     private readonly ILogger<DocumentFinalizer> _logger;
 
     // EVERY save here goes through SaveTranslatingContainmentAsync (#665). Several of them assign a mask or add
@@ -48,6 +49,7 @@ public class DocumentFinalizer
         CalendarContactClassifier calendarContactClassifier,
         SimplArchive.Infrastructure.Masks.IMaskContainmentProvider containment,
         IAuditRecorder audit,
+        IDavCollectionKindRegistry kinds,
         ILogger<DocumentFinalizer> logger)
     {
         _dbContext = dbContext;
@@ -62,6 +64,7 @@ public class DocumentFinalizer
         _calendarContactClassifier = calendarContactClassifier;
         _containment = containment;
         _audit = audit;
+        _kinds = kinds;
         _logger = logger;
     }
 
@@ -432,7 +435,7 @@ public class DocumentFinalizer
             .SingleOrDefaultAsync(cancellationToken);
 
         var rules = await _containment.ForAsync(_dbContext, document.TenantId, cancellationToken);
-        var kind = SimplArchive.Domain.CalDav.DavCollectionKinds.ForFolderMask(parentMaskId);
+        var kind = _kinds.ForFolderMask(parentMaskId);
         var itemMaskId = kind is not null && kind.Extension == extension
             ? kind.ItemMaskId
             : extension == ".vcf" ? WellKnownMaskIds.Contact : WellKnownMaskIds.Appointment;

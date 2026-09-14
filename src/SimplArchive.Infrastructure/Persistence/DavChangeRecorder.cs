@@ -53,7 +53,7 @@ internal static class DavChangeRecorder
     }
 
     internal static async Task<List<DavCollectionChange>> RecordAsync(
-        SimplArchiveDbContext db, CancellationToken cancellationToken)
+        SimplArchiveDbContext db, IReadOnlyList<DavCollectionKind> kinds, CancellationToken cancellationToken)
     {
         var tracker = db.ChangeTracker;
 
@@ -111,7 +111,7 @@ internal static class DavChangeRecorder
         // and a per-entry async lookup here would be a query per tracked field on every save in the system.
         var uidDefinitionIds = fieldEntries.Count == 0
             ? new HashSet<Guid>()
-            : await UidDefinitionIdsAsync(db, cancellationToken);
+            : await UidDefinitionIdsAsync(db, kinds, cancellationToken);
 
         foreach (var entry in fieldEntries)
         {
@@ -127,7 +127,7 @@ internal static class DavChangeRecorder
         var changes = new List<DavCollectionChange>();
         foreach (var ((documentId, folderId), _) in removals)
         {
-            if (await KindOfFolderAsync(db, tracker, folderId, cancellationToken) is { } kind)
+            if (await KindOfFolderAsync(db, tracker, kinds, folderId, cancellationToken) is { } kind)
             {
                 changes.Add(await BuildAsync(db, tracker, documentId, folderId, kind, DavChangeType.Removed, uidDefinitionIds, cancellationToken));
             }
@@ -135,7 +135,7 @@ internal static class DavChangeRecorder
 
         foreach (var ((documentId, folderId), _) in upserts)
         {
-            if (await KindOfFolderAsync(db, tracker, folderId, cancellationToken) is { } kind)
+            if (await KindOfFolderAsync(db, tracker, kinds, folderId, cancellationToken) is { } kind)
             {
                 changes.Add(await BuildAsync(db, tracker, documentId, folderId, kind, DavChangeType.Modified, uidDefinitionIds, cancellationToken));
             }
@@ -193,7 +193,7 @@ internal static class DavChangeRecorder
     }
 
     private static async Task<DavCollectionKind?> KindOfFolderAsync(
-        SimplArchiveDbContext db, ChangeTracker tracker, Guid folderId, CancellationToken cancellationToken)
+        SimplArchiveDbContext db, ChangeTracker tracker, IReadOnlyList<DavCollectionKind> kinds, Guid folderId, CancellationToken cancellationToken)
     {
         var tracked = tracker.Entries<Document>().FirstOrDefault(e => e.Entity.Id == folderId)?.Entity;
         var maskVersionId = tracked?.MaskVersionId
@@ -210,14 +210,14 @@ internal static class DavChangeRecorder
             .Where(v => v.Id == mv)
             .Select(v => (Guid?)v.MaskId)
             .FirstOrDefaultAsync(cancellationToken);
-        return DavCollectionKinds.ForFolderMask(maskId);
+        return maskId is { } id ? kinds.FirstOrDefault(k => k.FolderMaskId == id) : null;
     }
 
     private static async Task<HashSet<Guid>> UidDefinitionIdsAsync(
-        SimplArchiveDbContext db, CancellationToken cancellationToken)
+        SimplArchiveDbContext db, IReadOnlyList<DavCollectionKind> kinds, CancellationToken cancellationToken)
     {
-        var names = DavCollectionKinds.All.Select(k => k.UidFieldName).ToList();
-        var maskIds = DavCollectionKinds.All.Select(k => k.ItemMaskId).ToList();
+        var names = kinds.Select(k => k.UidFieldName).Distinct().ToList();
+        var maskIds = kinds.Select(k => k.ItemMaskId).ToList();
         return (await db.FieldDefinitions.IgnoreQueryFilters().AsNoTracking()
             .Where(f => names.Contains(f.Name)
                 && db.MaskVersions.Any(mv => mv.Id == f.MaskVersionId && maskIds.Contains(mv.MaskId)))

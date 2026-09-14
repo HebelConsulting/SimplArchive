@@ -35,7 +35,7 @@ internal static class DavEndpoints
 
         if (context.Depth >= 1)
         {
-            foreach (var collection in await DavTree.CollectionsAsync(context.Db, context.Rights, context.UserId, context.Protocol, context.Cancellation))
+            foreach (var collection in await DavTree.CollectionsAsync(context.Db, context.Rights, context.UserId, context.Protocol, context.Kinds, context.Cancellation))
             {
                 var rights = await RightsForAsync(context, collection.FolderId);
                 var sequence = await SequenceForAsync(context, collection.FolderId);
@@ -49,7 +49,7 @@ internal static class DavEndpoints
     /// <summary>PROPFIND on one collection, and (Depth ≥ 1) its items.</summary>
     internal static async Task<IActionResult> CollectionAsync(DavControllerContext context, Guid folderId)
     {
-        var collection = await DavTree.CollectionAsync(context.Db, context.Rights, context.UserId, context.Protocol, folderId, context.Cancellation);
+        var collection = await DavTree.CollectionAsync(context.Db, context.Rights, context.UserId, context.Protocol, context.Kinds, folderId, context.Cancellation);
         if (collection is null)
         {
             return new NotFoundResult();
@@ -62,7 +62,7 @@ internal static class DavEndpoints
 
         if (context.Depth >= 1)
         {
-            foreach (var item in await DavTree.ItemsAsync(context.Db, context.Protocol, context.UserId, folderId, context.Cancellation, Wire(context)))
+            foreach (var item in await DavTree.ItemsAsync(context.Db, context.Protocol, context.Kinds, context.UserId, folderId, context.Cancellation, Wire(context)))
             {
                 resources.Add(DavResources.Item(context.Protocol, item, data: null));
             }
@@ -117,19 +117,19 @@ internal static class DavEndpoints
 
         // Healed before it is read (#806): a CTag computed from a log the workbench outran would tell a
         // polling client "nothing new" about a collection that has, in fact, changed.
-        await DavChangeLog.ReconcileAsync(context.Db, context.Protocol, context.TenantId, folderId, context.Cancellation);
+        await DavChangeLog.ReconcileAsync(context.Db, context.Protocol, context.Kinds, context.TenantId, folderId, context.Cancellation);
         return await DavChangeLog.CurrentAsync(context.Db, folderId, context.Cancellation);
     }
 
     /// <summary>PROPFIND on one item.</summary>
     internal static async Task<IActionResult> ItemAsync(DavControllerContext context, Guid folderId, string resourceName)
     {
-        if (await DavTree.CollectionAsync(context.Db, context.Rights, context.UserId, context.Protocol, folderId, context.Cancellation) is null)
+        if (await DavTree.CollectionAsync(context.Db, context.Rights, context.UserId, context.Protocol, context.Kinds, folderId, context.Cancellation) is null)
         {
             return new NotFoundResult();
         }
 
-        var item = await DavTree.ItemAsync(context.Db, context.Protocol, context.UserId, folderId, resourceName, context.Cancellation);
+        var item = await DavTree.ItemAsync(context.Db, context.Protocol, context.Kinds, context.UserId, folderId, resourceName, context.Cancellation);
         if (item is null)
         {
             return new NotFoundResult();
@@ -174,7 +174,7 @@ internal static class DavEndpoints
         var request = PropRequest.FromProp(body.Element(DavNames.Prop));
 
         // Same healing before a sync answer (#806): the incremental branch below reads the log as the truth.
-        await DavChangeLog.ReconcileAsync(context.Db, context.Protocol, context.TenantId, folderId, context.Cancellation);
+        await DavChangeLog.ReconcileAsync(context.Db, context.Protocol, context.Kinds, context.TenantId, folderId, context.Cancellation);
         var current = await DavChangeLog.CurrentAsync(context.Db, folderId, context.Cancellation);
 
         // The INITIAL sync — no token, or the zero token we hand out for an untouched collection — answers
@@ -186,7 +186,7 @@ internal static class DavEndpoints
         // everything plus a token, and "everything" is what the collection holds, not what the log remembers.
         if ((since ?? 0) == 0)
         {
-            var everything = await DavTree.ItemsAsync(context.Db, context.Protocol, context.UserId, folderId, context.Cancellation, Wire(context));
+            var everything = await DavTree.ItemsAsync(context.Db, context.Protocol, context.Kinds, context.UserId, folderId, context.Cancellation, Wire(context));
             var initial = MultiStatus.Build(request, [.. everything.Select(i => DavResources.Item(context.Protocol, i, data: null))]);
             MultiStatus.WithSyncToken(initial, DavTokens.Format(current));
             return DavXml.MultiStatus(initial);
@@ -204,7 +204,7 @@ internal static class DavEndpoints
                 continue;
             }
 
-            var item = await DavTree.ItemAsync(context.Db, context.Protocol, context.UserId, folderId, change.ResourceName, context.Cancellation);
+            var item = await DavTree.ItemAsync(context.Db, context.Protocol, context.Kinds, context.UserId, folderId, change.ResourceName, context.Cancellation);
             if (item is null)
             {
                 // Logged as changed but no longer there — tell the client it is gone rather than omitting it,
@@ -258,7 +258,7 @@ internal static class DavEndpoints
 
     internal static async Task<IActionResult> ReportAsync(DavControllerContext context, Guid folderId)
     {
-        if (await DavTree.CollectionAsync(context.Db, context.Rights, context.UserId, context.Protocol, folderId, context.Cancellation) is null)
+        if (await DavTree.CollectionAsync(context.Db, context.Rights, context.UserId, context.Protocol, context.Kinds, folderId, context.Cancellation) is null)
         {
             return new NotFoundResult();
         }
@@ -291,7 +291,7 @@ internal static class DavEndpoints
         var request = PropRequest.FromProp(body?.Element(DavNames.Prop));
         var wanted = body?.Elements(DavNames.Href).Select(h => h.Value.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
 
-        var items = await DavTree.ItemsAsync(context.Db, context.Protocol, context.UserId, folderId, context.Cancellation, Wire(context));
+        var items = await DavTree.ItemsAsync(context.Db, context.Protocol, context.Kinds, context.UserId, folderId, context.Cancellation, Wire(context));
         if (wanted.Count > 0)
         {
             items = items.Where(i =>
@@ -315,12 +315,12 @@ internal static class DavEndpoints
     /// <summary>GET/HEAD one item: its stored bytes, with the ETag a client conditions on.</summary>
     internal static async Task<IActionResult> GetAsync(DavControllerContext context, Guid folderId, string resourceName, bool body)
     {
-        if (await DavTree.CollectionAsync(context.Db, context.Rights, context.UserId, context.Protocol, folderId, context.Cancellation) is null)
+        if (await DavTree.CollectionAsync(context.Db, context.Rights, context.UserId, context.Protocol, context.Kinds, folderId, context.Cancellation) is null)
         {
             return new NotFoundResult();
         }
 
-        var item = await DavTree.ItemAsync(context.Db, context.Protocol, context.UserId, folderId, resourceName, context.Cancellation);
+        var item = await DavTree.ItemAsync(context.Db, context.Protocol, context.Kinds, context.UserId, folderId, resourceName, context.Cancellation);
         if (item is null)
         {
             return new NotFoundResult();

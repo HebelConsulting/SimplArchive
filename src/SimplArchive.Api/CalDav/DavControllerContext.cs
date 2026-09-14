@@ -15,13 +15,14 @@ internal sealed class DavControllerContext
 
     internal DavControllerContext(
         DavProtocol protocol, HttpRequest request, SimplArchiveDbContext db, IEffectiveRightsCalculator rights,
-        IObjectStorageClient storage, Guid userId, Guid tenantId, string displayName, int depth, string? vapidPublicKey,
-        CancellationToken cancellation, ILogger? log = null)
+        IObjectStorageClient storage, IDavCollectionKindRegistry kinds, Guid userId, Guid tenantId, string displayName,
+        int depth, string? vapidPublicKey, CancellationToken cancellation, ILogger? log = null)
     {
         Log = log;
         Protocol = protocol;
         Db = db;
         Rights = rights;
+        Kinds = kinds;
         UserId = userId;
         TenantId = tenantId;
         DisplayName = displayName;
@@ -37,6 +38,9 @@ internal sealed class DavControllerContext
     internal SimplArchiveDbContext Db { get; }
 
     internal IEffectiveRightsCalculator Rights { get; }
+
+    /// <summary>The DAV collection kinds this server serves — core plus any module-declared (ADR 0791).</summary>
+    internal IDavCollectionKindRegistry Kinds { get; }
 
     internal Guid UserId { get; }
 

@@ -13,16 +13,19 @@ namespace SimplArchive.Api.CalDav;
 /// <param name="NamespacePrefix">The prefix bound to it in emitted XML.</param>
 /// <param name="HomeSetProperty">The home-set property name a client discovers on the principal.</param>
 /// <param name="CollectionResourceType">The element marking a collection as this protocol's kind.</param>
-/// <param name="Kinds">The collection kinds this protocol serves (ADR 0744): CalDAV serves both plain
-/// Calendars and meeting-room Schedules — same wire behaviour, different masks — so the masks are SETS
-/// derived from the kinds, while the extension and UID field must agree across them (one protocol, one
-/// item grammar).</param>
 /// <param name="Extension">The item file extension, e.g. <c>.ics</c>.</param>
 /// <param name="ContentType">The item media type served on GET.</param>
 /// <param name="UidFieldName">The item mask's UID field — the resource name is derived from it.</param>
 /// <param name="MultigetReport">The multiget REPORT element name.</param>
 /// <param name="QueryReport">The query REPORT element name.</param>
 /// <param name="DavCompliance">The extra token this protocol adds to the DAV: compliance header.</param>
+/// <remarks>
+/// The WIRE half only. Which masks a protocol's collections and items wear is NOT here (ABI 0.24, ADR 0791):
+/// modules declare .ics collections of their own (a flight-log Logbook), known only at startup, so the mask
+/// sets come from <see cref="Application.Abstractions.IDavCollectionKindRegistry"/> — keyed by
+/// <see cref="Extension"/> — rather than a static list a module could never reach. The extension and UID
+/// field DO belong here: one protocol, one item grammar, and every .ics kind shares it.
+/// </remarks>
 internal sealed record DavProtocol(
     string BasePath,
     string CollectionsSegment,
@@ -30,7 +33,6 @@ internal sealed record DavProtocol(
     string NamespacePrefix,
     string HomeSetProperty,
     string CollectionResourceType,
-    IReadOnlyList<Domain.CalDav.DavCollectionKind> Kinds,
     string Extension,
     string ContentType,
     string UidFieldName,
@@ -45,12 +47,6 @@ internal sealed record DavProtocol(
         NamespacePrefix: "C",
         HomeSetProperty: "calendar-home-set",
         CollectionResourceType: "calendar",
-        // DERIVED from the kind table by extension, not listed by hand (ADR 0778). It was a hand-written
-        // list, and adding the Maintenance kind to DavCollectionKinds.All therefore did not reach it: the
-        // collection existed, wore its mask, and was simply invisible to every CalDAV client — the "a new
-        // entry must reach every listing" failure, where the thing that breaks is the one nobody edited.
-        // Every .ics kind is a calendar on the wire, which is exactly what this protocol serves.
-        Kinds: [.. Domain.CalDav.DavCollectionKinds.All.Where(k => k.Extension == ".ics")],
         Extension: Domain.CalDav.DavCollectionKinds.Calendar.Extension,
         ContentType: "text/calendar; charset=utf-8",
         UidFieldName: Domain.CalDav.DavCollectionKinds.Calendar.UidFieldName,
@@ -65,7 +61,6 @@ internal sealed record DavProtocol(
         NamespacePrefix: "CARD",
         HomeSetProperty: "addressbook-home-set",
         CollectionResourceType: "addressbook",
-        Kinds: [.. Domain.CalDav.DavCollectionKinds.All.Where(k => k.Extension == ".vcf")],
         Extension: Domain.CalDav.DavCollectionKinds.Addressbook.Extension,
         ContentType: "text/vcard; charset=utf-8",
         UidFieldName: Domain.CalDav.DavCollectionKinds.Addressbook.UidFieldName,
@@ -74,12 +69,6 @@ internal sealed record DavProtocol(
         DavCompliance: "addressbook");
 
     internal static readonly IReadOnlyList<DavProtocol> All = [CalDav, CardDav];
-
-    /// <summary>The folder masks this protocol's collections wear — a List for EF's Contains translation.</summary>
-    internal List<Guid> FolderMaskIds { get; } = [.. Kinds.Select(k => k.FolderMaskId)];
-
-    /// <summary>The item masks this protocol's items wear — a List for EF's Contains translation.</summary>
-    internal List<Guid> ItemMaskIds { get; } = [.. Kinds.Select(k => k.ItemMaskId)];
 
     /// <summary>The protocol serving this request path, or null when the path is not a DAV one.</summary>
     internal static DavProtocol? ForPath(string path) =>
