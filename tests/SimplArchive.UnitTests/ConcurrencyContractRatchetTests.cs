@@ -53,6 +53,23 @@ public partial class ConcurrencyContractRatchetTests
     // claim is removed rather than left standing unverifiable.
     private static readonly Dictionary<string, string> ReadsOnly = new(StringComparer.Ordinal)
     {
+        ["DocumentChatController.cs:Document"] =
+            "Reads only: writes ChatMessage / ChatMessageMention / DocumentSubscription rows and reads the "
+            + "document for existence and rights. Deliberately does NOT move the document's token — a comment "
+            + "is not an edit of the document, and bumping it would 412 every open edit form in the tenant the "
+            + "moment a colleague posted.",
+        ["DocumentReferencesController.cs:Document"] =
+            "Reads only: writes DocumentReference rows. Placing a reference changes where a document APPEARS, "
+            + "not the document, so the parent token stays put.",
+        ["DocumentSubscriptionsController.cs:Document"] =
+            "Reads only: writes DocumentSubscription rows. Following is PER-USER state; my following a document "
+            + "must not invalidate your open edit of it.",
+        ["DocumentRemindersController.cs:Document"] =
+            "Reads only: writes DocumentReminder rows. Per-user, like a subscription.",
+        ["DocumentTagsController.cs:Document"] =
+            "Reads only: TagSetWriter writes DocumentTag / TagDefinition rows and the document row is untouched. "
+            + "Tags are deliberately the weakest of the metadata (ADR 0796) and are edited from the same pencil, "
+            + "so moving the token here would invalidate the very form that just wrote them.",
         ["AclEntriesController.cs:User"] =
             "Reads only: resolves display names for the entry rows, collects tenant-admin ids, and checks a "
             + "principal exists. Projections and AnyAsync — no user column is written.",
@@ -83,7 +100,6 @@ public partial class ConcurrencyContractRatchetTests
         "DocumentAppointmentController.cs:Document",
         "DocumentBulkController.cs:Document",
         "DocumentBulkController.cs:ServiceAccount",
-        "DocumentChatController.cs:Document",
         "DocumentChatController.cs:ServiceAccount",
         "DocumentChatController.cs:User",
         "DocumentChildrenController.cs:Document",
@@ -95,12 +111,8 @@ public partial class ConcurrencyContractRatchetTests
         "DocumentLifecycleController.cs:User",
         "DocumentMetadataController.cs:Document",
         "DocumentOriginController.cs:Document",
-        "DocumentReferencesController.cs:Document",
-        "DocumentRemindersController.cs:Document",
         "DocumentRemindersController.cs:User",
         "DocumentSearchableController.cs:Document",
-        "DocumentSubscriptionsController.cs:Document",
-        "DocumentTagsController.cs:Document",
         "DocumentTransferController.cs:Document",
         "DocumentVersionsController.cs:Document",
         "DocumentVersionsController.cs:ServiceAccount",
