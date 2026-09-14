@@ -53,6 +53,20 @@ public partial class ConcurrencyContractRatchetTests
     // claim is removed rather than left standing unverifiable.
     private static readonly Dictionary<string, string> ReadsOnly = new(StringComparer.Ordinal)
     {
+        ["DocumentAnnotationsController.cs:Document"] =
+            "Reads only: writes DocumentAnnotation rows and projects the document's NAME for its audit lines. "
+            + "Like a chat message, an annotation is not an edit of the document, so the token stays put — "
+            + "bumping it would refuse the open edit form of whoever is indexing the same document.",
+        ["DocumentAnnotationsController.cs:User"] =
+            "Reads only: projects an author's DisplayName onto the annotation rows.",
+        ["DocumentAnnotationsController.cs:ServiceAccount"] =
+            "Reads only: projects an author's Name onto the annotation rows, the service-account half of the "
+            + "line above.",
+        ["DocumentChatController.cs:ServiceAccount"] =
+            "Reads only: projects an author's Name onto the chat rows.",
+        ["DocumentSearchableController.cs:Document"] =
+            "Reads only: one Name projection for the audit line. The endpoint enqueues an OCR conversion; the "
+            + "new version it eventually produces is written by the sidecar pipeline, not here.",
         ["DocumentChatController.cs:Document"] =
             "Reads only: writes ChatMessage / ChatMessageMention / DocumentSubscription rows and reads the "
             + "document for existence and rights. Deliberately does NOT move the document's token — a comment "
@@ -94,25 +108,19 @@ public partial class ConcurrencyContractRatchetTests
         "BookingsController.cs:Document",
         "CheckoutsController.cs:Document",
         "CheckoutsController.cs:Tenant",
-        "DocumentAnnotationsController.cs:Document",
-        "DocumentAnnotationsController.cs:ServiceAccount",
-        "DocumentAnnotationsController.cs:User",
         "DocumentAppointmentController.cs:Document",
         "DocumentBulkController.cs:Document",
         "DocumentBulkController.cs:ServiceAccount",
-        "DocumentChatController.cs:ServiceAccount",
         "DocumentChatController.cs:User",
         "DocumentChildrenController.cs:Document",
         "DocumentContactCardController.cs:Document",
         "DocumentExternalLinksController.cs:Document",
         "DocumentExternalLinksController.cs:Tenant",
         "DocumentItemSourceController.cs:Document",
-        "DocumentLifecycleController.cs:Document",
         "DocumentLifecycleController.cs:User",
         "DocumentMetadataController.cs:Document",
         "DocumentOriginController.cs:Document",
         "DocumentRemindersController.cs:User",
-        "DocumentSearchableController.cs:Document",
         "DocumentTransferController.cs:Document",
         "DocumentVersionsController.cs:Document",
         "DocumentVersionsController.cs:ServiceAccount",

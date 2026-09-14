@@ -34,6 +34,7 @@ public class DocumentLifecycleController : ControllerBase
     private readonly SimplArchiveDbContext _dbContext;
     private readonly Documents.DocumentAccessService _access;
     private readonly IAuditRecorder _audit;
+    private readonly Concurrency.DocumentVerbs _documents;
     private readonly ILegalHoldService _legalHold;
     private readonly Documents.DocumentPurger _purger;
     private readonly Documents.DocumentRestorer _restorer;
@@ -53,7 +54,8 @@ public class DocumentLifecycleController : ControllerBase
         Documents.DocumentRestorer restorer,
         IDocumentIndexQueue queue,
         IWormLockService wormLock,
-        Documents.MailboxAddressClaims mailboxAddressClaims)
+        Documents.MailboxAddressClaims mailboxAddressClaims,
+        Concurrency.DocumentVerbs documents)
     {
         _objectStorage = objectStorage;
         _userSystemRights = userSystemRights;
@@ -61,6 +63,7 @@ public class DocumentLifecycleController : ControllerBase
         _dbContext = dbContext;
         _access = access;
         _audit = audit;
+        _documents = documents;
         _legalHold = legalHold;
         _purger = purger;
         _restorer = restorer;
@@ -107,7 +110,11 @@ public class DocumentLifecycleController : ControllerBase
             document.CheckedOutByUserId = userId;
             document.CheckedOutAt = DateTimeOffset.UtcNow;
             document.CheckoutReminderSentAt = null;
-            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            // Through the document's verb contract (ADR 0795). It is TOLERANT of an absent If-Match, so the
+            // decision recorded above — a lock action carries no precondition — survives the conversion; what
+            // it adds is the single transaction and a caller's token being honoured when one IS sent.
+            await _documents.MutateAsync(Request, document, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
             await _audit.RecordAsync(AuditActions.DocumentCheckedOut, "Document", documentId, document.Name, cancellationToken: cancellationToken);
         }
 
@@ -152,7 +159,7 @@ public class DocumentLifecycleController : ControllerBase
         document.CheckedOutByUserId = null;
         document.CheckedOutAt = null;
         document.CheckoutReminderSentAt = null;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _documents.MutateAsync(Request, document, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
 
         // Releasing ends the check-out, so the holder's cloud working-copy stash is no longer needed (ADR
         // "Check-out working-copy stash + exit guard") — remove it best-effort. Keyed by the HOLDER's user id
@@ -201,10 +208,8 @@ public class DocumentLifecycleController : ControllerBase
         // needs the routing right on top of CanDelete (#703, owner-decided 2026-08-23).
         await _mailboxAddressClaims.EnforceMayDeleteOrRestoreAsync(documentId, "Deleting a mailbox", cancellationToken);
 
-        if (!Request.Headers.TryGetValue("If-Match", out var ifMatchValues) || !TryParseETag(ifMatchValues.ToString(), out var ifMatchToken))
-        {
-            throw new IfMatchRequiredException();
-        }
+        // 428 when absent: deletion REQUIRES the precondition (ADR 0003), unlike the lock actions above.
+        _documents.RequireIfMatch(Request);
 
         var toDelete = await _dbContext.CollectSubtreeAsync(documentId, document, cancellationToken);
 
@@ -230,18 +235,18 @@ public class DocumentLifecycleController : ControllerBase
             doc.DeletedAt = now;
         }
 
-        _dbContext.Entry(document).Property(d => d.ConcurrencyToken).OriginalValue = ifMatchToken;
-
         try
         {
-            // The translated save, not the bare one: deleting a personal space's standing folder ("My
-            // Mailbox", "My Calendar", …) is refused by the #596 invariant, and untranslated that surfaced
-            // here as a bare 500 — found by #703's delete-gate test, live since the invariant shipped.
-            await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
+            await _documents.MutateAsync(Request, document, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
         }
-        catch (DbUpdateConcurrencyException)
+        // The contract owns the commit, so the containment refusal is translated AROUND it by the same mapping
+        // the translating save uses — never a second copy (ADR 0672). It matters here: deleting a personal
+        // space's standing folder ("My Mailbox", "My Calendar", …) is refused by the #596 invariant, and
+        // untranslated that surfaced as a bare 500 — found by #703's delete-gate test, live since the
+        // invariant shipped.
+        catch (Exception e) when (Documents.TypedFolderSave.Translate(e) is { } translated)
         {
-            throw EtagMismatchException.ForDocument();
+            throw translated;
         }
 
         foreach (var doc in toDelete)
