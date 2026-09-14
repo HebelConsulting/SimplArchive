@@ -95,6 +95,23 @@ public partial class ConcurrencyContractRatchetTests
             + "(AllowExternalLinks, ExternalLinkMaxDays, ExternalLinkDefaultAccesses). No property is assigned.",
         ["DocumentVersionsController.cs:ServiceAccount"] =
             "Reads only: one Name projection, naming a version's author.",
+        ["DocumentsController.cs:Tenant"] =
+            "Reads only: one AnyAsync asking whether the tenant allows external links, gating a rel.",
+        ["UsersController.cs:Tenant"] =
+            "Reads only: one ImapShowAllDocumentsDefault projection, seeding a NEW user's preference (#793). "
+            + "It reads the tenant to write a USER.",
+        ["UsersController.cs:ServiceAccount"] =
+            "Reads only: projects a calling service account's system-right flags, to gate what it may do.",
+        ["RepositoriesController.cs:ServiceAccount"] =
+            "Reads only: CanManageRepositories and CanImport projections, gating the caller.",
+        ["TokenController.cs:ServiceAccount"] =
+            "Reads only: resolves a client_id to { Id, TenantId, IsActive } at login, before the tenant is "
+            + "known. A token endpoint authenticates; it writes no principal.",
+        ["TokenController.cs:Tenant"] =
+            "Reads only: joined to the user solely to read the tenant's Status, so a suspended tenant cannot "
+            + "log in.",
+        ["WorkflowController.cs:ServiceAccount"] =
+            "Reads only: a Name dictionary, labelling who acted in the transition log.",
         ["AclEntriesController.cs:User"] =
             "Reads only: resolves display names for the entry rows, collects tenant-admin ids, and checks a "
             + "principal exists. Projections and AnyAsync — no user column is written.",
@@ -131,7 +148,6 @@ public partial class ConcurrencyContractRatchetTests
         "DocumentVersionsController.cs:User",
         "DocumentVersionsController.cs:WorkflowState",
         "DocumentsController.cs:Document",
-        "DocumentsController.cs:Tenant",
         "DocumentsController.cs:User",
         "GroupsController.cs:ServiceAccount",
         "GroupsController.cs:User",
@@ -144,20 +160,14 @@ public partial class ConcurrencyContractRatchetTests
         "PersonalRepositoryController.cs:Document",
         "RecycleBinController.cs:Document",
         "RepositoriesController.cs:Document",
-        "RepositoriesController.cs:ServiceAccount",
         "RetentionController.cs:Document",
         "SavedSearchesController.cs:User",
         "TenantsController.cs:Tenant",
-        "TokenController.cs:ServiceAccount",
-        "TokenController.cs:Tenant",
         "TokenController.cs:User",
         "TypedItemsController.cs:Document",
         "UsersController.cs:Document",
-        "UsersController.cs:ServiceAccount",
-        "UsersController.cs:Tenant",
         "UsersController.cs:WorkflowState",
         "WorkflowController.cs:Document",
-        "WorkflowController.cs:ServiceAccount",
         "WorkflowController.cs:User",
     };
 
