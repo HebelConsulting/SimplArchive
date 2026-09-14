@@ -7,6 +7,30 @@ using SimplArchive.Client.Models;
 namespace SimplArchive.Client.Services;
 
 /// <summary>
+/// The three honest answers to "make this node visible in the tree" (#1150). A single <c>bool</c> conflated the
+/// last two: a chain that had simply not loaded yet was reported the same as a node that is not in the tree at
+/// all, so the caller discarded a lost update as if the node did not exist — nothing retried, nothing reported.
+/// </summary>
+public enum RevealOutcome
+{
+    /// <summary>Found and made visible.</summary>
+    Revealed,
+
+    /// <summary>
+    /// Not in the loaded tree, and nothing says it will be — the honest "Go to" answer for a node whose
+    /// ancestors the tree has never opened. The caller leaves the highlight where it was.
+    /// </summary>
+    NotInTree,
+
+    /// <summary>
+    /// Reachable — the caller named a real parent — but that parent's chain is not in the loaded tree yet, so
+    /// the node cannot be found. The caller MAY act on this (retry, or load the chain) rather than treat it as
+    /// absent, which is the lost update #1150 is about.
+    /// </summary>
+    NotLoadedYet,
+}
+
+/// <summary>
 /// The repository tree's contents: its root nodes, and how a node's children are loaded.
 /// </summary>
 /// <remarks>
@@ -113,22 +137,84 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
     /// place that knows how the tree is built.
     /// </para>
     /// <para>
-    /// Only the loaded tree is searched. A folder reached by "Go to" may have ancestors the tree has never
-    /// opened, and this returns false rather than walking the whole archive to find it — the honest answer for
-    /// a node the tree does not have, and the caller simply leaves the highlight where it was.
+    /// This is the CHEAP probe: only the loaded tree is searched — it never fetches — so a folder whose chain
+    /// the tree has not opened answers a miss rather than triggering a crawl. The miss says WHY: a real
+    /// <paramref name="parentId"/> that is not itself in the tree is <see cref="RevealOutcome.NotLoadedYet"/>
+    /// (the chain is loadable, just not loaded), and a bare miss is <see cref="RevealOutcome.NotInTree"/>. The
+    /// caller escalates a miss to <see cref="RevealByLoadingChainAsync"/>, which loads what is needed and is the
+    /// authority on whether the node is reachable at all — so a lost update is no longer possible (#1150).
     /// </para>
     /// </remarks>
-    public async Task<bool> RevealAsync(Guid id, Guid? parentId = null)
+    public async Task<RevealOutcome> RevealAsync(Guid id, Guid? parentId = null)
     {
-        // The parent first, and this is not an optimisation — it is what makes the search possible at all. A
-        // node the tree has never expanded has no children loaded, so the target is not IN the loaded tree yet
-        // and searching for it finds nothing. Opening the parent is what puts it there.
-        if (parentId is { } parent && !await ExpandAsync(parent, includeSelf: true))
+        if (parentId is { } parent)
         {
-            return false;
+            // The parent first, and this is not an optimisation — it is what makes the search possible at all. A
+            // node the tree has never expanded has no children loaded, so the target is not IN the loaded tree
+            // yet and searching for it finds nothing. Opening the parent is what puts it there.
+            //
+            // The caller asserts `parent` really is this node's parent (it drilled in from that folder's list),
+            // so a miss on the parent is not "absent" — it is the parent's own chain not being loaded yet. That
+            // is the lost update: report it as NotLoadedYet so the caller can act, never as NotInTree.
+            if (!await ExpandAsync(parent, includeSelf: true))
+            {
+                return RevealOutcome.NotLoadedYet;
+            }
+
+            // The parent is now open and its children loaded; if the node still is not among them, the parent
+            // genuinely does not contain it.
+            return await ExpandAsync(id, includeSelf: false) ? RevealOutcome.Revealed : RevealOutcome.NotInTree;
         }
 
-        return await ExpandAsync(id, includeSelf: false);
+        // No parent named — the honest "Go to" path: a miss is the tree truthfully not having the node, and we
+        // make no claim it will appear.
+        return await ExpandAsync(id, includeSelf: false) ? RevealOutcome.Revealed : RevealOutcome.NotInTree;
+    }
+
+    /// <summary>
+    /// Reveals <paramref name="id"/> by LOADING its chain (#1150): fetches the folder's ancestors and expands
+    /// them top-down until the node is in the tree, then reveals it. The deterministic answer to
+    /// <see cref="RevealOutcome.NotLoadedYet"/> — where <see cref="RevealAsync"/> deliberately searches only the
+    /// loaded tree, this fills in what has not loaded.
+    /// </summary>
+    /// <remarks>
+    /// Bounded, and NOT the "walk the archive" cost the loaded-tree search refuses: the ancestor chain is one
+    /// call (the <c>ancestors</c> rel), and expanding it is O(depth) — each level's children load makes the next
+    /// ancestor findable, exactly as the reopen-after-reload walk works. Kept OFF the ordinary reveal path: it
+    /// is paid only when a move lands on a node whose chain is genuinely not loaded, not on every selection.
+    /// Still returns <see cref="RevealOutcome.NotInTree"/> when even the loaded chain cannot place the node —
+    /// its root is one the tree does not show (another tenant, an unshared repository).
+    /// </remarks>
+    public async Task<RevealOutcome> RevealByLoadingChainAsync(Guid id)
+    {
+        IReadOnlyList<Guid> ancestors;
+        try
+        {
+            ancestors = await browse.FetchAncestorsAsync(id);
+        }
+        // The same pair ReloadAsync swallows, for the same reason: a dropped token or a network blip is not the
+        // tree's answer about a node. Report NotLoadedYet, not NotInTree — leave the highlight, let a later move
+        // retry — rather than claim the node is gone.
+        catch (AccessTokenNotAvailableException)
+        {
+            return RevealOutcome.NotLoadedYet;
+        }
+        catch (HttpRequestException)
+        {
+            return RevealOutcome.NotLoadedYet;
+        }
+
+        // Top-down, repository-root first: the root is already in Roots, and expanding each ancestor loads the
+        // children the next one lives among — so FindPath finds each in turn where a cold search found none.
+        foreach (var ancestorId in ancestors)
+        {
+            if (!await ExpandAsync(ancestorId, includeSelf: true))
+            {
+                return RevealOutcome.NotInTree;
+            }
+        }
+
+        return await ExpandAsync(id, includeSelf: false) ? RevealOutcome.Revealed : RevealOutcome.NotInTree;
     }
 
     // Expands the chain down to `id`; `includeSelf` also opens the node itself, loading its children.

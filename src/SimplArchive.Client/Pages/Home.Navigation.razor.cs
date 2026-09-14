@@ -142,7 +142,28 @@ public partial class Home
             // list is a child of an unexpanded node, where nothing is loaded to mark. Without a parent first: a
             // node already in the tree is found directly, and naming a parent that is not one would expand an
             // unrelated node in front of the user.
-            _scrollTreeCurrent = await Tree.RevealAsync(folder.Id) || await Tree.RevealAsync(folder.Id, cameFrom);
+            // Three attempts, cheapest first (#1150). The tree's job is to answer "where am I" (ADR 0703), so a
+            // move must end with the folder marked in it whenever the folder is reachable at all.
+            //   1. Is it ALREADY in the loaded tree? (a folder near one the user has open) — no fetch.
+            //   2. Is its PARENT loaded, so the folder is one child-load away? — only when we know the parent
+            //      (a list drill names the folder we came from), and still no ancestor fetch.
+            //   3. Otherwise load its ancestor chain and expand down — deterministic, ONE /ancestors fetch, paid
+            //      only when the first two miss: a deep list drill onto an unloaded branch, or a deep link / Go
+            //      to whose target sits several levels below any open node. This is what used to be a silent lost
+            //      update — RevealAsync searched only the loaded tree and gave up — and it is why a deep link to a
+            //      deeply-filed document never marked its folder either.
+            var revealed = await Tree.RevealAsync(folder.Id);
+            if (revealed != RevealOutcome.Revealed && cameFrom is { } cf)
+            {
+                revealed = await Tree.RevealAsync(folder.Id, cf);
+            }
+
+            if (revealed != RevealOutcome.Revealed)
+            {
+                revealed = await Tree.RevealByLoadingChainAsync(folder.Id);
+            }
+
+            _scrollTreeCurrent = revealed == RevealOutcome.Revealed;
 
             // The rows have been on screen for a while, so the user may already have picked one — and this
             // tail's load would be NEWER than theirs, replacing their document with the folder. Measured: the

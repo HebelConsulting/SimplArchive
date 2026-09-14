@@ -73,6 +73,30 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
     public Task<string> FetchChildrenHrefAsync(Guid folderId) => FetchRelAsync(folderId, "children");
 
     /// <summary>
+    /// A folder's ancestor ids, repository-root first (the folder itself excluded), by following its
+    /// <c>ancestors</c> rel (#1150). Used to REVEAL a node whose chain the lazy tree has not loaded yet: fetch
+    /// the whole chain in one call, then expand it top-down. One request for the chain, not one per level.
+    /// </summary>
+    public async Task<IReadOnlyList<Guid>> FetchAncestorsAsync(Guid folderId)
+    {
+        var href = await FetchRelAsync(folderId, "ancestors");
+        var page = await http.GetFromJsonAsync<AncestorsResponse>(href);
+        return page?.Ancestors.Select(a => a.Id).ToList() ?? [];
+    }
+
+    private sealed record AncestorsResponse
+    {
+        public List<AncestorRow> Ancestors { get; set; } = [];
+    }
+
+    private sealed record AncestorRow
+    {
+        public Guid Id { get; set; }
+
+        public string Name { get; set; } = string.Empty;
+    }
+
+    /// <summary>
     /// A folder's real children plus the references (shortcuts) filed in it, and the order the folder wants them
     /// listed in.
     /// </summary>
