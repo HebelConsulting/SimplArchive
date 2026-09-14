@@ -181,7 +181,6 @@ public partial class ConcurrencyContractRatchetTests
         "DocumentTransferController.cs:Document",
         "DocumentVersionsController.cs:User",
         "DocumentVersionsController.cs:WorkflowState",
-        "DocumentsController.cs:Document",
         "DocumentsController.cs:User",
         "GroupsController.cs:ServiceAccount",
         "GroupsController.cs:User",

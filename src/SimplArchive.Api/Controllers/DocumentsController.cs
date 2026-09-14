@@ -35,6 +35,7 @@ namespace SimplArchive.Api.Controllers;
 public class DocumentsController : ControllerBase
 {
     private readonly SimplArchiveDbContext _dbContext;
+    private readonly Concurrency.DocumentVerbs _documents;
     private readonly Documents.DocumentAccessService _access;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly IDocumentIndexQueue _queue;
@@ -51,9 +52,11 @@ public class DocumentsController : ControllerBase
         Documents.DocumentMover mover,
         Documents.DocumentResourceLinks resourceLinks,
         Documents.MachineStatusEvaluator machineStatuses,
-        Documents.ModuleActionEvaluator moduleActions)
+        Documents.ModuleActionEvaluator moduleActions,
+        Concurrency.DocumentVerbs documents)
     {
         _currentTenantAccessor = currentTenantAccessor;
+        _documents = documents;
         _mover = mover;
         _resourceLinks = resourceLinks;
         _machineStatuses = machineStatuses;
@@ -500,10 +503,7 @@ public class DocumentsController : ControllerBase
         await _access.EnsureNotFrozenAsync(documentId, cancellationToken);
         await _access.EnsureNotCheckedOutByOtherAsync(documentId, cancellationToken);
 
-        if (!Request.Headers.TryGetValue("If-Match", out var ifMatchValues) || !TryParseETag(ifMatchValues.ToString(), out var ifMatchToken))
-        {
-            throw new IfMatchRequiredException();
-        }
+        _documents.RequireIfMatch(Request);
 
         document.Name = request.Name;
 
@@ -512,16 +512,9 @@ public class DocumentsController : ControllerBase
         // it rather than whatever was actually loaded — if the real stored value has since changed, zero
         // rows are affected and EF Core throws DbUpdateConcurrencyException. See ADR "ETag / If-Match
         // optimistic concurrency".
-        _dbContext.Entry(document).Property(d => d.ConcurrencyToken).OriginalValue = ifMatchToken;
-
-        try
-        {
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            throw EtagMismatchException.ForDocument();
-        }
+        // Through the document's verb contract (ADR 0795): the precondition, the single transaction and the
+        // stale-token translation all belong to it.
+        await _documents.MutateAsync(Request, document, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
 
         await _queue.EnqueueAsync(documentId, cancellationToken);
         await _audit.RecordAsync(AuditActions.DocumentRenamed, "Document", documentId, document.Name, $"Renamed to '{document.Name}'", cancellationToken: cancellationToken);
@@ -579,10 +572,7 @@ public class DocumentsController : ControllerBase
         await _access.EnsureNotFrozenAsync(documentId, cancellationToken);
         await _access.EnsureNotCheckedOutByOtherAsync(documentId, cancellationToken);
 
-        if (!Request.Headers.TryGetValue("If-Match", out var ifMatchValues) || !TryParseETag(ifMatchValues.ToString(), out var ifMatchToken))
-        {
-            throw new IfMatchRequiredException();
-        }
+        _documents.RequireIfMatch(Request);
 
         // Can't move an item into itself or into its own subtree (that would orphan a cycle).
         if (await IsAncestorOrSelfAsync(documentId, request.ParentId, cancellationToken))
@@ -595,15 +585,15 @@ public class DocumentsController : ControllerBase
         await _mover.RelocateContentForMoveAsync(documentId, request.ParentId, cancellationToken);
 
         document.ParentId = request.ParentId;
-        _dbContext.Entry(document).Property(d => d.ConcurrencyToken).OriginalValue = ifMatchToken;
-
         try
         {
-            await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
+            await _documents.MutateAsync(Request, document, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
         }
-        catch (DbUpdateConcurrencyException)
+        // The containment refusals are translated AROUND the contract by the shared mapping (ADR 0672) — they
+        // must not fall to the catch below, which reports every InvalidOperationException as a name clash.
+        catch (Exception e) when (Documents.TypedFolderSave.Translate(e) is { } translated)
         {
-            throw EtagMismatchException.ForDocument();
+            throw translated;
         }
         catch (InvalidOperationException)
         {
@@ -674,10 +664,7 @@ public class DocumentsController : ControllerBase
         await _access.EnsureNotFrozenAsync(documentId, cancellationToken);
         await _access.EnsureNotCheckedOutByOtherAsync(documentId, cancellationToken);
 
-        if (!Request.Headers.TryGetValue("If-Match", out var ifMatchValues) || !TryParseETag(ifMatchValues.ToString(), out var ifMatchToken))
-        {
-            throw new IfMatchRequiredException();
-        }
+        _documents.RequireIfMatch(Request);
 
         if (await IsAncestorOrSelfAsync(documentId, request.FolderId, cancellationToken))
         {
@@ -718,15 +705,15 @@ public class DocumentsController : ControllerBase
         await _mover.RelocateContentForMoveAsync(documentId, request.FolderId, cancellationToken);
 
         document.ParentId = request.FolderId;
-        _dbContext.Entry(document).Property(d => d.ConcurrencyToken).OriginalValue = ifMatchToken;
-
         try
         {
-            await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
+            await _documents.MutateAsync(Request, document, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
         }
-        catch (DbUpdateConcurrencyException)
+        // The containment refusals are translated AROUND the contract by the shared mapping (ADR 0672) — they
+        // must not fall to the catch below, which reports every InvalidOperationException as a name clash.
+        catch (Exception e) when (Documents.TypedFolderSave.Translate(e) is { } translated)
         {
-            throw EtagMismatchException.ForDocument();
+            throw translated;
         }
         catch (InvalidOperationException)
         {
@@ -804,8 +791,9 @@ public class DocumentsController : ControllerBase
         Response.Headers.ETag = $"\"{concurrencyToken}\"";
     }
 
-    private static bool TryParseETag(string headerValue, out Guid token)
-    {
-        return Guid.TryParse(headerValue.Trim('"'), out token);
-    }
+    // TryParseETag lived here and is GONE (#1175): the three actions that used it — rename, move and
+    // promote-to-primary-location — now take their precondition from the document's verb contract. Leaving a
+    // parser behind for nobody to call is how this controller's sibling ended up with the whole apparatus as
+    // dead code while six mutations checked nothing.
+
 }
