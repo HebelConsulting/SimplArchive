@@ -27,6 +27,7 @@ namespace SimplArchive.Api.Controllers;
 public class AdminController : ControllerBase
 {
     private readonly SimplArchiveDbContext _dbContext;
+    private readonly Concurrency.AclEntryVerbs _aclEntries;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly IUserSystemRightsResolver _userSystemRights;
     private readonly IAuditRecorder _auditRecorder;
@@ -39,9 +40,11 @@ public class AdminController : ControllerBase
         IUserSystemRightsResolver userSystemRights,
         IAuditRecorder auditRecorder,
         INotificationService notifications,
-        Documents.DocumentAccessService access)
+        Documents.DocumentAccessService access,
+        Concurrency.AclEntryVerbs aclEntries)
     {
         _dbContext = dbContext;
+        _aclEntries = aclEntries;
         _currentUserAccessor = currentUserAccessor;
         _userSystemRights = userSystemRights;
         _auditRecorder = auditRecorder;
@@ -279,7 +282,12 @@ public class AdminController : ControllerBase
         grant.CanMove = true;
         grant.CanAnnotate = true;
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        // Through the entry's verb contract (ADR 0795). This is a platform administrator taking over somebody's
+        // personal space, and it is create-OR-UPDATE: an existing grant is rewritten, so two administrators
+        // acting on the same space could silently overwrite each other's decision. touchEntity is FALSE because
+        // every path above writes the entry's own columns, and a grant being ADDED has no prior version.
+        await _aclEntries.MutateAsync(
+            Request, grant, apply: () => Task.CompletedTask, touchEntity: false, cancellationToken: cancellationToken);
 
         await _auditRecorder.RecordAsync(
             AuditActions.PersonalSpaceTakenOver,

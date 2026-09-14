@@ -40,6 +40,41 @@ public partial class ConcurrencyContractRatchetTests
         ["WorkflowState"] = "WorkflowStateVerbs",
     };
 
+    // The DbSet each entity actually lives in. Explicit, because naive pluralisation is WRONG for one of the
+    // six and was wrong silently: the detector built `_dbContext.AclEntrys`, which matches nothing, so
+    // AclEntry was never checked at all. Three controllers write AclEntries and not one of them was ever
+    // flagged for it — the guard reported on five of six entities while reading as though it covered all six.
+    //
+    // A table beats a rule here for the usual reason: the rule has to be right about every name, and this one
+    // was right about five and silently wrong about the sixth.
+    private static readonly Dictionary<string, string> DbSetByEntity = new(StringComparer.Ordinal)
+    {
+        ["Document"] = "Documents",
+        ["Tenant"] = "Tenants",
+        ["User"] = "Users",
+        ["ServiceAccount"] = "ServiceAccounts",
+        ["AclEntry"] = "AclEntries",
+        ["WorkflowState"] = "WorkflowStates",
+    };
+
+    // Pairs where the controller only ever CREATES that entity. A create has no prior version to conflict
+    // with, so a precondition on it asserts nothing and cannot fail — it is not debt, and it is not a read
+    // either, which is why neither of the other two lists could describe it honestly.
+    //
+    // Checked from the other side like ReadsOnly: an entry that stops being flagged is removed rather than
+    // left standing. It deliberately does NOT go in PermanentlyExempt, which has no staleness check — the day
+    // one of these grows an UPDATE it must reappear, not stay hidden.
+    private static readonly Dictionary<string, string> CreatesOnly = new(StringComparer.Ordinal)
+    {
+        ["RepositoriesController.cs:AclEntry"] =
+            "Creates only: the owner's grant is added as part of creating the repository, in the same save as "
+            + "the document row. Nothing here rewrites an existing entry.",
+        ["TenantsController.cs:Tenant"] =
+            "Creates only: reads tenants directly, and its single mutation is a POST that delegates to "
+            + "ITenantProvisioningService, which does the Tenants.Add. The moment this controller grows a PUT "
+            + "it needs the contract, which is why this is not a permanent exemption.",
+    };
+
     // Controllers that should NEVER take a contract, with why. Empty on purpose: nothing has yet been shown to
     // belong here, and guessing would defeat the point of the reason.
     private static readonly Dictionary<string, string> PermanentlyExempt = new();
@@ -67,6 +102,9 @@ public partial class ConcurrencyContractRatchetTests
         ["DocumentSearchableController.cs:Document"] =
             "Reads only: one Name projection for the audit line. The endpoint enqueues an OCR conversion; the "
             + "new version it eventually produces is written by the sidecar pipeline, not here.",
+        ["AdminController.cs:Document"] =
+            "Reads only: a listing projection of the personal spaces, and one lookup of a space's root to get "
+            + "its id for the grant. No document column is written — the take-over writes an ACL ENTRY.",
         ["DocumentChatController.cs:Document"] =
             "Reads only: writes ChatMessage / ChatMessageMention / DocumentSubscription rows and reads the "
             + "document for existence and rights. Deliberately does NOT move the document's token — a comment "
@@ -129,7 +167,6 @@ public partial class ConcurrencyContractRatchetTests
     // left it flagged, and an entry that cannot be removed stops meaning "not yet converted".
     private static readonly HashSet<string> NotYetConverted = new(StringComparer.Ordinal)
     {
-        "AdminController.cs:Document",
         "AuthorizationController.cs:User",
         "BookingsController.cs:Document",
         "DocumentAppointmentController.cs:Document",
@@ -182,6 +219,11 @@ public partial class ConcurrencyContractRatchetTests
 
         var controllers = Directory.GetFiles(
             Path.Combine(root, "src", "SimplArchive.Api", "Controllers"), "*Controller.cs");
+        Assert.True(
+            ContractByEntity.Keys.All(DbSetByEntity.ContainsKey) && DbSetByEntity.Count == ContractByEntity.Count,
+            "Every tracked entity needs its DbSet name here, or the detector silently stops checking it — which "
+            + "is exactly what naive pluralisation did to AclEntry.");
+
         Assert.True(controllers.Length > 50,
             $"Only {controllers.Length} controllers found — the layout changed and this guard stopped seeing them.");
 
@@ -195,7 +237,8 @@ public partial class ConcurrencyContractRatchetTests
             .ToList();
 
         var appeared = flagged
-            .Where(n => !NotYetConverted.Contains(n) && !ReadsOnly.ContainsKey(n) && !PermanentlyExempt.ContainsKey(n))
+            .Where(n => !NotYetConverted.Contains(n) && !ReadsOnly.ContainsKey(n)
+                && !CreatesOnly.ContainsKey(n) && !PermanentlyExempt.ContainsKey(n))
             .ToList();
         Assert.True(appeared.Count == 0,
             "These controllers mutate a concurrency-tracked entity without going through its verb contract\n"
@@ -213,9 +256,11 @@ public partial class ConcurrencyContractRatchetTests
 
         // A ReadsOnly claim that is no longer flagged is a claim nobody is checking any more — the controller
         // took the contract, or stopped naming the DbSet. Either way the sentence beside it has gone stale.
-        var stale = ReadsOnly.Keys.Where(n => !flagged.Contains(n)).OrderBy(n => n, StringComparer.Ordinal).ToList();
+        var stale = ReadsOnly.Keys.Concat(CreatesOnly.Keys)
+            .Where(n => !flagged.Contains(n)).OrderBy(n => n, StringComparer.Ordinal).ToList();
         Assert.True(stale.Count == 0,
-            "These ReadsOnly entries are no longer flagged, so their stated reason is unverifiable. Remove them:\n"
+            "These ReadsOnly/CreatesOnly entries are no longer flagged, so their stated reason is unverifiable.\n"
+            + "Remove them:\n"
             + string.Join("\n", stale.Select(n => $"  {n}")));
     }
 
@@ -224,5 +269,5 @@ public partial class ConcurrencyContractRatchetTests
     // every file is one people suppress rather than read.
     private static bool MentionsEntitySet(string text, string entity) =>
         Regex.IsMatch(text, $@"\b{Regex.Escape(entity)}\b(?!\w)")
-        && Regex.IsMatch(text, $@"(_dbContext|dbContext)\.{Regex.Escape(entity)}s\b");
+        && Regex.IsMatch(text, $@"(_dbContext|dbContext)\.{Regex.Escape(DbSetByEntity[entity])}\b");
 }
