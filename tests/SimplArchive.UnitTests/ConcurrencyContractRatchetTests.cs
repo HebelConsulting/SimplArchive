@@ -78,6 +78,12 @@ public partial class ConcurrencyContractRatchetTests
             + "existing document. A create has no prior version to conflict with.",
         ["NotebookController.cs:Document"] =
             "Creates only: Documents.Add(section) is its single write, same shape as the children endpoint.",
+        ["TypedItemsController.cs:Document"] =
+            "Creates only: two POST actions and nothing else — a contact and an appointment — each adding one "
+            + "document. It calls DocumentFinalizer, which DOES update an existing document elsewhere, but here "
+            + "the row it updates is the one added moments earlier in the same transaction: there is no prior "
+            + "version for a precondition to be about. That distinction is the whole reason this list exists "
+            + "separately from ReadsOnly.",
     };
 
     // Controllers that should NEVER take a contract, with why. An entry here is the OWNER's decision, not the
@@ -92,6 +98,49 @@ public partial class ConcurrencyContractRatchetTests
             + "These loops also save PER ITEM deliberately: each skips what it may not touch and answers with a "
             + "per-item outcome report (ADR 0797), which is the contract callers rely on. Do not 'fix' this by "
             + "wrapping the loop in one transaction — that would turn a partial success into a total failure.",
+        ["BookingsController.cs:Document"] =
+            "Owner's decision (2026-09-15): the document is the BOOKING's artefact, and the booking carries the "
+            + "precondition. Cancel binds If-Match to the booking row and soft-deletes the booking's document "
+            + "in the same save, so the action is already gated — by the token the client actually holds, "
+            + "because the booking is the resource it asked to cancel. A document If-Match would demand a tag "
+            + "it was never given. Creation is a create. RETIRE THIS if an endpoint here ever edits a document "
+            + "a user opened, rather than one this controller owns.",
+        ["PersonalRepositoryController.cs:Document"] =
+            "Owner's decision (2026-09-15): machine-owned maintenance. Every document write is "
+            + "PersonalRepositoryProvisioner.EnsureAsync, whose four branches are idempotent HEALS — rename a "
+            + "legacy-named folder to the current name, stamp a mask on a maskless one, restamp one wearing a "
+            + "superseded mask, or create it. They run at login and provisioning, so nobody has a form open and "
+            + "there is no tag anyone saw; a precondition here could not fail, and if it could it would make "
+            + "the heal itself fail for whoever's token had moved. RETIRE THIS if the controller gains a "
+            + "user-facing edit of a personal space.",
+        ["UsersController.cs:Document"] =
+            "Owner's decision (2026-09-15): the same provisioning heal as the line above, reached from the "
+            + "admin side — this controller's ONLY document write is PersonalRepositoryProvisioner.EnsureAsync, "
+            + "and its own use of the Documents set is one join. Its User writes go through UserVerbs, which is "
+            + "the pair that matters here and is already converted.",
+        ["MachineTransitionsController.cs:Document"] =
+            "Owner's decision (2026-09-15): a login-less module service principal acts, not a user. The writes "
+            + "happen in StateMachineEngine → ModuleArchiveFacade, on the module's own schedule, and ADR 0737 "
+            + "already gives the engine its transaction. There is no user and therefore no user's tag — a "
+            + "precondition would be a guard that cannot fail. RETIRE THIS if a transition ever becomes "
+            + "something a user commits from a form carrying an ETag.",
+        ["RecycleBinController.cs:Document"] =
+            "Owner's decision (2026-09-15): a purge is a DELETE, not an edit. Its single write is "
+            + "DocumentPurger's Documents.RemoveRange — there is no post-state for a precondition to protect, "
+            + "and the row it would be checked against is the row being removed. The caller has already chosen "
+            + "the subtree explicitly. See #1172, which asked this question for the purge path.",
+        ["RepositoriesController.cs:Document"] =
+            "Owner's decision (2026-09-15): creates, a purge, and a bulk import — no user edit among them. The "
+            + "controller has NO SaveChanges of its own: it adds a repository and a subfolder, and delegates "
+            + "the rest to DocumentPurger (a hard delete, as above) and RepositoryImporter (below). WATCH THIS "
+            + "ONE: it is the largest of the seven and the likeliest to grow a real per-document edit, which "
+            + "this list would not catch — PermanentlyExempt has no staleness check.",
+        ["DocumentTransferController.cs:Document"] =
+            "Owner's decision (2026-09-15): an import is a bulk SYNC, not an edit. RepositoryImporter matches "
+            + "documents by ORIGIN (OriginTenantId + OriginDocumentId) and, when updateExisting is set, takes "
+            + "the archive's name for a matched row. The caller holds an archive, not a document it read — "
+            + "there is no per-document tag it could send, and one token could not speak for a whole import "
+            + "(the same reason bulk actions carry none, see DocumentBulkController above).",
     };
 
     // Pairs where the controller only ever READS that entity — it names the DbSet to resolve a name, check
@@ -175,6 +224,28 @@ public partial class ConcurrencyContractRatchetTests
             "Reads only: one DisplayName projection, naming the holder in the 'checked out by …' refusal.",
         ["DocumentVersionsController.cs:User"] =
             "Reads only: one DisplayName projection, naming a version's author.",
+        ["LegalHoldsController.cs:Document"] =
+            "Reads only: writes LegalHold / LegalHoldItem rows, and materialises the document purely to name "
+            + "it in the audit line. Placing a hold FREEZES a document rather than editing it, so the token "
+            + "stays put. IWormLockService.ReconcileAsync applies the lock in object storage and only READS "
+            + "the document row.",
+        ["DocumentExternalLinksController.cs:Document"] =
+            "Reads only: writes ExternalLink rows — and carries the precondition on the LINK, which is the "
+            + "entity a caller is actually editing. The document is read for existence, rights and its name.",
+        ["DocumentVersionsController.cs:WorkflowState"] =
+            "Reads only: reads the state to answer whether a version is workflow-GATED, and to project a "
+            + "status onto the listing. Every write it makes is to the document and its versions, which go "
+            + "through DocumentVerbs.",
+        ["UsersController.cs:WorkflowState"] =
+            "Reads only: one join, projecting a user's open workflow load onto the listing.",
+        ["DocumentsController.cs:User"] =
+            "Reads only: projects a check-out holder's DisplayName and the candidate reviewers. No injected "
+            + "service touches the Users set at all.",
+        ["WorkflowController.cs:Document"] =
+            "Reads only: projects the document's name, its check-out holder and its mask's SLA to run the "
+            + "transition. The state it writes goes through WorkflowStateVerbs — which is the point: a "
+            + "workflow transition is an edit of the STATE, not of the document, so the document's token "
+            + "stays put and an open edit form elsewhere survives it.",
         ["AuthorizationController.cs:User"] =
             "Reads only: one projection of { TenantId, Email, IsActive } at the authorization endpoint, with "
             + "the tenant filter ignored because the interim cookie carries no tenant_id yet. Login resolves a "
@@ -210,30 +281,19 @@ public partial class ConcurrencyContractRatchetTests
     // makes the next tranche measurable, and what stops the first convenient moment from quietly becoming the
     // new baseline. THIS LIST MAY ONLY GET SHORTER.
     //
+    // IT IS NOW EMPTY (2026-09-15), which changes what this guard does rather than retiring it: every pair is
+    // either converted, or classified with a reason on one of the three lists above. A newly-flagged pair now
+    // fails the build the moment it appears, instead of being absorbed into a backlog — which is the whole
+    // point of a ratchet, and only true once the backlog is gone.
+    //
+    // Do NOT re-open it to park something. An entry added here now would be the first, with nothing else
+    // beside it to make it look temporary, and that is precisely how 69 accumulated the first time.
+    //
     // Pairs, not controllers, because per controller the debt could not be PAID: AclEntriesController mutates
     // AclEntry and Document and merely READS User and ServiceAccount, so converting everything it writes still
     // left it flagged, and an entry that cannot be removed stops meaning "not yet converted".
     private static readonly HashSet<string> NotYetConverted = new(StringComparer.Ordinal)
     {
-        "BookingsController.cs:Document",
-        "DocumentAppointmentController.cs:Document",
-        "DocumentContactCardController.cs:Document",
-        "DocumentExternalLinksController.cs:Document",
-        "DocumentItemSourceController.cs:Document",
-        "DocumentTransferController.cs:Document",
-        "DocumentVersionsController.cs:WorkflowState",
-        "DocumentsController.cs:User",
-        "IntrayController.cs:Document",
-        "LegalHoldsController.cs:Document",
-        "MachineTransitionsController.cs:Document",
-        "PersonalRepositoryController.cs:Document",
-        "RecycleBinController.cs:Document",
-        "RepositoriesController.cs:Document",
-        "TenantsController.cs:Tenant",
-        "TypedItemsController.cs:Document",
-        "UsersController.cs:Document",
-        "UsersController.cs:WorkflowState",
-        "WorkflowController.cs:Document",
     };
 
     [GeneratedRegex(@"\[Http(Post|Put|Delete|Patch)")]
@@ -284,14 +344,56 @@ public partial class ConcurrencyContractRatchetTests
             + "in the same commit that converted them:\n"
             + string.Join("\n", paid.Select(n => $"  {n}")));
 
-        // A ReadsOnly claim that is no longer flagged is a claim nobody is checking any more — the controller
-        // took the contract, or stopped naming the DbSet. Either way the sentence beside it has gone stale.
-        var stale = ReadsOnly.Keys.Concat(CreatesOnly.Keys)
+        // A claim that is no longer flagged is a claim nobody is checking any more — the controller took the
+        // contract, or stopped naming the DbSet. Either way the sentence beside it has gone stale.
+        //
+        // PermanentlyExempt is included, and it did NOT used to be. That mattered once the debt list emptied:
+        // the exemptions became the only content, and an exemption nobody checks is indistinguishable from a
+        // forgotten one. BE CLEAR ABOUT WHAT THIS DOES AND DOES NOT CATCH — it catches an exemption whose
+        // controller no longer exists, was renamed, or stopped touching the entity. It CANNOT catch the case
+        // that actually worries: a controller growing a genuine per-document user edit alongside the writes
+        // that were exempted, because the detector cannot tell a write from a read (see the header). That is
+        // why RepositoriesController's entry says to watch it rather than pretending a test will.
+        var stale = ReadsOnly.Keys.Concat(CreatesOnly.Keys).Concat(PermanentlyExempt.Keys)
             .Where(n => !flagged.Contains(n)).OrderBy(n => n, StringComparer.Ordinal).ToList();
         Assert.True(stale.Count == 0,
-            "These ReadsOnly/CreatesOnly entries are no longer flagged, so their stated reason is unverifiable.\n"
-            + "Remove them:\n"
+            "These ReadsOnly/CreatesOnly/PermanentlyExempt entries are no longer flagged, so their stated\n"
+            + "reason is unverifiable. Remove them:\n"
             + string.Join("\n", stale.Select(n => $"  {n}")));
+    }
+
+    // The four lists must be DISJOINT. Nothing enforced that, and it silently mattered: TenantsController.cs
+    // :Tenant was filed in CreatesOnly with its reason AND left standing in NotYetConverted, so the debt read
+    // one higher than it was and a pair carried two different verdicts at once. Neither existing check could
+    // see it — the exclusion in the flagged-pairs query simply skips a pair twice, and the staleness check
+    // asks whether a claim is still FLAGGED, which a pair in both lists is.
+    //
+    // The direction of the error is what makes this worth a test rather than a tidy-up: a duplicate inflates
+    // the debt, so the ledger reports work that is already done as still owed. A burn-down measured against a
+    // number that lies is the specific failure this whole file exists to prevent.
+    [Fact]
+    public void A_pair_is_claimed_in_exactly_one_list()
+    {
+        var lists = new (string Name, IEnumerable<string> Keys)[]
+        {
+            ("NotYetConverted", NotYetConverted),
+            ("ReadsOnly", ReadsOnly.Keys),
+            ("CreatesOnly", CreatesOnly.Keys),
+            ("PermanentlyExempt", PermanentlyExempt.Keys),
+        };
+
+        var duplicates = lists
+            .SelectMany(l => l.Keys.Select(k => (Pair: k, List: l.Name)))
+            .GroupBy(x => x.Pair, StringComparer.Ordinal)
+            .Where(g => g.Count() > 1)
+            .OrderBy(g => g.Key, StringComparer.Ordinal)
+            .Select(g => $"  {g.Key} — claimed in {string.Join(" and ", g.Select(x => x.List).OrderBy(n => n, StringComparer.Ordinal))}")
+            .ToList();
+
+        Assert.True(duplicates.Count == 0,
+            "A (controller, entity) pair carries ONE verdict. These carry more than one, so the debt count is "
+            + "wrong and at least one stated reason is unenforced:\n"
+            + string.Join("\n", duplicates));
     }
 
     // A whole-word DbSet mention, so `User` does not match `UserId` or `CurrentUserAccessor`, and `Document`

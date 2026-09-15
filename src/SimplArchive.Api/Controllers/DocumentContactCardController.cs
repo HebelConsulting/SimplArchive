@@ -38,6 +38,7 @@ public class DocumentContactCardController : ControllerBase
     private readonly IObjectStorageClient _storage;
     private readonly IContactCardComposer _composer;
     private readonly DocumentFinalizer _finalizer;
+    private readonly Concurrency.DocumentVerbs _documents;
     private readonly ICurrentUserAccessor _currentUser;
 
     public DocumentContactCardController(
@@ -46,6 +47,7 @@ public class DocumentContactCardController : ControllerBase
         IObjectStorageClient storage,
         IContactCardComposer composer,
         DocumentFinalizer finalizer,
+        Concurrency.DocumentVerbs documents,
         ICurrentUserAccessor currentUser)
     {
         _dbContext = dbContext;
@@ -53,6 +55,7 @@ public class DocumentContactCardController : ControllerBase
         _storage = storage;
         _composer = composer;
         _finalizer = finalizer;
+        _documents = documents;
         _currentUser = currentUser;
     }
 
@@ -258,31 +261,31 @@ public class DocumentContactCardController : ControllerBase
             CreatedAt = now,
             DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
         };
-        // ONE transaction for one edit (#1171). This committed the version, let the finalizer commit again,
-        // and then committed the shared token move — THREE separately durable commits for a single save. A
-        // failure between them left a new version filed whose token had not moved, so the If-Match the next
-        // save sends is judged against a document that only half changed.
+        // ONE transaction and ONE precondition for one edit, through the document's verb contract (#1171,
+        // #1175) — the same shape as the raw-source sibling, which is the point: two editors writing the same
+        // item must state the same precondition, or the one with the weaker check is the way through.
         //
-        // Owned only when nothing is already in flight (ADR 0781, the BookingsController.Book shape).
-        var owned = _dbContext.Database.CurrentTransaction is null
-            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
-            : null;
-        await using var transaction = owned;
+        // `gateBeforeApply` because the finalizer inside `apply` SAVES, and a precondition stated after it
+        // would be judged against a token that operation had just minted (VerbContractGateOrderingTests pins
+        // the ordering where it can actually be observed).
+        //
+        // `touchEntity` (default) replaces StructuredItemVersioning.MarkContentChangedAsync: a card already
+        // classified and already unpinned has NO column written on it, so without forcing the document
+        // modified its token never moves and the If-Match both editors require is enforced and inert.
+        await _documents.MutateAsync(
+            Request,
+            document,
+            apply: async () =>
+            {
+                _dbContext.DocumentVersions.Add(newVersion);
+                await _dbContext.SaveChangesAsync(cancellationToken);
 
-        _dbContext.DocumentVersions.Add(newVersion);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        // Pending + the shared finalizer, never a hand-written Confirmed version: the status is guarded by a
-        // CHECK constraint, and the finalizer is what re-extracts the index fields from the merged card.
-        await _finalizer.FinalizeAsync(newVersion, cancellationToken);
-
-        // The content changed, so the token both editors share must move — see StructuredItemVersioning.
-        await StructuredItemVersioning.MarkContentChangedAsync(_dbContext, document, cancellationToken);
-
-        if (transaction is not null)
-        {
-            await transaction.CommitAsync(cancellationToken);
-        }
+                // Pending + the shared finalizer, never a hand-written Confirmed version: the status is guarded
+                // by a CHECK constraint, and the finalizer re-extracts the index fields from the merged card.
+                await _finalizer.FinalizeAsync(newVersion, cancellationToken);
+            },
+            gateBeforeApply: true,
+            cancellationToken: cancellationToken);
 
         // Re-read: SaveChanges regenerated the document's token, and the client needs the new one to save again.
         Response.Headers.ETag = $"\"{document.ConcurrencyToken}\"";

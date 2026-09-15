@@ -59,25 +59,30 @@ public class EntityVerbContract<TEntity>(SimplArchiveDbContext dbContext, Func<E
     /// write is silently ignored — the defect <c>PUT index-data</c> had (#1167). Default true, because the
     /// caller is by definition mutating this entity's resource.
     /// </param>
+    /// <param name="gateBeforeApply">
+    /// States the precondition BEFORE <paramref name="apply"/> runs, for the case where <paramref name="apply"/>
+    /// delegates to a collaborator that SAVES. See the remarks on the ordering below: the default is correct
+    /// while apply only mutates the change tracker, and is actively wrong once it does not.
+    /// </param>
     public async Task MutateAsync(
         HttpRequest request,
         TEntity entity,
         Func<Task> apply,
         Func<Task>? afterCommit = null,
         bool touchEntity = true,
+        bool gateBeforeApply = false,
         CancellationToken cancellationToken = default)
     {
-        await apply();
-
-        ConcurrencyHeaders.ApplyIfMatch(dbContext, request, entity);
-        if (touchEntity)
-        {
-            dbContext.Entry(entity).Property(e => e.ConcurrencyToken).IsModified = true;
-        }
-
         // Owned only when nothing is already in flight: a module read-model context can enlist this one, and
         // beginning a second transaction inside that would throw where today it works (ADR 0781, the shape
         // BookingsController.Book established).
+        //
+        // It opens BEFORE apply rather than after. For an apply that only mutates the change tracker — which is
+        // all 37 call sites at the time of writing, every one a single-expression lambda with no external I/O —
+        // that is indistinguishable, since nothing is written until the save below. It stops being
+        // indistinguishable the moment an apply SAVES: opened afterwards, those saves are each separately
+        // durable and a failure part-way leaves a state the user never asked for. Opening first means an apply
+        // that saves is atomic by construction rather than by the caller remembering (ADR 0794, #1171).
         var owned = dbContext.Database.CurrentTransaction is null
             ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
             : null;
@@ -85,10 +90,41 @@ public class EntityVerbContract<TEntity>(SimplArchiveDbContext dbContext, Func<E
 
         try
         {
+            // WHEN THE PRECONDITION IS STATED, and why it is not always the same moment.
+            //
+            // Stating it after apply is right while apply only mutates the change tracker: nothing has been
+            // written, so the token still holds the value the caller read, and one save carries both the
+            // change and the precondition.
+            //
+            // It is WRONG when apply delegates to something that saves. DocumentFinalizer saves seven times,
+            // and several of those write the document row itself — Name, MaskVersionId, SensitivityLabelId,
+            // CurrentVersionId. Each save regenerates the token, so a precondition applied afterwards compares
+            // the caller's tag against a value the finalizer itself has just written, and refuses EVERY
+            // caller with 412 — including the one holding a perfectly current tag. That is not a theoretical
+            // ordering concern: it is what five tests reported when this was first attempted as a plain wrap.
+            //
+            // Gating first hands the caller's tag to that collaborator's own first save, which is also the
+            // honest reading of ADR 0794 — the tag must be the one the USER saw, not one minted moments ago by
+            // the very operation being gated.
+            if (gateBeforeApply)
+            {
+                Gate();
+            }
+
+            await apply();
+
+            if (!gateBeforeApply)
+            {
+                Gate();
+            }
+
             await dbContext.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {
+            // Covers apply() too, deliberately. Once the gate is stated first, the refusal is raised by the
+            // COLLABORATOR's save rather than by ours, and left untranslated it would surface as a bare 500
+            // instead of the 412 the whole mechanism exists to produce.
             throw staleToken();
         }
 
@@ -100,6 +136,15 @@ public class EntityVerbContract<TEntity>(SimplArchiveDbContext dbContext, Func<E
         if (afterCommit is not null)
         {
             await afterCommit();
+        }
+
+        void Gate()
+        {
+            ConcurrencyHeaders.ApplyIfMatch(dbContext, request, entity);
+            if (touchEntity)
+            {
+                dbContext.Entry(entity).Property(e => e.ConcurrencyToken).IsModified = true;
+            }
         }
     }
 

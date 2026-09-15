@@ -56,6 +56,7 @@ public class IntrayController : ControllerBase
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly DocumentFinalizer _finalizer;
+    private readonly Concurrency.DocumentVerbs _documents;
     private readonly IntrayScopeResolver _scopes;
 
     public IntrayController(
@@ -67,6 +68,7 @@ public class IntrayController : ControllerBase
         ICurrentTenantAccessor currentTenantAccessor,
         ICurrentUserAccessor currentUserAccessor,
         DocumentFinalizer finalizer,
+        Concurrency.DocumentVerbs documents,
         ILegalHoldService legalHold,
         IStorageQuotaService storageQuota,
         IAuditRecorder audit,
@@ -81,6 +83,7 @@ public class IntrayController : ControllerBase
         _currentTenantAccessor = currentTenantAccessor;
         _currentUserAccessor = currentUserAccessor;
         _finalizer = finalizer;
+        _documents = documents;
         _legalHold = legalHold;
         _storageQuota = storageQuota;
         _audit = audit;
@@ -852,10 +855,23 @@ public class IntrayController : ControllerBase
             Comment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim(),
         };
 
-        _dbContext.DocumentVersions.Add(version);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        // ONE transaction and ONE precondition for one filing (#1171, #1175). This path had NO transaction: it
+        // committed the version, then let the finalizer commit seven more times, so a failure part-way left a
+        // version filed against a document that had not been reclassified — and that reads as success.
+        //
+        // `gateBeforeApply` because the finalizer SAVES (VerbContractGateOrderingTests pins the ordering).
+        // `touchEntity: false` DELIBERATELY: forcing the document modified would move its token on every filing
+        // and 412 every open edit form — the wider question StructuredItemVersioning reserves for its owner.
+        await _documents.MutateAsync(Request, document,
+            apply: async () =>
+            {
+                _dbContext.DocumentVersions.Add(version);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                await _finalizer.FinalizeAsync(version, cancellationToken); // no staged draft — it keeps its mask
+            },
+            touchEntity: false, gateBeforeApply: true, cancellationToken: cancellationToken);
 
-        await _finalizer.FinalizeAsync(version, cancellationToken); // no staged draft — existing document keeps its mask
+        // AFTER the commit: neither announces anything the database might still roll back.
         await PurgeItemArtifactsAsync(prefix, name, cancellationToken);
         await _audit.RecordAsync(AuditActions.DocumentFiled, "Document", documentId, document.Name, "Filed from intray as a new version", cancellationToken: cancellationToken);
 

@@ -52,6 +52,7 @@ public partial class DocumentItemSourceController : ControllerBase
     private readonly DocumentAccessService _access;
     private readonly IObjectStorageClient _storage;
     private readonly DocumentFinalizer _finalizer;
+    private readonly Concurrency.DocumentVerbs _documents;
     private readonly ICurrentUserAccessor _currentUser;
     private readonly ILogger<DocumentItemSourceController> _logger;
 
@@ -60,6 +61,7 @@ public partial class DocumentItemSourceController : ControllerBase
         DocumentAccessService access,
         IObjectStorageClient storage,
         DocumentFinalizer finalizer,
+        Concurrency.DocumentVerbs documents,
         ICurrentUserAccessor currentUser,
         ILogger<DocumentItemSourceController> logger)
     {
@@ -67,6 +69,7 @@ public partial class DocumentItemSourceController : ControllerBase
         _access = access;
         _storage = storage;
         _finalizer = finalizer;
+        _documents = documents;
         _currentUser = currentUser;
         _logger = logger;
     }
@@ -233,30 +236,37 @@ public partial class DocumentItemSourceController : ControllerBase
             CreatedAt = now,
             DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
         };
-        // ONE transaction for one edit (#1171). This committed the version, let the finalizer commit again,
-        // and then committed the shared token move — THREE separately durable commits for a single save. A
-        // failure between them left a new version filed whose token had not moved, so the If-Match the next
-        // save sends is judged against a document that only half changed.
+        // ONE transaction and ONE precondition for one edit, through the document's verb contract (#1171,
+        // #1175). This hand-rolled all three parts: it committed the version, let the finalizer commit again,
+        // and then committed the shared token move — THREE separately durable commits for a single save, with
+        // the precondition stated by a manual string compare above and re-stated by a raw save below.
         //
-        // Owned only when nothing is already in flight (ADR 0781, the BookingsController.Book shape).
-        var owned = _dbContext.Database.CurrentTransaction is null
-            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
-            : null;
-        await using var transaction = owned;
-
-        _dbContext.DocumentVersions.Add(version);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        await _finalizer.FinalizeAsync(version, cancellationToken);
-
-        // The content changed, so the token this shares with the structured editor must move — without it the
-        // If-Match here is enforced and inert, and a race between two raw saves loses somebody's whole item
-        // rather than one field. See StructuredItemVersioning.
-        await StructuredItemVersioning.MarkContentChangedAsync(_dbContext, document, cancellationToken);
-
-        if (transaction is not null)
-        {
-            await transaction.CommitAsync(cancellationToken);
-        }
+        // `gateBeforeApply` because DocumentFinalizer SAVES — seven times, several of them writing the document
+        // row — so a precondition stated after it would be compared against a token the finalizer itself had
+        // just minted. Stating it first hands the caller's tag to the version save inside `apply`, which is the
+        // first write of the whole edit and therefore the right place for it to be judged.
+        //
+        // Measured, so nobody has to take that on trust from here: on THIS path the finalizer happens not to
+        // touch the document — an item already classified and already unpinned has no column written — so
+        // flipping the ordering leaves all seven ItemSourceTests green. The ordering is load-bearing on the
+        // paths where classification runs, and it is pinned where it can actually be seen, in
+        // VerbContractGateOrderingTests. Gating first here is the correct shape rather than a fix for an
+        // observed failure, and that distinction is worth keeping straight.
+        //
+        // `touchEntity` (default) replaces StructuredItemVersioning.MarkContentChangedAsync: an item already
+        // classified and already unpinned has NO column written on it, so without forcing the document
+        // modified its token never moves and the If-Match this endpoint requires is enforced and inert.
+        await _documents.MutateAsync(
+            Request,
+            document,
+            apply: async () =>
+            {
+                _dbContext.DocumentVersions.Add(version);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                await _finalizer.FinalizeAsync(version, cancellationToken);
+            },
+            gateBeforeApply: true,
+            cancellationToken: cancellationToken);
 
         _logger.LogInformation(
             "Replaced the raw {Format} of {DocumentId} with {Bytes} bytes as version {VersionId}",
