@@ -100,6 +100,30 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             CreatedAt = at,
         };
 
+        // Create the tenant's own object-storage bucket BEFORE the transaction, not inside it (#1226). Its id
+        // is assigned above rather than by the database, so nothing here needs the row to exist first — and the
+        // alternative is holding a Postgres transaction open across two network round-trips to object storage,
+        // coupling every tenant creation to an external service's latency.
+        //
+        // That trade is the one CheckoutsController already made and wrote down: a rollback leaves an EMPTY
+        // BUCKET for a tenant that does not exist, which is recoverable waste and is reused idempotently if the
+        // same id is provisioned again — where a half-provisioned TENANT is not recoverable at all. It is also
+        // still ordered before any blob could be written into it, which is what the original placement was for.
+        await _objectStorage.EnsureTenantBucketAsync(tenant.Id, cancellationToken);
+        await _objectStorage.SetBucketLifecycleAsync(tenant.Id, tenant.IncompleteUploadCleanupDays, cancellationToken);
+
+        // ONE transaction for founding a tenant (#1226, ADR 0794). This committed THREE times — the tenant row,
+        // the administrator, then the repository and its grant — so a failure between them left a tenant with
+        // no administrator, or an administrator with no repository. Nobody can sign in to fix either, and the
+        // tenant is the object every other invariant in the archive hangs off.
+        //
+        // Owned only when nothing is already in flight (ADR 0781), so a caller that provisions inside its own
+        // transaction — the demo seeder does — has ours join theirs rather than throwing.
+        var owned = _dbContext.Database.CurrentTransaction is null
+            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        await using var transaction = owned;
+
         _dbContext.Tenants.Add(tenant);
 
         try
@@ -112,12 +136,6 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             // uniqueness") — a real DB constraint, no app-level pre-check.
             throw TenantNameConflictException.OnCreate();
         }
-
-        // Create the tenant's own object-storage bucket (ADR "Per-tenant object-storage bucket") before any blob
-        // could be written to it — object-lock-enabled (WORM) + browser CORS + ops tags, idempotent — then apply
-        // its lifecycle policy (ADR "Per-tenant bucket policy knobs").
-        await _objectStorage.EnsureTenantBucketAsync(tenant.Id, cancellationToken);
-        await _objectStorage.SetBucketLifecycleAsync(tenant.Id, tenant.IncompleteUploadCleanupDays, cancellationToken);
 
         await _wellKnownMaskSeeder.EnsureWellKnownMasksAsync(tenant.Id, cancellationToken);
         // The default sensitivity labels (ADR "Configurable sensitivity labels + upload defaults").
@@ -222,6 +240,11 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
         // No app-level pre-check needed for the repository's own name: it's a brand-new tenant, so no
         // sibling can exist yet to conflict with.
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
 
         return new ProvisionedTenant(
             tenant.Id,

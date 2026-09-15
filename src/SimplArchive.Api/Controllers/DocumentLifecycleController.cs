@@ -310,6 +310,15 @@ public class DocumentLifecycleController : ControllerBase
     // irreversibly. Tenant-admin-only; refused for an active (not-recycled) document or one under legal hold.
     // A destructive action sub-resource (POST), like restore — not the soft-delete DELETE. See ADR "Manual
     // hard-delete / purge".
+    // NO PRECONDITION, deliberately (#1172). A purge is a DELETE, not an edit: there is no post-state for an
+    // If-Match to protect, and the row it would be compared against is the row being removed. The caller has
+    // already named this subtree explicitly and it is already in the recycle bin — a stale tag would refuse a
+    // deletion the caller still wants, which is the one outcome a precondition should never produce.
+    //
+    // This route USED to require one while the three bulk doors onto the same purger did not, and a rule
+    // enforced at one entrance is not a rule. The check is gone rather than copied, because copying it to the
+    // bulk routes is impossible: one If-Match cannot speak for a SET (the reason bulk actions are permanently
+    // exempt in ConcurrencyContractRatchetTests).
     [HttpPost("purge")]
     public async Task<IActionResult> Purge(Guid documentId, CancellationToken cancellationToken)
     {

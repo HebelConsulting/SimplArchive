@@ -231,6 +231,8 @@ public class RecycleBinController : ControllerBase
     // Empties the tenant's recycle bin — purges every top-level soft-deleted root (each cascading its subtree),
     // irreversibly. Tenant-admin-only; skips any item somehow under a legal hold. See ADR "Manual hard-delete /
     // purge" / "Recycle bin tab".
+    // No precondition (#1172): one If-Match cannot speak for a SET, and this route purges a selection or the
+    // whole bin. Same reasoning as the single-document purge in DocumentLifecycleController — recorded there.
     [HttpPost("purge")]
     public async Task<IActionResult> Purge(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] PurgeSelectedRequest? request,

@@ -837,6 +837,8 @@ public class RepositoriesController : ControllerBase
     // Empties the repository's recycle bin — permanently purges every soft-deleted document under it (blobs +
     // rows + search index), irreversibly. Tenant-admin-only; a destructive action sub-resource (POST). Any item
     // somehow under a legal hold is left behind. See ADR "Manual hard-delete / purge".
+    // No precondition (#1172): one If-Match cannot speak for a SET. Reasoning recorded at the single-document
+    // purge in DocumentLifecycleController.
     [HttpPost("{repositoryId:guid}/recycle-bin/purge")]
     public async Task<IActionResult> EmptyRecycleBin(Guid repositoryId, CancellationToken cancellationToken)
     {
