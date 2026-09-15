@@ -99,7 +99,7 @@ deps:
       limits: { cpu: "1", memory: 1Gi }
   gotenberg:
     enabled: false
-    image: gotenberg/gotenberg:8.34.0
+    image: gotenberg/gotenberg:8.37
     resources:
       requests: { cpu: 100m, memory: 256Mi }
       limits: { cpu: "1", memory: 768Mi }
@@ -112,7 +112,7 @@ deps:
       limits: { cpu: "1", memory: 512Mi }
   valkey:
     enabled: false
-    image: valkey/valkey:8.1.1-alpine
+    image: valkey/valkey:8.1.10-alpine
     resources:
       requests: { cpu: 50m, memory: 64Mi }
       limits: { cpu: 250m, memory: 128Mi }
@@ -120,7 +120,7 @@ deps:
   # Secret (idempotent via lookup); phase 3 moves them under OpenBao.
   postgres:
     enabled: false
-    image: postgres:16.14-alpine
+    image: postgres:16.15-alpine
     database: simplarchive
     storage: 5Gi
     resources:
@@ -147,7 +147,7 @@ deps:
   # kiosk (isolated network); the app reads them + the OpenBao-managed DB creds / OIDC certs at runtime.
   openbao:
     enabled: false
-    image: openbao/openbao:2.6.0
+    image: openbao/openbao:2.6.2
     storage: 1Gi
     roleId: "simplarchive-role"
     secretId: "simplarchive-secret"

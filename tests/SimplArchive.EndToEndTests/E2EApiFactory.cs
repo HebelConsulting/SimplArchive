@@ -43,7 +43,7 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         """{"identities":[{"name":"storageadmin","credentials":[{"accessKey":"storageadmin","secretKey":"storageadmin"}],"actions":["Admin","Read","Write","List","Tagging"]}]}""";
 
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:16-alpine")
+        .WithImage(SimplArchive.SelfHosting.ImagePins.Image("postgres", "POSTGRES_TAG"))
         .Build();
 
     // SeaweedFS via the generic container builder (no dedicated Testcontainers module) — it supports S3 Object
@@ -70,7 +70,7 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
     private readonly IContainer _openSearch = new ContainerBuilder()
         // Pinned to the version Compose, the kiosk and the Helm chart all run, so the suite tests what ships and
         // an image change arrives as a deliberate bump rather than overnight (#663).
-        .WithImage("opensearchproject/opensearch:2.19.6")
+        .WithImage(SimplArchive.SelfHosting.ImagePins.Image("opensearchproject/opensearch", "OPENSEARCH_TAG"))
         .WithEnvironment("discovery.type", "single-node")
         .WithEnvironment("DISABLE_SECURITY_PLUGIN", "true")
         .WithEnvironment("DISABLE_INSTALL_DEMO_CONFIG", "true")
@@ -91,7 +91,7 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         .Build();
 
     private readonly IContainer _tika = new ContainerBuilder()
-        .WithImage("apache/tika:latest-full")
+        .WithImage(SimplArchive.SelfHosting.ImagePins.Image("apache/tika", "TIKA_TAG"))
         // Cap the Tika JVM heap so the fleet fits a memory-constrained (≈16 GB) runner. Left uncapped, the JVM
         // sizes its max heap to a fraction of *visible* host RAM (GBs), and combined with OpenSearch + Gotenberg
         // the fleet overcommits, which surfaced on the runner as SeaweedFS S3 500s ("internal error") partway
@@ -105,7 +105,7 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
     // Gotenberg (LibreOffice + Chromium routes) for the preview-rendition tests — office/email → PDF and
     // markdown/html → PDF. Same image as the Compose stack.
     private readonly IContainer _gotenberg = new ContainerBuilder()
-        .WithImage("gotenberg/gotenberg:8")
+        .WithImage(SimplArchive.SelfHosting.ImagePins.Image("gotenberg/gotenberg", "GOTENBERG_TAG"))
         .WithPortBinding(3000, true)
         .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r.ForPort(3000).ForPath("/health").ForStatusCode(HttpStatusCode.OK)))
         .Build();
@@ -113,7 +113,7 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
     // Valkey (Redis-compatible) — the SignalR backplane (ADR "SignalR Valkey backplane"). Enabling it for the whole
     // E2E collection proves the backplane doesn't break single-instance realtime, and backs the cross-replica test.
     private readonly IContainer _valkey = new ContainerBuilder()
-        .WithImage("valkey/valkey:8.1.1-alpine")
+        .WithImage(SimplArchive.SelfHosting.ImagePins.Image("valkey/valkey", "VALKEY_TAG"))
         .WithPortBinding(6379, true)
         .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("Ready to accept connections"))
         .Build();

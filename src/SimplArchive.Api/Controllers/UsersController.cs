@@ -654,7 +654,7 @@ public class UsersController : ControllerBase
             return Forbid();
         }
 
-        return await StorePhotoAsync(userId, cancellationToken);
+        return await StorePhotoAsync(userId, asAdministrator: true, cancellationToken);
     }
 
     [HttpPut("me/photo")]
@@ -665,7 +665,7 @@ public class UsersController : ControllerBase
             return Forbid();
         }
 
-        return await StorePhotoAsync(userId, cancellationToken);
+        return await StorePhotoAsync(userId, asAdministrator: false, cancellationToken);
     }
 
     // Readable by ANY member of the tenant, not just the user themself or a CanManageUsers holder (ADR 0544).
@@ -744,7 +744,7 @@ public class UsersController : ControllerBase
             return Forbid();
         }
 
-        return await RemovePhotoAsync(userId, cancellationToken);
+        return await RemovePhotoAsync(userId, asAdministrator: true, cancellationToken);
     }
 
     [HttpDelete("me/photo")]
@@ -755,10 +755,10 @@ public class UsersController : ControllerBase
             return Forbid();
         }
 
-        return await RemovePhotoAsync(userId, cancellationToken);
+        return await RemovePhotoAsync(userId, asAdministrator: false, cancellationToken);
     }
 
-    private async Task<IActionResult> StorePhotoAsync(Guid userId, CancellationToken cancellationToken)
+    private async Task<IActionResult> StorePhotoAsync(Guid userId, bool asAdministrator, CancellationToken cancellationToken)
     {
         if (Request.ContentLength > ProfilePhotoValidator.MaxBytes)
         {
@@ -801,11 +801,28 @@ public class UsersController : ControllerBase
             photo.UpdatedAt = DateTimeOffset.UtcNow;
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await CommitPhotoAsync(userId, asAdministrator, cancellationToken);
         return NoContent();
     }
 
-    private async Task<IActionResult> RemovePhotoAsync(Guid userId, CancellationToken cancellationToken)
+    // Commits a photo change under the USER's precondition when an ADMIN makes it (#1083). A photo row is a
+    // child of a tracked user, so EF checks no token on it — the precondition rides on the parent via
+    // touchEntity (#1167), and two admins on one profile form should collide as they do on every other field.
+    // NOT for self-service: moving the token when somebody changes their OWN photo would 412 an administrator's
+    // open form for an unrelated reason — the argument that keeps a subscription out of a document's token.
+    private async Task CommitPhotoAsync(Guid userId, bool asAdministrator, CancellationToken cancellationToken)
+    {
+        if (!asAdministrator)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        var user = await _dbContext.Users.SingleAsync(u => u.Id == userId, cancellationToken);
+        await _users.MutateAsync(Request, user, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
+    }
+
+    private async Task<IActionResult> RemovePhotoAsync(Guid userId, bool asAdministrator, CancellationToken cancellationToken)
     {
         var photo = await _dbContext.UserProfilePhotos.SingleOrDefaultAsync(p => p.UserId == userId, cancellationToken);
         if (photo is null)
@@ -814,7 +831,7 @@ public class UsersController : ControllerBase
         }
 
         _dbContext.UserProfilePhotos.Remove(photo);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await CommitPhotoAsync(userId, asAdministrator, cancellationToken);
         return NoContent();
     }
 

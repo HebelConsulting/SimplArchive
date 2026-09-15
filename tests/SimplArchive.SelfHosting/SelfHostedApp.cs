@@ -49,7 +49,7 @@ public sealed class SelfHostedApp : IAsyncDisposable
     // against a remote target" — true rather than aspirational. Touching `.Value` outside the non-remote path
     // reintroduces the bug, so read them only where a container is actually being started or torn down.
     private readonly Lazy<PostgreSqlContainer> _postgres =
-        new(() => new PostgreSqlBuilder().WithImage("postgres:16-alpine").Build());
+        new(() => new PostgreSqlBuilder().WithImage(ImagePins.Image("postgres", "POSTGRES_TAG")).Build());
 
     // SeaweedFS via the generic container builder (ADR 0360, replacing the EOL MinIO).
     private readonly Lazy<IContainer> _storage =
@@ -71,7 +71,7 @@ public sealed class SelfHostedApp : IAsyncDisposable
         new(() => new ContainerBuilder()
             // Pinned to the version Compose, the kiosk and the Helm chart all run, so the suite tests what ships and
             // an image change arrives as a deliberate bump rather than overnight (#663).
-            .WithImage("opensearchproject/opensearch:2.19.6")
+            .WithImage(ImagePins.Image("opensearchproject/opensearch", "OPENSEARCH_TAG"))
             .WithEnvironment("discovery.type", "single-node")
             .WithEnvironment("DISABLE_SECURITY_PLUGIN", "true")
             .WithEnvironment("DISABLE_INSTALL_DEMO_CONFIG", "true")
@@ -93,7 +93,7 @@ public sealed class SelfHostedApp : IAsyncDisposable
 
     private readonly Lazy<IContainer> _tika =
         new(() => new ContainerBuilder()
-            .WithImage("apache/tika:latest-full")
+            .WithImage(ImagePins.Image("apache/tika", "TIKA_TAG"))
             // Cap the Tika JVM heap so the fleet fits a memory-constrained runner. JAVA_TOOL_OPTIONS, not JAVA_OPTS —
             // the image entrypoint runs `exec java …` and never references JAVA_OPTS, whereas the JVM auto-reads
             // JAVA_TOOL_OPTIONS at startup.
@@ -105,7 +105,7 @@ public sealed class SelfHostedApp : IAsyncDisposable
     // Gotenberg — office/markdown/html → PDF renditions.
     private readonly Lazy<IContainer> _gotenberg =
         new(() => new ContainerBuilder()
-            .WithImage("gotenberg/gotenberg:8")
+            .WithImage(ImagePins.Image("gotenberg/gotenberg", "GOTENBERG_TAG"))
             .WithPortBinding(3000, true)
             .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r.ForPort(3000).ForPath("/health").ForStatusCode(HttpStatusCode.OK)))
             .Build());

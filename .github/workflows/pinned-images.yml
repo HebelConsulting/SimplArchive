@@ -1,0 +1,41 @@
+name: Pinned images
+
+# #1214. Dependabot's `docker` ecosystem reads Dockerfiles and Kubernetes YAML — NOT docker-compose files. The
+# configuration nonetheless claimed a weekly cadence for them, and the only docker bump Dependabot has ever
+# opened was for a directory with a real Dockerfile. So the images the dev/demo stack and the PUBLIC KIOSK run
+# on were pinned deliberately (ADR 0507, so a floating tag cannot shift under a deployment) and then watched by
+# nobody. When this was written, SEVEN of ten were behind — including OpenBao, the secrets manager, two patches
+# back.
+#
+# SCHEDULE-ONLY, deliberately. A newer upstream release is not a reason to fail somebody's pull request: the
+# pin was correct when it was made, nothing in that PR changed it, and a gate that blocks unrelated work on
+# somebody else's release cadence is one people learn to bypass. It runs weekly, and on demand when a human
+# wants the answer.
+#
+# It reports rather than bumps. Bumping these touches the kiosk — the outward-facing demo — and that is a
+# rollout decision with its own runbook (docs/deploy/release.md), not something a scheduled job should do while
+# nobody is looking.
+
+on:
+  schedule:
+    - cron: "0 7 * * 1" # Monday 07:00 UTC, an hour after the Trivy sweep
+  workflow_dispatch:
+
+concurrency:
+  group: pinned-images-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The script exits non-zero when anything is behind AND when a lookup fails — a registry outage must not
+      # read as a clean bill of health. Docker Hub answered 500s on the day this was written, which is what
+      # makes that distinction concrete rather than theoretical.
+      - name: Check compose-pinned images
+        run: ./scripts/check-pinned-images.sh

@@ -23,7 +23,7 @@
 
 services:
   db:
-    image: postgres:16.14-alpine
+    image: postgres:${POSTGRES_TAG:-16.15-alpine}
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -44,7 +44,7 @@ services:
   # existing objects (created by a prior dynamic role / postgres) to the owner. Runs as the postgres superuser
   # (which the db exposes for local dev) and is safe to re-run. Uses the postgres image for its psql client.
   db-init:
-    image: postgres:16.14-alpine
+    image: postgres:${POSTGRES_TAG:-16.15-alpine}
     depends_on:
       db:
         condition: service_healthy
@@ -100,7 +100,7 @@ services:
   # persisted volume so create-bucket (which is the only time object lock can be enabled) runs only on a fresh
   # one; put-bucket-cors is applied every run.
   storage-init:
-    image: amazon/aws-cli:2.36.2
+    image: amazon/aws-cli:${AWSCLI_TAG:-2.36.45}
     depends_on:
       - seaweedfs
     environment:
@@ -124,12 +124,12 @@ services:
   # LibreOffice — see docs/adr/0228-office-document-preview-gotenberg.md. The Api POSTs the file and caches
   # the returned PDF as a rendition; keeps the Api image free of LibreOffice.
   gotenberg:
-    image: gotenberg/gotenberg:8.34.0
+    image: gotenberg/gotenberg:${GOTENBERG_TAG:-8.37}
     restart: unless-stopped
 
   # Full-text search engine (ADR 0011). Single-node, security disabled — dev only.
   opensearch:
-    image: opensearchproject/opensearch:2.19.6
+    image: opensearchproject/opensearch:${OPENSEARCH_TAG:-2.19.6}
     environment:
       discovery.type: single-node
       DISABLE_SECURITY_PLUGIN: "true"
@@ -151,7 +151,7 @@ services:
   # The `-full` image bundles Tesseract OCR (ADR "OCR for scanned documents") so scanned images / image-only
   # PDFs are OCR'd at index time; it ships eng/deu/fra/ita/spa/jpn tessdata.
   tika:
-    image: apache/tika:3.3.1.0-full
+    image: apache/tika:${TIKA_TAG:-3.3.1.0-full}
     restart: unless-stopped
 
   # OCR sidecar (ADR "Searchable PDF successor for TIFFs"): a thin FastAPI wrapper over OCRmyPDF/Tesseract that
@@ -190,7 +190,7 @@ services:
   # run its migrations. db-init cannot do it — it runs before the schema exists — and granting it there
   # speculatively would have meant a blanket future-tables grant, i.e. the whole archive.
   postfix-grant:
-    image: postgres:16.14-alpine
+    image: postgres:${POSTGRES_TAG:-16.15-alpine}
     depends_on:
       api:
         condition: service_healthy
@@ -213,7 +213,7 @@ services:
   # shows them in a web inbox on :8025 — so the demo's workflow/escalation emails are visible in a browser
   # (http://localhost:8025) without a real mail server. Dev-only; captures mail, never delivers it.
   mailpit:
-    image: axllent/mailpit:v1.30.4
+    image: axllent/mailpit:${MAILPIT_TAG:-v1.31.1}
     restart: unless-stopped
     ports:
       - "8025:8025"  # web inbox
@@ -222,7 +222,7 @@ services:
   # across API replicas (ADR "SignalR Valkey backplane"). Single-pod dev doesn't strictly need it, but wiring it
   # here exercises the backplane config path. Also the store ADR 0017 picked for future caching.
   valkey:
-    image: valkey/valkey:8.1.1-alpine
+    image: valkey/valkey:${VALKEY_TAG:-8.1.10-alpine}
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -235,7 +235,7 @@ services:
   # to pgAdmin's own /entrypoint.sh. Dev-only convenience baking in throwaway creds (the stack is "Not for
   # production"); browse http://localhost:5050 and the tree is already connected.
   pgadmin:
-    image: dpage/pgadmin4:9.16
+    image: dpage/pgadmin4:${PGADMIN_TAG:-9.17}
     restart: unless-stopped
     depends_on:
       db:
@@ -266,7 +266,7 @@ services:
   # in-memory `-dev` mode lost everything on restart while Postgres kept the rotated passwords → the recurring
   # `simplarchive` `28P01` credential drift. Runs as root so it can write the /openbao data volume (dev only).
   openbao:
-    image: openbao/openbao:2.6.0
+    image: openbao/openbao:${OPENBAO_TAG:-2.6.2}
     restart: unless-stopped
     user: root
     cap_add:
@@ -283,7 +283,7 @@ services:
   # (dynamic per-startup credentials), and an AppRole for the Api, then exits. Dev-only FIXED RoleId/SecretId
   # (analogous to the storage dev creds); production would response-wrap a short-lived SecretId.
   openbao-init:
-    image: openbao/openbao:2.6.0
+    image: openbao/openbao:${OPENBAO_TAG:-2.6.2}
     depends_on:
       openbao:
         condition: service_started
@@ -536,7 +536,7 @@ services:
   # (no mixed-content). PROXY_HOST = the host's LAN IP/hostname (default localhost). Caddy adds the
   # X-Forwarded-* headers and transparently proxies the SignalR WebSocket. Dev only.
   caddy:
-    image: caddy:2.11.4-alpine
+    image: caddy:${CADDY_TAG:-2.11.4-alpine}
     restart: unless-stopped
     depends_on:
       api:
