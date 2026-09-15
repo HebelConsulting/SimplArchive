@@ -24,6 +24,7 @@ public class DocumentTagsController : ControllerBase
 {
     private readonly SimplArchiveDbContext _dbContext;
     private readonly IDocumentIndexQueue _queue;
+    private readonly Concurrency.DocumentVerbs _documents;
     private readonly IAuditRecorder _audit;
     private readonly Documents.DocumentAccessService _access;
     private readonly Documents.TagSetWriter _tags;
@@ -33,13 +34,15 @@ public class DocumentTagsController : ControllerBase
         IDocumentIndexQueue queue,
         IAuditRecorder audit,
         Documents.DocumentAccessService access,
-        Documents.TagSetWriter tags)
+        Documents.TagSetWriter tags,
+        Concurrency.DocumentVerbs documents)
     {
         _dbContext = dbContext;
         _queue = queue;
         _audit = audit;
         _access = access;
         _tags = tags;
+        _documents = documents;
     }
 
     public class TagsResource : HypermediaResource
@@ -100,11 +103,20 @@ public class DocumentTagsController : ControllerBase
 
         // Normalization, the tag catalog and the row rewrite belong to TagSetWriter, which ADR 0794's
         // combined PUT .../detail calls too. What stays here is the envelope.
-        var normalized = await _tags.ApplyAsync(document, request.Tags, cancellationToken);
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        await _queue.EnqueueAsync(documentId, cancellationToken);
+        // Through the document's contract (#1227). Tags are CHILD ROWS on a tracked parent, the shape
+        // SetIndexData already solved: EF checks a token only on rows it is actually updating, so without
+        // touchEntity (default) marking the document modified, a precondition here would be enforced and
+        // inert — the defect #1167 found in this controller's neighbour.
+        //
+        // The re-index rides in afterCommit: fired before it, the index is told a tag set the database may
+        // still roll back.
+        List<string> normalized = null!;
+        await _documents.MutateAsync(
+            Request,
+            document,
+            apply: async () => normalized = await _tags.ApplyAsync(document, request.Tags, cancellationToken),
+            afterCommit: () => _queue.EnqueueAsync(documentId, cancellationToken),
+            cancellationToken: cancellationToken);
         await _audit.RecordAsync(AuditActions.DocumentTagsUpdated, "Document", documentId, document.Name,
             normalized.Count == 0 ? "Tags cleared" : $"Tags: {string.Join(", ", normalized)}", cancellationToken: cancellationToken);
 

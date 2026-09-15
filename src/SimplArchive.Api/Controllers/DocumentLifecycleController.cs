@@ -293,7 +293,23 @@ public class DocumentLifecycleController : ControllerBase
         // subtree, re-index) live in the shared DocumentRestorer (ADR "Bulk restore from the recycle bin");
         // restoring an already-active document is an idempotent no-op (Restored == false → no audit).
         var (userId, serviceAccountId) = _access.GetCallerIdentity();
-        if (await _restorer.RestoreAsync(document, userId, serviceAccountId, cancellationToken))
+
+        // Through the document's contract (#1227). Restore is delete's inverse and it CLEARS DeletedAt on the
+        // whole subtree, so two admins acting on a stale recycle-bin listing could restore something the other
+        // had just purged or re-deleted — and this route is reachable from two controllers, which is how the
+        // gap survived being looked at.
+        //
+        // gateBeforeApply because DocumentRestorer SAVES (ADR 0798): a precondition stated afterwards would be
+        // compared against a token the restore itself had just moved, refusing every caller.
+        var restored = false;
+        await _documents.MutateAsync(
+            Request,
+            document,
+            apply: async () => restored = await _restorer.RestoreAsync(document, userId, serviceAccountId, cancellationToken),
+            gateBeforeApply: true,
+            cancellationToken: cancellationToken);
+
+        if (restored)
         {
             await _audit.RecordAsync(AuditActions.DocumentRestored, "Document", documentId, document.Name, cancellationToken: cancellationToken);
         }

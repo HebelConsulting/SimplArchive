@@ -351,13 +351,25 @@ public class DocumentMetadataController : ControllerBase
         // 0794's combined PUT .../detail calls too. It hands the version back so the re-conversion is
         // enqueued AFTER the commit, by whoever owns it.
         var codes = request.Languages.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).ToList();
-        var sourceVersion = await _ocrLanguages.ApplyAsync(documentId, request.Languages, cancellationToken);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // Through the document's contract (#1227), which is also what finally gives the comment above an owner:
+        // the enqueue was already meant to happen after the commit, and with a bare SaveChanges there was no
+        // commit to be after. Two people editing one document's OCR languages also reverted each other silently.
+        //
+        // touchEntity (default) is what makes the precondition bite: the columns written live on the VERSION,
+        // and EF checks a token only on rows it is actually updating (#1167).
+        var document = await _dbContext.Documents.SingleAsync(d => d.Id == documentId, cancellationToken);
+        DocumentVersion sourceVersion = null!;
+        await _documents.MutateAsync(
+            Request,
+            document,
+            apply: async () => sourceVersion = await _ocrLanguages.ApplyAsync(documentId, request.Languages, cancellationToken),
+            afterCommit: () => _searchablePdfQueue.EnqueueAsync(documentId, sourceVersion.Id, cancellationToken: cancellationToken),
+            cancellationToken: cancellationToken);
 
         // Re-run the conversion with the new languages → a new searchable-PDF version (no-op when the OCR
         // sidecar isn't configured; a PDF the detector calls NotAScan stays unconverted here — the forced
         // path is the make-searchable rel, a deliberate act).
-        await _searchablePdfQueue.EnqueueAsync(documentId, sourceVersion.Id, cancellationToken: cancellationToken);
         await _audit.RecordAsync(AuditActions.DocumentOcrLanguagesChanged, "Document", documentId, documentName,
             codes.Count == 0 ? "OCR languages reset to tenant default" : $"OCR languages set to {string.Join('+', codes)}", cancellationToken: cancellationToken);
 

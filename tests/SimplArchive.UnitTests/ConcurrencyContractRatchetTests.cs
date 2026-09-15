@@ -186,10 +186,6 @@ public partial class ConcurrencyContractRatchetTests
             + "must not invalidate your open edit of it.",
         ["DocumentRemindersController.cs:Document"] =
             "Reads only: writes DocumentReminder rows. Per-user, like a subscription.",
-        ["DocumentTagsController.cs:Document"] =
-            "Reads only: TagSetWriter writes DocumentTag / TagDefinition rows and the document row is untouched. "
-            + "Tags are deliberately the weakest of the metadata (ADR 0796) and are edited from the same pencil, "
-            + "so moving the token here would invalidate the very form that just wrote them.",
         ["AuditEventsController.cs:ServiceAccount"] =
             "Reads only: one CanViewAuditLog projection, gating a service-account caller.",
         ["CheckoutsController.cs:Tenant"] =
@@ -275,6 +271,11 @@ public partial class ConcurrencyContractRatchetTests
         ["MasksController.cs:ServiceAccount"] =
             "Reads only: one lookup gating the caller. (The WellKnownMaskSeeder reference in this file is a "
             + "static field name, not a service that writes.)",
+        ["DocumentSubscriptionsController.cs:Document"] =
+            "Reads only (owner's decision, 2026-09-15): writes the CALLER'S OWN subscription row. Two people "
+            + "cannot collide on it — each writes their own — and moving the document's token because somebody "
+            + "FOLLOWED it would 412 every open edit form in the tenant. Same family as a chat message: "
+            + "following a document is not an edit of it.",
     };
 
     // The ADR 0795 conversion debt, one entry per (controller, ENTITY) pair. Recording the real number is what
