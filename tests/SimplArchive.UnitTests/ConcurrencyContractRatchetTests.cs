@@ -175,6 +175,35 @@ public partial class ConcurrencyContractRatchetTests
             "Reads only: one DisplayName projection, naming the holder in the 'checked out by …' refusal.",
         ["DocumentVersionsController.cs:User"] =
             "Reads only: one DisplayName projection, naming a version's author.",
+        ["AuthorizationController.cs:User"] =
+            "Reads only: one projection of { TenantId, Email, IsActive } at the authorization endpoint, with "
+            + "the tenant filter ignored because the interim cookie carries no tenant_id yet. Login resolves a "
+            + "principal; it writes none.",
+        ["PasskeysController.cs:User"] =
+            "Reads only: loads the user to associate a WebAuthn credential with. The writes are "
+            + "WebAuthnCredential rows; no user column is touched.",
+        ["TokenController.cs:User"] =
+            "Reads only: resolves the subject at login, and the ACTOR and TARGET of an impersonation exchange "
+            + "(RFC 8693) to check both are active. A token endpoint authenticates; it writes no principal.",
+        ["GroupsController.cs:User"] =
+            "Reads only: an AnyAsync existence check before adding a membership, a DisplayName projection for "
+            + "the rows, and a join listing a group's members. Memberships are their own entity.",
+        ["GroupsController.cs:ServiceAccount"] =
+            "Reads only: resolves a service account for the membership rows and the caller's rights.",
+        ["SavedSearchesController.cs:User"] =
+            "Reads only: OwnerName projections, and a check that share targets are ACTIVE before the share "
+            + "rows are written. The writes are SavedSearch and its share rows.",
+        ["DocumentChatController.cs:User"] =
+            "Reads only: DisplayName projections for authors and mentions, plus the active-user list the "
+            + "mention picker offers.",
+        ["DocumentRemindersController.cs:User"] =
+            "Reads only: TargetName and CreatedByName projections, and resolving the reminder's targets.",
+        ["WorkflowController.cs:User"] =
+            "Reads only: resolves the reviewer being assigned and a DisplayName dictionary labelling the "
+            + "transition log. The workflow state is a separate entity, already on this list.",
+        ["MasksController.cs:ServiceAccount"] =
+            "Reads only: one lookup gating the caller. (The WellKnownMaskSeeder reference in this file is a "
+            + "static field name, not a service that writes.)",
     };
 
     // The ADR 0795 conversion debt, one entry per (controller, ENTITY) pair. Recording the real number is what
@@ -186,35 +215,25 @@ public partial class ConcurrencyContractRatchetTests
     // left it flagged, and an entry that cannot be removed stops meaning "not yet converted".
     private static readonly HashSet<string> NotYetConverted = new(StringComparer.Ordinal)
     {
-        "AuthorizationController.cs:User",
         "BookingsController.cs:Document",
         "DocumentAppointmentController.cs:Document",
-        "DocumentChatController.cs:User",
         "DocumentContactCardController.cs:Document",
         "DocumentExternalLinksController.cs:Document",
         "DocumentItemSourceController.cs:Document",
-        "DocumentRemindersController.cs:User",
         "DocumentTransferController.cs:Document",
         "DocumentVersionsController.cs:WorkflowState",
         "DocumentsController.cs:User",
-        "GroupsController.cs:ServiceAccount",
-        "GroupsController.cs:User",
         "IntrayController.cs:Document",
         "LegalHoldsController.cs:Document",
         "MachineTransitionsController.cs:Document",
-        "MasksController.cs:ServiceAccount",
-        "PasskeysController.cs:User",
         "PersonalRepositoryController.cs:Document",
         "RecycleBinController.cs:Document",
         "RepositoriesController.cs:Document",
-        "SavedSearchesController.cs:User",
         "TenantsController.cs:Tenant",
-        "TokenController.cs:User",
         "TypedItemsController.cs:Document",
         "UsersController.cs:Document",
         "UsersController.cs:WorkflowState",
         "WorkflowController.cs:Document",
-        "WorkflowController.cs:User",
     };
 
     [GeneratedRegex(@"\[Http(Post|Put|Delete|Patch)")]
