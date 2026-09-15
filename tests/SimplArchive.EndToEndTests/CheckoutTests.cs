@@ -110,7 +110,7 @@ public class CheckoutTests
         Assert.False(before.GetProperty("isModified").GetBoolean());
 
         // Save to cloud: get a presigned PUT and upload the in-progress working copy.
-        var uploadUrl = (await TestJson.Put(holder, $"/api/checkouts/{docId}/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
+        var uploadUrl = (await TestJson.Put(holder, $"/api/documents/{docId}/checkout/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
         using var storage = new HttpClient();
         var wip = "work in progress edits";
         (await storage.PutAsync(uploadUrl, new ByteArrayContent(Encoding.UTF8.GetBytes(wip)))).EnsureSuccessStatusCode();
@@ -131,7 +131,7 @@ public class CheckoutTests
 
         // A non-holder can't stash a working copy.
         var (_, bystander) = await SeedAdminAsync(tenantId);
-        Assert.Equal(HttpStatusCode.Forbidden, (await bystander.PutAsJsonAsync($"/api/checkouts/{docId}/working-copy", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await bystander.PutAsJsonAsync($"/api/documents/{docId}/checkout/working-copy", new { })).StatusCode);
     }
 
     [Fact]
@@ -148,13 +148,13 @@ public class CheckoutTests
         await holder.PutAsync($"/api/documents/{docId}/checkout", null);
 
         // Check in with no stash → 400 NO_STASH.
-        Assert.Equal(HttpStatusCode.BadRequest, (await holder.PostAsJsonAsync($"/api/checkouts/{docId}/checkin", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await holder.PostAsJsonAsync($"/api/documents/{docId}/checkout/checkin", new { })).StatusCode);
 
         // Upload the edited working copy to the stash, then check in from it.
-        var uploadUrl = (await TestJson.Put(holder, $"/api/checkouts/{docId}/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
+        var uploadUrl = (await TestJson.Put(holder, $"/api/documents/{docId}/checkout/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
         using var storage = new HttpClient();
         (await storage.PutAsync(uploadUrl, new ByteArrayContent(Encoding.UTF8.GetBytes("web-edited v2")))).EnsureSuccessStatusCode();
-        (await holder.PostAsJsonAsync($"/api/checkouts/{docId}/checkin", new { })).EnsureSuccessStatusCode();
+        (await holder.PostAsJsonAsync($"/api/documents/{docId}/checkout/checkin", new { })).EnsureSuccessStatusCode();
 
         // The lock is released, the stash is gone (no litter), and the latest version is the edited content.
         Assert.Null(GetCheckedOut(await TestJson.Get(owner, $"/api/documents/{docId}")));
@@ -186,7 +186,7 @@ public class CheckoutTests
 
         // Check out + Save to cloud → exactly one stash object appears for this document.
         await holder.PutAsync($"/api/documents/{docId}/checkout", null);
-        var uploadUrl = (await TestJson.Put(holder, $"/api/checkouts/{docId}/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
+        var uploadUrl = (await TestJson.Put(holder, $"/api/documents/{docId}/checkout/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
         using var storage = new HttpClient();
         (await storage.PutAsync(uploadUrl, new ByteArrayContent(Encoding.UTF8.GetBytes("wip")))).EnsureSuccessStatusCode();
         Assert.Contains(await _factory.ListObjectKeysAsync(checkoutPrefix), k => k.EndsWith(docId.ToString()));
@@ -197,7 +197,7 @@ public class CheckoutTests
 
         // Same again, but released by OVERRIDE — the (different) releasing user still clears the holder's stash.
         await holder.PutAsync($"/api/documents/{docId}/checkout", null);
-        var uploadUrl2 = (await TestJson.Put(holder, $"/api/checkouts/{docId}/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
+        var uploadUrl2 = (await TestJson.Put(holder, $"/api/documents/{docId}/checkout/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
         (await storage.PutAsync(uploadUrl2, new ByteArrayContent(Encoding.UTF8.GetBytes("wip2")))).EnsureSuccessStatusCode();
         Assert.Contains(await _factory.ListObjectKeysAsync(checkoutPrefix), k => k.EndsWith(docId.ToString()));
 
@@ -224,25 +224,25 @@ public class CheckoutTests
         var before = CheckedOutAt(await TestJson.Get(holder, "/api/checkouts"), docId);
 
         // The holder extends → 204, and the idle timer (CheckedOutAt) moved forward — the lock is retained.
-        Assert.Equal(HttpStatusCode.NoContent, (await holder.PostAsync($"/api/checkouts/{docId}/extend", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await holder.PostAsync($"/api/documents/{docId}/checkout/extend", null)).StatusCode);
         var afterList = await TestJson.Get(holder, "/api/checkouts");
         Assert.True(CheckedOutAt(afterList, docId) > before, "extend should reset CheckedOutAt to now");
         Assert.Contains(afterList.GetProperty("items").EnumerateArray(), i => i.GetProperty("id").GetGuid() == docId); // still locked
 
         // A tenant admin WITHOUT CanOverrideCheckout can't extend someone else's lock (403).
         var (_, bystander) = await SeedAdminAsync(tenantId);
-        Assert.Equal(HttpStatusCode.Forbidden, (await bystander.PostAsync($"/api/checkouts/{docId}/extend", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await bystander.PostAsync($"/api/documents/{docId}/checkout/extend", null)).StatusCode);
 
         // A CanOverrideCheckout admin can extend it (204).
         var overriderEmail = $"cx-ov-{Guid.NewGuid():N}@e2e.local";
         await _factory.SeedUserAsync(tenantId, overriderEmail, "over-1234", "Overrider");
         await _factory.GrantCanOverrideCheckoutAsync(overriderEmail);
         using var overrider = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(overriderEmail, "over-1234"));
-        Assert.Equal(HttpStatusCode.NoContent, (await overrider.PostAsync($"/api/checkouts/{docId}/extend", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await overrider.PostAsync($"/api/documents/{docId}/checkout/extend", null)).StatusCode);
 
         // Once released, extending a not-checked-out document is 409 CHECKOUT_NOT_HELD.
         (await holder.DeleteAsync($"/api/documents/{docId}/checkout")).EnsureSuccessStatusCode();
-        var notHeld = await holder.PostAsync($"/api/checkouts/{docId}/extend", null);
+        var notHeld = await holder.PostAsync($"/api/documents/{docId}/checkout/extend", null);
         Assert.Equal(HttpStatusCode.Conflict, notHeld.StatusCode);
         Assert.Equal("CHECKOUT_NOT_HELD", JsonSerializer.Deserialize<JsonElement>(await notHeld.Content.ReadAsStringAsync()).GetProperty("errorCode").GetString());
     }
@@ -264,23 +264,23 @@ public class CheckoutTests
         await holder.PutAsync($"/api/documents/{docId}/checkout", null);
 
         // With no working copy stashed yet, compare is not available (nothing to diff against).
-        Assert.False((await TestJson.Get(holder, $"/api/checkouts/{docId}/compare")).GetProperty("available").GetBoolean());
+        Assert.False((await TestJson.Get(holder, $"/api/documents/{docId}/checkout/compare")).GetProperty("available").GetBoolean());
 
         // Stash an edited working copy (middle line changed).
-        var uploadUrl = (await TestJson.Put(holder, $"/api/checkouts/{docId}/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
+        var uploadUrl = (await TestJson.Put(holder, $"/api/documents/{docId}/checkout/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
         using var storage = new HttpClient();
         (await storage.PutAsync(uploadUrl, new ByteArrayContent(Encoding.UTF8.GetBytes("line one\nline two CHANGED\nline three\n")))).EnsureSuccessStatusCode();
 
         // The holder's compare now returns both extracted texts (ADR 0712) — the diff itself is the
         // clients' shared TextDiff.
-        var cmp = await TestJson.Get(holder, $"/api/checkouts/{docId}/compare");
+        var cmp = await TestJson.Get(holder, $"/api/documents/{docId}/checkout/compare");
         Assert.True(cmp.GetProperty("available").GetBoolean());
         Assert.Contains("line two\n", cmp.GetProperty("fromText").GetString());
         Assert.Contains("line two CHANGED", cmp.GetProperty("toText").GetString());
 
         // A non-holder can't compare someone else's working copy.
         var (_, bystander) = await SeedAdminAsync(tenantId);
-        Assert.Equal(HttpStatusCode.Forbidden, (await bystander.GetAsync($"/api/checkouts/{docId}/compare")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await bystander.GetAsync($"/api/documents/{docId}/checkout/compare")).StatusCode);
     }
 
     private async Task<(string Email, HttpClient Client)> SeedAdminAsync(Guid tenantId)

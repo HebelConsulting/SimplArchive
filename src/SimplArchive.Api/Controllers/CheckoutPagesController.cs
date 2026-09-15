@@ -17,7 +17,7 @@ namespace SimplArchive.Api.Controllers;
 /// </summary>
 [ApiController]
 [ApiVersion("1.0")]
-[Route("api/checkouts")]
+[Route("api/documents/{documentId:guid}/checkout")]
 [Authorize]
 public class CheckoutPagesController(
     SimplArchiveDbContext dbContext,
@@ -49,7 +49,7 @@ public class CheckoutPagesController(
         public int Degrees { get; set; }
     }
 
-    [HttpGet("{documentId:guid}/working-copy/pages")]
+    [HttpGet("working-copy/pages")]
     public async Task<IActionResult> Pages(Guid documentId, CancellationToken cancellationToken)
     {
         var held = await ResolveAsync(documentId, cancellationToken);
@@ -79,7 +79,7 @@ public class CheckoutPagesController(
         });
     }
 
-    [HttpHead("{documentId:guid}/working-copy/pages")]
+    [HttpHead("working-copy/pages")]
     public async Task<IActionResult> PagesHead(Guid documentId, CancellationToken cancellationToken)
     {
         var held = await ResolveAsync(documentId, cancellationToken);
@@ -87,7 +87,7 @@ public class CheckoutPagesController(
     }
 
     /// <summary>One whole-file rewrite of the working copy: reorder + delete (omission) + rotate.</summary>
-    [HttpPut("{documentId:guid}/working-copy/pages/order")]
+    [HttpPut("working-copy/pages/order")]
     public async Task<IActionResult> Sort(
         Guid documentId,
         [FromBody] CheckoutPageOrderRequest request,
@@ -130,5 +130,5 @@ public class CheckoutPagesController(
         return (source, held.StashKey, Path.GetExtension(held.Version.ObjectKey), null);
     }
 
-    private static string Href(Guid documentId, string suffix) => $"/api/checkouts/{documentId}/working-copy/{suffix}";
+    private static string Href(Guid documentId, string suffix) => $"/api/documents/{documentId}/checkout/working-copy/{suffix}";
 }

@@ -20,7 +20,7 @@ namespace SimplArchive.Api.Controllers;
 /// </summary>
 [ApiController]
 [ApiVersion("1.0")]
-[Route("api/checkouts")]
+[Route("api/documents/{documentId:guid}/checkout")]
 [Authorize]
 public class CheckoutsController : ControllerBase
 {
@@ -141,7 +141,11 @@ public class CheckoutsController : ControllerBase
         public string ToText { get; set; } = string.Empty;
     }
 
-    [HttpGet]
+    // THE COLLECTION KEEPS ITS OWN ADDRESS, via an absolute route out of the class template above. Everything
+    // else here is addressed as `api/documents/{id}/checkout/...` because it acts on ONE document's check-out;
+    // this lists the caller's check-outs ACROSS documents, so it has no document id to be nested under. The
+    // `~/` is what says that out loud rather than leaving a reader to wonder why the route template does not fit.
+    [HttpGet("~/api/checkouts")]
     public async Task<IActionResult> List(CancellationToken cancellationToken)
     {
         var items = await BuildAsync(cancellationToken);
@@ -152,7 +156,7 @@ public class CheckoutsController : ControllerBase
         });
     }
 
-    [HttpHead]
+    [HttpHead("~/api/checkouts")]
     public async Task<IActionResult> Head(CancellationToken cancellationToken)
     {
         await BuildAsync(cancellationToken);
@@ -162,7 +166,7 @@ public class CheckoutsController : ControllerBase
     // Inline unified text diff of the current version vs the working copy in check-out (the cloud stash) — ADR 0513
     // slice 3, the "Compare" action. Holder-only. Reuses IDocumentVersionComparer (which works on object keys, so
     // the stash is just another key). Available is false when there's no stash or a side has no extractable text.
-    [HttpGet("{documentId:guid}/compare")]
+    [HttpGet("compare")]
     public async Task<IActionResult> Compare(Guid documentId, CancellationToken cancellationToken)
     {
         if (_currentUserAccessor.UserId is not { } userId || _currentTenantAccessor.TenantId is not { } tenantId)
@@ -181,7 +185,7 @@ public class CheckoutsController : ControllerBase
             return Forbid(); // only the lock holder may compare their working copy
         }
 
-        var selfLink = new Link("self", $"/api/checkouts/{documentId}/compare", "GET");
+        var selfLink = new Link("self", $"/api/documents/{documentId}/checkout/compare", "GET");
         var stashKey = StashKey(tenantId, userId, documentId);
         var version = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, documentId, document.CurrentVersionId, cancellationToken);
         if (version is null || !await _objectStorage.ExistsAsync(stashKey, cancellationToken))
@@ -201,7 +205,7 @@ public class CheckoutsController : ControllerBase
         });
     }
 
-    [HttpHead("{documentId:guid}/compare")]
+    [HttpHead("compare")]
     public async Task<IActionResult> CompareHead(Guid documentId, CancellationToken cancellationToken)
     {
         if (_currentUserAccessor.UserId is not { } userId)
@@ -290,25 +294,25 @@ public class CheckoutsController : ControllerBase
                     // and the reason the desktop had to call its DELETE method CheckInAsync and the real one
                     // CheckInFromStashAsync. Renaming a rel is the breaking direction under ADR 0543, taken
                     // deliberately while the only clients following it are in this repository.
-                    new Link("checkin", $"/api/checkouts/{d.Id}/checkin", "POST"),
+                    new Link("checkin", $"/api/documents/{d.Id}/checkout/checkin", "POST"),
                     new Link("cancel-checkout", $"/api/documents/{d.Id}/checkout", "DELETE"),
-                    new Link("working-copy", $"/api/checkouts/{d.Id}/working-copy", "PUT"),
-                    new Link("extend", $"/api/checkouts/{d.Id}/extend", "POST"),
+                    new Link("working-copy", $"/api/documents/{d.Id}/checkout/working-copy", "PUT"),
+                    new Link("extend", $"/api/documents/{d.Id}/checkout/extend", "POST"),
                     // The working copy against the current version (ADR 0517) — a rel, so the compare dialog
                     // stops rebuilding /checkouts/{id}/compare from an id it was handed (issue #416).
-                    new Link("compare", $"/api/checkouts/{d.Id}/compare", "GET"),
+                    new Link("compare", $"/api/documents/{d.Id}/checkout/compare", "GET"),
                     // An inline preview of the WORKING COPY — what you are about to check in, not what is
                     // archived. Advertised only when a stash exists, because a check-out with nothing saved
                     // to it has no working copy to show and a rel that 404s is worse than no rel (ADR 0543).
                     .. hasStash
-                        ? new[] { new Link("preview", $"/api/checkouts/{d.Id}/preview", "GET") }
+                        ? new[] { new Link("preview", $"/api/documents/{d.Id}/checkout/preview", "GET") }
                         : [],
                     // Rotate/Sort on the WORKING COPY (ADR 0593) — advertised from the extension only, like
                     // the intray listing (ADR 0575): the pages resource itself answers what can actually be
                     // done, so a signed or empty working copy withholds `sort` there rather than 400ing here.
                     .. version is not null
                        && Infrastructure.Storage.PageComposer.FormatOf(version.ObjectKey) != Infrastructure.Storage.PageComposer.PageFormat.None
-                        ? new[] { new Link("pages", $"/api/checkouts/{d.Id}/working-copy/pages", "GET") }
+                        ? new[] { new Link("pages", $"/api/documents/{d.Id}/checkout/working-copy/pages", "GET") }
                         : [],
                 ],
             });
@@ -323,7 +327,7 @@ public class CheckoutsController : ControllerBase
     //
     // Holder-only, like every other action here. 204 when there is no stash yet (nothing has been saved) or the
     // format has no browser-viewable preview — the client shows "No preview available" rather than a blank pane.
-    [HttpGet("{documentId:guid}/preview")]
+    [HttpGet("preview")]
     public async Task<IActionResult> Preview(Guid documentId, CancellationToken cancellationToken)
     {
         var held = await ResolveHeldCheckoutAsync(documentId, cancellationToken);
@@ -355,11 +359,11 @@ public class CheckoutsController : ControllerBase
             {
                 PreviewUrl = preview.Url.ToString(),
                 PreviewConverted = preview.IsConverted,
-                Links = [new Link("self", $"/api/checkouts/{documentId}/preview", "GET")],
+                Links = [new Link("self", $"/api/documents/{documentId}/checkout/preview", "GET")],
             });
     }
 
-    [HttpHead("{documentId:guid}/preview")]
+    [HttpHead("preview")]
     public async Task<IActionResult> PreviewHead(Guid documentId, CancellationToken cancellationToken)
     {
         var held = await ResolveHeldCheckoutAsync(documentId, cancellationToken);
@@ -386,7 +390,7 @@ public class CheckoutsController : ControllerBase
     // "Save to cloud" — a presigned PUT to the working-copy stash, so in-progress edits survive logout/close and
     // are re-downloaded on next login (ADR "Check-out working-copy stash + exit guard"). Holder-only: the caller
     // must currently hold the lock on this document.
-    [HttpPut("{documentId:guid}/working-copy")]
+    [HttpPut("working-copy")]
     public async Task<IActionResult> UploadWorkingCopy(Guid documentId, CancellationToken cancellationToken)
     {
         if (_currentUserAccessor.UserId is not { } userId || _currentTenantAccessor.TenantId is not { } tenantId)
@@ -413,7 +417,7 @@ public class CheckoutsController : ControllerBase
         return Ok(new WorkingCopyUploadResource
         {
             UploadUrl = uploadUrl,
-            Links = [new Link("self", $"/api/checkouts/{documentId}/working-copy", "PUT")],
+            Links = [new Link("self", $"/api/documents/{documentId}/checkout/working-copy", "PUT")],
         });
     }
 
@@ -422,7 +426,7 @@ public class CheckoutsController : ControllerBase
     // "expiring soon" grace warning clears (CheckoutReminderSentAt). No new version, no stash change. Permitted for
     // the lock holder OR a CanOverrideCheckout admin (who can already break the lock, so extending it is lesser).
     // Idempotent-ish: each call just re-stamps CheckedOutAt to now. A ServiceAccount holds no locks (403).
-    [HttpPost("{documentId:guid}/extend")]
+    [HttpPost("extend")]
     public async Task<IActionResult> Extend(Guid documentId, CancellationToken cancellationToken)
     {
         if (_currentUserAccessor.UserId is not { } userId)
@@ -467,7 +471,7 @@ public class CheckoutsController : ControllerBase
     // stash to a new confirmed version (server-side copy + finalize, keeping the mask), releases the lock, and
     // deletes the stash. The web check-in path (the browser has no local file to upload as a version): the user
     // uploads their edited file to the stash first, then this commits it. Holder-only; 400 if there's no stash.
-    [HttpPost("{documentId:guid}/checkin")]
+    [HttpPost("checkin")]
     public async Task<IActionResult> CheckInFromStash(Guid documentId, CancellationToken cancellationToken)
     {
         if (_currentUserAccessor.UserId is not { } userId || _currentTenantAccessor.TenantId is not { } tenantId)

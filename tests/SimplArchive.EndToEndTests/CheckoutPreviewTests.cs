@@ -24,7 +24,7 @@ public class CheckoutPreviewTests
         Assert.DoesNotContain("preview", await CheckoutRelsAsync(user, docId));
 
         // …and the endpoint itself says "nothing to show" rather than falling back to the archived version.
-        using (var early = await user.GetAsync($"/api/checkouts/{docId}/preview"))
+        using (var early = await user.GetAsync($"/api/documents/{docId}/checkout/preview"))
         {
             Assert.Equal(HttpStatusCode.NoContent, early.StatusCode);
         }
@@ -57,7 +57,7 @@ public class CheckoutPreviewTests
         // unfinished work; it is not part of the archive until they check it in — a tenant admin's ACL bypass
         // is deliberately not enough, which is why this asserts against one.
         using var other = await SeedAdminAsync(tenantId);
-        using var response = await other.GetAsync($"/api/checkouts/{docId}/preview");
+        using var response = await other.GetAsync($"/api/documents/{docId}/checkout/preview");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -66,7 +66,7 @@ public class CheckoutPreviewTests
 
     private async Task<string> FetchPreviewBodyAsync(HttpClient user, Guid docId)
     {
-        var preview = await TestJson.Get(user, $"/api/checkouts/{docId}/preview");
+        var preview = await TestJson.Get(user, $"/api/documents/{docId}/checkout/preview");
         var url = preview.GetProperty("previewUrl").GetString()!;
 
         // The preview URL is presigned against object storage, so it is fetched anonymously — the same way the
@@ -118,7 +118,7 @@ public class CheckoutPreviewTests
 
     private static async Task SaveWorkingCopyAsync(HttpClient user, Guid docId, string content)
     {
-        var upload = await TestJson.Put(user, $"/api/checkouts/{docId}/working-copy", new { });
+        var upload = await TestJson.Put(user, $"/api/documents/{docId}/checkout/working-copy", new { });
         using var storage = new HttpClient();
         (await storage.PutAsync(upload.GetProperty("uploadUrl").GetString()!,
             new ByteArrayContent(Encoding.UTF8.GetBytes(content)))).EnsureSuccessStatusCode();
