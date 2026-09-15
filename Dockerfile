@@ -1,4 +1,15 @@
-# syntax=docker/dockerfile:1
+# NO `# syntax=` DIRECTIVE, deliberately (2026-09-15). It makes BuildKit fetch a FRONTEND IMAGE from Docker
+# Hub on every build — and that was the ONLY Docker Hub dependency here, since every base image below comes
+# from mcr.microsoft.com precisely to avoid Docker Hub's pull limits. The directive quietly undid that for the
+# whole image: every CI scan and every `docker compose up --build` paid a Docker Hub round trip.
+#
+# It cost a real outage: auth.docker.io answered 500 to the token request and the Trivy scan failed with
+# "failed to resolve source metadata for docker.io/docker/dockerfile:1", on a build whose own images were all
+# reachable. Re-running fixed it, which is exactly what makes this worth removing rather than retrying.
+#
+# Nothing here needs the pinned frontend: no --mount, no COPY --link, no heredocs, no --chmod. The one advanced
+# construct is `FROM --platform=$BUILDPLATFORM` below, which BuildKit's BUILT-IN frontend supports. Re-add a
+# syntax line only alongside a feature that genuinely requires it, knowing what it re-introduces.
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
 WORKDIR /src
