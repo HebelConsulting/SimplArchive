@@ -1,6 +1,7 @@
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
+@inject SimplArchive.Client.Services.ExternalLinksClient Links
 
 @* External links for one document (ADR 0546, issue #385): create a link, see the live ones, extend or revoke.
    Interactive — does its own API calls.
@@ -176,10 +177,7 @@
             return;
         }
 
-        var request = new HttpRequestMessage(HttpMethod.Delete, revokeHref);
-        request.Headers.TryAddWithoutValidation("If-Match", link.Etag);
-        var response = await Http.SendAsync(request);
-        if (response.IsSuccessStatusCode)
+        if (await Links.RevokeAsync(revokeHref, link.Etag))
         {
             await LoadAsync();
         }
@@ -200,15 +198,10 @@
             return;
         }
 
-        var request = new HttpRequestMessage(HttpMethod.Put, href)
-        {
-            // The cap travels WITH the expiry, so it has to be re-sent as it stands: availability replaces both,
-            // and omitting it would quietly turn a capped link into an unlimited one.
-            Content = JsonContent.Create(new { days = 90, maxAccesses = link.MaxAccesses }),
-        };
-        request.Headers.TryAddWithoutValidation("If-Match", link.Etag);
-        var response = await Http.SendAsync(request);
-        if (response.IsSuccessStatusCode)
+        // The cap travels WITH the expiry and is re-sent as it stands: availability replaces both, and
+        // omitting it would quietly turn a capped link into an unlimited one. The client takes it as a
+        // required argument for that reason, so it cannot be dropped by forgetting it.
+        if (await Links.RenewAsync(href, days: 90, maxAccesses: link.MaxAccesses, etag: link.Etag))
         {
             await LoadAsync();
         }

@@ -1,6 +1,7 @@
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
+@inject SimplArchive.Client.Services.ExternalLinksClient Links
 
 @* One external link, read-only, with the one thing you can still change about it: how long it stays usable and
    how often it may still be redeemed (ADR 0546).
@@ -162,14 +163,7 @@
             return;
         }
 
-        var request = new HttpRequestMessage(HttpMethod.Put, RenewHref)
-        {
-            Content = JsonContent.Create(new { days = _days, maxAccesses = _maxAccesses }),
-        };
-        request.Headers.TryAddWithoutValidation("If-Match", Link.Etag);
-
-        var response = await Http.SendAsync(request);
-        if (response.IsSuccessStatusCode)
+        if (await Links.RenewAsync(RenewHref, days: _days, maxAccesses: _maxAccesses, etag: Link.Etag))
         {
             // Closing with a result tells the list to reload: the row's expiry, cap and ETag all just changed, and
             // a stale ETag behind this dialog would make the caller's next action fail a precondition.

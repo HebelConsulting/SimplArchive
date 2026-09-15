@@ -1,4 +1,5 @@
 @inject HttpClient Http
+@inject SimplArchive.Client.Services.BookingsClient Bookings
 
 @* A bookable resource's bookings (ADR 0735; the meeting-room half of ADR 0743's slice-1 scope): list, book
    a slot, cancel one. The web mirror of the desktop's BookingDialog (ADR 0511 — the desktop is canonical):
@@ -105,18 +106,16 @@
         // Local wall-clock in, real instants out — the offset is this machine's, the server compares
         // instants (ADR 0735's [start, end) semantics).
         var offset = TimeZoneInfo.Local.GetUtcOffset(date);
-        var response = await Http.PostAsJsonAsync(BookingsHref.TrimStart('/'), new
-        {
-            startsAt = new DateTimeOffset(DateOnly.FromDateTime(date), TimeOnly.FromTimeSpan(start), offset),
-            endsAt = new DateTimeOffset(DateOnly.FromDateTime(date), TimeOnly.FromTimeSpan(end), offset),
-            purpose = string.IsNullOrWhiteSpace(_purpose) ? null : _purpose.Trim(),
-        });
 
-        if (!response.IsSuccessStatusCode)
+        // The errorCode through ApiErrorText — never the English detail (issue #424); the slot-conflict
+        // sentence is the one users will meet. The client returns the code and this decides where it goes.
+        if (await Bookings.BookAsync(
+                BookingsHref.TrimStart('/'),
+                new DateTimeOffset(DateOnly.FromDateTime(date), TimeOnly.FromTimeSpan(start), offset),
+                new DateTimeOffset(DateOnly.FromDateTime(date), TimeOnly.FromTimeSpan(end), offset),
+                string.IsNullOrWhiteSpace(_purpose) ? null : _purpose.Trim()) is { } bookError)
         {
-            // The errorCode through ApiErrorText — never the English detail (issue #424); the slot-conflict
-            // sentence is the one users will meet.
-            _error = ApiErrorText.For(await ErrorCodeAsync(response));
+            _error = ApiErrorText.For(bookError);
             return;
         }
 
@@ -134,12 +133,9 @@
             return; // no rel means "not available to you, here, now" (ADR 0543).
         }
 
-        using var request = new HttpRequestMessage(HttpMethod.Delete, href.TrimStart('/'));
-        request.Headers.TryAddWithoutValidation("If-Match", $"\"{row.Etag}\"");
-        var response = await Http.SendAsync(request);
-        if (!response.IsSuccessStatusCode)
+        if (await Bookings.CancelAsync(href.TrimStart('/'), row.Etag) is { } cancelError)
         {
-            _error = ApiErrorText.For(await ErrorCodeAsync(response));
+            _error = ApiErrorText.For(cancelError);
             return;
         }
 
@@ -151,18 +147,5 @@
     {
         var key = row.Status == "Cancelled" ? "BookStatusCancelled" : "BookStatusActive";
         return Strings.Get(key);
-    }
-
-    private static async Task<string?> ErrorCodeAsync(HttpResponseMessage response)
-    {
-        try
-        {
-            var problem = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
-            return problem.TryGetProperty("errorCode", out var code) ? code.GetString() : null;
-        }
-        catch (System.Text.Json.JsonException)
-        {
-            return null;
-        }
     }
 }

@@ -1,6 +1,7 @@
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject SimplArchive.Client.Services.ExternalLinksClient Links
 
 @* Everything the caller has shared, across all documents (ADR 0546, issue #385) — so a person can audit their own
    shares without hunting document by document, rather than relying on an administrator noticing later.
@@ -158,10 +159,7 @@
             return;
         }
 
-        var request = new HttpRequestMessage(HttpMethod.Delete, href);
-        request.Headers.TryAddWithoutValidation("If-Match", link.Etag);
-        var response = await Http.SendAsync(request);
-        if (response.IsSuccessStatusCode)
+        if (await Links.RevokeAsync(href, link.Etag))
         {
             await LoadAsync();
         }

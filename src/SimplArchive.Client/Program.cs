@@ -82,6 +82,12 @@ builder.Services.AddScoped<SimplArchive.Client.Services.BrowseService>();
 builder.Services.AddScoped<SimplArchive.Client.Services.DavCollections>();
 builder.Services.AddScoped<SimplArchive.Client.Services.StructuredEditors>();
 
+// The external-link and booking WRITES, each owning the If-Match its route requires (#1218). They live
+// here rather than in the dialogs because four dialogs were composing these requests by hand, which had
+// already produced two copies of revoke and two of renew — and a fifth copy was one share surface away.
+builder.Services.AddScoped<SimplArchive.Client.Services.ExternalLinksClient>();
+builder.Services.AddScoped<SimplArchive.Client.Services.BookingsClient>();
+
 // The repository tree's nodes. Outside the pane component for the same reason as SearchState: the workbench
 // renders one tab at a time, so roots kept in the component would be re-fetched — and every expanded folder
 // collapsed — every time the user visits another tab (see TreeState).
