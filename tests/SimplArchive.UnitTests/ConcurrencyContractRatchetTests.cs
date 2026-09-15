@@ -166,6 +166,10 @@ public partial class ConcurrencyContractRatchetTests
         ["AclEntriesController.cs:ServiceAccount"] =
             "Reads only: resolves one service account's name for an audit line, and checks a principal exists. "
             + "No service-account column is written.",
+        ["DocumentLifecycleController.cs:User"] =
+            "Reads only: one DisplayName projection, naming the holder in the 'checked out by …' refusal.",
+        ["DocumentVersionsController.cs:User"] =
+            "Reads only: one DisplayName projection, naming a version's author.",
     };
 
     // The ADR 0795 conversion debt, one entry per (controller, ENTITY) pair. Recording the real number is what
@@ -185,10 +189,8 @@ public partial class ConcurrencyContractRatchetTests
         "DocumentContactCardController.cs:Document",
         "DocumentExternalLinksController.cs:Document",
         "DocumentItemSourceController.cs:Document",
-        "DocumentLifecycleController.cs:User",
         "DocumentRemindersController.cs:User",
         "DocumentTransferController.cs:Document",
-        "DocumentVersionsController.cs:User",
         "DocumentVersionsController.cs:WorkflowState",
         "DocumentsController.cs:User",
         "GroupsController.cs:ServiceAccount",
