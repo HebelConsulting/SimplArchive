@@ -652,8 +652,15 @@ public class DocumentVersionsController : ControllerBase
         // Confirms (server-side hash + version number), auto-classifies, and files email attachments —
         // idempotent, a no-op on an already-Confirmed version (ADR "DocumentVersionsController
         // resource-oriented redesign"). Shared with intray filing via DocumentFinalizer.
+        // ONE unit of work for one finalize (#1171). This path is 58% of every unwrapped finalization measured
+        // across an E2E run — by far the biggest of them — and it let the finalizer's seven commits stand alone,
+        // so a failure part-way left a version confirmed against a document that had not been reclassified.
+        //
+        // The quota block ABOVE stays outside deliberately: it removes the pending row and COMMITS that removal
+        // before throwing, so a rejected upload leaves nothing behind. Inside this transaction that cleanup
+        // would roll back with the refusal and strand the very row it exists to delete.
         var wasPending = version.Status == DocumentVersionStatus.Pending;
-        await _finalizer.FinalizeAsync(version, cancellationToken);
+        await _finalizer.FileAsync(version, cancellationToken);
 
         var row = new VersionRow(versionId, documentId, version.Status, version.VersionNumber, version.ObjectKey, version.Sha256Hash, version.CreatedAt, version.DocumentDate, version.DocumentTime, version.CreatedByUserId, version.CreatedByServiceAccountId, version.OcrLanguages, version.Comment, version.OcrVerdict, version.IsSigned);
 

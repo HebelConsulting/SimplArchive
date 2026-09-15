@@ -585,10 +585,8 @@ public static class DemoDataSeeder
             // isn't, and the demo should show both (issue #380).
             Comment = comment,
         };
-        dbContext.DocumentVersions.Add(version);
-        await dbContext.SaveChangesAsync();
-
-        await finalizer.FinalizeAsync(version, CancellationToken.None);
+        // ONE unit of work per seeded document (#1171) — see DemoArtistsSeeder for why the seeders matter here.
+        await finalizer.FileAsync(version, CancellationToken.None);
         return version;
     }
 

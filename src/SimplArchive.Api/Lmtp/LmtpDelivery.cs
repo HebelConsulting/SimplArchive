@@ -255,9 +255,9 @@ public class LmtpDelivery
                     CreatedAt = now,
                     DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
                 };
-                _dbContext.DocumentVersions.Add(version);
-                await _dbContext.SaveChangesAsync(cancellationToken);
-                await _finalizer.FinalizeAsync(version, cancellationToken);
+                // ONE unit of work for one delivery (#1171) — the version and its classification commit
+                // together. A half-delivered message is one nobody can see and nobody can retry.
+                await _finalizer.FileAsync(version, cancellationToken);
 
                 _logger.LogInformation(
                     "Delivered a message from {Sender} to {Address} as document {DocumentId} ({Bytes} bytes)",

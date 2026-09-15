@@ -110,7 +110,7 @@ public sealed class NoteComposer
         // outright (CK_DocumentVersions_Status_VersionNumber_Sha256Hash), because a confirmed version without
         // its hash is not a state the schema allows. Worth stating, since "just set the status" looks like it
         // ought to work right up until the 500.
-        _dbContext.DocumentVersions.Add(new DocumentVersion
+        var version = new DocumentVersion
         {
             Id = versionId,
             DocumentId = document.Id,
@@ -120,12 +120,15 @@ public sealed class NoteComposer
             CreatedByUserId = userId,
             CreatedAt = now,
             DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
-        });
+        };
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        var version = await _dbContext.DocumentVersions.FirstAsync(v => v.Id == versionId, cancellationToken);
-        await _finalizer.FinalizeAsync(version, cancellationToken);
+        // ONE unit of work for the version and its finalization (#1171). The version used to be added into the
+        // save above and then RE-FETCHED, which meant the row was separately durable before anything confirmed
+        // it — so a failure in finalization left a Pending version nothing would ever complete. Building it
+        // here and handing it to FileAsync removes both the extra save and the re-read.
+        await _finalizer.FileAsync(version, cancellationToken);
         return document;
     }
 

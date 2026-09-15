@@ -499,9 +499,10 @@ internal static class DemoArtistsSeeder
             CreatedAt = at,
             DocumentDate = DateOnly.FromDateTime(at.UtcDateTime),
         };
-        dbContext.DocumentVersions.Add(version);
-        await dbContext.SaveChangesAsync();
-        await finalizer.FinalizeAsync(version, CancellationToken.None);
+        // ONE unit of work per seeded document (#1171). Seeding is not a user action, but a half-filed demo
+        // document is still a demo that looks broken — and this path is why the finalizer's warning flooded the
+        // log at fixture startup, a line per document, which is what made the real call sites hard to read.
+        await finalizer.FileAsync(version, CancellationToken.None);
         return document;
     }
 

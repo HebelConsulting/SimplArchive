@@ -291,9 +291,10 @@ internal static class WebDavWrites
             CreatedAt = now,
             DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
         };
-        db.DocumentVersions.Add(version);
-        await db.SaveChangesAsync(context.RequestAborted);
-        await finalizer.FinalizeAsync(version, context.RequestAborted);
+        // ONE unit of work for one PUT (#1171): the version row and everything finalization writes commit
+        // together, or not at all. Filed separately, a failure part-way left a version whose document had not
+        // been reclassified — a half-filed state that reads as success to the client.
+        await finalizer.FileAsync(version, context.RequestAborted);
 
         context.Response.StatusCode = existing is null ? StatusCodes.Status201Created : StatusCodes.Status204NoContent;
     }

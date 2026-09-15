@@ -157,15 +157,17 @@ internal static class DavWrites
             CreatedAt = now,
             DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
         };
-        db.DocumentVersions.Add(version);
-        await db.SaveChangesAsync(context.Cancellation);
-
         // The finalizer confirms the version, classifies the content into the Contact/Calendar/Room-booking
         // mask and fills its fields — the same path every other upload takes. In a Schedule the same pass
         // moves the claim row (ADR 0744), so a booking refusal surfaces HERE.
+        //
+        // FileAsync owns the version row AND the finalization as one unit (#1171), which shrinks the husk this
+        // handler has to clean up: a refusal now rolls the version back before the catch below runs, leaving
+        // only the DOCUMENT — committed earlier — for the purger. The catch stays exactly as it is, because
+        // that document is still real and a DAV client still retries at the same resource name.
         try
         {
-            await services.GetRequiredService<DocumentFinalizer>().FinalizeAsync(version, context.Cancellation);
+            await services.GetRequiredService<DocumentFinalizer>().FileAsync(version, context.Cancellation);
         }
         // EVERY refusal, not just the core's own. This caught BookingException alone, so a MODULE's refusal
         // (ADR 0781) — a ModuleApiException — did not match, and the husk this handler exists to prevent

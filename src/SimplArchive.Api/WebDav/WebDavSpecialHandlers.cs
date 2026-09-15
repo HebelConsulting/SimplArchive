@@ -340,9 +340,8 @@ internal static class WebDavSpecialHandlers
             CreatedAt = now,
             DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
         };
-        db.DocumentVersions.Add(version);
-        await db.SaveChangesAsync(context.RequestAborted);
-        await services.GetRequiredService<DocumentFinalizer>().FinalizeAsync(version, context.RequestAborted);
+        // ONE unit of work (#1171) — see DocumentFinalizer.FileAsync.
+        await services.GetRequiredService<DocumentFinalizer>().FileAsync(version, context.RequestAborted);
 
         await storage.DeleteObjectAsync(tempKey, context.RequestAborted);
         context.Response.StatusCode = StatusCodes.Status201Created;

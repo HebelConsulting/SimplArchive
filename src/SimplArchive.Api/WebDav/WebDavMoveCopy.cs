@@ -398,8 +398,7 @@ internal static class WebDavMoveCopy
             DocumentDate = version.DocumentDate,
             DocumentTime = version.DocumentTime,
         };
-        db.DocumentVersions.Add(newVersion);
-        await db.SaveChangesAsync(ct);
-        await finalizer.FinalizeAsync(newVersion, ct);
+        // ONE unit of work for one MOVE/COPY (#1171) — see DocumentFinalizer.FileAsync.
+        await finalizer.FileAsync(newVersion, ct);
     }
 }

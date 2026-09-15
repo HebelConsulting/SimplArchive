@@ -175,9 +175,9 @@ internal static class ImapWrites
             CreatedAt = now,
             DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
         };
-        db.DocumentVersions.Add(version);
-        await db.SaveChangesAsync();
-        await scope.ServiceProvider.GetRequiredService<DocumentFinalizer>().FinalizeAsync(version, CancellationToken.None);
+        // ONE unit of work for one APPEND (#1171): the client is told OK once, so the filing behind it must
+        // be all-or-nothing rather than a version row whose document was never reclassified.
+        await scope.ServiceProvider.GetRequiredService<DocumentFinalizer>().FileAsync(version, CancellationToken.None);
 
         // Eagerly render the preview so the email's embedded images are persisted in the rendition NOW (#562),
         // not on the first workbench click. Best-effort: a converter outage must not fail the filing.
@@ -664,7 +664,7 @@ internal static class ImapWrites
 
         var objectKey = ObjectKeyBuilder.Build(tenantId, document.CreatedAt, document.StorageFolderId, versionId, ".eml");
         await storage.PutObjectAsync(objectKey, new MemoryStream(bytes), "message/rfc822");
-        db.DocumentVersions.Add(new DocumentVersion
+        var version = new DocumentVersion
         {
             Id = versionId,
             DocumentId = document.Id,
@@ -674,7 +674,7 @@ internal static class ImapWrites
             CreatedByUserId = userId,
             CreatedAt = now,
             DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
-        });
+        };
 
         if (existingId is not null)
         {
@@ -690,8 +690,12 @@ internal static class ImapWrites
         }
 
         await db.SaveChangesAsync();
-        var version = await db.DocumentVersions.FirstAsync(v => v.Id == versionId);
-        await scope.ServiceProvider.GetRequiredService<DocumentFinalizer>().FinalizeAsync(version, CancellationToken.None);
+
+        // ONE unit of work for the version and its finalization (#1171). It used to ride in the save above and
+        // then be RE-FETCHED, so the row was separately durable before anything confirmed it — a failure in
+        // finalization left a Pending version nothing would complete, on a path whose client was already told
+        // OK. Building it here and handing it to FileAsync removes the extra save and the re-read with it.
+        await scope.ServiceProvider.GetRequiredService<DocumentFinalizer>().FileAsync(version, CancellationToken.None);
 
         // A stable identity gets a NEW UID per re-append (the row updates in place — the PK is per document,
         // UIDs only ever grow). The old message's UID vanishes from later listings; an EXPUNGE aimed at it is

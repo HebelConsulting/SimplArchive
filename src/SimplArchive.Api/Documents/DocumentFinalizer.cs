@@ -72,18 +72,64 @@ public class DocumentFinalizer
     // the worker OCRs it only if it's a scanned image-only document (ADRs "Searchable PDF successor for TIFFs"
     // and "Scanned image-only PDF detection"). The enqueue is a cheap outbox insert; detection is off the
     // request path, so a born-digital PDF just costs a no-op job the worker drops.
-    // Reported ONCE per call site, not once per document. The demo seeders call this in a loop, so a plain
-    // warning emitted a line per filed document at every fixture startup — hundreds of them, on a suite whose
-    // desktop leg is already timing-sensitive. It showed up as three DIFFERENT desktop tests failing across
-    // three runs of the same branch, which is what sent me looking.
-    //
-    // The information wanted here is WHICH CALL SITES are unwrapped, and that is a set of about twenty; the
-    // per-document repetition added nothing and buried it. A guard that floods is a guard people suppress
-    // rather than read.
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> UnwrappedCallSites = new();
-
     private static readonly HashSet<string> SearchablePdfSourceExtensions =
         new(StringComparer.OrdinalIgnoreCase) { ".tif", ".tiff", ".pdf" };
+
+    /// <summary>
+    /// Files a version end to end — adding it when new, saving, confirming and classifying — as ONE unit of work.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The seam #1171 was missing. <see cref="FinalizeAsync"/> cannot open the transaction itself: by the time
+    /// it runs, the caller has already saved the version row, so that write is separately durable and a failure
+    /// inside finalization leaves a half-filed document — a row with no version, a version with no mask, a
+    /// check-in whose lock was never released. Every one of those looks like success to the caller.
+    /// </para>
+    /// <para>
+    /// The fix has to own the FIRST write as well as the rest, which is what this does. Measured before it was
+    /// written: ten call sites finalized outside a transaction across an E2E run, and all but one were the same
+    /// three lines — add the version, save, finalize. Ten hand-rolled copies of the conditionally-owned block
+    /// would have been ten chances to get it wrong, which is what CLAUDE.md's one-implementation rule is about;
+    /// worse, the eleventh caller would have copied whichever one they happened to read.
+    /// </para>
+    /// <para>
+    /// Owned only when nothing is already in flight (ADR 0781): a module read-model context can enlist ours, and
+    /// beginning a second transaction inside that would throw. So a caller that already owns a transaction — the
+    /// eight that do — can call this too, and it simply joins theirs.
+    /// </para>
+    /// <para>
+    /// SIDE EFFECTS BELONG AFTER, and are deliberately not this method's business: an index enqueue, an audit
+    /// event or an object-storage delete fired before the commit announces something that may then roll back.
+    /// Callers do that work after this returns, which is after the commit.
+    /// </para>
+    /// </remarks>
+    public async Task FileAsync(
+        DocumentVersion version,
+        CancellationToken cancellationToken,
+        StagedClassification? staged = null)
+    {
+        var owned = _dbContext.Database.CurrentTransaction is null
+            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        await using var transaction = owned;
+
+        // Added only when it is NEW. The upload path finalizes a version a prior POST already created, so it
+        // arrives tracked rather than detached; adding it again would throw. Taking both shapes here is what
+        // keeps this a single seam — a second helper for "finalize something already stored" is how two
+        // mechanisms start diverging.
+        if (_dbContext.Entry(version).State == Microsoft.EntityFrameworkCore.EntityState.Detached)
+        {
+            _dbContext.DocumentVersions.Add(version);
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        await FinalizeAsync(version, cancellationToken, staged);
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+    }
 
     /// <param name="callerFile">Filled by the compiler — see the transaction warning below. Never passed.</param>
     /// <param name="callerLine">Filled by the compiler — see the transaction warning below. Never passed.</param>
@@ -108,19 +154,24 @@ public class DocumentFinalizer
         // The transaction cannot be opened HERE: by the time this runs, the caller's first commit has already
         // happened. It has to be opened by the caller, which is why this only reports rather than repairs.
         //
-        // STAGE ONE of making it mandatory (#1171, owner-decided): warn, naming the caller so the list of
-        // unwrapped paths is discoverable from a log rather than from the next audit — 20 files call this and
-        // only BookingsController and CheckoutsController wrap it. Once they are converted this becomes a
-        // throw, and an unwrapped filing path stops being possible rather than merely being noticed.
-        if (_dbContext.Database.CurrentTransaction is null && UnwrappedCallSites.TryAdd($"{callerFile}:{callerLine}", true))
+        // MANDATORY as of #1171, which is stage two. Stage one warned and named the caller so the unwrapped
+        // paths were discoverable from a log rather than from the next audit; twelve call sites were then
+        // converted to FileAsync, and a re-run of the same measurement came back with ZERO product sites
+        // across the full E2E suite. So this stops being a thing to notice and becomes a thing that cannot
+        // happen.
+        //
+        // It refuses rather than repairs for the reason the warning gave: by the time this runs the caller has
+        // usually committed once already, so opening a transaction HERE would not make that first write part
+        // of it. FileAsync is the seam that owns the whole unit — use it.
+        if (_dbContext.Database.CurrentTransaction is null)
         {
-            _logger.LogWarning(
-                "Document finalization ran OUTSIDE a transaction, from {CallerFile}:{CallerLine} (version "
-                + "{VersionId}). This method commits several times and the caller has usually committed once "
-                + "already, so a failure part-way leaves a half-filed document. Wrap the call in one "
-                + "conditionally-owned transaction (see BookingsController.Book) — this will be refused "
-                + "outright once the remaining paths are converted (#1171).",
-                callerFile, callerLine, version.Id);
+            throw new InvalidOperationException(
+                $"Document finalization ran OUTSIDE a transaction, from {callerFile}:{callerLine} (version "
+                + $"{version.Id}). This method commits several times, so a failure part-way would leave a "
+                + "half-filed document — a row with no version, a version with no mask, a check-in whose lock "
+                + "was never released, each of which looks like success to the caller. Call "
+                + "DocumentFinalizer.FileAsync, which owns the version row and the finalization as one unit "
+                + "of work, or open a conditionally-owned transaction first (ADR 0781).");
         }
 
         // Re-fetch and re-hash the object server-side rather than trusting a client-supplied hash.

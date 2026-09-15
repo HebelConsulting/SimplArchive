@@ -91,9 +91,10 @@ public sealed class TypedItemWriter(
             CreatedAt = now,
             DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
         };
-        dbContext.DocumentVersions.Add(version);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        await finalizer.FinalizeAsync(version, cancellationToken);
+        // ONE unit of work (#1171). Measured, not assumed: a static reading said this was only ever called
+        // from the already-wrapped appointment controller and would inherit its transaction — it recorded four
+        // unwrapped hits in an E2E run, so another path reaches it.
+        await finalizer.FileAsync(version, cancellationToken);
     }
 
     /// <summary>A name no sibling already holds — the DbContext refuses a clash, and a create should not.</summary>

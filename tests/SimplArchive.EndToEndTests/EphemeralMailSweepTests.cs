@@ -65,9 +65,11 @@ public class EphemeralMailSweepTests
             CreatedAt = DateTimeOffset.UtcNow,
             DocumentDate = DateOnly.FromDateTime(DateTime.UtcNow),
         };
-        db.DocumentVersions.Add(version);
-        await db.SaveChangesAsync();
-        await scope.ServiceProvider.GetRequiredService<SimplArchive.Api.Documents.DocumentFinalizer>().FinalizeAsync(version, CancellationToken.None);
+        // FileAsync, not FinalizeAsync: this helper files a version exactly as the product does, and the
+        // product no longer has a path that finalizes outside a transaction (#1171). A test that kept the old
+        // shape would be the only caller left proving the refusal below can fire.
+        await scope.ServiceProvider.GetRequiredService<SimplArchive.Api.Documents.DocumentFinalizer>()
+            .FileAsync(version, CancellationToken.None);
 
         return (document.Id, key);
     }
