@@ -73,6 +73,11 @@ public partial class ConcurrencyContractRatchetTests
             "Creates only: reads tenants directly, and its single mutation is a POST that delegates to "
             + "ITenantProvisioningService, which does the Tenants.Add. The moment this controller grows a PUT "
             + "it needs the contract, which is why this is not a permanent exemption.",
+        ["DocumentChildrenController.cs:Document"] =
+            "Creates only: Documents.Add(child) is its single write, and the file assigns no property on an "
+            + "existing document. A create has no prior version to conflict with.",
+        ["NotebookController.cs:Document"] =
+            "Creates only: Documents.Add(section) is its single write, same shape as the children endpoint.",
     };
 
     // Controllers that should NEVER take a contract, with why. An entry here is the OWNER's decision, not the
@@ -185,7 +190,6 @@ public partial class ConcurrencyContractRatchetTests
         "BookingsController.cs:Document",
         "DocumentAppointmentController.cs:Document",
         "DocumentChatController.cs:User",
-        "DocumentChildrenController.cs:Document",
         "DocumentContactCardController.cs:Document",
         "DocumentExternalLinksController.cs:Document",
         "DocumentItemSourceController.cs:Document",
@@ -199,7 +203,6 @@ public partial class ConcurrencyContractRatchetTests
         "LegalHoldsController.cs:Document",
         "MachineTransitionsController.cs:Document",
         "MasksController.cs:ServiceAccount",
-        "NotebookController.cs:Document",
         "PasskeysController.cs:User",
         "PersonalRepositoryController.cs:Document",
         "RecycleBinController.cs:Document",
