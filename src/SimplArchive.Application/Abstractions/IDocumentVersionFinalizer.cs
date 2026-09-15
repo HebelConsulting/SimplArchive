@@ -25,4 +25,17 @@ public interface IDocumentVersionFinalizer
     /// <summary>Finalizes <paramref name="version"/> — the same work the upload path does after the bytes
     /// land, including classification of the formats the core interprets.</summary>
     Task FinalizeAsync(DocumentVersion version, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Files a version end to end — adding it when new, saving, confirming and classifying — as ONE unit of
+    /// work, opening a transaction only when one is not already in flight (#1171, ADR 0781).
+    /// </summary>
+    /// <remarks>
+    /// This is what a caller OUTSIDE a transition wants, and since #1171 it is what such a caller must use:
+    /// <see cref="FinalizeAsync"/> now REFUSES to run without a transaction, because it commits several times
+    /// and the caller has usually committed once already. A module reaching the archive from its own HTTP
+    /// controller has no engine-owned transaction around it, so the plain finalize would throw where it used
+    /// to warn (#1223).
+    /// </remarks>
+    Task FileAsync(DocumentVersion version, CancellationToken cancellationToken = default);
 }

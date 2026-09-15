@@ -136,7 +136,7 @@ public partial class ConcurrencyContractRatchetTests
         ["RepositoriesController.cs:Document"] =
             "Owner's decision (2026-09-15): creates, a purge, and a bulk import — no user edit among them. The "
             + "controller has NO SaveChanges of its own: it adds a repository and a subfolder, and delegates "
-            + "the rest to DocumentPurger (a hard delete, as above) and RepositoryImporter (below). WATCH THIS "
+            + "the rest to DocumentPurger (a hard delete, as above) and RepositoryImporter (below). WATCHED BY ExemptControllerShapeTests (#1224), which fails the build if this controller grows or loses a mutating action so the verdict gets re-read rather than assumed. WATCH THIS "
             + "ONE: it is the largest of the seven and the likeliest to grow a real per-document edit, which "
             + "this list would not catch — PermanentlyExempt has no staleness check.",
         ["DocumentTransferController.cs:Document"] =

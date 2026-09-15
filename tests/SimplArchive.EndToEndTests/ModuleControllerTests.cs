@@ -437,6 +437,18 @@ public class ModuleControllerTests
             var rights = await TestJson.Get(rig.Admin, $"/api/test-module/documents/{licenseDocId}/rights");
             Assert.True(rights.GetProperty("canSee").GetBoolean());
 
+            // THE PATH #1223 WAS FILED ABOUT: the facade's content write, reached from the module's OWN HTTP
+            // controller, where nothing has opened a transaction. Every other module test arrives through a
+            // transition, which the engine wraps (ADR 0737) — so this path had no caller at all, and the
+            // measurement behind #1171 reported zero unwrapped finalizations while this one would have thrown.
+            //
+            // It asserts 204, not an absence of errors: before the facade moved to FileAsync this answered 500,
+            // because DocumentFinalizer REFUSES to run outside a transaction since #1171. A module that filed
+            // content from its own endpoint worked yesterday and failed today, with nothing in-repo to notice.
+            var replaced = await rig.Admin.PostAsync(
+                $"/api/test-module/documents/{licenseDocId}/replace-content", content: null);
+            Assert.Equal(HttpStatusCode.NoContent, replaced.StatusCode);
+
             // ...unknown document → the module's own intent-named refusal, in the core's problem shape.
             var invisible = await rig.Admin.GetAsync($"/api/test-module/documents/{Guid.NewGuid()}/rights");
             Assert.Equal(HttpStatusCode.NotFound, invisible.StatusCode);

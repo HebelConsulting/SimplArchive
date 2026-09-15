@@ -494,13 +494,17 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
             CreatedAt = now,
             DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
         };
-        _dbContext.DocumentVersions.Add(version);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
+        // FileAsync, not Add + Save + FinalizeAsync (#1223). A module reaches this facade from TWO places: a
+        // transition handler, which the engine wraps in a transaction (ADR 0737), and its own HTTP controller,
+        // which nothing wraps. Since #1171 the plain finalize REFUSES to run outside a transaction, so that
+        // second path would THROW where it used to warn — and no in-repo caller exercises it, which is exactly
+        // why the measurement behind #1171 could not see it. FileAsync opens a transaction only when one is
+        // not already in flight, so it is correct from both.
+        //
         // Any refusal the classification raises — a taken slot, a grounded resource, another module's vetting
         // refusal — propagates to the module unchanged, which is what makes this the same door as every other
         // booking write rather than a quieter one beside it.
-        await _finalizer.FinalizeAsync(version, cancellationToken);
+        await _finalizer.FileAsync(version, cancellationToken);
     }
 
     /// <summary>

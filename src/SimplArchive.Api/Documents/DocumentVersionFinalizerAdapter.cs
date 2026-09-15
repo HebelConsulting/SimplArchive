@@ -24,4 +24,7 @@ public sealed class DocumentVersionFinalizerAdapter : IDocumentVersionFinalizer
 
     public Task FinalizeAsync(DocumentVersion version, CancellationToken cancellationToken = default) =>
         ((DocumentFinalizer)_services.GetService(typeof(DocumentFinalizer))!).FinalizeAsync(version, cancellationToken);
+
+    public Task FileAsync(DocumentVersion version, CancellationToken cancellationToken = default) =>
+        ((DocumentFinalizer)_services.GetService(typeof(DocumentFinalizer))!).FileAsync(version, cancellationToken);
 }

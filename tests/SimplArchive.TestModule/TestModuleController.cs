@@ -72,6 +72,28 @@ public sealed class TestModuleController : ControllerBase
             Links = [new Link("self", "/api/test-module/settings-seen", "GET")],
         });
 
+    /// <summary>
+    /// Replaces a document's content from a module's OWN HTTP controller — the path #1223 was filed about.
+    /// </summary>
+    /// <remarks>
+    /// A module reaches the archive facade from two places: a transition handler, which the engine wraps in a
+    /// transaction (ADR 0737), and an endpoint like this one, which nothing wraps. Every in-repo module test
+    /// arrives through a transition, so the second path had NO caller at all — which is why the measurement
+    /// behind #1171 reported zero unwrapped finalizations while this one would have thrown.
+    ///
+    /// It exists to be exercised, not because a module needs this exact route: the fixture's proof that the
+    /// facade's content write works with no ambient transaction.
+    /// </remarks>
+    [HttpPost("documents/{documentId:guid}/replace-content")]
+    public async Task<IActionResult> ReplaceContent(
+        Guid documentId,
+        [FromServices] IModuleArchiveFacade facade,
+        CancellationToken cancellationToken)
+    {
+        await facade.ReplaceContentAsync(documentId, System.Text.Encoding.UTF8.GetBytes("replaced by the module"), cancellationToken);
+        return NoContent();
+    }
+
     [HttpHead("settings-seen")]
     public IActionResult HeadSettingsSeen() => NoContent();
 
