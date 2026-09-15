@@ -75,9 +75,19 @@ public partial class ConcurrencyContractRatchetTests
             + "it needs the contract, which is why this is not a permanent exemption.",
     };
 
-    // Controllers that should NEVER take a contract, with why. Empty on purpose: nothing has yet been shown to
-    // belong here, and guessing would defeat the point of the reason.
-    private static readonly Dictionary<string, string> PermanentlyExempt = new();
+    // Controllers that should NEVER take a contract, with why. An entry here is the OWNER's decision, not the
+    // author's — the same rule as the 1000-line limit.
+    private static readonly Dictionary<string, string> PermanentlyExempt = new(StringComparer.Ordinal)
+    {
+        ["DocumentBulkController.cs:Document"] =
+            "Owner's decision (2026-09-14): BULK ACTIONS CARRY NO CONCURRENCY CHECK. A bulk request names a SET "
+            + "and carries at most ONE If-Match, so honouring it would require that single token to match every "
+            + "document in the set — which is not a precondition, it is a coincidence. The alternative shapes "
+            + "(a token per id in the body, or a collection-level CTag) were available and were not taken. "
+            + "These loops also save PER ITEM deliberately: each skips what it may not touch and answers with a "
+            + "per-item outcome report (ADR 0797), which is the contract callers rely on. Do not 'fix' this by "
+            + "wrapping the loop in one transaction — that would turn a partial success into a total failure.",
+    };
 
     // Pairs where the controller only ever READS that entity — it names the DbSet to resolve a name, check
     // existence or list candidates, and writes no column on it. The detector cannot tell a read from a write
@@ -170,7 +180,6 @@ public partial class ConcurrencyContractRatchetTests
         "AuthorizationController.cs:User",
         "BookingsController.cs:Document",
         "DocumentAppointmentController.cs:Document",
-        "DocumentBulkController.cs:Document",
         "DocumentChatController.cs:User",
         "DocumentChildrenController.cs:Document",
         "DocumentContactCardController.cs:Document",

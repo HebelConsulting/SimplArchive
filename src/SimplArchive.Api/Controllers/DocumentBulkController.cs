@@ -18,6 +18,25 @@ namespace SimplArchive.Api.Controllers;
 /// refused (legal hold / check-out / name conflict / cycle) is silently <em>skipped</em>, and the response
 /// reports how many succeeded vs skipped. Accepts either a ServiceAccount or a User caller.
 /// </summary>
+/// <remarks>
+/// <para>
+/// NO CONCURRENCY CHECK, by the owner's decision (2026-09-14, #1175/#1172) — and that is a decision rather
+/// than an omission, so it is written here where the next person will look for it.
+/// </para>
+/// <para>
+/// A bulk request names a SET and carries at most ONE <c>If-Match</c>. Honouring it would mean requiring that
+/// single token to match every document in the set, which is not a precondition — it is a coincidence, and it
+/// would refuse the whole batch because somebody else renamed one unrelated item. The alternatives were
+/// available and were not taken: a token per id in the body, or a collection-level CTag.
+/// </para>
+/// <para>
+/// The per-item <c>SaveChanges</c> below is deliberate for the same reason. Each iteration skips what the
+/// caller may not touch and the response reports per-item outcomes (ADR 0797), which is the contract callers
+/// rely on. Do NOT wrap the loop in one transaction to satisfy the one-action-one-transaction rule (ADR 0794):
+/// that rule is about ONE user action on ONE object, and applying it here would convert a partial success into
+/// a total failure — the opposite of what a bulk action promises.
+/// </para>
+/// </remarks>
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/documents/bulk")]
