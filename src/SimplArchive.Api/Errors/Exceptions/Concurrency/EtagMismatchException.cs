@@ -39,4 +39,12 @@ public sealed class EtagMismatchException : ConcurrencyException
 
     public static EtagMismatchException ForWorkflow() =>
         new("The workflow has been modified since it was last read.");
+
+    // #1220: entities that were EDITED from an admin form while carrying no token at all, so two people saving
+    // the same row reverted each other in silence.
+    public static EtagMismatchException ForGroup() =>
+        new("The group has been modified since it was last read.");
+
+    public static EtagMismatchException ForTag() =>
+        new("The tag has been modified since it was last read.");
 }

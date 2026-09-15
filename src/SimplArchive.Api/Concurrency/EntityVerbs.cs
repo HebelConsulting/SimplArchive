@@ -1,6 +1,7 @@
 using SimplArchive.Api.Errors.Exceptions.Concurrency;
 using SimplArchive.Domain.Acl;
 using SimplArchive.Domain.Documents;
+using SimplArchive.Domain.Groups;
 using SimplArchive.Domain.ServiceAccounts;
 using SimplArchive.Domain.Tenants;
 using SimplArchive.Domain.Users;
@@ -42,3 +43,11 @@ public sealed class AclEntryVerbs(SimplArchiveDbContext dbContext)
 /// <summary>The verb contract for <see cref="WorkflowState"/> — two approvers resolving one workflow.</summary>
 public sealed class WorkflowStateVerbs(SimplArchiveDbContext dbContext)
     : EntityVerbContract<WorkflowState>(dbContext, EtagMismatchException.ForWorkflow);
+
+/// <summary>The verb contract for <see cref="Group"/> — renamed and re-granted from the admin form (#1220).</summary>
+public sealed class GroupVerbs(SimplArchiveDbContext dbContext)
+    : EntityVerbContract<Group>(dbContext, EtagMismatchException.ForGroup);
+
+/// <summary>The verb contract for <see cref="TagDefinition"/> — the catalog's name and colour (#1220).</summary>
+public sealed class TagDefinitionVerbs(SimplArchiveDbContext dbContext)
+    : EntityVerbContract<TagDefinition>(dbContext, EtagMismatchException.ForTag);

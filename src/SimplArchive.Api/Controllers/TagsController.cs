@@ -28,19 +28,22 @@ public partial class TagsController : ControllerBase
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly IUserSystemRightsResolver _userSystemRights;
     private readonly IDocumentIndexQueue _queue;
+    private readonly Concurrency.TagDefinitionVerbs _tags;
 
     public TagsController(
         SimplArchiveDbContext dbContext,
         ICurrentUserAccessor currentUserAccessor,
         ICurrentTenantAccessor currentTenantAccessor,
         IUserSystemRightsResolver userSystemRights,
-        IDocumentIndexQueue queue)
+        IDocumentIndexQueue queue,
+        Concurrency.TagDefinitionVerbs tags)
     {
         _dbContext = dbContext;
         _currentUserAccessor = currentUserAccessor;
         _currentTenantAccessor = currentTenantAccessor;
         _userSystemRights = userSystemRights;
         _queue = queue;
+        _tags = tags;
     }
 
     [GeneratedRegex("^#[0-9A-Fa-f]{6}$")]
@@ -51,6 +54,16 @@ public partial class TagsController : ControllerBase
         public Guid Id { get; set; }
         public string Name { get; set; } = string.Empty;
         public string? Color { get; set; }
+
+        /// <summary>
+        /// The row's concurrency token, sent back as <c>If-Match</c> when editing it (#1220).
+        /// </summary>
+        /// <remarks>
+        /// Row-borne rather than fetched per edit, the external-links precedent: this controller has no
+        /// single-tag GET, so a tag whose token did not travel with the listing would cost a request per edit
+        /// just to learn something the listing already read (ADR 0557).
+        /// </remarks>
+        public Guid Etag { get; set; }
     }
 
     public class TagsResource : HypermediaResource
@@ -72,7 +85,7 @@ public partial class TagsController : ControllerBase
         var catalog = await _dbContext.TagDefinitions
             .Where(t => t.RetiredAt == null)
             .OrderBy(t => t.Name)
-            .Select(t => new TagResource { Id = t.Id, Name = t.Name, Color = t.Color })
+            .Select(t => new TagResource { Id = t.Id, Name = t.Name, Color = t.Color, Etag = t.ConcurrencyToken })
             .ToListAsync(cancellationToken);
 
         // Each catalog row addresses itself: rename/recolour (PUT), retire (DELETE) and merge-into-another
@@ -162,31 +175,27 @@ public partial class TagsController : ControllerBase
             }
         }
 
-        // ONE transaction for one user action (#1170): the re-pointed DocumentTag rows and the definition's new
-        // name commit together or not at all. Separately committed, a failure on the second left every affected
-        // document carrying a tag name whose definition did not exist.
+        // ONE transaction and ONE precondition for one user action (#1170, #1220). The re-pointed DocumentTag
+        // rows and the definition's new name commit together or not at all — separately committed, a failure on
+        // the second left every affected document carrying a tag name whose definition did not exist. The
+        // contract owns the transaction, conditionally (ADR 0781), and the reindex rides in afterCommit so the
+        // index is never told a name the database may still roll back.
         //
-        // Owned only when nothing is already in flight — the BookingsController.Book precedent (ADR 0781): a
-        // module read-model context can enlist this one, and beginning a second transaction inside that throws.
-        var owned = _dbContext.Database.CurrentTransaction is null
-            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
-            : null;
-        await using var transaction = owned;
+        // The DEFAULT gate ordering, deliberately: everything above only mutated the change tracker — RetagAsync
+        // re-points rows without saving — so the token still holds what the caller read. gateBeforeApply is for
+        // an apply that SAVES (ADR 0798), and reaching for it here out of habit would state the precondition
+        // against a value nothing had moved yet.
+        await _tags.MutateAsync(
+            Request,
+            tag,
+            apply: () => Task.CompletedTask,
+            afterCommit: () => reindex.Count > 0
+                ? _queue.EnqueueManyAsync(reindex, cancellationToken)
+                : Task.CompletedTask,
+            cancellationToken: cancellationToken);
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        if (transaction is not null)
-        {
-            await transaction.CommitAsync(cancellationToken);
-        }
-
-        // AFTER the commit. Enqueued before it, the index is told a name the database may still roll back —
-        // which is how a search index comes to hold a version that never existed.
-        if (reindex.Count > 0)
-        {
-            await _queue.EnqueueManyAsync(reindex, cancellationToken);
-        }
-
-        return Ok(new TagResource { Id = tag.Id, Name = tag.Name, Color = tag.Color });
+        _tags.EmitETag(Response, tag);
+        return Ok(new TagResource { Id = tag.Id, Name = tag.Name, Color = tag.Color, Etag = tag.ConcurrencyToken });
     }
 
     // Retire (soft — DELETE) / un-retire a catalog tag. Existing usages on documents are grandfathered.

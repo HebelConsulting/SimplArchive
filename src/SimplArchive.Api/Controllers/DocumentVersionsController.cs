@@ -60,10 +60,12 @@ public class DocumentVersionsController : ControllerBase
         IAuditRecorder audit,
         IDocumentVersionComparer comparer,
         Documents.DocumentAccessService access,
-        Concurrency.DocumentVerbs documents)
+        Concurrency.DocumentVerbs documents,
+        Documents.DocumentVersionResourceBuilder versionResources)
     {
         _dbContext = dbContext;
         _documents = documents;
+        _versionResources = versionResources;
         _objectStorageClient = objectStorageClient;
         _documentPreviewService = documentPreviewService;
         _textLayoutService = textLayoutService;
@@ -99,6 +101,7 @@ public class DocumentVersionsController : ControllerBase
         _access.EnsureNotCheckedOutByOtherAsync(documentId, cancellationToken);
     private readonly DocumentFinalizer _finalizer;
     private readonly Documents.ChatSystemEntryRecorder _chatEntries;
+    private readonly Documents.DocumentVersionResourceBuilder _versionResources;
 
     // Plain mutable classes, not records — System.Xml.Serialization.XmlSerializer (ADR "JSON/XML content
     // negotiation") needs a parameterless constructor and settable properties.
@@ -224,11 +227,6 @@ public class DocumentVersionsController : ControllerBase
         });
     }
 
-    private record VersionRow(
-        Guid Id, Guid DocumentId, DocumentVersionStatus Status, int? VersionNumber, string ObjectKey,
-        string? Sha256Hash, DateTimeOffset CreatedAt, DateOnly DocumentDate, TimeOnly? DocumentTime,
-        Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, string? OcrLanguages, string? Comment,
-        OcrVerdict? OcrVerdict = null, bool? IsSigned = null);
 
     public class DocumentVersionListResource : HypermediaResource
     {
@@ -319,7 +317,7 @@ public class DocumentVersionsController : ControllerBase
         var versions = new List<DocumentVersionResource>(page.Count);
         foreach (var row in page)
         {
-            versions.Add(await BuildResourceAsync(row, documentName, cancellationToken));
+            versions.Add(await _versionResources.BuildAsync(row, documentName, cancellationToken));
         }
 
         return Ok(new DocumentVersionListResource
@@ -365,7 +363,7 @@ public class DocumentVersionsController : ControllerBase
         }
 
         var documentName = await LoadDocumentNameAsync(documentId, cancellationToken);
-        return Ok(await BuildResourceAsync(version, documentName, cancellationToken));
+        return Ok(await _versionResources.BuildAsync(version, documentName, cancellationToken));
     }
 
     // Standing convention: every GET action gets a companion HEAD action — a separate action, not
@@ -625,6 +623,11 @@ public class DocumentVersionsController : ControllerBase
         }
 
         // Set the version comment from the finalize body when it wasn't given at create (don't overwrite one).
+        //
+        // NOT under the document's precondition, unlike the document-date PUT below (#1220): this completes a
+        // CREATE, `IsNullOrEmpty` makes the comment fill-once, and the quota rejection below COMMITS its
+        // removal of the pending row before throwing — inside a contract-owned transaction that cleanup would
+        // roll back and strand the row it deletes. Still a #1171 unwrapped-finalizer site.
         if (!string.IsNullOrWhiteSpace(request?.Comment) && string.IsNullOrEmpty(version.Comment))
         {
             version.Comment = request.Comment.Trim();
@@ -663,7 +666,7 @@ public class DocumentVersionsController : ControllerBase
             await _audit.RecordAsync(AuditActions.DocumentVersionAdded, "Document", documentId, documentName, $"Version {version.VersionNumber}", cancellationToken: cancellationToken);
         }
 
-        return Ok(await BuildResourceAsync(row, documentName, cancellationToken));
+        return Ok(await _versionResources.BuildAsync(row, documentName, cancellationToken));
     }
 
     // Makes an earlier version current (roll back) by setting the document's CurrentVersionId pointer to it —
@@ -724,7 +727,7 @@ public class DocumentVersionsController : ControllerBase
 
         var name = await LoadDocumentNameAsync(documentId, cancellationToken);
         var row = new VersionRow(source.Id, documentId, source.Status, source.VersionNumber, source.ObjectKey, source.Sha256Hash, source.CreatedAt, source.DocumentDate, source.DocumentTime, source.CreatedByUserId, source.CreatedByServiceAccountId, source.OcrLanguages, source.Comment, source.OcrVerdict, source.IsSigned);
-        return Ok(await BuildResourceAsync(row, name, cancellationToken));
+        return Ok(await _versionResources.BuildAsync(row, name, cancellationToken));
     }
 
     // Refuses an operation while the document has an approval workflow in progress — a version In Review or
@@ -758,17 +761,32 @@ public class DocumentVersionsController : ControllerBase
             throw new InvalidDocumentDateException($"'{request.DocumentDate}' is not a valid date (expected yyyy-MM-dd).");
         }
 
-        version.DocumentDate = date;
-        version.DocumentTime = ParseOptionalDocumentTime(request.DocumentTime);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        await _queue.EnqueueAsync(documentId, cancellationToken);
-        await _wormLock.ReconcileAsync(documentId, cancellationToken); // the retention anchor (document date) moved
+        // Through the DOCUMENT's contract, not a token of the version's own (#1220): a version is a child
+        // guarded by a tracked parent, the editor holds the DOCUMENT's ETag, and a per-version token would put
+        // TWO preconditions on one user action (ADR 0794). touchEntity is what makes it bite — EF checks a
+        // token only on rows it updates, so a child-only write is otherwise gated by nothing (#1167). This PUT
+        // used to SaveChanges raw, so two people setting a document's date silently reverted each other; the
+        // pencil path was already safe via 0794's combined PUT .../detail.
+        var document = await _dbContext.Documents.SingleAsync(d => d.Id == documentId, cancellationToken);
+        await _documents.MutateAsync(Request, document,
+            apply: () =>
+            {
+                version.DocumentDate = date;
+                version.DocumentTime = ParseOptionalDocumentTime(request.DocumentTime);
+                return Task.CompletedTask;
+            },
+            afterCommit: async () =>
+            {
+                await _queue.EnqueueAsync(documentId, cancellationToken);
+                await _wormLock.ReconcileAsync(documentId, cancellationToken); // the retention anchor moved
+            },
+            cancellationToken: cancellationToken);
 
         var row = new VersionRow(versionId, documentId, version.Status, version.VersionNumber, version.ObjectKey, version.Sha256Hash, version.CreatedAt, version.DocumentDate, version.DocumentTime, version.CreatedByUserId, version.CreatedByServiceAccountId, version.OcrLanguages, version.Comment, version.OcrVerdict, version.IsSigned);
         var documentName = await LoadDocumentNameAsync(documentId, cancellationToken);
         var stamp = version.DocumentTime is { } t ? $"{date:yyyy-MM-dd} {t:HH:mm} UTC" : $"{date:yyyy-MM-dd}";
         await _audit.RecordAsync(AuditActions.DocumentDateChanged, "Document", documentId, documentName, $"Document date set to {stamp} (version {version.VersionNumber})", cancellationToken: cancellationToken);
-        return Ok(await BuildResourceAsync(row, documentName, cancellationToken));
+        return Ok(await _versionResources.BuildAsync(row, documentName, cancellationToken));
     }
 
     public class SetDocumentDateRequest
@@ -840,118 +858,8 @@ public class DocumentVersionsController : ControllerBase
             .SingleAsync(cancellationToken);
     }
 
-    private async Task<DocumentVersionResource> BuildResourceAsync(VersionRow version, string documentName, CancellationToken cancellationToken)
-    {
-        var links = new List<Link> { new("self", $"/api/documents/{version.DocumentId}/versions/{version.Id}", "GET") };
-        var previewConverted = false;
-
-        if (version.Status == DocumentVersionStatus.Confirmed)
-        {
-            // Name the download after Document.Name but with the *version object's* extension, so a version
-            // whose type differs from the document name saves correctly — e.g. the searchable-PDF successor of
-            // a `.tif` document downloads as `<name>.pdf` (ADR "Searchable PDF successor for TIFFs"), and an
-            // email named after its subject (no extension) saves as `<subject>.eml` (ADR "Email
-            // auto-classification"). Falls back to the raw name when the object key carries no extension.
-            var objectExtension = Path.GetExtension(version.ObjectKey);
-            var downloadFileName = string.IsNullOrEmpty(objectExtension)
-                ? documentName
-                : Path.GetFileNameWithoutExtension(documentName) + objectExtension;
-
-            var downloadUrl = await _objectStorageClient.GetPresignedDownloadUrlAsync(version.ObjectKey, PresignedUrlExpiry, downloadFileName, cancellationToken);
-            links.Add(new Link("download", downloadUrl.ToString(), "GET"));
-
-            // Inline-disposition URL the workbench preview renders in place — see ADR "Repositories
-            // workbench UI". For formats the browser can't display (TIFF, office docs), this resolves to a
-            // cached rendition instead of the original (ADR "Server-side preview renditions", "Office
-            // document preview via Gotenberg"). Null when no viewable preview can be produced (conversion
-            // failed / converter down) — omit the link so the client shows "No preview available" rather
-            // than a blank pane (ADR "Preview fallback when a rendition can't be produced").
-            var preview = await _documentPreviewService.GetPreviewUrlAsync(version.ObjectKey, PresignedUrlExpiry, downloadFileName, cancellationToken);
-            if (preview is not null)
-            {
-                links.Add(new Link("preview", preview.Url.ToString(), "GET"));
-                previewConverted = preview.IsConverted;
-            }
-
-            // Per-page word boxes for search hit-overlay (ADR "Search hit overlay"). A static link — the
-            // endpoint computes/caches the layout on demand and returns 204 for formats with no overlay — so
-            // building the resource stays cheap (no OCR/PDF parse here).
-            links.Add(new Link("text-layout", $"/api/documents/{version.DocumentId}/versions/{version.Id}/text-layout", "GET"));
-
-            // Ordered per-page image URLs for a multi-page TIFF (ADR "Multi-page TIFF preview pages"). Static
-            // link; the endpoint returns 204 for every other format (the client then uses the single `preview`).
-            links.Add(new Link("preview-pages", $"/api/documents/{version.DocumentId}/versions/{version.Id}/preview-pages", "GET"));
-
-            // The version's approval workflow (ADR "Workflow / document state model", 0009). Static link — the
-            // endpoint resolves the current status + valid-transition links on demand. The STATUS itself rides
-            // in the payload (one indexed lookup, beside the preview resolution this method already pays) so a
-            // client can label its workflow affordance without a request per rel (ADR 0557).
-            links.Add(new Link("workflow", $"/api/documents/{version.DocumentId}/versions/{version.Id}/workflow", "GET"));
-
-            // Roll back to this version (ADR "Version restore") — copies its content into a new current version.
-            // Static link (the action enforces CanEditContent + the frozen/checked-out/workflow guards); the
-            // client offers it for older versions.
-            links.Add(new Link("restore", $"/api/documents/{version.DocumentId}/versions/{version.Id}/restore", "POST"));
-
-            // Sticky notes / positional annotations pinned to this version's pages (ADR "Document annotations
-            // (sticky notes)"). Static link — the endpoint lists them on demand.
-            links.Add(new Link("annotations", $"/api/documents/{version.DocumentId}/versions/{version.Id}/annotations", "GET"));
-
-            // This version's issuing date (ADR "System-field search"). Static like `restore` above — the PUT
-            // enforces CanEditIndexData plus the frozen/checked-out guards, and resolving all of that per row
-            // would put a rights + legal-hold + checkout lookup on every version in the list.
-            links.Add(new Link("document-date", $"/api/documents/{version.DocumentId}/versions/{version.Id}/document-date", "PUT"));
-
-            // Force a searchable-PDF successor from this version (#999's Make searchable): the user may
-            // overrule the detector — a detector-blind scan, or a re-run with changed languages. CONDITIONAL
-            // on what the enforcer refuses (ADR 0543): an OCR-candidate extension, and not signed (OCR would
-            // break the signature). DocumentSearchableController is the enforcer of the same predicate.
-            if (DocumentSearchableController.IsOcrCandidate(version.ObjectKey) && version.IsSigned != true)
-            {
-                links.Add(new Link("make-searchable", $"/api/documents/{version.DocumentId}/versions/{version.Id}/searchable", "PUT"));
-            }
-        }
-
-        return new DocumentVersionResource
-        {
-            Id = version.Id,
-            VersionNumber = version.VersionNumber,
-            ObjectKey = version.ObjectKey,
-            Sha256Hash = version.Sha256Hash,
-            Status = version.Status.ToString(),
-            WorkflowStatus = (await _dbContext.WorkflowStates
-                .Where(w => w.DocumentVersionId == version.Id)
-                .Select(w => (WorkflowStatus?)w.Status)
-                .FirstOrDefaultAsync(cancellationToken))?.ToString(),
-            PreviewConverted = previewConverted,
-            CreatedAt = version.CreatedAt,
-            CreatedByName = await ResolveCreatorNameAsync(version.CreatedByUserId, version.CreatedByServiceAccountId, cancellationToken),
-            DocumentDate = version.DocumentDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-            DocumentTime = version.DocumentTime?.ToString("HH:mm", CultureInfo.InvariantCulture),
-            OcrLanguages = version.OcrLanguages,
-            FileExtension = Path.GetExtension(version.ObjectKey),
-            Comment = version.Comment,
-            OcrVerdict = version.OcrVerdict?.ToString(),
-            IsSigned = version.IsSigned == true,
-            Links = links,
-        };
-    }
 
     // The display name of a version's creator (exactly one of the two ids is set — see the CreatedBy CHECK).
-    private async Task<string> ResolveCreatorNameAsync(Guid? userId, Guid? serviceAccountId, CancellationToken cancellationToken)
-    {
-        if (userId is { } uid)
-        {
-            return await _dbContext.Users.Where(u => u.Id == uid).Select(u => u.DisplayName).SingleOrDefaultAsync(cancellationToken) ?? "";
-        }
-
-        if (serviceAccountId is { } said)
-        {
-            return await _dbContext.ServiceAccounts.Where(s => s.Id == said).Select(s => s.Name).SingleOrDefaultAsync(cancellationToken) ?? "";
-        }
-
-        return "";
-    }
 
     private Task<EffectiveRights> GetCallerRightsAsync(Guid documentId, CancellationToken cancellationToken) =>
         _access.GetCallerRightsAsync(documentId, cancellationToken);

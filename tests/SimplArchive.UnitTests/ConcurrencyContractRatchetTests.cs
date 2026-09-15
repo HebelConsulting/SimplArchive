@@ -38,6 +38,8 @@ public partial class ConcurrencyContractRatchetTests
         ["ServiceAccount"] = "ServiceAccountVerbs",
         ["AclEntry"] = "AclEntryVerbs",
         ["WorkflowState"] = "WorkflowStateVerbs",
+        ["Group"] = "GroupVerbs",
+        ["TagDefinition"] = "TagDefinitionVerbs",
     };
 
     // The DbSet each entity actually lives in. Explicit, because naive pluralisation is WRONG for one of the
@@ -55,6 +57,8 @@ public partial class ConcurrencyContractRatchetTests
         ["ServiceAccount"] = "ServiceAccounts",
         ["AclEntry"] = "AclEntries",
         ["WorkflowState"] = "WorkflowStates",
+        ["Group"] = "Groups",
+        ["TagDefinition"] = "TagDefinitions",
     };
 
     // Pairs where the controller only ever CREATES that entity. A create has no prior version to conflict
@@ -195,8 +199,6 @@ public partial class ConcurrencyContractRatchetTests
         ["DocumentExternalLinksController.cs:Tenant"] =
             "Reads only: CurrentTenantAsync materialises the tenant to read its external-link policy "
             + "(AllowExternalLinks, ExternalLinkMaxDays, ExternalLinkDefaultAccesses). No property is assigned.",
-        ["DocumentVersionsController.cs:ServiceAccount"] =
-            "Reads only: one Name projection, naming a version's author.",
         ["DocumentsController.cs:Tenant"] =
             "Reads only: one AnyAsync asking whether the tenant allows external links, gating a rel.",
         ["UsersController.cs:Tenant"] =
@@ -222,8 +224,6 @@ public partial class ConcurrencyContractRatchetTests
             + "No service-account column is written.",
         ["DocumentLifecycleController.cs:User"] =
             "Reads only: one DisplayName projection, naming the holder in the 'checked out by …' refusal.",
-        ["DocumentVersionsController.cs:User"] =
-            "Reads only: one DisplayName projection, naming a version's author.",
         ["LegalHoldsController.cs:Document"] =
             "Reads only: writes LegalHold / LegalHoldItem rows, and materialises the document purely to name "
             + "it in the audit line. Placing a hold FREEZES a document rather than editing it, so the token "

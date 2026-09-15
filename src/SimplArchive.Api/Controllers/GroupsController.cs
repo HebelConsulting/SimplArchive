@@ -33,6 +33,7 @@ public class GroupsController : ControllerBase
     private readonly IUserSystemRightsResolver _userSystemRights;
     private readonly IClearanceResolver _clearanceResolver;
     private readonly IAuditRecorder _audit;
+    private readonly Concurrency.GroupVerbs _groups;
 
     public GroupsController(
         SimplArchiveDbContext dbContext,
@@ -41,7 +42,8 @@ public class GroupsController : ControllerBase
         ICurrentUserAccessor currentUserAccessor,
         IUserSystemRightsResolver userSystemRights,
         IClearanceResolver clearanceResolver,
-        IAuditRecorder audit)
+        IAuditRecorder audit,
+        Concurrency.GroupVerbs groups)
     {
         _dbContext = dbContext;
         _currentTenantAccessor = currentTenantAccessor;
@@ -50,6 +52,7 @@ public class GroupsController : ControllerBase
         _userSystemRights = userSystemRights;
         _clearanceResolver = clearanceResolver;
         _audit = audit;
+        _groups = groups;
     }
 
     // Plain mutable classes, not records — System.Xml.Serialization.XmlSerializer (ADR "JSON/XML content
@@ -207,6 +210,10 @@ public class GroupsController : ControllerBase
             return NotFound();
         }
 
+        // The tag the caller sends back as If-Match. Without it the token added in #1220 would be a
+        // precondition no client could satisfy — a guard enforced and unusable, which is the shape
+        // DocumentMetadataController's never-called TryParseETag already cost once (#1167).
+        _groups.EmitETag(Response, group);
         return Ok(BuildResource(group));
     }
 
@@ -243,17 +250,25 @@ public class GroupsController : ControllerBase
             return NotFound();
         }
 
-        group.Name = request.Name;
-
+        // Through the group's verb contract (#1220, ADR 0795). Before this the row carried no token at all, so
+        // two administrators with the same group open both saved and the second silently reverted the first.
+        //
+        // The InvalidOperationException catch WRAPS the contract call rather than a bare save: the sibling-name
+        // invariant is raised by SaveChanges inside MutateAsync, and the contract translates only a stale
+        // precondition. Left unwrapped, a duplicate group name would surface as a bare 500 instead of the
+        // conflict this endpoint has always answered.
         try
         {
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            await _groups.MutateAsync(
+                Request, group, apply: () => { group.Name = request.Name; return Task.CompletedTask; },
+                cancellationToken: cancellationToken);
         }
         catch (InvalidOperationException)
         {
             throw new GroupNameConflictException();
         }
 
+        _groups.EmitETag(Response, group);
         return Ok(BuildResource(group));
     }
 
@@ -471,10 +486,19 @@ public class GroupsController : ControllerBase
             throw InsufficientRightsToGrantException.OnSystemRights();
         }
 
-        ApplyRights(group, request);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        await _audit.RecordAsync(AuditActions.GroupRightsChanged, "Group", group.Id, group.Name, Users.SystemRightsMapping.Describe(request), cancellationToken: cancellationToken);
+        // The precondition matters MOST here of anywhere in this controller: a lost update on a rights row
+        // silently restores authorization an administrator had just removed, and nobody finds out (#1220).
+        // The audit line rides in afterCommit so it cannot record a grant the database then rolls back.
+        await _groups.MutateAsync(
+            Request,
+            group,
+            apply: () => { ApplyRights(group, request); return Task.CompletedTask; },
+            afterCommit: () => _audit.RecordAsync(
+                AuditActions.GroupRightsChanged, "Group", group.Id, group.Name,
+                Users.SystemRightsMapping.Describe(request), cancellationToken: cancellationToken),
+            cancellationToken: cancellationToken);
 
+        _groups.EmitETag(Response, group);
         return Ok(BuildResource(group));
     }
 

@@ -6,7 +6,7 @@ namespace SimplArchive.Domain.Documents;
 // free-form DocumentTag strings. Rename/merge cascade-update the DocumentTag.Tag strings; a colour is looked up
 // by Name for chip rendering. Retire is soft (RetiredAt set): hidden from the catalog/autocomplete + un-appliable
 // when the tenant enforces the catalog, but existing usages on documents are grandfathered. ITenantScoped.
-public class TagDefinition : ITenantScoped
+public class TagDefinition : ITenantScoped, IConcurrencyTracked
 {
     public Guid Id { get; set; }
 
@@ -22,4 +22,13 @@ public class TagDefinition : ITenantScoped
     public DateTimeOffset? RetiredAt { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
+
+    /// <summary>
+    /// The optimistic-concurrency token (#1220). SaveChanges owns this value — never set it by hand.
+    /// </summary>
+    /// <remarks>
+    /// The catalog's name and colour are edited from an admin form, and a rename also re-points every
+    /// DocumentTag row wearing the old name — so a lost update here is not merely a reverted colour.
+    /// </remarks>
+    public Guid ConcurrencyToken { get; set; }
 }

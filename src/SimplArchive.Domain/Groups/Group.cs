@@ -2,7 +2,7 @@ using SimplArchive.Domain.Abstractions;
 
 namespace SimplArchive.Domain.Groups;
 
-public class Group : ITenantScoped
+public class Group : ITenantScoped, IConcurrencyTracked
 {
     public Guid Id { get; set; }
 
@@ -80,4 +80,14 @@ public class Group : ITenantScoped
     public int ClearanceRank { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
+
+    /// <summary>
+    /// The optimistic-concurrency token (#1220). SaveChanges owns this value — never set it by hand.
+    /// </summary>
+    /// <remarks>
+    /// A group is renamed and re-granted from an admin form, so two administrators with the same group open
+    /// silently reverted each other before this existed. The rights PUT is the reason it matters most: a lost
+    /// update there restores authorization an administrator had just removed, and nobody finds out.
+    /// </remarks>
+    public Guid ConcurrencyToken { get; set; }
 }
