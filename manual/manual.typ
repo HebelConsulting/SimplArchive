@@ -541,12 +541,53 @@ other calendar (@davsub). That cuts both ways, deliberately:
   conflict check as the dialog. Dragging a reservation to another time is a rebooking, checked again; there is no
   way in — workbench, phone, or any calendar program — that bypasses the rule.
 
-#note[
-  *A room can be taken out of service.* Beside the Schedule, a room can carry a *Maintenance* calendar; a block
-  filed there ("projector broken, Tuesday to Thursday") *suspends* every reservation it overlaps rather than
-  deleting them — and when the block is cleared, the reservations simply stand again. Blocks may overlap each
-  other: two defects are two entries, and neither hides the other.
-]
+=== Three calendars, three different questions <threecalendars>
+
+A bookable thing — a room, a vehicle, a person's time — answers three questions about the same timeline, and
+each gets its own calendar because each obeys a *different rule*. Putting them in one calendar would mean one
+rule for three jobs, and two of the three would be wrong.
+
+#table(
+  columns: (auto, auto, 1fr),
+  stroke: 0.5pt + luma(80%),
+  inset: 6pt,
+  [*Calendar*], [*It says*], [*And the rule that makes it different*],
+  [*Schedule*#idx("Schedule")], [This time is _claimed_],
+  [Two reservations may *never* overlap. A slot that collides is refused, and the refusal says so.],
+  [*Maintenance*#idx("Maintenance")], [This time is _withdrawn_],
+  [Blocks *may* overlap each other — two defects reported on one vehicle are two entries, and refusing the
+   second would mean the second finding cannot be recorded.],
+  [*Availability*#idx("Availability")], [This time is _offered_],
+  [Windows may overlap each other, *and* reservations sit inside them — that overlap is the whole point, not a
+   conflict.],
+)
+
+*Out of service.*#idx("Block") A block filed in Maintenance ("projector broken, Tuesday to Thursday")
+*suspends* every reservation it overlaps rather than deleting them; when the block is cleared, those
+reservations simply stand again. Nothing is stored as "suspended", so nothing can be left stale, and nobody can
+edit a reservation back into service — the only way out is clearing the block, which is a right of its own. A
+suspended reservation shows on your phone as *tentative*, so you can see it is in doubt without it vanishing
+from your week.
+
+The two moments differ, deliberately. A *new* booking that lands in a block is *refused* at the door; a booking
+that already existed when the block appeared is *suspended*. The archive will not let you walk into a known
+problem, and it will not quietly cancel a commitment you already made.
+
+*Offered time.*#idx("Offered time") An Availability window is somebody publishing when a thing may be booked —
+an instructor's teaching hours, a pool car's lending times. Two rules about it are worth knowing because the
+obvious guess is wrong in both cases:
+
+- *A window must cover the whole booking, on its own.* Two adjacent windows do not add up: 09:00–11:00 and
+  11:00–13:00 will not between them carry a 10:00–12:00 booking. Accepting half an offer as consent for a whole
+  booking is a failure nobody would see — the booking succeeds, somebody is committed to a time they never
+  offered, and the first anyone learns of it is when they do not turn up.
+- *No window means not offered.* A thing nobody has published time for offers nothing. Absence of an offer is
+  not consent.
+
+Whether a reservation *requires* an offer at all depends on what is being booked, and that is decided by the
+industry module that owns the thing rather than by the archive: booking an instructor may need their published
+hours as their consent, while booking a meeting room needs nothing of the sort. The archive stores the offer
+and answers the question; what the answer *obliges* is the module's rule.
 
 == On a phone or a tablet
 
