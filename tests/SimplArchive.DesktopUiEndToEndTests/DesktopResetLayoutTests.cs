@@ -10,6 +10,13 @@ namespace SimplArchive.UiEndToEndTests;
 // 1.5* default, and it reported FAILED for months with nothing to notice — a headless hook is run when someone
 // remembers to run it, which is never. So the behaviour is asserted HERE, where CI runs it, and the hook now
 // agrees with this rather than the other way round.
+// SERIALISED with the other layout tests: LayoutSettingsStore.PathOverride is a STATIC, and xUnit runs distinct
+// classes in PARALLEL — so this class and DesktopDetailPanePeekTests were setting and clearing the same field at
+// the same time, each reading the other's layout file. The symptom was a DIFFERENT test failing per run, in tens
+// of milliseconds, with no server involved: "Expected Auto, Actual 1.5*" is one class seeing the other's drag.
+// Both pass 3/3 alone. DesktopConfigCollection already existed for exactly this hazard on
+// ServerProfileStore.PathOverride; this class simply never joined it.
+[Collection("DesktopConfig")]
 public class DesktopResetLayoutTests
 {
     [Fact]

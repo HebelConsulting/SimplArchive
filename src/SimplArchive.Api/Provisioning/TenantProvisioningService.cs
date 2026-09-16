@@ -175,6 +175,19 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             // Mail routing is part of founding a tenant too: the first administrator must be able to give a
             // department a mailbox without a second principal existing yet to grant it from (#703).
             CanManageMailRouting = true,
+            // The booking rights, added with the inventory work and then missing from this list for four
+            // releases (#1241). The comment above is not decoration: because nothing is implied by
+            // IsTenantAdmin and SystemRightsPolicy caps a grant to what the caller holds, a right absent HERE is
+            // not merely un-held — it is permanently UN-GRANTABLE, by anyone, in every tenant this provisions.
+            // Measured on the v0.26.0 demo: both tenant admins had them false, so a grounded aircraft could not
+            // be released by anybody through the app (ADR 0778 makes suspension derived from an active block,
+            // clearable only with CanReleaseResources).
+            //
+            // The service-account asymmetry is NOT contradicted by this. ServiceAccount carries
+            // CanBlockResources and deliberately no CanReleaseResources (owner decision 2026-09-09): a machine
+            // may ground on suspicion, releasing is a human judgement. This is a human, and the founding one.
+            CanBlockResources = true,
+            CanReleaseResources = true,
             CreatedAt = at,
         };
 
