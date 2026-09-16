@@ -80,6 +80,17 @@ public sealed class AuditClient(ApiCore core)
     //
     // Cached like the API root's own rels, and for the same reason: these five do not change between calls,
     // and the audit tab would otherwise re-read the collection once per button.
+    /// <summary>Sends AT a rel on the audit collection — address and METHOD both from the link (#1192).</summary>
+    /// <remarks>
+    /// Caching the collection's rels is legitimate (ADR 0557 — a structurally fixed set), and what is cached is
+    /// now the LINK, method included, rather than an href with the verb left to the call site.
+    /// </remarks>
+    private async Task<HttpResponseMessage> SendAuditRelAsync(string rel, object? body, CancellationToken cancellationToken)
+    {
+        await AuditRelAsync(rel, cancellationToken);   // populates the cache and refuses an unadvertised rel
+        return await _core.SendRelAsync(_auditLinks, rel, body, cancellationToken);
+    }
+
     private async Task<string> AuditRelAsync(string rel, CancellationToken cancellationToken)
     {
         if (_auditLinks is null)
@@ -91,7 +102,7 @@ public sealed class AuditClient(ApiCore core)
                 {
                     var href = await _core.RootHrefAsync("auditEvents", cancellationToken);
                     var page = await _core.Http.GetFromJsonAsync<JsonElement>($"{href}?limit=1", cancellationToken);
-                    _auditLinks = ApiCore.ParseLinks(page) is { } lm ? lm.Rels.ToDictionary(r => r, r => lm.Href(r)!, StringComparer.Ordinal) : null;
+                    _auditLinks = ApiCore.ParseLinks(page);
                 }
             }
             finally
@@ -100,12 +111,12 @@ public sealed class AuditClient(ApiCore core)
             }
         }
 
-        return _auditLinks?.GetValueOrDefault(rel) is { } relHref
+        return _auditLinks?.Href(rel) is { } relHref
             ? relHref
             : throw new InvalidOperationException($"The audit log advertised no '{rel}' rel (ADR 0543).");
     }
 
-    private IReadOnlyDictionary<string, string>? _auditLinks;
+    private LinkMap? _auditLinks;
     private readonly SemaphoreSlim _auditGate = new(1, 1);
 
     private Task<string> AuditRetentionHrefAsync(CancellationToken cancellationToken) =>
@@ -128,7 +139,7 @@ public sealed class AuditClient(ApiCore core)
 
     public async Task<AuditPurgeInfo> PurgeAuditAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsync(await AuditRelAsync("purge", cancellationToken), null, cancellationToken);
+        using var response = await SendAuditRelAsync("purge", null, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to purge the audit log.");

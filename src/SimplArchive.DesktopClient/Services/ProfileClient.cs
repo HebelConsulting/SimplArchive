@@ -20,7 +20,7 @@ public sealed class ProfileClient(ApiCore core)
     // preferences — so this is the desktop's counterpart to the web client's MeHrefAsync (issue #416). Without
     // it every one of those was a composed /api/users/me/… path, which is thirteen private routes copied into a
     // second codebase.
-    private IReadOnlyDictionary<string, string>? _meLinks;
+    private LinkMap? _meLinks;
     private string? _myEmail;
     private readonly SemaphoreSlim _meGate = new(1, 1);
 
@@ -41,6 +41,21 @@ public sealed class ProfileClient(ApiCore core)
     /// <summary>
     /// The href for a rel on the caller's own "me" resource. Throws when it is not advertised.
     /// </summary>
+    /// <summary>
+    /// Sends AT a rel on the caller's own "me" resource — address and METHOD both from the advertised link.
+    /// </summary>
+    /// <remarks>
+    /// The desktop twin of the web client's <c>ApiRoot.SendMeAsync</c>, deliberately the same shape: the two
+    /// clients answer one question identically rather than each inventing its own (ADR 0511). Caching the
+    /// me-rels stays legitimate — the set is structurally fixed (ADR 0557) — and what is cached is now the
+    /// LINK, not an href with the verb left to the call site (#1192).
+    /// </remarks>
+    public async Task<HttpResponseMessage> SendMeAsync(string rel, object? body = null, CancellationToken cancellationToken = default)
+    {
+        await MeHrefAsync(rel, cancellationToken);   // populates the cache and refuses an unadvertised rel
+        return await _core.SendRelAsync(_meLinks, rel, body, cancellationToken);
+    }
+
     public async Task<string> MeHrefAsync(string rel, CancellationToken cancellationToken = default)
     {
         if (_meLinks is null)
@@ -56,7 +71,7 @@ public sealed class ProfileClient(ApiCore core)
                 if (_meLinks is null)
                 {
                     var me = await _core.Http.GetFromJsonAsync<JsonElement>(meHref, cancellationToken);
-                    _meLinks = ApiCore.ParseLinks(me) is { } lm ? lm.Rels.ToDictionary(r => r, r => lm.Href(r)!, StringComparer.Ordinal) : null;
+                    _meLinks = ApiCore.ParseLinks(me);
 
                     // The email rides in the SAME response as the links (#464) — reading it here rather than
                     // adding a second call is ADR 0557's rule applied to a value, not an address: one read,
@@ -72,7 +87,7 @@ public sealed class ProfileClient(ApiCore core)
             }
         }
 
-        return _meLinks?.GetValueOrDefault(rel) is { } href
+        return _meLinks?.Href(rel) is { } href
             ? href
             : throw new InvalidOperationException($"The 'me' resource does not advertise the '{rel}' rel.");
     }
@@ -119,7 +134,7 @@ public sealed class ProfileClient(ApiCore core)
 
     public async Task ChangeMyPasswordAsync(string currentPassword, string newPassword, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PutAsJsonAsync(await MeHrefAsync("changePassword", cancellationToken), new { currentPassword, newPassword }, cancellationToken);
+        using var response = await SendMeAsync("changePassword", new { currentPassword, newPassword }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.BadRequest)
         {
             throw new ApiActionException("The current password is incorrect.");
@@ -194,7 +209,7 @@ public sealed class ProfileClient(ApiCore core)
     // a pending, not-yet-active enrollment).
     public async Task<MfaEnrollInfo> EnrollMfaAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsync(await MeHrefAsync("mfaEnroll", cancellationToken), null, cancellationToken);
+        using var response = await SendMeAsync("mfaEnroll", cancellationToken: cancellationToken);
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
         return new MfaEnrollInfo(
@@ -206,7 +221,7 @@ public sealed class ProfileClient(ApiCore core)
     // Confirms enrollment with a code; returns the one-time recovery codes (shown once).
     public async Task<List<string>> EnableMfaAsync(string code, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsJsonAsync(await MeHrefAsync("mfaEnable", cancellationToken), new { code }, cancellationToken);
+        using var response = await SendMeAsync("mfaEnable", new { code }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.BadRequest)
         {
             throw new ApiActionException("That authentication code isn't right.");
@@ -303,7 +318,7 @@ public sealed class ProfileClient(ApiCore core)
     // the caller has no personal space (e.g. a ServiceAccount → 403) so the tree still renders shared repositories.
     public async Task<Node?> GetPersonalRepositoryAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsync(await MeHrefAsync("personalRepository", cancellationToken), null, cancellationToken);
+        using var response = await SendMeAsync("personalRepository", cancellationToken: cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             return null;

@@ -68,9 +68,17 @@ public partial class ClientLinkMethodTests
     // Sites that still name their own verb, per file. THIS MAY ONLY GO DOWN.
     private static readonly Dictionary<string, int> Budget = new(StringComparer.Ordinal)
     {
-        ["src/SimplArchive.DesktopClient/Services/AdminClient.cs"] = 2,
-        ["src/SimplArchive.DesktopClient/Services/AuditClient.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/ProfileClient.cs"] = 4,
+        // EMPTY, and that is the finished state rather than a missing ledger. Every entry was paid: 42 sites
+        // across 19 files, burnt down in three tranches (desktop #1236, web #1237, the last seven here).
+        //
+        // It is therefore now a FLAT BAN, without changing a line of the checking logic — a file absent from
+        // this dictionary has a budget of zero, so any site at all fails. The original comment explained that a
+        // ban was not viable "because there are 247 sites across 77 files, so a ban would fail the build today
+        // and be suppressed tomorrow". That objection expired with the debt.
+        //
+        // A NEW ENTRY HERE IS A REGRESSION, not a starting point. If one is genuinely needed — a call site that
+        // cannot send at a rel for a reason worth recording — put the reason beside it, because an unexplained
+        // number here is indistinguishable from someone silencing the guard.
     };
 
     /// <summary>

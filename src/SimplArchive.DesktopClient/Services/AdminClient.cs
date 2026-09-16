@@ -213,7 +213,7 @@ public sealed class AdminClient(ApiCore core)
     // Rebuilds the tenant's used-storage counter from the actual stored blobs (ADR "Per-tenant storage quota").
     public async Task<TenantSettingsInfo> RecomputeStorageAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsync(await TenantSettingsRelAsync("recompute-storage", cancellationToken), null, cancellationToken);
+        using var response = await SendTenantSettingsRelAsync("recompute-storage", null, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to recompute storage usage.");
@@ -792,13 +792,24 @@ public sealed class AdminClient(ApiCore core)
     // reaching them means reading it first — paid once per admin click, which is the trade the root's
     // "collection roots only" rule asks for: an action on a resource is advertised by that resource, not by the
     // root. (Contrast the notification badge, which is polled and therefore earned a root rel of its own.)
-    private async Task<string> TenantSettingsRelAsync(string rel, CancellationToken cancellationToken)
-    {
-        var settings = await _core.Http.GetFromJsonAsync<JsonElement>(await _core.RootHrefAsync("tenantSettings", cancellationToken), cancellationToken);
-        return ApiCore.ParseLinks(settings) is { } links && links.Href(rel) is { } href
+    private async Task<string> TenantSettingsRelAsync(string rel, CancellationToken cancellationToken) =>
+        await TenantSettingsLinksAsync(cancellationToken) is { } links && links.Href(rel) is { } href
             ? href
             : throw new InvalidOperationException($"Tenant settings advertised no '{rel}' rel (ADR 0543).");
+
+    // The tenant-settings LINKS rather than one href: the method rides along, so a mutating caller can send at
+    // the rel instead of pairing an address with a verb of its own (#1192). Not cached — tenant settings change
+    // under the caller, unlike the root and "me" rel sets.
+    private async Task<LinkMap?> TenantSettingsLinksAsync(CancellationToken cancellationToken)
+    {
+        var settings = await _core.Http.GetFromJsonAsync<JsonElement>(await _core.RootHrefAsync("tenantSettings", cancellationToken), cancellationToken);
+        return ApiCore.ParseLinks(settings);
     }
+
+    /// <summary>Sends AT a rel advertised by tenant settings — address and METHOD both from the link (#1192).</summary>
+    private async Task<HttpResponseMessage> SendTenantSettingsRelAsync(
+        string rel, object? body, CancellationToken cancellationToken) =>
+        await _core.SendRelAsync(await TenantSettingsLinksAsync(cancellationToken), rel, body, cancellationToken);
 
 
 
@@ -807,7 +818,7 @@ public sealed class AdminClient(ApiCore core)
     // whether the endpoint accepted it + the error on failure.
     public async Task<(bool Success, string? Error)> TestAuditWebhookAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsync(await TenantSettingsRelAsync("audit-webhook-test", cancellationToken), null, cancellationToken);
+        using var response = await SendTenantSettingsRelAsync("audit-webhook-test", null, cancellationToken);
         if (response.StatusCode == HttpStatusCode.BadRequest)
         {
             throw new ApiActionException("Save the webhook URL + secret before sending a test.");
