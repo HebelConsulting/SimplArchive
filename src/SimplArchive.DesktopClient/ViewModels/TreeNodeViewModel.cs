@@ -213,7 +213,12 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     /// </remarks>
     public Action<TreeNodeViewModel, bool>? ExpansionChanged { get; set; }
 
-    async partial void OnIsExpandedChanged(bool value)
+    // NOT `async partial void` (#1251). A generated change hook is async void BY CONSTRUCTION — no call site
+    // can wrap it — so an exception inside one bypasses Safe.Fire, the wrapper that exists precisely because
+    // Avalonia has no single UI-thread exception hook (ADR 0275), and lands on AppDomain.UnhandledException.
+    // Expanding a folder after the session ended therefore CRASHED the client rather than signing it out.
+    // Keeping the synchronous part here and deferring only the await keeps the notification ordering intact.
+    partial void OnIsExpandedChanged(bool value)
     {
         // Reported for CLOSING as well as opening — a collapse is a change to the remembered shape, and the
         // early return below only concerns loading children.
@@ -223,6 +228,16 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         }
 
         if (!value || _loaded || _loadChildren is null)
+        {
+            return;
+        }
+
+        Services.Safe.Fire(LoadChildrenOnExpandAsync);
+    }
+
+    private async Task LoadChildrenOnExpandAsync()
+    {
+        if (_loadChildren is null)
         {
             return;
         }

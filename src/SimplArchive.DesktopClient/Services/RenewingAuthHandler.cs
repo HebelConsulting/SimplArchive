@@ -74,13 +74,26 @@ public sealed class RenewingAuthHandler : DelegatingHandler
             _session.Value = null;
             TokenSessions.Current.Clear(_apiRootUrl);
             SessionEnded?.Invoke(_apiRootUrl);
-            return response;
+
+            // THROW rather than hand the 401 back (#1251). Returning it made one ordinary expiry produce two
+            // racing outcomes: the session-ended modal this event raises, and an HttpRequestException from the
+            // caller's EnsureSuccessStatusCode() that nothing caught — which reached the user as a CRASH.
+            // AppExceptions.Report recognises this type and stays silent, so the modal above owns the telling.
+            response.Dispose();
+            throw new SessionEndedException(_apiRootUrl);
         }
 
         var renewed = await RenewAsync(current, cancellationToken);
         if (renewed is null || string.IsNullOrEmpty(renewed.AccessToken))
         {
-            return response;
+            // Renewal was possible in principle and still failed — the same ended session, reached one step
+            // later. It must not return a 401 either, for exactly the reason above.
+            _session.Value = null;
+            TokenSessions.Current.Clear(_apiRootUrl);
+            SessionEnded?.Invoke(_apiRootUrl);
+
+            response.Dispose();
+            throw new SessionEndedException(_apiRootUrl);
         }
 
         response.Dispose();

@@ -72,7 +72,9 @@ public sealed partial class MainWindowViewModel
         }
     }
 
-    async partial void OnSelectedPrincipalChanged(PrincipalRowViewModel? value)
+    partial void OnSelectedPrincipalChanged(PrincipalRowViewModel? value) => Services.Safe.Fire(() => OnSelectedPrincipalChangedAsync(value));
+
+    private async Task OnSelectedPrincipalChangedAsync(PrincipalRowViewModel? value)
     {
         UgEditingRights = false; // selecting a principal exits edit mode
         PrincipalRights.Clear();
@@ -180,7 +182,9 @@ public sealed partial class MainWindowViewModel
     // The AutoCompleteBox's selected candidate — setting it (a pick) adds that user, then resets.
     [ObservableProperty] private UserOptionInfo? _selectedMemberToAdd;
 
-    async partial void OnSelectedMemberToAddChanged(UserOptionInfo? value)
+    partial void OnSelectedMemberToAddChanged(UserOptionInfo? value) => Services.Safe.Fire(() => OnSelectedMemberToAddChangedAsync(value));
+
+    private async Task OnSelectedMemberToAddChangedAsync(UserOptionInfo? value)
     {
         if (value is null || _api is null || SelectedPrincipal is not { IsGroup: true } group)
         {

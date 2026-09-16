@@ -118,7 +118,9 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
     [RelayCommand]
     private Task Refresh() => LoadAsync();
 
-    async partial void OnSelectedItemChanged(RecycleBinRowViewModel? value)
+    partial void OnSelectedItemChanged(RecycleBinRowViewModel? value) => Services.Safe.Fire(() => OnSelectedItemChangedAsync(value));
+
+    private async Task OnSelectedItemChangedAsync(RecycleBinRowViewModel? value)
     {
         if (value is null || _api is null)
         {

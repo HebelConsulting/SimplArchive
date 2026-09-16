@@ -97,7 +97,9 @@ public sealed partial class MainWindowViewModel
         }
     }
 
-    async partial void OnSelectedLegalHoldChanged(LegalHoldRowViewModel? value)
+    partial void OnSelectedLegalHoldChanged(LegalHoldRowViewModel? value) => Services.Safe.Fire(() => OnSelectedLegalHoldChangedAsync(value));
+
+    private async Task OnSelectedLegalHoldChangedAsync(LegalHoldRowViewModel? value)
     {
         SelectedHoldItems.Clear();
         SelectedHoldItem = null; // the items are re-fetched — a held-over selection is a stale subject (ADR 0559)

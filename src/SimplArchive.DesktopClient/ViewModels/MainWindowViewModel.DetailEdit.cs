@@ -137,7 +137,9 @@ public sealed partial class MainWindowViewModel
 
     // Re-load the field editors when the user picks a different mask (empty values — a different mask has
     // different fields). Suppressed during the initial edit load, which fills the current values instead.
-    async partial void OnSelectedMaskChoiceChanged(MaskChoiceViewModel? value)
+    partial void OnSelectedMaskChoiceChanged(MaskChoiceViewModel? value) => Services.Safe.Fire(() => OnSelectedMaskChoiceChangedAsync(value));
+
+    private async Task OnSelectedMaskChoiceChangedAsync(MaskChoiceViewModel? value)
     {
         if (_loadingMaskEdit || _selectedDocumentId is not { } documentId)
         {

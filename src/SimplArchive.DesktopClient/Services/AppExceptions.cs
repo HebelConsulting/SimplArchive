@@ -1,5 +1,6 @@
 using System;
 using System.Net.Http;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
@@ -75,6 +76,18 @@ public static class AppExceptions
     // unhandled exception shows the one-shot crash dialog.
     public static void Report(Exception exception)
     {
+        // An ended session is ALREADY being told to the user (#1251). RenewingAuthHandler raises SessionEnded
+        // and then throws this, so the modal is on its way; reporting it again would be a second dialog for one
+        // event — and since only one shows at a time, the loser is suppressed. Before this, the loser was
+        // usually the correct one, and an ordinary expiry reached the user as a CRASH.
+        //
+        // Swallowing is right here and nowhere near as broad as it looks: this type is thrown from exactly one
+        // place, and only after that place has already raised the event that tells the user.
+        if (IsSessionEnded(exception))
+        {
+            return;
+        }
+
         if (IsConnectivityError(exception))
         {
             ReportConnectionLost();
@@ -83,6 +96,31 @@ public static class AppExceptions
 
         Run(() => _ = ShowCrashAsync(exception));
     }
+
+    /// <summary>
+    /// Whether this exception is an already-announced end of session, and so must NOT be reported again.
+    /// </summary>
+    /// <remarks>
+    /// A predicate rather than an inline check because it is the whole decision, and a decision that cannot be
+    /// asked a question directly can only be tested through <see cref="Report"/> — which on a headless host
+    /// posts its dialog work to a dispatcher that never runs, so "it did not throw" proves nothing. Exposing it
+    /// is what lets the narrowness be asserted: an ordinary exception, and a plain 401, must both answer false,
+    /// or the crash guard has been quietly switched off for everything.
+    /// <para>
+    /// It looks THROUGH wrappers: an exception crossing a Task boundary arrives inside an
+    /// <see cref="AggregateException"/>, and a plain <c>is</c> test against the outer one passes in a unit test
+    /// and then silently stops matching in the app — the worst way for this to be wrong, since the guard would
+    /// look correct and crash anyway.
+    /// </para>
+    /// </remarks>
+    internal static bool IsSessionEnded(Exception exception) => Unwrap(exception) is SessionEndedException;
+
+    private static Exception Unwrap(Exception exception) => exception switch
+    {
+        AggregateException aggregate when aggregate.InnerExceptions.Count == 1 => Unwrap(aggregate.InnerExceptions[0]),
+        TargetInvocationException { InnerException: { } inner } => Unwrap(inner),
+        _ => exception,
+    };
 
     // Raised by the background heartbeat (ADR "Desktop session reconnect") when an idle probe finds the server
     // unreachable — surfaces the same reconnect modal without an exception.

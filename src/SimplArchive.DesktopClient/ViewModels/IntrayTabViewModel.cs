@@ -284,7 +284,9 @@ public sealed partial class IntrayTabViewModel : ObservableObject
     private bool _adjustingFilters;
 
     // The "Show group intrays" checkbox — reveals my group intrays; clears any admin user-view (they're exclusive).
-    async partial void OnIncludeGroupsChanged(bool value)
+    partial void OnIncludeGroupsChanged(bool value) => Services.Safe.Fire(() => OnIncludeGroupsChangedAsync(value));
+
+    private async Task OnIncludeGroupsChangedAsync(bool value)
     {
         if (_adjustingFilters)
         {
@@ -303,7 +305,9 @@ public sealed partial class IntrayTabViewModel : ObservableObject
     }
 
     // The admin user-picker — open a chosen user's intray, or (null id) back to my own.
-    async partial void OnSelectedUserChanged(IntrayUserPickerItem? value)
+    partial void OnSelectedUserChanged(IntrayUserPickerItem? value) => Services.Safe.Fire(() => OnSelectedUserChangedAsync(value));
+
+    private async Task OnSelectedUserChangedAsync(IntrayUserPickerItem? value)
     {
         if (_adjustingFilters)
         {
@@ -384,7 +388,9 @@ public sealed partial class IntrayTabViewModel : ObservableObject
     private bool _loadingMask;
 
     // Loads the right panes when a server intray item gains focus (or clears them when focus is lost).
-    async partial void OnSelectedServerItemChanged(IntrayItemViewModel? value)
+    partial void OnSelectedServerItemChanged(IntrayItemViewModel? value) => Services.Safe.Fire(() => OnSelectedServerItemChangedAsync(value));
+
+    private async Task OnSelectedServerItemChangedAsync(IntrayItemViewModel? value)
     {
         if (value is null)
         {
@@ -466,7 +472,9 @@ public sealed partial class IntrayTabViewModel : ObservableObject
 
     // Reloads the field editors when a different mask is picked (empty values); suppressed on the initial load,
     // which fills the staged draft values instead.
-    async partial void OnSelectedMaskChoiceChanged(MaskChoiceViewModel? value)
+    partial void OnSelectedMaskChoiceChanged(MaskChoiceViewModel? value) => Services.Safe.Fire(() => OnSelectedMaskChoiceChangedAsync(value));
+
+    private async Task OnSelectedMaskChoiceChangedAsync(MaskChoiceViewModel? value)
     {
         if (_loadingMask)
         {

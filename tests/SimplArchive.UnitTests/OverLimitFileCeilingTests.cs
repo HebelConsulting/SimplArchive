@@ -246,7 +246,12 @@ public class OverLimitFileCeilingTests
         // badge under a "Workflow + tasks" heading, and ReloadTasksAsync/LoadTasksAsync/OpenTask a hundred
         // lines away at the tail of the notifications section. They now join the sort/filter state that was
         // already in MainWindowViewModel.Tasks.cs -- which is what actually reads Tasks (#941).
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 1554,
+        // +2 for #1251: OnSelectedTabChanged stopped being `async partial void`. A generated change hook is
+        // async void by construction, so an exception inside one bypasses Safe.Fire and crashes the app — which
+        // is how an expired session took the client down. The forwarder that hands the await to Safe.Fire costs
+        // two lines and removes a crash; raised deliberately rather than worked around, because the alternative
+        // (moving one hook to another file to dodge the number) would scatter the tab logic to protect a count.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 1556,
 
         // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
         // the one authenticated ApiCore. Four areas left it:

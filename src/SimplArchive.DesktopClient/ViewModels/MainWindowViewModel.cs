@@ -1091,7 +1091,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     // fourteen independent decisions when they are one, and the chain is what made every added tab cost this
     // file another dozen lines (#517). Each arm hands back the Task the activation needs; anything with more
     // than one statement gets a local function rather than being flattened into the arm.
-    async partial void OnSelectedTabChanged(int value)
+    partial void OnSelectedTabChanged(int value) => Services.Safe.Fire(() => OnSelectedTabChangedAsync(value));
+
+    private async Task OnSelectedTabChangedAsync(int value)
     {
         Preview.ExitFullscreen(); // leave full screen when switching tabs (the tab strip stays reachable while maximized)
         Intray.Preview.ExitFullscreen();

@@ -194,7 +194,9 @@ public partial class MainWindowViewModel
     // and clobber that document selection.
     private bool _suppressTreeSelectionLoad;
 
-    async partial void OnSelectedTreeNodeChanged(TreeNodeViewModel? value)
+    partial void OnSelectedTreeNodeChanged(TreeNodeViewModel? value) => Services.Safe.Fire(() => OnSelectedTreeNodeChangedAsync(value));
+
+    private async Task OnSelectedTreeNodeChangedAsync(TreeNodeViewModel? value)
     {
         if (_suppressTreeSelectionLoad)
         {
@@ -240,7 +242,9 @@ public partial class MainWindowViewModel
         await LoadFolderContentsAsync(node.Id, node.Links);
     }
 
-    async partial void OnSelectedItemChanged(NodeViewModel? value)
+    partial void OnSelectedItemChanged(NodeViewModel? value) => Services.Safe.Fire(() => OnSelectedItemChangedAsync(value));
+
+    private async Task OnSelectedItemChangedAsync(NodeViewModel? value)
     {
         OnPropertyChanged(nameof(HasSelectedItem));
         OnPropertyChanged(nameof(CanSaveAs));
