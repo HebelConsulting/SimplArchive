@@ -398,7 +398,7 @@ public class RepositoriesController : ControllerBase
             // the plain Folder mask, which made a repository indistinguishable from any folder in a listing or
             // over IMAP without a second query.
             MaskVersionId = await Documents.FolderMask.CurrentVersionIdAsync(
-                _dbContext, tenantId, SimplArchive.Domain.Masks.WellKnownMaskIds.Repository, cancellationToken),
+                _dbContext, tenantId, SimplArchive.Domain.Masks.WellKnownMaskIds.Repository, cancellationToken) ?? Guid.Empty,
             CreatedByUserId = createdByUserId,
             CreatedByServiceAccountId = createdByServiceAccountId,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -707,7 +707,7 @@ public class RepositoriesController : ControllerBase
             ParentId = repositoryId,
             Name = request.Name,
             // Assigned the Folder mask now; if a version is later added, finalize reclassifies it (ADR "Folder mask on folders").
-            MaskVersionId = await Documents.FolderMask.CurrentVersionIdAsync(_dbContext, cancellationToken),
+            MaskVersionId = await Documents.FolderMask.CurrentVersionIdAsync(_dbContext, cancellationToken) ?? Guid.Empty,
             CreatedByUserId = createdByUserId,
             CreatedByServiceAccountId = createdByServiceAccountId,
             CreatedAt = DateTimeOffset.UtcNow,

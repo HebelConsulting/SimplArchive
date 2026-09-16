@@ -148,7 +148,7 @@ public class WorkflowController : ControllerBase
         // Review deadline from the document's mask SLA (ADR "Workflow escalation / SLA reminders"): null when
         // the document has no mask, or the mask defines no ReviewSlaDays.
         var slaDays = await _dbContext.Documents
-            .Where(d => d.Id == documentId && d.MaskVersionId != null)
+            .Where(d => d.Id == documentId)
             .Select(d => _dbContext.MaskVersions.Where(mv => mv.Id == d.MaskVersionId).Select(mv => mv.ReviewSlaDays).FirstOrDefault())
             .FirstOrDefaultAsync(cancellationToken);
         DateTimeOffset? dueAt = slaDays is { } days ? now.AddDays(days) : null;

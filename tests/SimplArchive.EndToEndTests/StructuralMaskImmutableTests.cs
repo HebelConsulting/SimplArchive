@@ -19,7 +19,7 @@ public class StructuralMaskImmutableTests
     public StructuralMaskImmutableTests(E2EApiFactory factory) => _factory = factory;
 
     [Fact]
-    public async Task Re_typing_and_un_typing_a_notebook_are_both_refused_with_their_own_cause()
+    public async Task Re_typing_a_notebook_is_refused_and_un_typing_cannot_be_expressed_at_all()
     {
         var (_, _, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: false);
         var email = $"struct-{Guid.NewGuid():N}@e2e.local";
@@ -50,10 +50,12 @@ public class StructuralMaskImmutableTests
         Assert.Equal(HttpStatusCode.Conflict, retype.StatusCode);
         Assert.Contains("STRUCTURAL_MASK_IMMUTABLE", await retype.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
-        // ...and clearing it, which breaks the projection just as completely.
+        // ...and CLEARING it is no longer a thing that can be attempted: the endpoint that did it is gone
+        // (#1240), so the route answers 405 rather than refusing with a cause. That is a stronger guarantee
+        // than the one this half used to assert — an operation that cannot be expressed cannot break the
+        // projection — and the assertion is kept rather than deleted so the removal stays deliberate.
         var clear = await api.DeleteAsync($"/api/documents/{notebookId}/mask");
-        Assert.Equal(HttpStatusCode.Conflict, clear.StatusCode);
-        Assert.Contains("STRUCTURAL_MASK_IMMUTABLE", await clear.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, clear.StatusCode);
 
         // The mailbox it lives in is equally fixed — the folder mail arrives into.
         var mailbox = await api.PutAsJsonAsync($"/api/documents/{mailboxId}/mask", new { maskId = folderMaskId });

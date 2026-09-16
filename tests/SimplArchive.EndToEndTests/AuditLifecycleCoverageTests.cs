@@ -45,7 +45,8 @@ public class AuditLifecycleCoverageTests
         (await owner.PutAsJsonAsync($"/api/documents/{docId}/mask", new { maskId })).EnsureSuccessStatusCode();
         (await owner.PutAsJsonAsync($"/api/documents/{docId}/index-data", new { fields = Array.Empty<object>() })).EnsureSuccessStatusCode();
         (await owner.PutAsJsonAsync($"/api/documents/{docId}/versions/{versionId}/document-date", new { documentDate = "2020-01-02" })).EnsureSuccessStatusCode();
-        (await owner.DeleteAsync($"/api/documents/{docId}/mask")).EnsureSuccessStatusCode();
+        // No mask-clearing step: the endpoint is gone (#1240), so there is no Document.MaskCleared to cover.
+        // The expectations below dropped it for the same reason.
 
         // A CanViewAuditLog user reads the log; every lifecycle action is present.
         var viewerEmail = $"auditor-{Guid.NewGuid():N}@e2e.local";
@@ -59,7 +60,10 @@ public class AuditLifecycleCoverageTests
         foreach (var expected in new[]
         {
             "Repository.Created", "Document.Created", "Document.VersionAdded", "Document.Renamed",
-            "Document.MaskAssigned", "Document.IndexDataUpdated", "Document.DocumentDateChanged", "Document.MaskCleared",
+            // Document.MaskCleared is NOT expected any more: clearing a mask is not an operation (#1240), so
+            // nothing emits it. The action constant stays in AuditActions because historical events still
+            // carry the string and a reader of the log must still be able to resolve it.
+            "Document.MaskAssigned", "Document.IndexDataUpdated", "Document.DocumentDateChanged",
         })
         {
             Assert.Contains(expected, actions);

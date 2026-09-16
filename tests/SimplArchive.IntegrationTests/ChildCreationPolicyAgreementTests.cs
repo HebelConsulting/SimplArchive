@@ -71,7 +71,7 @@ public class ChildCreationPolicyAgreementTests
                 Id = Guid.NewGuid(),
                 TenantId = _tenantId,
                 Name = $"Repo {Guid.NewGuid():N}"[..12],
-                MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, WellKnownMaskIds.Repository, CancellationToken.None),
+                MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, WellKnownMaskIds.Repository, CancellationToken.None) ?? Guid.Empty,
                 CreatedByUserId = userId,
                 CreatedAt = DateTimeOffset.UtcNow,
             };
@@ -91,7 +91,7 @@ public class ChildCreationPolicyAgreementTests
                 TenantId = _tenantId,
                 ParentId = repoId,
                 Name = "Parent",
-                MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, parentMaskId, CancellationToken.None),
+                MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, parentMaskId, CancellationToken.None) ?? Guid.Empty,
                 CreatedByUserId = userId,
                 CreatedAt = DateTimeOffset.UtcNow,
             };
@@ -119,7 +119,7 @@ public class ChildCreationPolicyAgreementTests
                 TenantId = _tenantId,
                 ParentId = parentId,
                 Name = "A plain folder",
-                MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, WellKnownMaskIds.Folder, CancellationToken.None),
+                MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, WellKnownMaskIds.Folder, CancellationToken.None) ?? Guid.Empty,
                 CreatedByUserId = userId,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
@@ -182,7 +182,7 @@ public class ChildCreationPolicyAgreementTests
                 TenantId = _tenantId,
                 ParentId = personalId,
                 Name = "A plain folder",
-                MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, WellKnownMaskIds.Folder, CancellationToken.None),
+                MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, WellKnownMaskIds.Folder, CancellationToken.None) ?? Guid.Empty,
                 CreatedByUserId = userId,
                 CreatedAt = DateTimeOffset.UtcNow,
             });

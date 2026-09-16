@@ -283,42 +283,6 @@ public class DocumentMetadataController : ControllerBase
         return Ok(new SensitivityResource { SensitivityLabelId = request.LabelId, SensitivityLabelName = labelName ?? "", Links = [new Link("self", $"/api/documents/{documentId}/sensitivity", "GET")] });
     }
 
-    [HttpDelete("mask")]
-    public async Task<IActionResult> ClearMask(Guid documentId, CancellationToken cancellationToken)
-    {
-        var document = await _dbContext.Documents.SingleOrDefaultAsync(d => d.Id == documentId, cancellationToken);
-
-        if (document is null)
-        {
-            return NotFound();
-        }
-
-        if (!await _access.CanEditIndexDataAsync(documentId, cancellationToken))
-        {
-            return Forbid();
-        }
-
-        await _access.EnsureNotFrozenAsync(documentId, cancellationToken);
-        await _access.EnsureNotCheckedOutByOtherAsync(documentId, cancellationToken);
-
-        document.MaskVersionId = null;
-        // Clearing is a change: an untyped Mailbox breaks the projection exactly as a re-typed one does
-        // (ADR 0672), so this path is refused for the same folders and needs the same translation.
-        try
-        {
-            await _documents.MutateAsync(Request, document, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
-        }
-        catch (Exception e) when (Documents.TypedFolderSave.Translate(e) is { } translated)
-        {
-            throw translated;
-        }
-
-        await _queue.EnqueueAsync(documentId, cancellationToken);
-        await _wormLock.ReconcileAsync(documentId, cancellationToken); // retention no longer applies
-        await _audit.RecordAsync(AuditActions.DocumentMaskCleared, "Document", documentId, document.Name, cancellationToken: cancellationToken);
-
-        return NoContent();
-    }
 
     // Ordered OCR-language codes (first = highest priority) — the system-field picker's selection (ADR
     // "Per-tenant / per-version OCR languages"). Empty clears the override (inherit the tenant default).

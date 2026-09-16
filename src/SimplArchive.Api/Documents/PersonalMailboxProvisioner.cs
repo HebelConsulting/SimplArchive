@@ -92,7 +92,7 @@ public sealed class PersonalMailboxProvisioner
             .ToListAsync(cancellationToken);
 
         var existing = await _dbContext.Documents
-            .Where(d => d.ParentId == personal.Id && d.MaskVersionId != null && mailboxVersionIds.Contains(d.MaskVersionId.Value))
+            .Where(d => d.ParentId == personal.Id && mailboxVersionIds.Contains(d.MaskVersionId))
             .FirstOrDefaultAsync(cancellationToken);
 
         // Found by its MASK, not its name, so the 2026-08-19 rename cannot orphan one — but a space
@@ -222,9 +222,20 @@ public sealed class PersonalMailboxProvisioner
             // maskless one is not merely untyped — it is indistinguishable from archive content to anything
             // keying off the mask, the sweep included. A grow-only seed never revisits it, so the heal happens
             // where the node is already in hand (#574).
-            if (found.MaskVersionId is null && maskVersionId is not null)
+            // "Created before its mask existed" now means GENERICALLY typed, not maskless: since #1240 every
+            // document wears a mask, so the old `== Guid.Empty` test could never be true again and the heal
+            // would have gone permanently dead — the INBOX staying indistinguishable from archive content
+            // forever, while looking perfectly fine in every listing.
+            var wearsGenericMask = found.MaskVersionId == Guid.Empty
+                || await _dbContext.MaskVersions.IgnoreQueryFilters(["TenantFilter"])
+                    .AnyAsync(
+                        v => v.Id == found.MaskVersionId
+                            && (v.MaskId == WellKnownMaskIds.Folder || v.MaskId == WellKnownMaskIds.BasicEntry),
+                        cancellationToken);
+
+            if (wearsGenericMask && maskVersionId is not null)
             {
-                found.MaskVersionId = maskVersionId;
+                found.MaskVersionId = maskVersionId.Value;
                 await _dbContext.SaveChangesAsync(cancellationToken);
             }
 
@@ -237,7 +248,7 @@ public sealed class PersonalMailboxProvisioner
             TenantId = tenantId,
             ParentId = mailbox.Id,
             Name = name,
-            MaskVersionId = maskVersionId,
+            MaskVersionId = maskVersionId ?? Guid.Empty,
             CreatedByUserId = userId,
             CreatedByServiceAccountId = createdByServiceAccountId,
             CreatedAt = createdAt ?? DateTimeOffset.UtcNow,

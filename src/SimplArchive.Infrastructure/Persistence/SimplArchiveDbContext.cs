@@ -535,8 +535,7 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
         // than being exempted from it. Only an assignment the level would have refused on arrival is refused
         // here — which is the same question, asked at the moment the answer becomes knowable.
         var masked = entry.State == EntityState.Modified
-                     && entry.Property(d => d.MaskVersionId).IsModified
-                     && document.MaskVersionId is not null;
+                     && entry.Property(d => d.MaskVersionId).IsModified;
 
         if (!arriving && !masked)
         {
@@ -559,7 +558,8 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
         //
         // The consequence is that an unclassified upload is admitted here too, so "no loose files in the
         // personal space" is NOT yet enforced (#596 leaves that question open).
-        var admitted = document.MaskVersionId is not { } maskVersionId
+        var maskVersionId = document.MaskVersionId;
+        var admitted = maskVersionId == Guid.Empty
             || await MaskVersions.IgnoreQueryFilters(["TenantFilter"])
                 .AnyAsync(
                     v => v.Id == maskVersionId && PersonalFolders.FirstLevelMasks.Contains(v.MaskId),
@@ -653,8 +653,7 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
         var occupants = (await Documents
             .Where(d => d.Id != document.Id
                 && d.ParentId == folderId
-                && d.MaskVersionId != null
-                && maskVersionIds.Contains(d.MaskVersionId.Value))
+                && maskVersionIds.Contains(d.MaskVersionId))
             .Select(d => d.Id)
             .ToListAsync(cancellationToken))
             .ToHashSet();
@@ -859,7 +858,6 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
             .Where(e => e.State == EntityState.Added
                 || (e.State == EntityState.Modified && e.Property(d => d.MaskVersionId).IsModified))
             .Select(e => e.Entity)
-            .Where(d => d.MaskVersionId is not null)
             .ToList();
 
         if (changedDocuments.Count == 0)
@@ -874,7 +872,7 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
 
         foreach (var document in changedDocuments)
         {
-            var maskVersionId = document.MaskVersionId!.Value;
+            var maskVersionId = document.MaskVersionId;
 
             var requiredFieldDefinitions = await FieldDefinitions
                 .Where(f => f.MaskVersionId == maskVersionId && f.IsRequired)

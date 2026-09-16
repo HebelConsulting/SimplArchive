@@ -64,7 +64,7 @@ internal static class DavChangeLog
     {
         var itemMaskIds = registry.ItemMaskIds(protocol.Extension);
         var items = await db.Documents
-            .Where(d => d.ParentId == folderId && d.MaskVersionId != null
+            .Where(d => d.ParentId == folderId
                 && db.MaskVersions.Any(v => v.Id == d.MaskVersionId && itemMaskIds.Contains(v.MaskId)))
             .Select(d => new
             {

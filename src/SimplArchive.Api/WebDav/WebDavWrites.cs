@@ -266,9 +266,10 @@ internal static class WebDavWrites
                 // Folder-masked child is refused outright. Those uploads must arrive unclassified and let the
                 // finalizer decide what they are — which is exactly how a .ics or .vcf becomes one.
                 MaskVersionId = parentIsTypedFolder
-                    ? null
+                    ? Guid.Empty
                     : await FolderMask.CurrentVersionIdAsync(db, user.TenantId, WellKnownMaskIds.Folder, context.RequestAborted)
-                        ?? await FolderMask.CurrentVersionIdAsync(db, context.RequestAborted),
+                        ?? await FolderMask.CurrentVersionIdAsync(db, context.RequestAborted)
+                        ?? Guid.Empty,
                 CreatedByUserId = user.Id,
                 CreatedAt = now,
                 StorageFolderId = keyStorageFolderId,
@@ -365,7 +366,7 @@ internal static class WebDavWrites
             TenantId = user.TenantId,
             ParentId = parentDoc.Id,
             Name = segments[^1],
-            MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, context.RequestAborted),
+            MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, context.RequestAborted) ?? Guid.Empty,
             CreatedByUserId = user.Id,
             CreatedAt = DateTimeOffset.UtcNow,
         });

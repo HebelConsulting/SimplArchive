@@ -117,7 +117,7 @@ public sealed class DocumentResourceLinks
         // no bookings surface, and the endpoint 404s to match. One rel: GET lists, POST books (ADR 0719);
         // both are gated by CanSee, which the caller holding this resource already passed.
         var maskFacts = await _dbContext.Documents
-            .Where(d => d.Id == documentId && d.MaskVersionId != null)
+            .Where(d => d.Id == documentId)
             .Join(_dbContext.MaskVersions, d => d.MaskVersionId, v => (Guid?)v.Id, (d, v) => v)
             .Join(_dbContext.Masks, v => new { v.TenantId, Id = v.MaskId }, m => new { m.TenantId, m.Id }, (v, m) => new { m.IsBookable, MaskId = m.Id })
             .FirstOrDefaultAsync(cancellationToken);
@@ -224,7 +224,7 @@ public sealed class DocumentResourceLinks
             && _machines.Machines.Values.Any(m => m.Transitions.Values.Any(t => t.AutoRefreshOnOpen)))
         {
             var parentMaskId = await _dbContext.Documents
-                .Where(d => d.Id == refreshParent && d.MaskVersionId != null)
+                .Where(d => d.Id == refreshParent)
                 .Join(_dbContext.MaskVersions, d => d.MaskVersionId, v => (Guid?)v.Id, (d, v) => (Guid?)v.MaskId)
                 .FirstOrDefaultAsync(cancellationToken);
             if (parentMaskId is { } parentMask)
@@ -306,7 +306,7 @@ public sealed class DocumentResourceLinks
         // DocumentRow is a projection and does not carry the mask — one small query rather than widening the
         // row for every read that does not need it.
         var folderMaskId = await _dbContext.Documents
-            .Where(d => d.Id == documentId && d.MaskVersionId != null)
+            .Where(d => d.Id == documentId)
             .Join(_dbContext.MaskVersions, d => d.MaskVersionId, v => v.Id, (_, v) => (Guid?)v.MaskId)
             .SingleOrDefaultAsync(cancellationToken);
 

@@ -67,10 +67,10 @@ public class ProvisionedRepositoryMaskTests
             .Select(d => d.MaskVersionId)
             .SingleAsync();
 
-        return maskVersionId is null
+        return maskVersionId == Guid.Empty
             ? null
             : await db.MaskVersions.IgnoreQueryFilters(["TenantFilter"])
-                .Where(v => v.Id == maskVersionId.Value)
+                .Where(v => v.Id == maskVersionId)
                 .Select(v => (Guid?)v.MaskId)
                 .SingleAsync();
     }

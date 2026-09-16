@@ -81,7 +81,7 @@ public class DocumentsController : ControllerBase
     {
         var row = await (
             from d in _dbContext.Documents
-            where d.Id == documentId && d.MaskVersionId != null
+            where d.Id == documentId
             join mv in _dbContext.MaskVersions on d.MaskVersionId equals mv.Id
             where mv.RetentionYears != null
             select new { d.CreatedAt, d.CurrentVersionId, RetentionYears = mv.RetentionYears!.Value }).FirstOrDefaultAsync(cancellationToken);

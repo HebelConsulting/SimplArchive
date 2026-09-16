@@ -336,7 +336,8 @@ internal static class DavWrites
     /// </summary>
     private static async Task<IActionResult?> ReadOnlyRefusalAsync(DavControllerContext context, Document folder, string resourceName)
     {
-        if (folder.MaskVersionId is not { } maskVersionId)
+        var maskVersionId = folder.MaskVersionId;
+        if (maskVersionId == Guid.Empty)
         {
             return null;
         }

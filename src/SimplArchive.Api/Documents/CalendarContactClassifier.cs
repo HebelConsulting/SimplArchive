@@ -105,7 +105,8 @@ public sealed class CalendarContactClassifier
     public async Task<bool> TryRefreshAsync(Document document, DocumentVersion version, CancellationToken cancellationToken)
     {
         var extension = Path.GetExtension(version.ObjectKey).ToLowerInvariant();
-        if (!Handles(extension) || document.MaskVersionId is not { } maskVersionId)
+        var maskVersionId = document.MaskVersionId;
+        if (!Handles(extension) || maskVersionId == Guid.Empty)
         {
             return false;
         }

@@ -93,7 +93,7 @@ public class NotebookController : ControllerBase
             ParentId = documentId,
             Name = request.Name.Trim(),
             MaskVersionId = await FolderMask.CurrentVersionIdAsync(
-                _dbContext, folder.TenantId, WellKnownMaskIds.NotebookSection, cancellationToken),
+                _dbContext, folder.TenantId, WellKnownMaskIds.NotebookSection, cancellationToken) ?? Guid.Empty,
             CreatedByUserId = createdByUserId,
             CreatedByServiceAccountId = createdByServiceAccountId,
             CreatedAt = DateTimeOffset.UtcNow,

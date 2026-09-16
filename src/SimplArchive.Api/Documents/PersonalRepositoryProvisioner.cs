@@ -127,8 +127,9 @@ public sealed class PersonalRepositoryProvisioner
             // ambient one instead made a personal repository come out with no mask whenever the caller had no
             // current tenant set — the same defect ADR 0582 fixed for a tenant's first repository. Taking it from
             // the parameter removes the dependency on caller context altogether.
-            MaskVersionId = await FolderMask.CurrentVersionIdAsync(_dbContext, tenantId, WellKnownMaskIds.UserFolder, cancellationToken)
-                ?? await FolderMask.CurrentVersionIdAsync(_dbContext, tenantId, cancellationToken),
+            MaskVersionId = (await FolderMask.CurrentVersionIdAsync(_dbContext, tenantId, WellKnownMaskIds.UserFolder, cancellationToken))
+                ?? await FolderMask.CurrentVersionIdAsync(_dbContext, tenantId, cancellationToken)
+                ?? Guid.Empty,
             CreatedByUserId = userId,
             CreatedAt = at,
         };
@@ -199,12 +200,24 @@ public sealed class PersonalRepositoryProvisioner
 
         if (existing is not null)
         {
-            // Heal a maskless typed folder: a provisioning run whose tenant predated this mask (an upgraded
-            // deployment) created the folder with no mask at all — in which state it neither projects onto its
-            // protocol surface nor enforces its typed containment.
-            if (existing.MaskVersionId is null && maskVersionId is not null)
+            // Heal a GENERICALLY typed folder: a provisioning run whose tenant predated this mask (an upgraded
+            // deployment) created the folder without it — in which state it neither projects onto its protocol
+            // surface nor enforces its typed containment.
+            //
+            // The condition used to be "has no mask at all", and #1240 retired that state: every document is
+            // typed, so such a folder now arrives wearing the generic Folder mask (or was backfilled to it by
+            // the migration). Reading the old condition would leave the branch permanently false and silently
+            // end the heal — the folder would stay generic forever, looking correct in every listing.
+            var wearsGenericMask = existing.MaskVersionId == Guid.Empty
+                || await _dbContext.MaskVersions.IgnoreQueryFilters(["TenantFilter"])
+                    .AnyAsync(
+                        v => v.Id == existing.MaskVersionId
+                            && (v.MaskId == WellKnownMaskIds.Folder || v.MaskId == WellKnownMaskIds.BasicEntry),
+                        cancellationToken);
+
+            if (wearsGenericMask && maskVersionId is not null)
             {
-                existing.MaskVersionId = maskVersionId;
+                existing.MaskVersionId = maskVersionId.Value;
                 await _dbContext.SaveChangesAsync(cancellationToken);
             }
             else if (restampFromMaskId is { } fromMaskId && maskVersionId is not null && existing.MaskVersionId is { } currentVersionId)
@@ -217,7 +230,7 @@ public sealed class PersonalRepositoryProvisioner
                     .AnyAsync(v => v.Id == currentVersionId && v.MaskId == fromMaskId, cancellationToken);
                 if (wearsOldMask)
                 {
-                    existing.MaskVersionId = maskVersionId;
+                    existing.MaskVersionId = maskVersionId.Value;
                     await _dbContext.SaveChangesAsync(cancellationToken);
                 }
             }
@@ -230,7 +243,7 @@ public sealed class PersonalRepositoryProvisioner
             TenantId = tenantId,
             ParentId = root.Id,
             Name = name,
-            MaskVersionId = maskVersionId,
+            MaskVersionId = maskVersionId ?? Guid.Empty,
             CreatedByUserId = userId,
             CreatedAt = at,
         });

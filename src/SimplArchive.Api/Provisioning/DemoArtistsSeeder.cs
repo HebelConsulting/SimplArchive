@@ -442,7 +442,7 @@ internal static class DemoArtistsSeeder
             TenantId = tenantId,
             ParentId = parentId,
             Name = name,
-            MaskVersionId = maskVersionId,
+            MaskVersionId = maskVersionId ?? Guid.Empty,
             CreatedByUserId = adminId,
             CreatedAt = at,
         };

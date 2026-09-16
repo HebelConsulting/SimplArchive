@@ -56,7 +56,7 @@ public class MultiResourceBookingTests
                 TenantId = f.TenantId,
                 ParentId = parent,
                 Name = name,
-                MaskVersionId = maskVersion,
+                MaskVersionId = maskVersion ?? Guid.Empty,
                 CreatedByUserId = f.UserId,
                 CreatedAt = DateTimeOffset.UtcNow,
             });

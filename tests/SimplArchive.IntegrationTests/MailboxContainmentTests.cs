@@ -62,7 +62,7 @@ public class MailboxContainmentTests
     {
         var document = await AddAsync(db, parentId, userId, name, WellKnownMaskIds.EMail);
 
-        var maskVersionId = document.MaskVersionId!.Value;
+        var maskVersionId = document.MaskVersionId;
         var fields = await db.FieldDefinitions
             .Where(f => f.MaskVersionId == maskVersionId && f.IsRequired)
             .ToListAsync();
@@ -90,7 +90,7 @@ public class MailboxContainmentTests
             TenantId = _tenantId,
             ParentId = parentId,
             Name = name,
-            MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, maskId, CancellationToken.None),
+            MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, maskId, CancellationToken.None) ?? Guid.Empty,
             CreatedByUserId = userId,
             CreatedAt = DateTimeOffset.UtcNow,
         };

@@ -121,7 +121,7 @@ public sealed class ModuleActivationService
                 return; // tenant not yet healed to carry the mask — the projection is best-effort, the activation is not.
             }
 
-            document.MaskVersionId = currentVersionId;
+            document.MaskVersionId = currentVersionId.Value;
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 

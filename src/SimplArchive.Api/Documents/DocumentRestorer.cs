@@ -143,7 +143,7 @@ public sealed class DocumentRestorer
             TenantId = tenantId,
             ParentId = rootId,
             Name = RecoveredItemsFolderName,
-            MaskVersionId = await FolderMask.CurrentVersionIdAsync(_dbContext, cancellationToken),
+            MaskVersionId = await FolderMask.CurrentVersionIdAsync(_dbContext, cancellationToken) ?? Guid.Empty,
             CreatedByUserId = callerUserId,
             CreatedByServiceAccountId = callerServiceAccountId,
             CreatedAt = DateTimeOffset.UtcNow,

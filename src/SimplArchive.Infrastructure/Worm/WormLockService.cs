@@ -88,7 +88,8 @@ public sealed class WormLockService : IWormLockService
             .Select(t => t.WormLockMode)
             .SingleAsync(cancellationToken);
 
-        if (document.MaskVersionId is not { } maskVersionId)
+        var maskVersionId = document.MaskVersionId;
+        if (maskVersionId == Guid.Empty)
         {
             return (null, mode);
         }

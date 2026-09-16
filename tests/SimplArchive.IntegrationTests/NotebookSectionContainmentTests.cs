@@ -63,7 +63,7 @@ public class NotebookSectionContainmentTests
         TenantId = tenantId,
         ParentId = parentId,
         Name = name,
-        MaskVersionId = maskVersionId,
+        MaskVersionId = maskVersionId ?? Guid.Empty,
         CreatedByUserId = userId,
         CreatedAt = DateTimeOffset.UtcNow,
     };
@@ -73,7 +73,7 @@ public class NotebookSectionContainmentTests
     private static async Task AddWithRequiredFieldsAsync(SimplArchiveDbContext db, Document document)
     {
         db.Documents.Add(document);
-        if (document.MaskVersionId is not { } maskVersionId)
+        if (document.MaskVersionId is var maskVersionId && maskVersionId == Guid.Empty)
         {
             return;
         }

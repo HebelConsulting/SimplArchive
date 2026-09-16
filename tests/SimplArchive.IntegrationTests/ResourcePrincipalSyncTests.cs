@@ -128,7 +128,7 @@ public class ResourcePrincipalSyncTests
         Guid versionId;
         using (var db = CreateContext(connection, f.TenantId))
         {
-            versionId = await db.Documents.Where(d => d.Id == f.DossierId).Select(d => d.MaskVersionId!.Value).SingleAsync();
+            versionId = await db.Documents.Where(d => d.Id == f.DossierId).Select(d => d.MaskVersionId).SingleAsync();
             db.Documents.Add(new Document
             {
                 Id = bareId,

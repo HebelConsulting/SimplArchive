@@ -37,4 +37,27 @@ public static class FolderMask
     // Whether a mask-version id belongs to the Folder well-known mask (so finalize treats it as unclassified).
     public static async Task<bool> IsFolderMaskAsync(SimplArchiveDbContext dbContext, Guid? maskVersionId, CancellationToken cancellationToken) =>
         maskVersionId is { } id && await dbContext.MaskVersions.AnyAsync(mv => mv.Id == id && mv.MaskId == WellKnownMaskIds.Folder, cancellationToken);
+
+    /// <summary>
+    /// Whether this mask leaves the document still OPEN TO CLASSIFICATION — the generic types, not a real one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Before #1240 an unclassified document had NO mask, and <c>AutoClassifyAsync</c> simply asked whether one
+    /// was present. Now every document is typed at insert, so "has a mask" no longer distinguishes a classified
+    /// document from a brand-new upload — and asking the old question would make the classifier skip every new
+    /// file, silently ending auto-classification of <c>.eml</c>, <c>.ics</c> and <c>.vcf</c>.
+    /// </para>
+    /// <para>
+    /// So the question it always meant is asked explicitly: <b>Folder and Basic Entry are the generic types</b>,
+    /// carrying no claim about what the document IS, exactly as an absent mask carried none. Anything else was
+    /// chosen — by a user or by the classifier — and is left alone.
+    /// </para>
+    /// </remarks>
+    public static async Task<bool> IsGenericMaskAsync(SimplArchiveDbContext dbContext, Guid maskVersionId, CancellationToken cancellationToken) =>
+        maskVersionId == Guid.Empty
+        || await dbContext.MaskVersions.AnyAsync(
+            mv => mv.Id == maskVersionId
+                && (mv.MaskId == WellKnownMaskIds.Folder || mv.MaskId == WellKnownMaskIds.BasicEntry),
+            cancellationToken);
 }

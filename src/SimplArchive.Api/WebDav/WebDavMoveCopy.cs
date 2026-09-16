@@ -359,7 +359,7 @@ internal static class WebDavMoveCopy
                 TenantId = user.TenantId,
                 ParentId = destParentId,
                 Name = newName,
-                MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, ct),
+                MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, ct) ?? Guid.Empty,
                 CreatedByUserId = user.Id,
                 CreatedAt = now,
             };

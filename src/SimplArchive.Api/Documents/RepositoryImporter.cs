@@ -482,7 +482,7 @@ public sealed class RepositoryImporter
                 entity.BreaksInheritance = doc.BreaksInheritance;
             }
 
-            entity.MaskVersionId = doc.MaskVersionId is { } mv && maskVersionMap.TryGetValue(mv, out var mapped) ? mapped : null;
+            entity.MaskVersionId = doc.MaskVersionId is { } mv && maskVersionMap.TryGetValue(mv, out var mapped) ? mapped : Guid.Empty;
             // The document's sensitivity label (ADR "Classification in export/import") resolves by name against the
             // merged catalog; null (unlabelled) or an unknown label clears it.
             entity.SensitivityLabelId = doc.SensitivityLabel is { } sl && labelMap.TryGetValue(sl, out var labelId) ? labelId : null;
@@ -619,7 +619,7 @@ public sealed class RepositoryImporter
             TenantId = tenantId,
             ParentId = parentId,
             Name = name,
-            MaskVersionId = null, // set in phase D
+            MaskVersionId = Guid.Empty, // set in phase D
             CreatedByUserId = userId,
             CreatedByServiceAccountId = svcId,
             CreatedAt = doc.CreatedAt,

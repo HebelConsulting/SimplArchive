@@ -133,12 +133,6 @@ public sealed class MasksClient
         await ApiCore.ThrowIfProblemAsync(response, "Could not assign the mask", cancellationToken);
     }
 
-    public async Task ClearMaskAsync(string maskHref, CancellationToken cancellationToken = default)
-    {
-        var response = await _core.Http.DeleteAsync(maskHref, cancellationToken);
-        await ApiCore.ThrowIfProblemAsync(response, "Could not clear the mask", cancellationToken);
-    }
-
     /// <summary>Creates a tenant mask with no fields — freely assignable, since it types nothing in particular.</summary>
     /// <remarks>
     /// Needs CanManageMasks. A mask created this way is the ordinary case a tenant admin makes: not a folder

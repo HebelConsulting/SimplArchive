@@ -141,8 +141,14 @@ public class RepositoryExporterTests
         Assert.Equal(new HashSet<string> { "Repo", "Folder", "DocA", "DocB" }, docNames);
 
         // Mask definition + its field are exported, flagged not-well-known, retention preserved.
-        var mask = JsonDocument.Parse(entries["masks/masks.json"]).RootElement[0];
-        Assert.False(mask.GetProperty("wellKnown").GetBoolean());
+        //
+        // SELECTED BY NAME rather than taken as element [0]. Since #1240 every document wears a mask, so this
+        // fixture's documents also pull in the tenant's generic default — a WELL-KNOWN mask that is now
+        // exported beside the custom one. Indexing blindly made the assertion depend on which of the two the
+        // exporter happened to emit first, which is not what the test is about.
+        var mask = JsonDocument.Parse(entries["masks/masks.json"]).RootElement
+            .EnumerateArray()
+            .Single(m => !m.GetProperty("wellKnown").GetBoolean());
         Assert.Equal(7, mask.GetProperty("version").GetProperty("retentionYears").GetInt32());
         Assert.Equal("Keywords", mask.GetProperty("fields")[0].GetProperty("name").GetString());
 

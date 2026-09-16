@@ -81,7 +81,7 @@ public sealed class RetentionService : IRetentionService
         // available here. Ordering happens on the entity, before the projection, or EF can't translate it.
         var candidates =
             from d in _dbContext.Documents
-            where d.MaskVersionId != null && !_dbContext.Documents.Any(c => c.ParentId == d.Id)
+            where !_dbContext.Documents.Any(c => c.ParentId == d.Id)
             join mv in _dbContext.MaskVersions on d.MaskVersionId equals mv.Id
             where mv.RetentionYears != null
             orderby d.Id

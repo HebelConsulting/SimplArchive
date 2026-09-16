@@ -227,7 +227,7 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             // a freshly reset demo — which is why the kiosk showed a plain folder icon on its repository every
             // morning after the nightly `down -v`, and nowhere else did.
             MaskVersionId = await Documents.FolderMask.CurrentVersionIdAsync(
-                _dbContext, tenant.Id, Domain.Masks.WellKnownMaskIds.Repository, cancellationToken),
+                _dbContext, tenant.Id, Domain.Masks.WellKnownMaskIds.Repository, cancellationToken) ?? Guid.Empty,
             CreatedByUserId = administrator.Id,
             CreatedAt = at,
         };

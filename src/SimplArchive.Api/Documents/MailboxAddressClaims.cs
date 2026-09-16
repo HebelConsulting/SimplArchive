@@ -143,7 +143,7 @@ public sealed class MailboxAddressClaims(
             var level = currentLevel; // no closure over the loop variable
             var wearsMailbox = await dbContext.Documents
                 .IgnoreQueryFilters(["SoftDeleteFilter"])
-                .Where(d => level.Contains(d.Id) && d.MaskVersionId != null)
+                .Where(d => level.Contains(d.Id))
                 .Join(dbContext.MaskVersions, d => d.MaskVersionId, mv => mv.Id, (d, mv) => mv.MaskId)
                 .AnyAsync(maskId => maskId == WellKnownMaskIds.Mailbox, cancellationToken);
             if (wearsMailbox)

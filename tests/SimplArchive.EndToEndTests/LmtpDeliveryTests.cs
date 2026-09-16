@@ -278,15 +278,23 @@ public class LmtpDeliveryTests
         var filed = db.Documents.IgnoreQueryFilters().Single(d => d.Name == first);
         var inbox = db.Documents.IgnoreQueryFilters().Single(d => d.Id == filed.ParentId);
         Assert.Equal("Inbox", inbox.Name); // PascalCase in the tree; IMAP projects it as INBOX (#596)
-        Assert.NotNull(inbox.MaskVersionId);
+        Assert.NotEqual(Guid.Empty, inbox.MaskVersionId);
         Assert.True(await IsImapSpecialAsync(db, inbox.MaskVersionId));
 
         // An INBOX created before the mask existed: a grow-only seed never revisits it, so the heal has to
         // happen on the next delivery. Via ExecuteUpdate, because the state is HISTORICAL, not a transition —
         // ADR 0685 now refuses moving a folder OFF a structural mask through SaveChanges, and a pre-mask
         // folder never made that transition: it simply predates the mask.
+        // The historical state is now "generically typed" rather than null — the column is required (#1240),
+        // so NULL is no longer a value the database will take. Still ExecuteUpdate for the original reason:
+        // this is a HISTORICAL state, not a transition, and ADR 0685 refuses moving a folder off a structural
+        // mask through SaveChanges.
+        var folderVersionId = await db.MaskVersions.IgnoreQueryFilters()
+            .Where(v => v.TenantId == inbox.TenantId && v.MaskId == SimplArchive.Domain.Masks.WellKnownMaskIds.Folder && v.IsCurrent)
+            .Select(v => v.Id)
+            .SingleAsync();
         await db.Documents.IgnoreQueryFilters().Where(d => d.Id == inbox.Id)
-            .ExecuteUpdateAsync(u => u.SetProperty(d => d.MaskVersionId, (Guid?)null));
+            .ExecuteUpdateAsync(u => u.SetProperty(d => d.MaskVersionId, folderVersionId));
 
         var second = await DeliverOneAsync(address);
 

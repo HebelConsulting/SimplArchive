@@ -32,7 +32,8 @@ public partial class SimplArchiveDbContext
         foreach (var entry in candidates)
         {
             var document = entry.Entity;
-            if (document.MaskVersionId is not { } maskVersionId)
+            var maskVersionId = document.MaskVersionId;
+            if (maskVersionId == Guid.Empty)
             {
                 continue;
             }

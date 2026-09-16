@@ -330,9 +330,12 @@ public class DocumentDetailController(
 
         if ((changed & DocumentDetailWriter.Aspect.Mask) != 0)
         {
-            await (applied.MaskName is { } maskName
-                ? audit.RecordAsync(AuditActions.DocumentMaskAssigned, "Document", documentId, name, $"Mask set to '{maskName}'", cancellationToken: cancellationToken)
-                : audit.RecordAsync(AuditActions.DocumentMaskCleared, "Document", documentId, name, cancellationToken: cancellationToken));
+            // Only ever an assignment now: a request that names no mask is refused rather than clearing one
+            // (#1240), so the "cleared" branch became unreachable. The audit ACTION is kept in AuditActions
+            // because historical events still carry the string — a reader of the log must still resolve it.
+            await audit.RecordAsync(
+                AuditActions.DocumentMaskAssigned, "Document", documentId, name,
+                $"Mask set to '{applied.MaskName}'", cancellationToken: cancellationToken);
         }
 
         if ((changed & DocumentDetailWriter.Aspect.ContentsSortOrder) != 0)

@@ -93,9 +93,17 @@ public class DocumentDetailEndpointTests
         var detail = await TestJson.Get(owner, $"/api/documents/{docId}/detail");
         var formEtag = detail.GetProperty("etag").GetString()!;
 
+        // CARRIES THE MASK, because this endpoint states the full intended value — the API serves no PATCH.
+        // Omitting it used to mean "clear the mask", and this request would silently have UNTYPED the document
+        // while the test looked only at names; it passed because the document had no mask to lose. Since #1240
+        // there is no untyped state, so the omission is refused outright (400 DOCUMENT_MUST_WEAR_A_MASK) — and
+        // a test about PRECONDITIONS should not be quietly asserting anything about masks either way.
+        var maskId = detail.GetProperty("maskId").GetGuid();
+
         object body(string name) => new
         {
             name,
+            maskId,
             tags = Array.Empty<string>(),
             fields = Array.Empty<object>(),
             ocrLanguages = Array.Empty<string>(),

@@ -666,9 +666,10 @@ public class DocumentChildrenController : ControllerBase
             // Inside a typed folder, null UNLESS the caller named a mask that folder admits (a Section in a
             // Notebook): an unnamed one is an item-to-be, and the finalizer decides what it is (see above).
             MaskVersionId = parentRule is not null && !admittedFolder
-                ? null
+                ? Guid.Empty
                 : await Documents.FolderMask.CurrentVersionIdAsync(_dbContext, parent.TenantId, folderMaskId, cancellationToken)
-                    ?? await Documents.FolderMask.CurrentVersionIdAsync(_dbContext, cancellationToken),
+                    ?? await Documents.FolderMask.CurrentVersionIdAsync(_dbContext, cancellationToken)
+                    ?? Guid.Empty,
             CreatedByUserId = createdByUserId,
             CreatedByServiceAccountId = createdByServiceAccountId,
             CreatedAt = DateTimeOffset.UtcNow,

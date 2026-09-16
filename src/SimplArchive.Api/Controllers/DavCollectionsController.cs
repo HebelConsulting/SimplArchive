@@ -124,7 +124,7 @@ public class DavCollectionsController : ControllerBase
         var maskVersionIds = maskVersions.Select(v => v.Id).ToList();
 
         var candidates = await _dbContext.Documents
-            .Where(d => d.MaskVersionId != null && maskVersionIds.Contains(d.MaskVersionId.Value))
+            .Where(d => maskVersionIds.Contains(d.MaskVersionId))
             .Select(d => new { d.Id, d.Name, d.ParentId, d.MaskVersionId })
             .ToListAsync(cancellationToken);
 
@@ -214,11 +214,11 @@ public class DavCollectionsController : ControllerBase
                 Id = candidate.Id,
                 Name = candidate.Name,
                 DisplayName = parent is null ? candidate.Name : $"{parent.Name} / {candidate.Name}",
-                Kind = kindByMaskVersion.GetValueOrDefault(candidate.MaskVersionId!.Value, "calendar"),
-                CollectionKind = collectionKindByMaskVersion.GetValueOrDefault(candidate.MaskVersionId!.Value, string.Empty),
+                Kind = kindByMaskVersion.GetValueOrDefault(candidate.MaskVersionId, "calendar"),
+                CollectionKind = collectionKindByMaskVersion.GetValueOrDefault(candidate.MaskVersionId, string.Empty),
                 Color = overrides.GetValueOrDefault(candidate.Id)
                     ?? defaults.GetValueOrDefault(candidate.Id)
-                    ?? kindColourByMaskVersion.GetValueOrDefault(candidate.MaskVersionId!.Value),
+                    ?? kindColourByMaskVersion.GetValueOrDefault(candidate.MaskVersionId),
                 Writable = effective.CanEditContent,
                 CanCreateEntries = effective.CanCreateSubItems && (contacts || appointments),
                 IsPersonalDefault = personal,

@@ -128,7 +128,7 @@ public sealed class RepositoryExporter
             .ToListAsync(cancellationToken);
 
         // 7. Referenced mask definitions — every distinct MaskVersion an included document pins.
-        var maskVersionIds = includedDocuments.Where(d => d.MaskVersionId is not null).Select(d => d.MaskVersionId!.Value).Distinct().ToList();
+        var maskVersionIds = includedDocuments.Select(d => d.MaskVersionId).Distinct().ToList();
         var maskVersions = await _dbContext.MaskVersions.Where(m => maskVersionIds.Contains(m.Id)).ToListAsync(cancellationToken);
         var maskIds = maskVersions.Select(m => m.MaskId).Distinct().ToList();
         var masks = await _dbContext.Masks.Where(m => maskIds.Contains(m.Id)).ToListAsync(cancellationToken);

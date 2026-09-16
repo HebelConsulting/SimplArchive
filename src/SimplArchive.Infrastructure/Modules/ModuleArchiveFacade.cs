@@ -188,8 +188,8 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         // Ordered in memory: SQLite cannot ORDER BY a DateTimeOffset (provider parity — the model runs on
         // both), and a dossier's children are a bounded set.
         var rows = (await _dbContext.Documents
-            .Where(d => d.ParentId == parentDocumentId && d.MaskVersionId != null)
-            .Join(_dbContext.MaskVersions, d => d.MaskVersionId, v => (Guid?)v.Id, (d, v) => new { d, v.MaskId })
+            .Where(d => d.ParentId == parentDocumentId)
+            .Join(_dbContext.MaskVersions, d => d.MaskVersionId, v => v.Id, (d, v) => new { d, v.MaskId })
             .Where(x => x.MaskId == maskId)
             .Select(x => new { x.d.Id, x.d.ParentId, x.d.Name, x.d.CreatedAt })
             .ToListAsync(cancellationToken))
@@ -217,8 +217,7 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         // The rebuild's subject enumeration (ADR 0738) — same version → identity walk and same in-memory
         // ordering as the children read, for the same provider-parity reason.
         var rows = (await _dbContext.Documents
-            .Where(d => d.MaskVersionId != null)
-            .Join(_dbContext.MaskVersions, d => d.MaskVersionId, v => (Guid?)v.Id, (d, v) => new { d, v.MaskId })
+            .Join(_dbContext.MaskVersions, d => d.MaskVersionId, v => v.Id, (d, v) => new { d, v.MaskId })
             .Where(x => x.MaskId == maskId)
             .Select(x => new { x.d.Id, x.d.ParentId, x.d.Name, x.d.CreatedAt })
             .ToListAsync(cancellationToken))
@@ -271,10 +270,7 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
     {
         var document = await _dbContext.Documents.SingleOrDefaultAsync(d => d.Id == documentId, cancellationToken)
             ?? throw new ArgumentException($"Document {documentId} does not exist.", nameof(documentId));
-        if (document.MaskVersionId is not { } maskVersionId)
-        {
-            throw new InvalidOperationException($"Document {documentId} wears no mask; a module can only set fields its mask defines.");
-        }
+        var maskVersionId = document.MaskVersionId;
 
         foreach (var (name, value) in fields)
         {
@@ -312,10 +308,7 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
     {
         var document = await _dbContext.Documents.SingleOrDefaultAsync(d => d.Id == documentId, cancellationToken)
             ?? throw new ArgumentException($"Document {documentId} does not exist.", nameof(documentId));
-        if (document.MaskVersionId is not { } maskVersionId)
-        {
-            throw new InvalidOperationException($"Document {documentId} wears no mask; a module can only set fields its mask defines.");
-        }
+        var maskVersionId = document.MaskVersionId;
 
         // Same by-name-within-the-mask-version resolution as the single-value write (the vCard-UID
         // lesson); a replace-write like the core's own metadata PUT — the rows afterwards ARE the list.
@@ -545,8 +538,7 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         {
             document = await _dbContext.Documents.SingleOrDefaultAsync(d => d.Id == replaceId, cancellationToken)
                 ?? throw new ArgumentException($"Document {replaceId} to replace does not exist.", nameof(replaceDocumentId));
-            maskVersionId = document.MaskVersionId
-                ?? throw new InvalidOperationException($"Document {replaceId} wears no mask; only a module-mask document can be replaced.");
+            maskVersionId = document.MaskVersionId;
             document.Name = name;
             document.ExpiresAt = expiresAt;
         }

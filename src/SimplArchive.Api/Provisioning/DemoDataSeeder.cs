@@ -509,7 +509,7 @@ public static class DemoDataSeeder
             TenantId = tenantId,
             ParentId = parentId,
             Name = name,
-            MaskVersionId = folderMaskVersionId,
+            MaskVersionId = folderMaskVersionId ?? Guid.Empty,
             CreatedByUserId = adminId,
             CreatedAt = at,
         };
@@ -535,7 +535,7 @@ public static class DemoDataSeeder
             TenantId = tenantId,
             ParentId = parentId,
             Name = name,
-            MaskVersionId = maskVersionId,
+            MaskVersionId = maskVersionId ?? Guid.Empty,
             CreatedByUserId = adminId,
             CreatedAt = at,
             StorageFolderId = storageFolderId,

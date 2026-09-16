@@ -228,7 +228,7 @@ public class DocumentDetailWriter(
             }
             else
             {
-                document.MaskVersionId = null;
+                throw new Errors.Exceptions.Documents.DocumentMustWearAMaskException();
             }
 
             changed |= Aspect.Mask;

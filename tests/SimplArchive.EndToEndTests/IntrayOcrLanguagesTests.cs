@@ -28,6 +28,16 @@ public class IntrayOcrLanguagesTests
         // File into the user's own personal repository (full rights, no ACL setup needed).
         var repoId = (await TestJson.Post(user, "/api/me/personal-repository", new { })).GetProperty("id").GetGuid();
 
+        // INTO My Documents, not onto the personal root. The root holds only the folders it was provisioned
+        // with (#634); filing a document there used to be permitted because the filed document was MASKLESS,
+        // and the rule admitted that as the pre-upgrade state. #1240 removed the untyped state and with it the
+        // gap, so this now answers 409 PERSONAL_SPACE_STRUCTURE — correctly, and the fixture was never
+        // realistic: a user's scans land in a folder, not beside the provisioned ones.
+        var targetId = (await TestJson.Get(user, $"/api/documents/{repoId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .First(c => c.GetProperty("name").GetString() == "My Documents")
+            .GetProperty("id").GetGuid();
+
         // Upload a scannable item + stage OCR languages (German first, then English) on its sidecar.
         const string name = "scan.tif";
         var upload = await TestJson.Post(user, "/api/intray", new { fileName = name });
@@ -38,7 +48,7 @@ public class IntrayOcrLanguagesTests
         (await user.PutAsJsonAsync($"/api/intray/{name}/mask", new { ocrLanguages = new[] { "deu", "eng" } })).EnsureSuccessStatusCode();
 
         // File it → the filed version carries the staged, ordered OCR languages.
-        var filed = await TestJson.Post(user, $"/api/intray/{name}/file", new { folderId = repoId });
+        var filed = await TestJson.Post(user, $"/api/intray/{name}/file", new { folderId = targetId });
         var docId = filed.GetProperty("id").GetGuid();
 
         var versions = await TestJson.Get(user, $"/api/documents/{docId}/versions");

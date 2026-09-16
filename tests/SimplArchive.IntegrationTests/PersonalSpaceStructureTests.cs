@@ -91,7 +91,7 @@ public class PersonalSpaceStructureTests
             TenantId = _tenantId,
             ParentId = myDocuments.Id,
             Name = "Elsewhere",
-            MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, CancellationToken.None),
+            MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, CancellationToken.None) ?? Guid.Empty,
             CreatedByUserId = userId,
             CreatedAt = DateTimeOffset.UtcNow,
         };
@@ -124,7 +124,7 @@ public class PersonalSpaceStructureTests
             TenantId = _tenantId,
             ParentId = personalId,
             Name = "Tax 2026",
-            MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, CancellationToken.None),
+            MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, CancellationToken.None) ?? Guid.Empty,
             CreatedByUserId = userId,
             CreatedAt = DateTimeOffset.UtcNow,
         });
@@ -150,7 +150,7 @@ public class PersonalSpaceStructureTests
             TenantId = _tenantId,
             ParentId = myDocuments.Id,
             Name = "Tax 2026",
-            MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, CancellationToken.None),
+            MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, CancellationToken.None) ?? Guid.Empty,
             CreatedByUserId = userId,
             CreatedAt = DateTimeOffset.UtcNow,
         });
@@ -177,7 +177,7 @@ public class PersonalSpaceStructureTests
             TenantId = _tenantId,
             ParentId = personalId,
             Name = "A loose document",
-            MaskVersionId = emailMaskVersionId,
+            MaskVersionId = emailMaskVersionId ?? Guid.Empty,
             CreatedByUserId = userId,
             CreatedAt = DateTimeOffset.UtcNow,
         });
@@ -187,11 +187,21 @@ public class PersonalSpaceStructureTests
     }
 
     [Fact]
-    public async Task A_maskless_folder_is_still_admitted_because_that_is_the_pre_upgrade_state()
+    public async Task An_untyped_document_is_refused_here_because_the_default_it_gets_is_not_admitted()
     {
-        // Not a loophole: a tenant provisioned before a mask existed holds maskless folders waiting to be
-        // healed, and refusing them would make provisioning fail on exactly the deployments the heal repairs.
-        // Found by the mask-heal test, not by reasoning about the rule.
+        // THE ESCAPE HATCH IS GONE, and this is what replaced it. This test used to assert the opposite — that
+        // a MASKLESS folder is admitted, because a tenant provisioned before a mask existed held maskless
+        // folders waiting to be healed and refusing them would have broken provisioning on exactly the
+        // deployments the heal repairs.
+        //
+        // #1240 removed the maskless state, which removes the reason for the allowance: a document added with
+        // no mask now receives the tenant's default, and the default is generic (Folder / Basic Entry), which
+        // FirstLevelMasks does not admit. So the rule that #634 wrote finally applies to everything at this
+        // level instead of to everything that happened to be typed — a maskless document used to slip past it.
+        //
+        // Worth stating plainly because the failure mode is quiet: PersonalRepositoryProvisioner CATCHES this
+        // exception, so a typed folder whose own mask is missing is not created at all rather than created
+        // wrongly. That is the right outcome, and it is why the provisioner's fixtures must seed the masks.
         var (connection, accessor, userId, personalId) = await SpaceAsync();
         using var _c = connection;
 
@@ -201,14 +211,15 @@ public class PersonalSpaceStructureTests
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ParentId = personalId,
-            Name = "Legacy folder",
-            MaskVersionId = null,
+            Name = "Slipped in",
+            MaskVersionId = Guid.Empty,
             CreatedByUserId = userId,
             CreatedAt = DateTimeOffset.UtcNow,
         });
 
-        await db.SaveChangesAsync();
-        Assert.True(await db.Documents.AnyAsync(d => d.Name == "Legacy folder"));
+        var failure = await Assert.ThrowsAsync<PersonalSpaceStructureException>(() => db.SaveChangesAsync());
+        Assert.Contains("holds only the folders it was provisioned with", failure.Message, StringComparison.Ordinal);
+        Assert.False(await db.Documents.AnyAsync(d => d.Name == "Slipped in"));
     }
 
     [Fact]
@@ -229,7 +240,7 @@ public class PersonalSpaceStructureTests
             TenantId = _tenantId,
             ParentId = myDocuments.Id,
             Name = "A document that is fine here",
-            MaskVersionId = entryMaskVersionId,
+            MaskVersionId = entryMaskVersionId ?? Guid.Empty,
             CreatedByUserId = userId,
             CreatedAt = DateTimeOffset.UtcNow,
         });

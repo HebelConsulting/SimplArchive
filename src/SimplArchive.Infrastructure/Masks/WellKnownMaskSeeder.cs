@@ -707,8 +707,7 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         var roots = await _dbContext.Documents.IgnoreQueryFilters(["TenantFilter", "SoftDeleteFilter"])
             .Where(d => d.TenantId == tenantId
                 && d.ParentId == null
-                && d.MaskVersionId != null
-                && folderVersionIds.Contains(d.MaskVersionId.Value))
+                && folderVersionIds.Contains(d.MaskVersionId))
             .ToListAsync(cancellationToken);
         if (roots.Count == 0)
         {

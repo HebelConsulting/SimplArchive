@@ -27,7 +27,21 @@ public class Document : ITenantScoped, IConcurrencyTracked, ISoftDeletable
 
     public required string Name { get; set; }
 
-    public Guid? MaskVersionId { get; set; }
+    /// <summary>
+    /// The mask version this document wears. EVERY document has one (#1240).
+    /// </summary>
+    /// <remarks>
+    /// Non-nullable because "no mask" was never a legitimate state: a document without a mask has no index
+    /// fields, so offering it let a user discard a document's typing with one click and gain nothing. It was
+    /// reachable from four places and only two of them were user choices — the other two were an importer's
+    /// transient state and a validation-failure fallback, neither of which the user ever asked for.
+    /// <para>
+    /// <see cref="Guid.Empty"/> means "not decided yet by the caller", and never survives a save: the
+    /// SaveChanges invariant fills it from the document's own shape — Basic Entry where it has versions,
+    /// Folder where it does not — so a creation path that forgets gets a sensible type instead of a null.
+    /// </para>
+    /// </remarks>
+    public Guid MaskVersionId { get; set; }
 
     // Data-classification / sensitivity label (ADR "Configurable sensitivity labels + upload defaults",
     // superseding the fixed enum of ADR 0399) — a per-tenant SensitivityLabelDefinition, or null = None.

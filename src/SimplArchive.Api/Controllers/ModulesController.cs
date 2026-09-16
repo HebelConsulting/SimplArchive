@@ -436,7 +436,7 @@ public class ModulesController : ControllerBase
         // Filter and order on the ENTITY before projecting (the EF-translation gotcha): documents whose
         // worn mask version belongs to the well-known Module-license mask.
         var documents = await _dbContext.Documents
-            .Where(d => d.MaskVersionId != null && _dbContext.MaskVersions
+            .Where(d => _dbContext.MaskVersions
                 .Any(v => v.Id == d.MaskVersionId && v.MaskId == WellKnownMaskIds.License))
             .OrderByDescending(d => d.CreatedAt).ThenByDescending(d => d.Id)
             .Take(50)

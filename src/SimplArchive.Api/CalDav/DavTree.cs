@@ -310,14 +310,13 @@ internal static class DavTree
     private static IQueryable<Document> FolderQuery(SimplArchiveDbContext db, DavProtocol protocol, IDavCollectionKindRegistry registry)
     {
         var folderMaskIds = registry.FolderMaskIds(protocol.Extension);
-        return db.Documents.Where(d => d.MaskVersionId != null
-            && db.MaskVersions.Any(v => v.Id == d.MaskVersionId && folderMaskIds.Contains(v.MaskId)));
+        return db.Documents.Where(d => db.MaskVersions.Any(v => v.Id == d.MaskVersionId && folderMaskIds.Contains(v.MaskId)));
     }
 
     private static IQueryable<Document> ItemQuery(SimplArchiveDbContext db, DavProtocol protocol, IDavCollectionKindRegistry registry, Guid folderId)
     {
         var itemMaskIds = registry.ItemMaskIds(protocol.Extension);
-        return db.Documents.Where(d => d.ParentId == folderId && d.MaskVersionId != null
+        return db.Documents.Where(d => d.ParentId == folderId
             && db.MaskVersions.Any(v => v.Id == d.MaskVersionId && itemMaskIds.Contains(v.MaskId)));
     }
 

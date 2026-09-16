@@ -65,7 +65,7 @@ public class ModuleActivationTests
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             Name = name,
-            MaskVersionId = maskVersionId,
+            MaskVersionId = maskVersionId ?? Guid.Empty,
             CreatedByUserId = userId,
             CreatedAt = DateTimeOffset.UtcNow,
         };

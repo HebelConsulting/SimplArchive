@@ -228,7 +228,7 @@ public class RetentionServiceTests
         Id = Guid.NewGuid(),
         TenantId = tenantId,
         ParentId = parentId,
-        MaskVersionId = maskVersionId,
+        MaskVersionId = maskVersionId ?? Guid.Empty,
         Name = name,
         CreatedByUserId = userId,
         CreatedAt = createdAt,

@@ -67,7 +67,7 @@ internal static class ImapMailboxLifecycle
             TenantId = tenantId,
             ParentId = parent.Value.Mailbox.FolderId,
             Name = leaf,
-            MaskVersionId = maskVersionId,
+            MaskVersionId = maskVersionId ?? Guid.Empty,
             CreatedByUserId = userId,
             CreatedAt = DateTimeOffset.UtcNow,
             StorageFolderId = Guid.NewGuid(),
@@ -281,7 +281,7 @@ internal static class ImapMailboxLifecycle
             TenantId = tenantId,
             ParentId = parent.Value.Mailbox.FolderId,
             Name = leaf,
-            MaskVersionId = maskVersionId,
+            MaskVersionId = maskVersionId ?? Guid.Empty,
             CreatedByUserId = userId,
             CreatedAt = DateTimeOffset.UtcNow,
         });

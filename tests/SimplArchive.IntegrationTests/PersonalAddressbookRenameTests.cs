@@ -4,6 +4,7 @@ using SimplArchive.Api.Documents;
 using SimplArchive.Domain.Documents;
 using SimplArchive.Domain.Tenants;
 using SimplArchive.Domain.Users;
+using SimplArchive.Infrastructure.Masks;
 using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.IntegrationTests;
@@ -39,6 +40,13 @@ public class PersonalAddressbookRenameTests
             db.Users.Add(user);
             await db.SaveChangesAsync();
             userId = user.Id;
+
+            // The well-known masks, as every real tenant has them (seeded at provisioning, healed at startup).
+            // The fixture used to omit them and still work, because a typed folder whose mask was missing came
+            // out MASKLESS and the personal space admitted that as the pre-upgrade state. #1240 removed the
+            // maskless state, so the omission now surfaces as the folder simply not being created.
+            await new WellKnownMaskSeeder(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<WellKnownMaskSeeder>.Instance)
+                .EnsureWellKnownMasksAsync(_tenantId);
         }
 
         // Provision once, then rename the folder BACK to what it was called before 2026-08-19 — which is
@@ -89,6 +97,13 @@ public class PersonalAddressbookRenameTests
             db.Users.Add(user);
             await db.SaveChangesAsync();
             userId = user.Id;
+
+            // The well-known masks, as every real tenant has them (seeded at provisioning, healed at startup).
+            // The fixture used to omit them and still work, because a typed folder whose mask was missing came
+            // out MASKLESS and the personal space admitted that as the pre-upgrade state. #1240 removed the
+            // maskless state, so the omission now surfaces as the folder simply not being created.
+            await new WellKnownMaskSeeder(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<WellKnownMaskSeeder>.Instance)
+                .EnsureWellKnownMasksAsync(_tenantId);
         }
 
         Guid contactId;

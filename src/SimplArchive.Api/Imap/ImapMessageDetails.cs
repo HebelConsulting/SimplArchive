@@ -50,8 +50,8 @@ internal static class ImapMessageDetailsLoader
         }
 
         var documentIds = documents.Select(d => d.Id).ToList();
-        var maskVersionIds = documents.Where(d => d.MaskVersionId is not null)
-            .Select(d => d.MaskVersionId!.Value).Distinct().ToList();
+        var maskVersionIds = documents.Where(d => d.MaskVersionId != Guid.Empty)
+            .Select(d => d.MaskVersionId).Distinct().ToList();
         var labelIds = documents.Where(d => d.SensitivityLabelId is not null)
             .Select(d => d.SensitivityLabelId!.Value).Distinct().ToList();
 

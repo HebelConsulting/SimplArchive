@@ -1131,9 +1131,6 @@
   <data name="RightManageIntrays" xml:space="preserve">
     <value>Eingänge verwalten</value>
   </data>
-  <data name="NoMask" xml:space="preserve">
-    <value>(Keine Maske)</value>
-  </data>
   <data name="OneValuePerLine" xml:space="preserve">
     <value>Ein Wert pro Zeile</value>
   </data>

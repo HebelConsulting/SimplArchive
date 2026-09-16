@@ -150,7 +150,9 @@ public class AclEntryTests
 
         var affected = await context.SaveChangesAsync();
 
-        Assert.Equal(6, affected);
+        // 6 rows asked for + the 2 that type the document: every document wears a mask (#1240), and this
+        // minimal fixture seeds no masks, so the invariant provisions the tenant's default in the same save.
+        Assert.Equal(8, affected);
     }
 
     [Fact]
@@ -234,6 +236,7 @@ public class AclEntryTests
 
         var affected = await context.SaveChangesAsync();
 
-        Assert.Equal(8, affected);
+        // 8 rows asked for + the 2 that type the document (#1240) — see the sibling test above.
+        Assert.Equal(10, affected);
     }
 }

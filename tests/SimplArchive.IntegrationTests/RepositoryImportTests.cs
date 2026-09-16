@@ -98,7 +98,7 @@ public class RepositoryImportTests
             Assert.Equal("Src", root.Name);
 
             var docA = await db.Documents.SingleAsync(d => d.Name == "DocA");
-            Assert.NotNull(docA.MaskVersionId);
+            Assert.NotEqual(Guid.Empty, docA.MaskVersionId);
 
             // The custom mask was recreated fresh in B.
             var maskName = await db.MaskVersions.Where(m => m.Id == docA.MaskVersionId).Select(m => m.Name).SingleAsync();

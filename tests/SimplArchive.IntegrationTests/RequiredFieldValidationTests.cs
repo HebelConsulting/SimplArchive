@@ -107,7 +107,7 @@ public class RequiredFieldValidationTests
     }
 
     [Fact]
-    public async Task Allows_creating_a_document_without_a_mask_and_filling_in_fields_later()
+    public async Task Allows_creating_a_document_generically_typed_and_filling_in_fields_later()
     {
         using var connection = new SqliteConnection("Filename=:memory:");
         await connection.OpenAsync();
@@ -126,8 +126,11 @@ public class RequiredFieldValidationTests
                 CreatedByUserId = fixture.UserId,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
+            // 1 document + the 2 rows that type it: this fixture seeds only its own mask, so the invariant
+            // provisions the tenant's generic default in the same save (#1240). What the test is about is
+            // unchanged — a REQUIRED field is checked when the real mask is ASSIGNED, not at creation.
             var affected = await createContext.SaveChangesAsync();
-            Assert.Equal(1, affected);
+            Assert.Equal(3, affected);
         }
 
         using (var maskContext = CreateContext(connection, fixture.TenantId))
@@ -182,7 +185,7 @@ public class RequiredFieldValidationTests
     }
 
     [Fact]
-    public async Task Allows_clearing_a_documents_mask_assignment_with_no_required_field_check()
+    public async Task A_document_cannot_be_returned_to_having_no_mask_it_gets_the_default_instead()
     {
         using var connection = new SqliteConnection("Filename=:memory:");
         await connection.OpenAsync();
@@ -215,10 +218,20 @@ public class RequiredFieldValidationTests
 
         using var context = CreateContext(connection, fixture.TenantId);
         var document = await context.Documents.SingleAsync(d => d.Id == documentId);
-        document.MaskVersionId = null;
 
-        var affected = await context.SaveChangesAsync();
+        // Writing the sentinel is the nearest thing to "clear the mask" that still exists at this layer. It
+        // does NOT clear anything: the invariant fills it with the tenant's default, so the document comes out
+        // generically typed rather than untyped. The API refuses the request outright (#1240), and this is the
+        // persistence-level half of the same guarantee — there is no path back to a maskless document.
+        document.MaskVersionId = Guid.Empty;
+        await context.SaveChangesAsync();
 
-        Assert.Equal(1, affected);
+        var reloaded = await context.Documents.AsNoTracking().SingleAsync(d => d.Id == documentId);
+        Assert.NotEqual(Guid.Empty, reloaded.MaskVersionId);
+        Assert.NotEqual(fixture.MaskVersionId, reloaded.MaskVersionId);
+
+        var maskId = await context.MaskVersions.Where(v => v.Id == reloaded.MaskVersionId)
+            .Select(v => v.MaskId).SingleAsync();
+        Assert.Contains(maskId, new[] { WellKnownMaskIds.Folder, WellKnownMaskIds.BasicEntry });
     }
 }

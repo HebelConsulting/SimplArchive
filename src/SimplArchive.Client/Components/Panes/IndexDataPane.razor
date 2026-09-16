@@ -202,7 +202,10 @@
                 <div class="wb-mask-row">
                     <span class="wb-mask-label">@Strings.Get("MaskLabel")</span>
                     <MudSelect T="Guid?" Value="Detail.EditMaskId" ValueChanged="@((Guid? v) => EditMaskChanged.InvokeAsync(v))" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined">
-                        <MudSelectItem T="Guid?" Value="@((Guid?)null)">@Strings.Get("NoMask")</MudSelectItem>
+                        @* No "No mask" entry (#1240): a document without a mask has no index fields, so the option
+                           only ever let someone discard a document's typing with one click and gain nothing in
+                           return. Every document now wears one, and the desktop client never offered it — this is
+                           the web side catching up to the reference (ADR 0511). *@
                         @* The document's CURRENT mask, when the catalogue does not carry it (#671 filters it to
                            the freely-assignable ones). Without this entry MudSelect fell back to rendering its
                            raw value — a bare GUID where a name belongs.

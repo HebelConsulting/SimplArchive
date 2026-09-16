@@ -639,7 +639,20 @@ public class IntrayController : ControllerBase
 
         _dbContext.Documents.Add(document);
         _dbContext.DocumentVersions.Add(version);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // TRANSLATED HERE TOO, because #1240 moved WHEN the destination's admission rules become answerable.
+        // The comment below still describes the old order — the finalizer assigned the mask, so a folder that
+        // would not hold the document refused at finalize. Every document now wears a mask from the moment it
+        // is saved, so the refusal happens at THIS save instead, outside the try that was built for it, and it
+        // surfaced as a bare 500 on filing.
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (Domain.Documents.PersonalSpaceStructureException e)
+        {
+            throw new Errors.Exceptions.Documents.PersonalSpaceStructureException(e.Message);
+        }
 
         // Confirm + classify (the object is already in storage). A staged draft applies the user's intray
         // classification; otherwise the normal auto-classification runs — same path as a normal upload.

@@ -102,7 +102,7 @@ public class RetentionController : ControllerBase
         // Leaf documents (no children) whose assigned mask version carries a retention period. Cap the scan.
         var candidates = await (
             from d in _dbContext.Documents
-            where d.MaskVersionId != null && !_dbContext.Documents.Any(c => c.ParentId == d.Id)
+            where !_dbContext.Documents.Any(c => c.ParentId == d.Id)
             join mv in _dbContext.MaskVersions on d.MaskVersionId equals mv.Id
             where mv.RetentionYears != null
             select new { d.Id, d.Name, d.CreatedAt, d.RetentionOverrideUntil, d.CurrentVersionId, RetentionYears = mv.RetentionYears!.Value })
@@ -255,7 +255,8 @@ public class RetentionController : ControllerBase
     // call site so it can raise the specific LEGAL_HOLD error).
     private async Task<bool> IsEligibleForDispositionAsync(Document document, CancellationToken cancellationToken)
     {
-        if (document.MaskVersionId is not { } maskVersionId)
+        var maskVersionId = document.MaskVersionId;
+        if (maskVersionId == Guid.Empty)
         {
             return false;
         }

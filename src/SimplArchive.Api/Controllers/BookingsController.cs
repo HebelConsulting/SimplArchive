@@ -429,7 +429,7 @@ public class BookingsController : ControllerBase
             TenantId = room.TenantId,
             ParentId = room.Id,
             Name = await UniqueNameAsync(room.Id, "Schedule", cancellationToken),
-            MaskVersionId = await CurrentMaskVersionIdAsync(WellKnownMaskIds.Schedule, cancellationToken),
+            MaskVersionId = await CurrentMaskVersionIdAsync(WellKnownMaskIds.Schedule, cancellationToken) ?? Guid.Empty,
             CreatedByUserId = userId,
             CreatedByServiceAccountId = serviceAccountId,
             CreatedAt = DateTimeOffset.UtcNow,

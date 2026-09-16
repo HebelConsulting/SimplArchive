@@ -61,7 +61,7 @@ public class StructuralMaskImmutabilityTests
             Id = w.FolderId,
             TenantId = w.TenantId,
             Name = "A folder",
-            MaskVersionId = initialMaskId is { } m ? VersionIdFor(m) : null,
+            MaskVersionId = initialMaskId is { } m ? VersionIdFor(m) : Guid.Empty,
             CreatedByUserId = w.UserId,
             CreatedAt = now,
         });
@@ -85,7 +85,7 @@ public class StructuralMaskImmutabilityTests
     {
         using var db = CreateContext(connection, w.TenantId);
         var folder = await db.Documents.SingleAsync(d => d.Id == w.FolderId);
-        folder.MaskVersionId = toMaskId is { } m ? VersionIdFor(m) : null;
+        folder.MaskVersionId = toMaskId is { } m ? VersionIdFor(m) : Guid.Empty;
         await db.SaveChangesAsync();
     }
 

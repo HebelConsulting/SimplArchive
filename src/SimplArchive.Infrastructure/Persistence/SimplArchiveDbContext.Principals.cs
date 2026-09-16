@@ -72,7 +72,7 @@ public partial class SimplArchiveDbContext
             return;
         }
 
-        var versionIds = documents.Where(d => d.MaskVersionId != null).Select(d => d.MaskVersionId!.Value).Distinct().ToList();
+        var versionIds = documents.Select(d => d.MaskVersionId).Distinct().ToList();
         var declaring = await MaskVersions.IgnoreQueryFilters()
             .Where(v => versionIds.Contains(v.Id))
             .Join(Masks.IgnoreQueryFilters(),
@@ -96,7 +96,8 @@ public partial class SimplArchiveDbContext
 
         foreach (var document in documents)
         {
-            if (document.MaskVersionId is not { } versionId || !fieldOf.TryGetValue(versionId, out var declaredField))
+            var versionId = document.MaskVersionId;
+            if (versionId == Guid.Empty || !fieldOf.TryGetValue(versionId, out var declaredField))
             {
                 continue;
             }

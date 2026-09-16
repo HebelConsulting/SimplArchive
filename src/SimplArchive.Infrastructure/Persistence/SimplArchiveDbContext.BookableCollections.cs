@@ -26,8 +26,7 @@ public partial class SimplArchiveDbContext
         // is how the children endpoint makes a typed folder, and why the first version of this provisioned
         // nothing for a freshly created room.
         var becameBookable = ChangeTracker.Entries<Document>()
-            .Where(e => e.Entity.MaskVersionId is not null
-                && (e.State == EntityState.Added
+            .Where(e => (e.State == EntityState.Added
                     || (e.State == EntityState.Modified && e.Property(d => d.MaskVersionId).IsModified)))
             .Select(e => e.Entity)
             .ToList();
@@ -38,7 +37,7 @@ public partial class SimplArchiveDbContext
 
         // The tracked entity wins over a query: the new mask is not saved yet, so a projection would read the
         // mask the document had BEFORE this save — the exact trap the principal mapping's first fix fell into.
-        var versionIds = becameBookable.Select(d => d.MaskVersionId!.Value).Distinct().ToList();
+        var versionIds = becameBookable.Select(d => d.MaskVersionId).Distinct().ToList();
         var bookableVersions = await MaskVersions.IgnoreQueryFilters()
             .Where(v => versionIds.Contains(v.Id))
             .Join(Masks.IgnoreQueryFilters(),
@@ -58,7 +57,7 @@ public partial class SimplArchiveDbContext
         // and a kind added later must arrive here without anybody remembering this file.
         var kinds = DavCollectionKinds.All.Where(k => k.Extension == ".ics" && k.FolderMaskId != Domain.Masks.WellKnownMaskIds.Calendar).ToList();
 
-        foreach (var resource in becameBookable.Where(d => bookableVersions.Contains(d.MaskVersionId!.Value)))
+        foreach (var resource in becameBookable.Where(d => bookableVersions.Contains(d.MaskVersionId)))
         {
             foreach (var kind in kinds)
             {

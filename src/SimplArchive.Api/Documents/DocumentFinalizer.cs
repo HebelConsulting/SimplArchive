@@ -419,7 +419,13 @@ public class DocumentFinalizer
                 _dbContext.Entry(fieldValue).State = EntityState.Detached;
             }
 
-            document.MaskVersionId = null;
+            // REVERT to what the document already wore, which is what this always meant. Writing Guid.Empty
+            // here is not a revert: since #1240 the document arrived generically typed, so the sentinel is a
+            // value it never had, and marking the entry Unchanged leaves that corrupt value in memory for the
+            // next SaveChanges in this context to write — a foreign key violation surfacing as a bare 500 on
+            // filing. The original value is the only correct answer, and the entry already knows it.
+            var maskProperty = _dbContext.Entry(document).Property(d => d.MaskVersionId);
+            maskProperty.CurrentValue = maskProperty.OriginalValue;
             _dbContext.Entry(document).State = EntityState.Unchanged;
         }
     }
@@ -431,7 +437,7 @@ public class DocumentFinalizer
     private async Task ApplyDefaultSensitivityLabelAsync(Guid documentId, CancellationToken cancellationToken)
     {
         var document = await _dbContext.Documents.SingleAsync(d => d.Id == documentId, cancellationToken);
-        if (document.SensitivityLabelId is not null || document.MaskVersionId is null)
+        if (document.SensitivityLabelId is not null || document.MaskVersionId == Guid.Empty)
         {
             return;
         }
@@ -456,7 +462,7 @@ public class DocumentFinalizer
         // bytes changed, and until ADR 0744 nothing re-read them — the editors' "the finalizer re-extracts
         // the index fields" comments described a step that did not exist, so every edit left Name/UID/
         // Start/End stale. For a Booking the refresh is also what makes an edit a REBOOKING.
-        if (document.MaskVersionId is not null && !await FolderMask.IsFolderMaskAsync(_dbContext, document.MaskVersionId, cancellationToken))
+        if (!await FolderMask.IsGenericMaskAsync(_dbContext, document.MaskVersionId, cancellationToken))
         {
             await _calendarContactClassifier.TryRefreshAsync(document, version, cancellationToken);
             return false;

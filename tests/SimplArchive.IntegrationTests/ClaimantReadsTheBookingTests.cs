@@ -46,7 +46,7 @@ public class ClaimantReadsTheBookingTests
                 TenantId = f.TenantId,
                 ParentId = parent,
                 Name = name,
-                MaskVersionId = version,
+                MaskVersionId = version ?? Guid.Empty,
                 CreatedByUserId = f.UserId,
                 CreatedAt = DateTimeOffset.UtcNow,
             });

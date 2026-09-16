@@ -1131,9 +1131,6 @@
   <data name="RightManageIntrays" xml:space="preserve">
     <value>Gestisci caselle</value>
   </data>
-  <data name="NoMask" xml:space="preserve">
-    <value>(Nessuna maschera)</value>
-  </data>
   <data name="OneValuePerLine" xml:space="preserve">
     <value>Un valore per riga</value>
   </data>

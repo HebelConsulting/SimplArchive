@@ -36,7 +36,8 @@ public partial class SimplArchiveDbContext
         foreach (var entry in candidates)
         {
             var document = entry.Entity;
-            if (document.MaskVersionId is not { } maskVersionId)
+            var maskVersionId = document.MaskVersionId;
+            if (maskVersionId == Guid.Empty)
             {
                 continue;
             }
@@ -155,7 +156,7 @@ public partial class SimplArchiveDbContext
         await Documents.IgnoreQueryFilters()
             .Where(d => d.TenantId == tenantId && d.Id == resourceDocumentId)
             .Join(MaskVersions.IgnoreQueryFilters(),
-                d => new { d.TenantId, Id = d.MaskVersionId ?? Guid.Empty },
+                d => new { d.TenantId, Id = d.MaskVersionId },
                 v => new { v.TenantId, v.Id },
                 (d, v) => v)
             .Join(Masks.IgnoreQueryFilters(),

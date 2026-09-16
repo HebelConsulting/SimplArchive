@@ -74,8 +74,7 @@ public sealed class ModuleStatusEscalationService
             foreach (var machine in escalating.Where(m => activeModuleIds.Contains(m.ModuleId!)))
             {
                 var subjectIds = await _dbContext.Documents
-                    .Where(d => d.MaskVersionId != null)
-                    .Join(_dbContext.MaskVersions, d => d.MaskVersionId, v => (Guid?)v.Id, (d, v) => new { d.Id, v.MaskId })
+                    .Join(_dbContext.MaskVersions, d => d.MaskVersionId, v => v.Id, (d, v) => new { d.Id, v.MaskId })
                     .Where(x => x.MaskId == machine.SubjectMaskId)
                     .Select(x => x.Id)
                     .ToListAsync(cancellationToken);

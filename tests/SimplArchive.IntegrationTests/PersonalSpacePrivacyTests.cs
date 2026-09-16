@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SimplArchive.Domain.Acl;
 using SimplArchive.Domain.Documents;
 using SimplArchive.Domain.Groups;
+using SimplArchive.Domain.Masks;
 using SimplArchive.Domain.Tenants;
 using SimplArchive.Domain.Users;
 using SimplArchive.Infrastructure.Acl;
@@ -54,7 +55,24 @@ public class PersonalSpacePrivacyTests
 
         // The personal space: a root flagged with its owner, and one document inside it.
         db.Documents.Add(new Document { Id = w.PersonalRootId, TenantId = w.TenantId, Name = "Owner", PersonalOfUserId = w.OwnerId, CreatedByUserId = w.OwnerId, CreatedAt = now });
-        db.Documents.Add(new Document { Id = w.PersonalDocId, TenantId = w.TenantId, Name = "Private note", ParentId = w.PersonalRootId, CreatedByUserId = w.OwnerId, CreatedAt = now });
+
+        // INSIDE My Documents, not loose at the first level. The fixture used to park the note directly under
+        // the personal root, which the space's structure rule forbids (#634) — it only got away with it because
+        // the document was MASKLESS, and the rule admitted that as the pre-upgrade state. #1240 removed the
+        // maskless state, which closed that gap and made this fixture illegal. It was never realistic anyway:
+        // a personal space's first level holds the folders it was provisioned with and nothing else.
+        var myDocumentsId = Guid.NewGuid();
+        db.Documents.Add(new Document
+        {
+            Id = myDocumentsId,
+            TenantId = w.TenantId,
+            Name = PersonalFolders.MyDocuments,
+            ParentId = w.PersonalRootId,
+            MaskVersionId = MyDocumentsVersionId(db, w.TenantId),
+            CreatedByUserId = w.OwnerId,
+            CreatedAt = now,
+        });
+        db.Documents.Add(new Document { Id = w.PersonalDocId, TenantId = w.TenantId, Name = "Private note", ParentId = myDocumentsId, CreatedByUserId = w.OwnerId, CreatedAt = now });
 
         // ...and an ordinary repository, which is the control: whatever changes inside the personal space must
         // demonstrably NOT change out here, or the test is measuring a broken bypass rather than a narrowed one.
@@ -301,9 +319,14 @@ public class PersonalSpacePrivacyTests
         }
 
         // ...and back in again, which is the direction that actually grants privacy rather than removing it.
+        // Back into My Documents rather than onto the root: the first level admits only the folders the space
+        // was provisioned with (#634), and since #1240 there is no maskless document to slip past that.
         using (var db = CreateContext(connection, w.TenantId))
         {
-            (await db.Documents.SingleAsync(d => d.Id == w.PersonalDocId)).ParentId = w.PersonalRootId;
+            var myDocumentsId = await db.Documents
+                .Where(d => d.ParentId == w.PersonalRootId && d.Name == PersonalFolders.MyDocuments)
+                .Select(d => d.Id).SingleAsync();
+            (await db.Documents.SingleAsync(d => d.Id == w.PersonalDocId)).ParentId = myDocumentsId;
             await db.SaveChangesAsync();
         }
 
@@ -311,5 +334,22 @@ public class PersonalSpacePrivacyTests
         {
             Assert.Equal(w.OwnerId, (await db.Documents.SingleAsync(d => d.Id == grandchildId)).PersonalRootOwnerId);
         }
+    }
+
+    // The My Documents mask, added inline: this fixture builds its world by hand rather than provisioning a
+    // tenant, so nothing has seeded the well-known masks for it. Only the one the first level must admit.
+    private static Guid MyDocumentsVersionId(SimplArchiveDbContext db, Guid tenantId)
+    {
+        db.Masks.Add(new Mask { Id = WellKnownMaskIds.MyDocuments, TenantId = tenantId, CreatedAt = DateTimeOffset.UtcNow, IsFolderMask = true });
+        var version = new MaskVersion
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            MaskId = WellKnownMaskIds.MyDocuments,
+            Name = "My Documents",
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        db.MaskVersions.Add(version);
+        return version.Id;
     }
 }

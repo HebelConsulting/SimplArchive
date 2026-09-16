@@ -201,7 +201,8 @@ internal static class DavChangeRecorder
                 .Where(d => d.Id == folderId)
                 .Select(d => d.MaskVersionId)
                 .FirstOrDefaultAsync(cancellationToken);
-        if (maskVersionId is not { } mv)
+        var mv = maskVersionId;
+        if (mv == Guid.Empty)
         {
             return null;
         }

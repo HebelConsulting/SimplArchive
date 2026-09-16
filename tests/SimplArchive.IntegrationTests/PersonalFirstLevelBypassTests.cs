@@ -60,15 +60,25 @@ public class PersonalFirstLevelBypassTests
         return (connection, accessor, userId, personalId);
     }
 
-    private async Task<Document> ArriveMasklessAsync(SimplArchiveDbContext db, Guid parentId, Guid userId, string name)
+    // ARRIVES WEARING AN ADMITTED MASK, which is the only way to get a document to the personal first level
+    // now. It used to arrive MASKLESS — the bypass these tests are about was "slip in untyped, then assign the
+    // mask the level would have refused". #1240 removed the maskless state, so the first half of the bypass is
+    // no longer constructible: an untyped arrival receives the generic default and is refused on the spot
+    // (PersonalSpaceStructureTests covers that half).
+    //
+    // What remains reachable, and is what these tests now exercise, is the SECOND half: a document legitimately
+    // at the first level being RE-MASKED to something the level does not admit. That is still a real path — the
+    // heal, a restamp, an importer — and the rule must still refuse it.
+    private async Task<Document> ArriveAdmittedAsync(SimplArchiveDbContext db, Guid parentId, Guid userId, string name)
     {
+        var admitted = await FolderMask.CurrentVersionIdAsync(db, _tenantId, WellKnownMaskIds.MyDocuments, CancellationToken.None);
         var document = new Document
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ParentId = parentId,
             Name = name,
-            MaskVersionId = null,
+            MaskVersionId = admitted ?? Guid.Empty,
             CreatedByUserId = userId,
             CreatedAt = DateTimeOffset.UtcNow,
         };
@@ -86,9 +96,9 @@ public class PersonalFirstLevelBypassTests
         using var _c = connection;
 
         using var db = Ctx(connection, accessor);
-        var document = await ArriveMasklessAsync(db, personalId, userId, "Slipped in");
+        var document = await ArriveAdmittedAsync(db, personalId, userId, "Slipped in");
 
-        document.MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, WellKnownMaskIds.BasicEntry, CancellationToken.None);
+        document.MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, WellKnownMaskIds.BasicEntry, CancellationToken.None) ?? Guid.Empty;
 
         await Assert.ThrowsAsync<PersonalSpaceStructureException>(() => db.SaveChangesAsync());
     }
@@ -104,14 +114,14 @@ public class PersonalFirstLevelBypassTests
         using var _c = connection;
 
         using var db = Ctx(connection, accessor);
-        var folder = await ArriveMasklessAsync(db, personalId, userId, "A pre-upgrade folder");
+        var folder = await ArriveAdmittedAsync(db, personalId, userId, "A pre-upgrade folder");
 
-        folder.MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, WellKnownMaskIds.MyDocuments, CancellationToken.None);
+        folder.MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, WellKnownMaskIds.MyDocuments, CancellationToken.None) ?? Guid.Empty;
         await db.SaveChangesAsync();
 
         var stored = await db.Documents.SingleAsync(d => d.Id == folder.Id);
         Assert.Equal(personalId, stored.ParentId);
-        Assert.NotNull(stored.MaskVersionId);
+        Assert.NotEqual(Guid.Empty, stored.MaskVersionId);
     }
 
     [Fact]
@@ -128,11 +138,11 @@ public class PersonalFirstLevelBypassTests
             .Where(d => d.ParentId == personalId && d.Name == PersonalFolders.MyDocuments)
             .Select(d => d.Id).SingleAsync();
 
-        var document = await ArriveMasklessAsync(db, myDocumentsId, userId, "An ordinary upload");
-        document.MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, WellKnownMaskIds.BasicEntry, CancellationToken.None);
+        var document = await ArriveAdmittedAsync(db, myDocumentsId, userId, "An ordinary upload");
+        document.MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, WellKnownMaskIds.BasicEntry, CancellationToken.None) ?? Guid.Empty;
         await db.SaveChangesAsync();
 
-        Assert.NotNull((await db.Documents.SingleAsync(d => d.Id == document.Id)).MaskVersionId);
+        Assert.NotEqual(Guid.Empty, (await db.Documents.SingleAsync(d => d.Id == document.Id)).MaskVersionId);
     }
 
     [Fact]
@@ -148,9 +158,9 @@ public class PersonalFirstLevelBypassTests
         using var _c = connection;
 
         using var db = Ctx(connection, accessor);
-        var document = await ArriveMasklessAsync(db, personalId, userId, "Notebook");
+        var document = await ArriveAdmittedAsync(db, personalId, userId, "Notebook");
 
-        document.MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, WellKnownMaskIds.Notebook, CancellationToken.None);
+        document.MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, WellKnownMaskIds.Notebook, CancellationToken.None) ?? Guid.Empty;
 
         var failure = await Assert.ThrowsAsync<TypedFolderContainmentException>(() => db.SaveChangesAsync());
         Assert.Contains("can only live in a Mailbox", failure.Message, StringComparison.Ordinal);

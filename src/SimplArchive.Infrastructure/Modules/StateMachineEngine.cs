@@ -335,7 +335,7 @@ public sealed class StateMachineEngine
             .Where(d => d.Id == documentId)
             .Select(d => d.MaskVersionId)
             .SingleOrDefaultAsync(cancellationToken);
-        if (maskVersionId is null)
+        if (maskVersionId == Guid.Empty)
         {
             return null;
         }
