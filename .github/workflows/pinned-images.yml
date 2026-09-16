@@ -32,7 +32,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The script exits non-zero when anything is behind AND when a lookup fails — a registry outage must not
       # read as a clean bill of health. Docker Hub answered 500s on the day this was written, which is what
