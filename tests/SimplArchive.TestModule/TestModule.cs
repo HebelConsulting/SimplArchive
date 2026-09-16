@@ -13,6 +13,10 @@ public sealed class TestModule : IIndustryModule
     public static readonly Guid DossierMaskId = Guid.Parse("7E57AB1E-0000-0000-0000-000000000000");
     public static readonly Guid CertificateMaskId = Guid.Parse("7E57AB1E-0000-0000-0000-000000000001");
     public static readonly Guid EntryMaskId = Guid.Parse("7E57AB1E-0000-0000-0000-000000000002");
+    // A module-declared CalDAV collection and its item (ABI 0.24, ADR 0791). Nothing exercised that path
+    // end to end before #1242 — a module could declare a calendar and no test asked whether the core SERVED it.
+    public static readonly Guid LogMaskId = Guid.Parse("7E57AB1E-0000-0000-0000-000000000003");
+    public static readonly Guid LogItemMaskId = Guid.Parse("7E57AB1E-0000-0000-0000-000000000004");
 
     public string ModuleId => "test-module";
 
@@ -156,6 +160,19 @@ public sealed class TestModule : IIndustryModule
         [
             // The list-field fixture (ABI 0.2, #1014): what SetFieldListAsync round-trips against.
             new ModuleFieldSeed("Tags", "Text", IsList: true),
+        ]),
+        // A module-declared CalDAV collection (ABI 0.24, ADR 0791) — read-only, like a flight-log Logbook.
+        // Its own masks rather than reusing the ones above, so nothing already asserted about Dossier or Entry
+        // changes shape: this is additive fixture, not a redefinition.
+        new ModuleMaskSeed(LogMaskId, "Test Log", IsFolderMask: true, IsBookable: false, [])
+        {
+            DavCollection = new ModuleDavCollection(".ics", LogItemMaskId, "Event UID", ReadOnly: true),
+        },
+        new ModuleMaskSeed(LogItemMaskId, "Test Log Entry", IsFolderMask: false, IsBookable: false,
+        [
+            // Named exactly as the core's .ics grammar expects — one protocol, one UID field for every .ics
+            // kind (DavProtocol). A module that names it anything else gets items the core cannot address.
+            new ModuleFieldSeed("Event UID", "Text"),
         ]),
     ];
 
