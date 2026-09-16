@@ -68,14 +68,6 @@ public partial class ClientLinkMethodTests
     // Sites that still name their own verb, per file. THIS MAY ONLY GO DOWN.
     private static readonly Dictionary<string, int> Budget = new(StringComparer.Ordinal)
     {
-        ["src/SimplArchive.Client/Components/Tabs/CheckoutTab.razor"] = 6,
-        ["src/SimplArchive.Client/Components/Tabs/LegalHoldsTab.razor"] = 2,
-        ["src/SimplArchive.Client/Dialogs/ChangePasswordDialog.razor"] = 1,
-        ["src/SimplArchive.Client/Dialogs/MfaSetupDialog.razor"] = 2,
-        ["src/SimplArchive.Client/Dialogs/PasskeysDialog.razor"] = 2,
-        ["src/SimplArchive.Client/Dialogs/ServiceAccountsDialog.razor"] = 1,
-        ["src/SimplArchive.Client/Services/BrowseService.cs"] = 1,
-        ["src/SimplArchive.Client/Services/DocumentActions.cs"] = 1,
         ["src/SimplArchive.DesktopClient/Services/AdminClient.cs"] = 2,
         ["src/SimplArchive.DesktopClient/Services/AuditClient.cs"] = 1,
         ["src/SimplArchive.DesktopClient/Services/ProfileClient.cs"] = 4,
@@ -139,6 +131,8 @@ public partial class ClientLinkMethodTests
             + "make this pass vacuously.");
 
         var counted = new Dictionary<string, int>(StringComparer.Ordinal);
+        var scanned = 0;   // client files actually read — proves the scan reaches them
+        var sends = 0;     // mutating sends the pattern matched at all — proves the pattern is alive
         foreach (var client in new[] { "SimplArchive.Client", "SimplArchive.DesktopClient" })
         {
             var dir = Path.Combine(root, "src", client);
@@ -155,6 +149,7 @@ public partial class ClientLinkMethodTests
                     continue;
                 }
 
+                scanned++;
                 var n = 0;
                 foreach (var line in File.ReadAllLines(file))
                 {
@@ -165,8 +160,13 @@ public partial class ClientLinkMethodTests
                         continue;
                     }
 
-                    if (MutatingSend().Match(line) is { Success: true } m
-                        && QuotedName().Matches(m.Groups[2].Value).Any(q => actionRels.Contains(q.Groups[1].Value)))
+                    if (MutatingSend().Match(line) is not { Success: true } m)
+                    {
+                        continue;
+                    }
+
+                    sends++;
+                    if (QuotedName().Matches(m.Groups[2].Value).Any(q => actionRels.Contains(q.Groups[1].Value)))
                     {
                         n++;
                     }
@@ -179,8 +179,23 @@ public partial class ClientLinkMethodTests
             }
         }
 
-        Assert.True(counted.Count > 10,
-            $"Only {counted.Count} files matched — the detector stopped seeing the clients, which would make this pass vacuously.");
+        // ANTI-VACUOUS, rewritten because the burn-down broke the original. It asserted that MORE THAN TEN files
+        // still carried debt — which was true when 19 did, and became false the moment the debt was paid. A
+        // guard whose liveness check is "plenty of violations remain" fails at exactly the moment it succeeds,
+        // and reads as a broken detector rather than as a finished job.
+        //
+        // What actually needs proving is that the SCAN still reaches the clients and the PATTERN still matches
+        // something — neither of which depends on how much debt is left. So: the files were found and read, and
+        // the mutating-send pattern still fires somewhere in them (converted sites stop matching, but every
+        // client still issues plenty of sends on addresses that are not rel-derived at all).
+        Assert.True(scanned > 100,
+            $"Only {scanned} client files were scanned — the scan stopped reaching the clients, which would "
+            + "make this pass vacuously however the pattern behaves.");
+
+        Assert.True(sends > 50,
+            $"The mutating-send pattern matched only {sends} times across {scanned} client files. The debt may "
+            + "legitimately reach zero, but the PATTERN going dead is a different thing and must not look the "
+            + "same: clients still issue many sends on addresses that are not rel-derived.");
 
         var grew = counted
             .Where(c => c.Value > Budget.GetValueOrDefault(c.Key))

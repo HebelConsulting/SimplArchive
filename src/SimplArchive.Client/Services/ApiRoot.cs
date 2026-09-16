@@ -92,9 +92,15 @@ public sealed class ApiRoot
                 {
                     var me = meHref is null ? null : await _http.GetFromJsonAsync<RootResponse>(meHref, cancellationToken);
                     _meEmail = me?.Email;
-                    _meRels = me?.Links
+                    // The LINKS, not just their hrefs: a Link carries a Method, and a caller that drops it has
+                    // to name its own verb — which is how a route that keeps its rel and changes its method
+                    // still breaks the client (#1192). MeHrefAsync below still answers with an href, because
+                    // most callers only navigate.
+                    _meLinks = me?.Links
                         .Where(l => !string.IsNullOrEmpty(l.Rel) && !string.IsNullOrEmpty(l.Href))
-                        .ToDictionary(l => l.Rel, l => Relative(l.Href)) ?? [];
+                        .Select(l => new LinkResponse { Rel = l.Rel, Href = Relative(l.Href), Method = l.Method })
+                        .ToList() ?? [];
+                    _meRels = _meLinks.ToDictionary(l => l.Rel, l => l.Href);
                 }
             }
             finally
@@ -112,6 +118,22 @@ public sealed class ApiRoot
         ?? throw new InvalidOperationException($"The 'me' resource does not advertise the '{rel}' rel.");
 
     /// <summary>
+    /// Sends AT a rel on the caller's own "me" resource — address and METHOD both from the advertised link.
+    /// </summary>
+    /// <remarks>
+    /// The same move as <see cref="Hypermedia.Links.SendAsync"/>, for the rels that hang off "me" rather than
+    /// off a row: a caller cannot name a verb, so it cannot disagree with the server (#1192). Caching is
+    /// legitimate here because the me-resource's rel set is structurally fixed (ADR 0557) — what is cached is
+    /// the link, method included, not a guess about it.
+    /// </remarks>
+    public async Task<HttpResponseMessage> SendMeAsync(
+        string rel, object? body = null, CancellationToken cancellationToken = default)
+    {
+        await MeHrefAsync(rel, cancellationToken);
+        return await Hypermedia.Links.SendAsync(_http, _meLinks, rel, body, cancellationToken);
+    }
+
+    /// <summary>
     /// The signed-in account's email address, or null for a principal with no personal account.
     /// </summary>
     /// <remarks>
@@ -127,6 +149,7 @@ public sealed class ApiRoot
 
     private readonly SemaphoreSlim _meGate = new(1, 1);
     private Dictionary<string, string>? _meRels;
+    private List<LinkResponse>? _meLinks;
     private string? _meEmail;
 
     private async Task<Dictionary<string, string>> LoadAsync(CancellationToken cancellationToken)

@@ -546,7 +546,7 @@
         if (file is null) return;
         try
         {
-            var target = await (await Http.PutAsJsonAsync(Href(c, "working-copy"), new { })).Content.ReadFromJsonAsync<WorkingCopyUploadResponse>();
+            var target = await (await Links.SendAsync(Http, c.Links, "working-copy", new { })).Content.ReadFromJsonAsync<WorkingCopyUploadResponse>();
             using var buffer = new MemoryStream();
             await file.OpenReadStream(maxAllowedSize: 500L * 1024 * 1024).CopyToAsync(buffer);
             using var content = new ByteArrayContent(buffer.ToArray());
@@ -562,7 +562,7 @@
     {
         try
         {
-            var resp = await Http.PostAsync(Href(c, "checkin"), null);
+            var resp = await Links.SendAsync(Http, c.Links, "checkin");
             if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest) { Snackbar.Add(Strings.Get("CoErrUploadFirst"), Severity.Warning); return; }
             resp.EnsureSuccessStatusCode();
             Snackbar.Add(string.Format(Strings.Get("CoOkCheckedIn"), c.Name), Severity.Success);
@@ -662,7 +662,7 @@
     {
         try
         {
-            (await Http.PostAsync(Href(c, "extend"), null)).EnsureSuccessStatusCode();
+            (await Links.SendAsync(Http, c.Links, "extend")).EnsureSuccessStatusCode();
             Snackbar.Add(string.Format(Strings.Get("CoOkExtended"), c.Name), Severity.Success);
             await Refresh.InvokeAsync();
         }
@@ -696,7 +696,7 @@
         {
             try
             {
-                var resp = await Http.PostAsync(Href(row, "checkin"), null);
+                var resp = await Links.SendAsync(Http, row.Links, "checkin");
                 if (resp.IsSuccessStatusCode)
                 {
                     succeeded++;
@@ -738,7 +738,7 @@
         {
             try
             {
-                var resp = await Http.DeleteAsync(Href(row, "cancel-checkout"));
+                var resp = await Links.SendAsync(Http, row.Links, "cancel-checkout");
                 if (resp.IsSuccessStatusCode)
                 {
                     succeeded++;
@@ -762,7 +762,7 @@
         if (!await Confirm(string.Format(Strings.Get("CoConfirmCancel"), c.Name), Strings.Get("CoCancelTitle"))) return;
         try
         {
-            (await Http.DeleteAsync(Href(c, "cancel-checkout"))).EnsureSuccessStatusCode();
+            (await Links.SendAsync(Http, c.Links, "cancel-checkout")).EnsureSuccessStatusCode();
             Snackbar.Add(string.Format(Strings.Get("CoOkReleased"), c.Name), Severity.Success);
             await Refresh.InvokeAsync();
             await Refresh.InvokeAsync();

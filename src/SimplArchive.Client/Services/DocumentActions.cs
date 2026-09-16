@@ -511,7 +511,7 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
     {
         try
         {
-            (await http.DeleteAsync(await browse.FetchRelAsync(node.Id, "cancel-checkout"))).EnsureSuccessStatusCode();
+            (await browse.SendRelAsync(node.Id, "cancel-checkout")).EnsureSuccessStatusCode();
             snackbar.Add(string.Format(Strings.Get("StReleasedCheckout"), node.Name), Severity.Success);
             return true;
         }

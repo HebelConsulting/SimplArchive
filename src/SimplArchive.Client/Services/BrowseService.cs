@@ -69,6 +69,20 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
     public Task<DocumentLinksResponse?> FetchAsync(Guid documentId) =>
         http.GetFromJsonAsync<DocumentLinksResponse>($"api/documents/{documentId}");
 
+    /// <summary>
+    /// Fetches the resource behind an id and sends AT one of its rels — address and METHOD both from the link.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="FetchRelAsync"/> answers with an href alone, so a caller then names its own verb and can
+    /// disagree with the server (#1192). This is the same one read, with the method kept. Still ONE request for
+    /// the resource (ADR 0557); a caller following several rels should <see cref="FetchAsync"/> once instead.
+    /// </remarks>
+    public async Task<HttpResponseMessage> SendRelAsync(Guid documentId, string rel, object? body = null)
+    {
+        var doc = await FetchAsync(documentId);
+        return await Links.SendAsync(http, doc?.Links, rel, body);
+    }
+
     /// <summary>A folder's children address, resolved from its id — see <see cref="FetchRelAsync"/>.</summary>
     public Task<string> FetchChildrenHrefAsync(Guid folderId) => FetchRelAsync(folderId, "children");
 
@@ -177,7 +191,7 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
     {
         try
         {
-            var response = await http.PostAsync(await apiRoot.RequireMeAsync("personalRepository"), null);
+            var response = await apiRoot.SendMeAsync("personalRepository");
             if (!response.IsSuccessStatusCode) return null;
             return await response.Content.ReadFromJsonAsync<PersonalRepositoryResponse>();
         }

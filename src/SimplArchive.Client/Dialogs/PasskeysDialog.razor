@@ -72,14 +72,14 @@
         _busy = true;
         try
         {
-            var options = await Http.PostAsync(await ApiRoot.RequireMeAsync("passkeyRegisterOptions"), null);
+            var options = await ApiRoot.SendMeAsync("passkeyRegisterOptions");
             options.EnsureSuccessStatusCode();
             var optionsBody = await options.Content.ReadFromJsonAsync<RegisterOptionsResponse>();
 
             var attestationJson = await JS.InvokeAsync<string>("simplArchiveWebAuthn.register", optionsBody!.Options);
             var attestation = JsonSerializer.Deserialize<JsonElement>(attestationJson);
 
-            var resp = await Http.PostAsJsonAsync(await ApiRoot.RequireMeAsync("passkeyRegister"), new { attestationResponse = attestation, token = optionsBody.Token, name = _newName.Trim() });
+            var resp = await ApiRoot.SendMeAsync("passkeyRegister", new { attestationResponse = attestation, token = optionsBody.Token, name = _newName.Trim() });
             if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("PasskeyRegisterError"), Severity.Error); return; }
 
             Snackbar.Add(string.Format(Strings.Get("StPasskeyAdded"), _newName.Trim()), Severity.Success);
