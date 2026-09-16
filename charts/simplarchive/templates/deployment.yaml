@@ -42,6 +42,44 @@ spec:
       serviceAccountName: {{ include "simplarchive.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if .Values.modules.install }}
+      {{- /*
+        Install the pinned industry modules before the app starts (ADR 0799). An initContainer rather than
+        app-startup work: the application is never given the package credential, and a feed outage is then a
+        failed init step instead of a boot failure of the whole app.
+
+        A FAILED FETCH LEAVES THE POD DOWN, deliberately. A tenant with an active module licence whose module
+        did not install loses its controllers, masks and transitions, and every module route answers
+        404 MODULE_NOT_ACTIVE — which reads as "never built" rather than "not installed". That invisible shape
+        is what #1242 was, so the fix must not reproduce it one layer down.
+      */}}
+      initContainers:
+        - name: modules-init
+          image: "{{ .Values.modules.image.repository }}:{{ .Values.modules.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          command: ["sh", "/init/modules-init.sh"]
+          env:
+            - name: SA_MODULES
+              value: {{ join " " .Values.modules.install | quote }}
+            - name: SA_MODULE_FEED
+              value: {{ .Values.modules.feed | quote }}
+            - name: MODULES_ENV
+              value: /init/modules.env
+            - name: TARGET
+              value: /modules
+            - name: SA_MODULE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "modules.existingSecret is required when modules.install is set — GitHub Packages needs a read:packages token even for a public package, and every module repository is private." .Values.modules.existingSecret }}
+                  key: {{ .Values.modules.tokenSecretKey }}
+          volumeMounts:
+            - name: modules-init
+              mountPath: /init
+            - name: modules
+              mountPath: /modules
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: {{ include "simplarchive.image" . | quote }}
@@ -110,6 +148,24 @@ spec:
             {{- toYaml .Values.readinessProbe | nindent 12 }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.modules.install }}
+          volumeMounts:
+            # Read-only here, and deliberately NOT in docker-compose.yaml. The asymmetry is not an oversight:
+            # the flight-school demo nests a bind at /app/Modules/flight-school inside the compose mount, and a
+            # nested bind cannot create its mountpoint inside a read-only volume — it fails the container
+            # start outright. Nothing nests inside this emptyDir, so the app can take the stricter form.
+            - name: modules
+              mountPath: /app/Modules
+              readOnly: true
+          {{- end }}
+      {{- if .Values.modules.install }}
+      volumes:
+        - name: modules-init
+          configMap:
+            name: {{ include "simplarchive.fullname" . }}-modules
+        - name: modules
+          emptyDir: {}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

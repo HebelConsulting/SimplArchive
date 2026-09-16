@@ -1,0 +1,29 @@
+{{- if .Values.modules.install }}
+{{- /*
+  The module installer's script and its pins, for the initContainer (ADR 0799).
+
+  WHY A COPY OF THE SCRIPT LIVES IN THE CHART: a Helm chart is self-contained — `.Files.Get` cannot reach
+  outside the chart directory, and `-f extra.yaml` is an install-time override rather than chart authoring. So
+  `files/modules-init.sh` is a copy of `scripts/modules-init.sh`, and it is CHECKED rather than trusted:
+  ModulePinLockstepTests fails the build when the two differ by a byte. That guard is not ceremony — the
+  chart's OTHER file copy, db-init.sql, went unguarded and silently lost a whole role (#1249).
+
+  The pins are rendered from values rather than copied from modules.env for the same reason, and the same test
+  compares them.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "simplarchive.fullname" . }}-modules
+  labels:
+    {{- include "simplarchive.labels" . | nindent 4 }}
+data:
+  modules-init.sh: |
+    {{- .Files.Get "files/modules-init.sh" | nindent 4 }}
+  modules.env: |
+    {{- range $key, $pin := .Values.modules.pins }}
+    {{ $key }}_PACKAGE={{ $pin.package }}
+    {{ $key }}_VERSION={{ $pin.version }}
+    {{ $key }}_SHA512={{ $pin.sha512 }}
+    {{- end }}
+{{- end }}

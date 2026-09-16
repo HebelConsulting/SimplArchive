@@ -389,6 +389,25 @@ services:
         bao kv put secret/simplarchive/openiddict signing=@/tmp/signing.json encryption=@/tmp/encryption.json
         echo 'openbao provisioned'
 
+  # Install the industry modules this deployment pins (ADR 0799) — the fourth one-shot, and the reason a module
+  # is now a NAMED VERSION rather than a file somebody copied. It reads modules.env for the version + digest and
+  # SA_MODULES for which of them this deployment wants; SA_MODULES is EMPTY by default, so the dev stack runs
+  # core-only, needs no package credential, and `docker compose up --build` works exactly as the README says.
+  #
+  # Plain alpine because a .nupkg is a zip — no NuGet tooling and no SDK image. (`unzip` and `sha512sum` are not
+  # on alpine's PATH, only as busybox applets; the script calls them explicitly.)
+  modules-init:
+    image: alpine:${ALPINE_TAG:-3.22.5}
+    environment:
+      SA_MODULES: "${SA_MODULES:-}"
+      SA_MODULE_TOKEN: "${SA_MODULE_TOKEN:-}"
+      SA_MODULE_FEED: "${SA_MODULE_FEED:-https://nuget.pkg.github.com/HebelConsulting}"
+    volumes:
+      - ./modules.env:/modules.env:ro
+      - ./scripts/modules-init.sh:/modules-init.sh:ro
+      - modules-data:/modules
+    entrypoint: ["sh", "/modules-init.sh"]
+
   api:
     build:
       context: .
@@ -415,12 +434,30 @@ services:
         condition: service_started
       openbao-init:
         condition: service_completed_successfully
+      # A pinned module that did NOT install must stop the app, not be discovered later as a missing feature
+      # (ADR 0799). `service_completed_successfully` is what makes the refusal bite: a non-zero modules-init
+      # leaves the api unstarted rather than up-and-incomplete.
+      modules-init:
+        condition: service_completed_successfully
     ports:
       - "8080:8080"
       # The IMAP endpoint's dev plaintext port (ADR 0594) — point a mail client at localhost:143 with the
       # generated IMAP password from the account menu. Plaintext is Development-only; production uses
       # Imap__TlsPort with a real certificate and the readiness gate refuses this port.
       - "143:143"
+    volumes:
+      # What modules-init installed (ADR 0799).
+      #
+      # NOT `:ro`, and that is a measured decision rather than an oversight. The flight-school demo `include`s
+      # this file and overrides the api with `./modules/flight-school:/app/Modules/flight-school:ro` — a bind
+      # NESTED inside this mount. A nested bind cannot create its mountpoint inside a read-only volume, so
+      # `:ro` here does not merely weaken something, it stops the container starting at all:
+      #   error mounting … create mountpoint for /app/Modules/flight-school: read-only file system
+      # Verified both ways before choosing. Read-only would also have bought little: the app never writes here,
+      # and the hazard it looks like it guards — a module assembly overwritten under a running host, which
+      # poisons not-yet-JITted IL and surfaces as "Bad IL range" hours later — comes from an EXTERNAL writer
+      # that this flag has no say over.
+      - modules-data:/app/Modules
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       # Secrets come from OpenBao (ADR "Secrets management with OpenBao"): ConnectionStrings:Default is built
@@ -560,3 +597,5 @@ volumes:
   openbao-data:
   caddy-data:
   caddy-config:
+  # What modules-init unpacks, and the api mounts read-only (ADR 0799).
+  modules-data:

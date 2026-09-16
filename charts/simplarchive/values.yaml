@@ -377,3 +377,35 @@ tolerations: []
 affinity: {}
 # Spread replicas across nodes/zones for HA (used when set).
 topologySpreadConstraints: []
+
+# Industry modules (ADR 0799). A module is installed by resolving a PINNED PACKAGE and verifying its digest,
+# never by copying a file onto the host — which is what #1242 cost, when the kiosk served a build four releases
+# old and nothing anywhere recorded it.
+modules:
+  # WHICH modules this installation installs. Empty (the default) is core-only: no initContainer is rendered,
+  # no package credential is needed, and the chart behaves exactly as it did before this existed.
+  install: []
+  # e.g.
+  #   install: ["FLIGHT_SCHOOL"]
+  #   existingSecret: simplarchive-module-feed
+
+  feed: https://nuget.pkg.github.com/HebelConsulting
+
+  # A Secret holding the read:packages token. REQUIRED when `install` is non-empty — GitHub Packages demands a
+  # token even for a public package, and every module repository here is private, so there is no anonymous path.
+  existingSecret: ""
+  tokenSecretKey: token
+
+  # The version + digest of every module this chart knows how to install. A LITERAL COPY of modules.env, because
+  # a chart is self-contained and values.yaml cannot include another file — so the copy is CHECKED rather than
+  # trusted (ModulePinLockstepTests), the same arrangement images.env has with the image tags above.
+  pins:
+    FLIGHT_SCHOOL:
+      package: SimplArchive.FlightSchool
+      version: 0.0.0
+      sha512: ""
+
+  # Plain alpine: a .nupkg is a zip, so the installer needs no NuGet tooling and no SDK image.
+  image:
+    repository: alpine
+    tag: 3.22.5
