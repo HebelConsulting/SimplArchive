@@ -265,7 +265,11 @@ public sealed class AdminClient(ApiCore core)
         DateTimeOffset? SupportContractEndDate, DateTimeOffset? DeactivatesAt, string? LicenseHref,
         // The module's per-tenant configuration (ADR 0772) — absent where it declares none, so no module is
         // ever offered an empty form.
-        string? SettingsHref = null);
+        string? SettingsHref = null,
+        // WHICH BUILD is loaded (#1247): "1.0.0+<sha>". The SHA is the identity — every module reports version
+        // 1.0.0 until they become versioned packages (#1246) — and without it a stale module is invisible,
+        // because it loads, seeds and serves while only post-build features are missing (#1242).
+        string? Build = null);
 
     /// <summary>One declared setting plus what is configured. A SECRET's value is never here — only whether
     /// one is set (ADR 0772); the module reads the plaintext, the administrator never does.</summary>
@@ -304,7 +308,8 @@ public sealed class AdminClient(ApiCore core)
                     m.TryGetProperty("supportContractEndDate", out var end) && end.ValueKind == JsonValueKind.String ? end.GetDateTimeOffset() : null,
                     m.TryGetProperty("deactivatesAt", out var de) && de.ValueKind == JsonValueKind.String ? de.GetDateTimeOffset() : null,
                     links?.Href("license"),
-                    links?.Href("settings")));
+                    links?.Href("settings"),
+                    m.TryGetProperty("build", out var b) && b.ValueKind == JsonValueKind.String ? b.GetString() : null));
             }
         }
 

@@ -14,8 +14,28 @@ namespace SimplArchive.Infrastructure.Modules;
 /// </summary>
 public static class ModuleLoader
 {
-    /// <summary>A module the host accepted: its contract, where it came from, its context.</summary>
-    public sealed record LoadedModule(IIndustryModule Module, string AssemblyPath);
+    /// <summary>A module the host accepted: its contract, where it came from, and WHICH BUILD it is.</summary>
+    /// <param name="Build">
+    /// The assembly's informational version — in practice <c>1.0.0+&lt;git sha&gt;</c>, because SourceLink
+    /// stamps the source commit and no module declares a <c>&lt;Version&gt;</c> of its own.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// <b>The version NUMBER is worthless and the SHA is the identity</b>, which is worth saying out loud before
+    /// anyone renders this as "v1.0.0". Every module builds as <c>1.0.0</c> — the csproj declares nothing, so
+    /// that is the SDK default and it is identical for every module and every build. What distinguishes one
+    /// build from the next is the <c>+sha</c> suffix. When modules become versioned packages (#1246) the number
+    /// starts meaning something; until then, do not trust it.
+    /// </para>
+    /// <para>
+    /// <b>Why capture it at all:</b> the kiosk ran a module build four releases old and nothing could say so
+    /// (#1242). A stale module loads, seeds its masks, registers its controllers and answers requests — only
+    /// features added after the deployed build are missing, which reads as "never built" rather than "not
+    /// deployed". The investigation ended up comparing file mtimes and SHA-256 sums because the process itself
+    /// could not answer "which build is this?". It can now.
+    /// </para>
+    /// </remarks>
+    public sealed record LoadedModule(IIndustryModule Module, string AssemblyPath, string? Build = null);
 
     /// <summary>
     /// Scans <paramref name="modulesDirectory"/> for module assemblies — every <c>*.dll</c> in each
@@ -70,8 +90,13 @@ public static class ModuleLoader
                         continue;
                     }
 
-                    logger.LogInformation("Loaded module {ModuleId} ({DisplayName}) from {Path}.", module.ModuleId, module.DisplayName, candidate);
-                    loaded.Add(new LoadedModule(module, candidate));
+                    // The BUILD, not just the path: a path says where the file is, never which one it is.
+                    var build = assembly.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()
+                        ?.InformationalVersion;
+
+                    logger.LogInformation("Loaded module {ModuleId} ({DisplayName}) build {Build} from {Path}.",
+                        module.ModuleId, module.DisplayName, build ?? "unknown", candidate);
+                    loaded.Add(new LoadedModule(module, candidate, build));
                 }
             }
             catch (BadImageFormatException)

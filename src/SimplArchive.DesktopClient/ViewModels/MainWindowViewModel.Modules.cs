@@ -61,6 +61,31 @@ public sealed class ModuleRowViewModel(AdminClient.ModuleInfo module)
 
     public string DisplayName => Module.DisplayName;
 
+    /// <summary>
+    /// WHICH BUILD is loaded, as the short sha — empty when the assembly carried no stamp (#1247).
+    /// </summary>
+    /// <remarks>
+    /// The SHA alone, deliberately: every module reports version <c>1.0.0</c> because none declares a
+    /// <c>&lt;Version&gt;</c>, so rendering the number would look like information and carry none. Shown at all
+    /// because a stale module is otherwise invisible — it loads, seeds its masks and answers requests, and only
+    /// features added after the deployed build are missing, which reads as "never implemented" (#1242).
+    /// The web client shows the same thing in the same place; the two must not diverge (ADR 0511).
+    /// </remarks>
+    public string BuildSha
+    {
+        get
+        {
+            var plus = Module.Build?.IndexOf('+') ?? -1;
+            if (plus < 0 || Module.Build is null || plus + 1 >= Module.Build.Length)
+            {
+                return string.Empty;
+            }
+
+            var sha = Module.Build[(plus + 1)..];
+            return sha.Length > 8 ? sha[..8] : sha;
+        }
+    }
+
     /// <summary>The state line, one sentence per state (ADR 0740's escalate → grace → deactivate ladder).</summary>
     public string StatusText => Module switch
     {

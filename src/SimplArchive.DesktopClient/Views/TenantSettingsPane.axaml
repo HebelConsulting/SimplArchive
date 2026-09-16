@@ -231,6 +231,15 @@
                                     <StackPanel Grid.Column="0">
                                         <SelectableTextBlock Text="{Binding DisplayName}" />
                                         <SelectableTextBlock Text="{Binding StatusText}" FontSize="11" Foreground="{Binding StatusBrush}" />
+                                        <!-- WHICH BUILD is loaded (#1247). A stale module is otherwise
+                                             invisible: it loads, seeds and serves, and only features added
+                                             after the deployed build are missing — the kiosk sat four releases
+                                             behind and nothing could say so (#1242). The SHA only: every module
+                                             reports version 1.0.0, so the number would carry nothing. Hidden
+                                             when unstamped rather than showing a bare "1.0.0". -->
+                                        <SelectableTextBlock Text="{Binding BuildSha, StringFormat='build {0}'}"
+                                                             IsVisible="{Binding BuildSha, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                             FontSize="10" Foreground="{DynamicResource WbFaint}" />
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                                         <Button Content="{loc:Tr ModConfigure}" FontSize="11"

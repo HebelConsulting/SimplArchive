@@ -262,6 +262,14 @@
                     <div class="flex-grow-1">
                         <MudText Typo="Typo.body2">@m.DisplayName</MudText>
                         <MudText Typo="Typo.caption" Color="@ModuleStatusColor(m)">@ModuleStatusText(m)</MudText>
+                        @* WHICH BUILD is running (#1247). A stale module is otherwise invisible: it loads,
+                           seeds and serves, and only features added after the deployed build are missing — the
+                           kiosk sat four releases behind and nothing could say so (#1242). Shown as the SHA
+                           alone: every module reports version 1.0.0, so rendering that would surface nothing. *@
+                        @if (ModuleBuildSha(m) is { } sha)
+                        {
+                            <MudText Typo="Typo.caption" Class="wb-muted" title="@m.Build">build @sha</MudText>
+                        }
                     </div>
                     @* Only where the module DECLARED settings — the server withholds the rel otherwise, so
                        no module is ever offered an empty form (ADR 0543/0772). *@
@@ -487,6 +495,20 @@
         catch (Exception) { _modules = null; }
     }
 
+    // The sha from "1.0.0+<sha>", shortened for display. Null when the assembly carried no stamp — then the
+    // row shows nothing rather than a bare "1.0.0", which would look like information and carry none.
+    private static string? ModuleBuildSha(ModuleDto m)
+    {
+        var plus = m.Build?.IndexOf('+') ?? -1;
+        if (plus < 0 || m.Build is null || plus + 1 >= m.Build.Length)
+        {
+            return null;
+        }
+
+        var sha = m.Build[(plus + 1)..];
+        return sha.Length > 8 ? sha[..8] : sha;
+    }
+
     private static string ModuleStatusText(ModuleDto m) => m switch
     {
         { Installed: false } => Strings.Get("ModNotInstalled"),
@@ -544,6 +566,9 @@
         public List<LinkResponse> Links { get; set; } = [];
         public string ModuleId { get; set; } = string.Empty;
         public string DisplayName { get; set; } = string.Empty;
+        // WHICH BUILD is loaded (#1247) — "1.0.0+<sha>". The sha is the identity; the number is the SDK
+        // default and identical for every module until they become versioned packages (#1246).
+        public string? Build { get; set; }
         public bool Installed { get; set; }
         public bool Activated { get; set; }
         public bool Active { get; set; }

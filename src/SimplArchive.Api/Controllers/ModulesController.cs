@@ -66,6 +66,24 @@ public class ModulesController : ControllerBase
         public string DisplayName { get; set; } = string.Empty;
         public int AbiMajorVersion { get; set; }
 
+        /// <summary>
+        /// WHICH BUILD of the module is loaded — the assembly's informational version, in practice
+        /// <c>1.0.0+&lt;git sha&gt;</c>.
+        /// </summary>
+        /// <remarks>
+        /// <b>Read the sha, not the number.</b> Every module builds as <c>1.0.0</c> (no module declares a
+        /// <c>&lt;Version&gt;</c>, so that is the SDK default and it is the same for all of them); the
+        /// <c>+sha</c> suffix is what identifies the build. When modules become versioned packages (#1246) the
+        /// number starts carrying information too.
+        ///
+        /// <para>It is here because a stale module is otherwise INVISIBLE: it loads, seeds its masks, registers
+        /// its controllers and serves requests, and only features added after the deployed build are missing —
+        /// which reads as "never implemented" rather than "not deployed". The kiosk ran a build four releases
+        /// old and the only way to establish that was comparing file mtimes and SHA-256 sums off the host
+        /// (#1242). Null when the assembly carries no such attribute.</para>
+        /// </remarks>
+        public string? Build { get; set; }
+
         /// <summary>Whether this host carries the module's code. False on a row whose module was removed
         /// from disk — the activation (and the tenant's data) outlives the code, ADR 0740.</summary>
         public bool Installed { get; set; }
@@ -191,7 +209,10 @@ public class ModulesController : ControllerBase
             return Forbid();
         }
 
-        var module = _modules.FirstOrDefault(m => string.Equals(m.Module.ModuleId, moduleId, StringComparison.Ordinal))?.Module
+        // The LOADED module, not just its contract: the activation response reports the build too, and a field
+        // that is populated on one surface and null on another is one nobody trusts on either.
+        var loaded = _modules.FirstOrDefault(m => string.Equals(m.Module.ModuleId, moduleId, StringComparison.Ordinal));
+        var module = loaded?.Module
             ?? throw new ModuleNotInstalledException(moduleId);
 
         var document = await _dbContext.Documents
@@ -227,7 +248,7 @@ public class ModulesController : ControllerBase
             cancellationToken: cancellationToken);
 
         return Ok(ToResource(module.ModuleId, module.DisplayName, module.AbiMajorVersion, installed: true, activation,
-            hasSettings: module.Settings.Count > 0));
+            hasSettings: module.Settings.Count > 0, build: loaded?.Build));
     }
 
     /// <summary>
@@ -455,7 +476,8 @@ public class ModulesController : ControllerBase
         var items = _modules
             .Select(m => ToResource(
                 m.Module.ModuleId, m.Module.DisplayName, m.Module.AbiMajorVersion, installed: true,
-                byModuleId.GetValueOrDefault(m.Module.ModuleId), hasSettings: m.Module.Settings.Count > 0))
+                byModuleId.GetValueOrDefault(m.Module.ModuleId), hasSettings: m.Module.Settings.Count > 0,
+                build: m.Build))
             .ToList();
 
         // Activation rows whose module is no longer on disk: the data outlives the code (ADR 0740), and an
@@ -481,7 +503,7 @@ public class ModulesController : ControllerBase
 
     private static ModuleResource ToResource(
         string moduleId, string displayName, int abiMajorVersion, bool installed, ModuleActivation? activation,
-        bool hasSettings)
+        bool hasSettings, string? build = null)
     {
         var now = DateTimeOffset.UtcNow;
         return new ModuleResource
@@ -489,6 +511,7 @@ public class ModulesController : ControllerBase
             ModuleId = moduleId,
             DisplayName = displayName,
             AbiMajorVersion = abiMajorVersion,
+            Build = build,
             Installed = installed,
             Activated = activation is not null,
             Active = installed && activation is not null && ModuleActivationPolicy.IsActive(activation, now),
