@@ -66,7 +66,7 @@ jobs:
 
       # What install.sh GENERATES is Kubernetes, and nothing else type-checks it: a renamed chart value
       # would otherwise fail at 3 a.m. on a customer's install rather than here (ADR 0695).
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@v5
       - name: Install kubeconform
         run: |
           curl -fsSL https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz \
