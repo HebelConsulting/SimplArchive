@@ -93,7 +93,7 @@ public sealed class TokenSessions
     public TokenSession? For(string apiRootUrl)
     {
         var key = Key(apiRootUrl);
-        if (_byServer.TryGetValue(key, out var session))
+        if (_byServer.GetValueOrDefault(key) is { } session)
         {
             return session;
         }

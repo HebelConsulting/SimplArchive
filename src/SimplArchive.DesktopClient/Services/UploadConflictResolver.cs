@@ -89,7 +89,7 @@ public sealed class UploadConflictResolver(SimplArchiveApiClient api)
 
         // The row carries the address a new version is posted to (ADRs 0555/0557) — no second lookup, and
         // nothing rebuilt from an id. A missing `versions` rel means it is not available here (ADR 0543).
-        if (existing.Links is null || !existing.Links.TryGetValue("versions", out var versionsHref))
+        if (existing.Links is null || existing.Links?.Href("versions") is not { } versionsHref)
         {
             report(string.Format(Strings.Get("StUploadNoPermission"), fileName));
             return false;

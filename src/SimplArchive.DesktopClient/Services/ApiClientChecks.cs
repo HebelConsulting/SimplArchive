@@ -157,7 +157,7 @@ internal static class ApiClientChecks
         var refs = await api.References.GetReferencesAsync(a.Href("references"));
         var reference = refs.FirstOrDefault(r => r.TargetId == c.Id);
         Console.WriteLine(reference is not null && reference.RealParentId == b.Id
-            ? $"OK: reference present, realParentId points to B; go-to folder = '{(await api.GetDocumentByAddressAsync(reference.Links!["go-to"])).Name}'."
+            ? $"OK: reference present, realParentId points to B; go-to folder = '{(await api.GetDocumentByAddressAsync(reference.Links!.Href("go-to")!)).Name}'."
             : "FAILED: reference/realParentId wrong.");
 
         Console.WriteLine("removing the reference…");
@@ -237,18 +237,18 @@ internal static class ApiClientChecks
         var wf = await api.Documents.GetWorkflowAsync(doc.Href("versions"));
         Console.WriteLine($"initial: {wf?.StatusName} | links: {string.Join(",", wf?.Links.Keys ?? [])}");
 
-        await api.Workflow.PostWorkflowActionAsync(wf!.Links["submit"], new { reviewerId = me.UserId });
+        await api.Workflow.PostWorkflowActionAsync(wf!.Links.Href("submit")!, new { reviewerId = me.UserId });
         wf = await api.Documents.GetWorkflowAsync(doc.Href("versions"));
         Console.WriteLine($"after submit: {wf?.StatusName} | assignedTo: {wf?.AssignedToName} | links: {string.Join(",", wf?.Links.Keys ?? [])}");
 
         var tasks = await api.Workflow.GetTasksAsync();
         Console.WriteLine($"tasks: {tasks.Count} -> {string.Join(",", tasks.Select(t => $"{t.DocumentName}/v{t.VersionNumber}"))}");
 
-        await api.Workflow.PostWorkflowActionAsync(wf!.Links["approve"], null);
+        await api.Workflow.PostWorkflowActionAsync(wf!.Links.Href("approve")!, null);
         wf = await api.Documents.GetWorkflowAsync(doc.Href("versions"));
         Console.WriteLine($"after approve: {wf?.StatusName} | links: {string.Join(",", wf?.Links.Keys ?? [])}");
 
-        await api.Workflow.PostWorkflowActionAsync(wf!.Links["release"], null);
+        await api.Workflow.PostWorkflowActionAsync(wf!.Links.Href("release")!, null);
         wf = await api.Documents.GetWorkflowAsync(doc.Href("versions"));
         Console.WriteLine($"after release: {wf?.StatusName}");
         Console.WriteLine("history:");

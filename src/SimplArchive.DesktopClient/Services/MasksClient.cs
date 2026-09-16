@@ -119,7 +119,7 @@ public sealed class MasksClient
                     f.TryGetProperty("isList", out var isList) && isList.GetBoolean(),
                     f.TryGetProperty("classifierOwned", out var owned) && owned.GetBoolean(),
                     f.TryGetProperty("requiresMailRouting", out var rmr) && rmr.GetBoolean(),
-                    ApiCore.ParseLinks(f)?.GetValueOrDefault("values")));
+                    ApiCore.ParseLinks(f)?.Href("values")));
             }
         }
 

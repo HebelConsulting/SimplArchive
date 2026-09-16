@@ -56,7 +56,7 @@ public sealed class ProfileClient(ApiCore core)
                 if (_meLinks is null)
                 {
                     var me = await _core.Http.GetFromJsonAsync<JsonElement>(meHref, cancellationToken);
-                    _meLinks = ApiCore.ParseLinks(me) ?? new Dictionary<string, string>();
+                    _meLinks = ApiCore.ParseLinks(me) is { } lm ? lm.Rels.ToDictionary(r => r, r => lm.Href(r)!, StringComparer.Ordinal) : null;
 
                     // The email rides in the SAME response as the links (#464) — reading it here rather than
                     // adding a second call is ADR 0557's rule applied to a value, not an address: one read,
@@ -72,7 +72,7 @@ public sealed class ProfileClient(ApiCore core)
             }
         }
 
-        return _meLinks.TryGetValue(rel, out var href)
+        return _meLinks?.GetValueOrDefault(rel) is { } href
             ? href
             : throw new InvalidOperationException($"The 'me' resource does not advertise the '{rel}' rel.");
     }
@@ -149,9 +149,9 @@ public sealed class ProfileClient(ApiCore core)
 
     // The status resource advertises generate/revoke/settings; the follows below take them from one read
     // (ADR 0557) rather than re-resolving the me resource per action.
-    public sealed record ImapAccessInfo(bool Available, bool Enabled, string Username, string Host, int? Port, int? TlsPort, bool ShowAllDocuments, string? Password, IReadOnlyDictionary<string, string>? Links = null)
+    public sealed record ImapAccessInfo(bool Available, bool Enabled, string Username, string Host, int? Port, int? TlsPort, bool ShowAllDocuments, string? Password, LinkMap? Links = null)
     {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+        public string? Href(string rel) => Links?.Href(rel);
     }
 
     public async Task<ImapAccessInfo> GetImapAccessAsync(CancellationToken cancellationToken = default)
@@ -245,7 +245,7 @@ public sealed class ProfileClient(ApiCore core)
                     p.GetProperty("name").GetString() ?? "",
                     p.GetProperty("createdAt").GetDateTimeOffset(),
                     p.TryGetProperty("lastUsedAt", out var lu) && lu.ValueKind != JsonValueKind.Null ? lu.GetDateTimeOffset() : null,
-                    links is not null && links.TryGetValue("self", out var removeHref) ? removeHref : null));
+                    links is not null && links.Href("self") is { } removeHref ? removeHref : null));
             }
         }
 

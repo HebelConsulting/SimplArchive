@@ -35,9 +35,9 @@ public sealed class IntrayApi(ApiCore core)
     // acts on a SELECTION, so it belongs to the collection rather than to any one row. Read once, followed many
     // times; re-fetching the intray to learn an address it already handed over is a round trip spent re-learning
     // something in hand.
-    public sealed record IntrayListing(IReadOnlyList<IntrayItemInfo> Items, IReadOnlyDictionary<string, string> Links)
+    public sealed record IntrayListing(IReadOnlyList<IntrayItemInfo> Items, LinkMap Links)
     {
-        public string? Href(string rel) => Links.TryGetValue(rel, out var href) ? href : null;
+        public string? Href(string rel) => Links?.Href(rel);
     }
 
     // Lists intray items (ADR "S3-backed inbox"). Own-items-only by default; includeGroups also aggregates the
@@ -69,7 +69,7 @@ public sealed class IntrayApi(ApiCore core)
             }
         }
 
-        return new IntrayListing(items, ApiCore.ParseLinks(json) ?? new Dictionary<string, string>());
+        return new IntrayListing(items, ApiCore.ParseLinks(json) ?? LinkMap.Empty);
     }
 
     /// <summary>
@@ -115,15 +115,15 @@ public sealed class IntrayApi(ApiCore core)
         }
 
         var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-        var links = ApiCore.ParseLinks(json) ?? new Dictionary<string, string>();
+        var links = ApiCore.ParseLinks(json);
         return new PagesInfo(
             json.TryGetProperty("format", out var f) ? f.GetString() ?? string.Empty : string.Empty,
             json.TryGetProperty("pageCount", out var c) ? c.GetInt32() : 0,
-            links.TryGetValue("split", out var split) ? split : null,
-            links.TryGetValue("sort", out var sort) ? sort : null,
-            links.TryGetValue("deskew", out var deskew) ? deskew : null,
+            links?.Href("split") is { } split ? split : null,
+            links?.Href("sort") is { } sort ? sort : null,
+            links?.Href("deskew") is { } deskew ? deskew : null,
             json.TryGetProperty("signed", out var signed) && signed.ValueKind == JsonValueKind.True,
-            links.TryGetValue("patchCodes", out var patch) ? patch : null);
+            links?.Href("patchCodes") is { } patch ? patch : null);
     }
 
     /// <summary>The intray ribbon's two standing preferences, as the "me" resource reports them.</summary>
@@ -189,7 +189,7 @@ public sealed class IntrayApi(ApiCore core)
     private async Task SetPreferenceAsync(string rel, bool enabled, CancellationToken cancellationToken)
     {
         var me = await core.Http.GetFromJsonAsync<JsonElement>(await core.RootHrefAsync("me", cancellationToken), cancellationToken);
-        var href = ApiCore.ParseLinks(me)?.GetValueOrDefault(rel)
+        var href = ApiCore.ParseLinks(me)?.Href(rel)
             ?? throw new ApiActionException(Strings.Get("ApiErrGeneric"));
 
         using var response = await core.Http.PutAsJsonAsync(href.TrimStart('/'), new { enabled }, cancellationToken);
@@ -423,9 +423,9 @@ public sealed class IntrayApi(ApiCore core)
 
     public sealed record IntrayItemInfo(string Name, long Size, string DownloadUrl, bool HasMask,
         Guid? GroupId = null, string? GroupName = null, Guid? UserId = null, string? UserName = null, string MoveUrl = "",
-        IReadOnlyDictionary<string, string>? Links = null, bool Signed = false)
+        LinkMap? Links = null, bool Signed = false)
     {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+        public string? Href(string rel) => Links?.Href(rel);
 
         // Own items (no group/user source) get "Send to…"; a group/other-user item gets "Move to my intray".
         public bool IsOwn => GroupId is null && UserId is null;

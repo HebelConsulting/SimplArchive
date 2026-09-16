@@ -1,4 +1,5 @@
 using SimplArchive.Presentation;
+using SimplArchive.DesktopClient.Services;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -11,11 +12,11 @@ public sealed class NodeViewModel
     //
     // Null for the SYNTHETIC rows — the Administration branch, the personal-space groupings — which stand for no
     // server resource at all. Href() therefore throws for them, which is right: there is nothing to follow.
-    public IReadOnlyDictionary<string, string>? Links { get; init; }
+    public LinkMap? Links { get; init; }
 
     /// <summary>The advertised href for <paramref name="rel"/>; throws rather than composing one.</summary>
     public string Href(string rel) =>
-        Links is not null && Links.TryGetValue(rel, out var href)
+        Links?.Href(rel) is { } href
             ? href
             : throw new InvalidOperationException(
                 $"The '{rel}' rel was not advertised for '{Name}'. Follow a rel the resource offers, or fetch the "
@@ -28,14 +29,14 @@ public sealed class NodeViewModel
     /// default, because composing past a rel the server withheld is what that rule exists to stop.
     /// </remarks>
     public string? TryHref(string rel) =>
-        Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+        Links is not null && Links.Href(rel) is { } href ? href : null;
 
     /// <summary>
     /// The DOCUMENT resource's own address. A repository row calls its document view <c>document</c> — its
     /// <c>self</c> is the repository view (ADR 0200) — while every other row's <c>self</c> IS the document.
     /// </summary>
     public string DocumentSelfHref =>
-        Links is not null && Links.TryGetValue("document", out var doc) ? doc : Href("self");
+        Links is not null && Links.Href("document") is { } doc ? doc : Href("self");
 
     public required Guid Id { get; init; }
 

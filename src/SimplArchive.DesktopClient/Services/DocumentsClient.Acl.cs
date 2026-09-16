@@ -31,14 +31,14 @@ public sealed partial class DocumentsClient
             return new AclInfo(true, false, [], [], null);
         }
 
-        var docLinks = ApiCore.ParseLinks(doc) ?? new Dictionary<string, string>();
-        if (!docLinks.TryGetValue("acl-entries", out var aclHref))
+        var docLinks = ApiCore.ParseLinks(doc);
+        if (docLinks?.Href("acl-entries") is not { } aclHref)
         {
             return new AclInfo(true, false, [], [], null);
         }
 
         var breaksInheritance = doc.TryGetProperty("breaksInheritance", out var bi) && bi.ValueKind == JsonValueKind.True;
-        docLinks.TryGetValue("acl-inheritance", out var inheritanceHref);
+        var inheritanceHref = docLinks?.Href("acl-inheritance");
 
         using var listResponse = await _core.Http.GetAsync(aclHref, cancellationToken);
         if (listResponse.StatusCode == HttpStatusCode.Forbidden)

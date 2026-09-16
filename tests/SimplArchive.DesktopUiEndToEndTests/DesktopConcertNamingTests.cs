@@ -28,7 +28,7 @@ public class DesktopConcertNamingTests
         var found = new List<(string, DavEntry)>();
         foreach (var calendar in await api.DavCollections.ListAsync("calendar"))
         {
-            if (calendar.Links.TryGetValue("appointments", out var href))
+            if (calendar.Links.Href("appointments") is { } href)
             {
                 foreach (var entry in await api.DavCollections.ListEntriesAsync(href))
                 {

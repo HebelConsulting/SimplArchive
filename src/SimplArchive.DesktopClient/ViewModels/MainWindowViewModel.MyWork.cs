@@ -45,10 +45,10 @@ public sealed partial class MainWindowViewModel
         }
 
         // Follow the row's `parent` and select the document there; a root document opens itself (#443).
-        if ((row.Links?.GetValueOrDefault("parent") ?? row.Links?.GetValueOrDefault("document")) is { } href)
+        if ((row.Links?.Href("parent") ?? row.Links?.Href("document")) is { } href)
         {
             SelectedTab = 0;
-            await OpenFolderAsync(href, row.Links?.ContainsKey("parent") == true ? row.DocumentId : null);
+            await OpenFolderAsync(href, row.Links?.Has("parent") == true ? row.DocumentId : null);
         }
     }
 
@@ -60,10 +60,10 @@ public sealed partial class MainWindowViewModel
             return;
         }
 
-        if ((row.Links?.GetValueOrDefault("parent") ?? row.Links?.GetValueOrDefault("document")) is { } href)
+        if ((row.Links?.Href("parent") ?? row.Links?.Href("document")) is { } href)
         {
             SelectedTab = 0;
-            await OpenFolderAsync(href, row.Links?.ContainsKey("parent") == true ? row.DocumentId : null);
+            await OpenFolderAsync(href, row.Links?.Has("parent") == true ? row.DocumentId : null);
         }
     }
 }

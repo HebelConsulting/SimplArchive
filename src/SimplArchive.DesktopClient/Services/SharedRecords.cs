@@ -13,6 +13,11 @@ public interface IAdvertisesLinks
     string Name { get; }
 
     string? Href(string rel);
+
+    // The row's links INCLUDING their methods, so a caller can send AT a rel rather than pairing an href with
+    // a verb of its own choosing (#1192). Href above stays, because 149 call sites read an address and need no
+    // verb; this is what the mutating ones need, and what ApiCore.SendRelAsync takes.
+    LinkMap? Links { get; }
 }
 
 // ---- Document ACL / Manage access (ADR "Manage-access UI for document/folder ACLs") -------------
@@ -48,7 +53,7 @@ public sealed record Node(Guid Id, string Name, bool HasChildren, bool HasVersio
     // holding a row follows these instead of composing a path from the document id from a template. Empty only if
     // the row came from somewhere that does not advertise them, in which case a caller must fetch the
     // resource — never rebuild the path.
-    IReadOnlyDictionary<string, string>? Links = null,
+    LinkMap? Links = null,
     // The kinds of child this folder will accept, each with the address that creates one (#673). Supplied by
     // the listing, so a context menu is built from it without a round trip — and a mask nobody hardcoded still
     // gets an entry, because the client never maps a mask to an endpoint.
@@ -76,7 +81,7 @@ public sealed record Node(Guid Id, string Name, bool HasChildren, bool HasVersio
     /// silently.
     /// </remarks>
     public string Href(string rel) =>
-        Links is not null && Links.TryGetValue(rel, out var href)
+        Links is not null && Links.Href(rel) is { } href
             ? href
             : throw new InvalidOperationException(
                 $"The '{rel}' rel was not advertised for '{Name}'. Follow a rel the resource offers, or fetch "
@@ -101,11 +106,11 @@ public sealed record BulkResult(int Succeeded, int Skipped);
 // Both rows carry the address the WRITE goes to — an existing entry advertises `edit`/`remove`, a principal
 // you may newly grant to advertises `grant`. Same shape, so the write is expressed once (ADR 0543/0555).
 public sealed record AclEntryInfo(string PrincipalType, Guid PrincipalId, AclRights Rights,
-    IReadOnlyDictionary<string, string>? Links = null) : IAdvertisesLinks
+    LinkMap? Links = null) : IAdvertisesLinks
 {
     public string Name => $"{PrincipalType}/{PrincipalId}";
 
-    public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+    public string? Href(string rel) => Links?.Href(rel);
 }
 
 // FileExtension is the current version's derived extension (ADR "Extension off Document.Name"); native

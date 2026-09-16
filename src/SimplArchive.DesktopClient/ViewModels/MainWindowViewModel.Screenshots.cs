@@ -325,7 +325,7 @@ public partial class MainWindowViewModel
             IsFolder = false,
             ParentId = sub.Id,
             Path = string.Empty,
-            Links = new Dictionary<string, string> { ["self"] = docRow.Href("self"), ["parent"] = sub.Href("self") },
+            Links = LinkMap.FromHrefs(new Dictionary<string, string> { ["self"] = docRow.Href("self"), ["parent"] = sub.Href("self") }),
         });
 
         return (
@@ -688,7 +688,7 @@ public partial class MainWindowViewModel
                 new AdminClient.SystemRightsData(true, false, false, false, false, false, true, true, true, true, true, true, true),
                 // A stand-in address, deliberately not an api/ path: the demo never follows it, and a composed
                 // URL here would be a real violation of ADR 0543 sitting in a fixture where nobody reads it.
-                Links: new Dictionary<string, string> { ["email"] = "demo://advertised-by-the-server" },
+                Links: LinkMap.FromHrefs(new Dictionary<string, string> { ["email"] = "demo://advertised-by-the-server" }),
                 Email: "demo@simplarchive.local")));
         Principals.Add(new PrincipalRowViewModel(false, Guid.NewGuid(), "Jane Doe", false,
             new AdminClient.SystemRightsData(false, false, false, false, false, false, false, false, false, false, false, false, false)));

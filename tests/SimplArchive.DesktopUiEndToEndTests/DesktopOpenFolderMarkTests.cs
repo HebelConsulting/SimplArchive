@@ -1,4 +1,5 @@
 using SimplArchive.DesktopClient.ViewModels;
+using SimplArchive.DesktopClient.Services;
 
 namespace SimplArchive.UiEndToEndTests;
 
@@ -67,7 +68,7 @@ public class DesktopOpenFolderMarkTests
     public void The_open_folder_is_described_from_its_own_advertised_links()
     {
         var id = Guid.NewGuid();
-        var links = new Dictionary<string, string> { ["self"] = "/api/documents/x", ["children"] = "/api/documents/x/children" };
+        var links = LinkMap.FromHrefs(new Dictionary<string, string> { ["self"] = "/api/documents/x", ["children"] = "/api/documents/x/children" });
 
         var row = OpenFolderMark.AsRow(id, "Artists", links, hasChildren: true);
 

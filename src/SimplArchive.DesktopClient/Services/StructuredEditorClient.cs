@@ -35,7 +35,7 @@ public sealed class StructuredEditorClient(ApiCore core, DocumentsClient documen
     /// already happened, so opening the raw box costs one request instead of two (ADR 0557).
     /// </param>
     public sealed record Loaded<T>(
-        T Value, string Href, string ETag, bool CanEdit, IReadOnlyDictionary<string, string> Links);
+        T Value, string Href, string ETag, bool CanEdit, LinkMap Links);
 
     /// <summary>The raw text behind a structured item, and what is needed to save it back.</summary>
     public sealed record RawSource(string Text, string Format, string ETag, bool CanEdit);
@@ -51,7 +51,7 @@ public sealed class StructuredEditorClient(ApiCore core, DocumentsClient documen
         Func<JsonElement, T> parse,
         CancellationToken cancellationToken = default)
     {
-        IReadOnlyDictionary<string, string> links;
+        LinkMap links;
         try
         {
             links = await documents.GetDocumentLinksAsync(documentSelfHref, cancellationToken);
@@ -61,7 +61,7 @@ public sealed class StructuredEditorClient(ApiCore core, DocumentsClient documen
             return null;
         }
 
-        if (!links.TryGetValue(rel, out var href))
+        if (links?.Href(rel) is not { } href)
         {
             return null;
         }
@@ -81,7 +81,7 @@ public sealed class StructuredEditorClient(ApiCore core, DocumentsClient documen
 
         return new Loaded<T>(
             parse(body), href, etag, canEdit,
-            ApiCore.ParseLinks(body) ?? new Dictionary<string, string>());
+            ApiCore.ParseLinks(body) ?? LinkMap.Empty);
     }
 
     /// <summary>
@@ -120,9 +120,9 @@ public sealed class StructuredEditorClient(ApiCore core, DocumentsClient documen
     /// the wrong trade — this is one deliberate request, at the moment it is asked for.
     /// </remarks>
     public async Task<RawSource?> ReadRawAsync(
-        IReadOnlyDictionary<string, string> structuredLinks, CancellationToken cancellationToken = default)
+        LinkMap structuredLinks, CancellationToken cancellationToken = default)
     {
-        if (!structuredLinks.TryGetValue("source", out var href))
+        if (structuredLinks?.Href("source") is not { } href)
         {
             return null;
         }
@@ -145,12 +145,12 @@ public sealed class StructuredEditorClient(ApiCore core, DocumentsClient documen
     /// Replaces the stored item with <paramref name="text"/> — this does NOT merge (#648).
     /// </summary>
     public async Task SaveRawAsync(
-        IReadOnlyDictionary<string, string> structuredLinks,
+        LinkMap structuredLinks,
         string text,
         string etag,
         CancellationToken cancellationToken = default)
     {
-        if (!structuredLinks.TryGetValue("source", out var href))
+        if (structuredLinks?.Href("source") is not { } href)
         {
             throw new ApiActionException("This item does not offer a raw source.");
         }

@@ -26,7 +26,7 @@ public sealed partial class MainWindowViewModel
         if (node.RealParentId is not null)
         {
             await OpenFolderAsync(
-                node.Links?.GetValueOrDefault("go-to")
+                node.Links?.Href("go-to")
                 ?? throw new InvalidOperationException($"The shortcut '{node.Name}' advertised no 'go-to' rel (ADR 0543/0555)."),
                 node.Id);
         }
@@ -65,7 +65,7 @@ public sealed partial class MainWindowViewModel
     }
 
     // The shared tail of both opens: contents, breadcrumbs, selection.
-    private async Task OpenLoadedFolderAsync(Guid folderId, string name, IReadOnlyDictionary<string, string>? folderLinks, Guid? selectTargetId)
+    private async Task OpenLoadedFolderAsync(Guid folderId, string name, LinkMap? folderLinks, Guid? selectTargetId)
     {
         await LoadFolderContentsAsync(folderId, folderLinks);
         Breadcrumbs.Clear();
@@ -85,7 +85,7 @@ public sealed partial class MainWindowViewModel
     public ReferencesViewModel? CreateReferencesViewModel() =>
         _api is not null && SelectedItem is { } item
             ? new ReferencesViewModel(_api, item.Id, item.Name, item.DocumentSelfHref,
-                item.Links is not null && item.Links.TryGetValue("referencing-folders", out var rf) ? rf : null)
+                item.Links is not null && item.Links.Href("referencing-folders") is { } rf ? rf : null)
             : null;
 
     // Same dialog for an explicit row — the tree context menu's "References…" acts on the right-clicked folder,

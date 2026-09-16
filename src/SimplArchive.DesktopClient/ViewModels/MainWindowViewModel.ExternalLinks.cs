@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SimplArchive.Localization;
+using SimplArchive.DesktopClient.Services;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -37,12 +38,12 @@ public sealed partial class MainWindowViewModel
     // exactly what hides the affordance — a missing rel means "not available to you, here, now".
     private string? _detailExternalLinksHref;
 
-    private IReadOnlyDictionary<string, string>? _detailLinks;
+    private LinkMap? _detailLinks;
 
     // The advertised href for a rel on the document currently shown in the detail pane. Throws rather than
     // composing: a rel the resource did not advertise means the action is not available here (ADR 0543).
     private string DetailHref(string rel) =>
-        _detailLinks is not null && _detailLinks.TryGetValue(rel, out var href)
+        _detailLinks is not null && _detailLinks.Href(rel) is { } href
             ? href
             : throw new InvalidOperationException($"The '{rel}' rel was not advertised for the open document.");
 

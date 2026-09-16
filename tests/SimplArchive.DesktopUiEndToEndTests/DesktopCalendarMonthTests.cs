@@ -1,5 +1,6 @@
 using SimplArchive.DesktopClient.ViewModels;
 using SimplArchive.Presentation;
+using SimplArchive.DesktopClient.Services;
 
 namespace SimplArchive.UiEndToEndTests;
 
@@ -27,7 +28,7 @@ public class DesktopCalendarMonthTests
             // An hour long, as a real entry is: with no End, TimeRange collapses to the single start time and
             // the range/start distinction this file asserts would be untestable.
             End = at is { } time ? Moment(day, time.AddHours(1)) : null,
-            Links = new Dictionary<string, string>(),
+            Links = LinkMap.Empty,
         };
 
     private static DateTimeOffset? Moment(DateOnly day, TimeOnly? at) =>

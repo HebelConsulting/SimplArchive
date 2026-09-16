@@ -35,7 +35,7 @@ public class DesktopNotificationsTests
 
         // Submit the document to the reviewer → a ReviewAssigned notification for them.
         var wf = await admin.Documents.GetWorkflowAsync(doc.Href("versions"));
-        await admin.Workflow.PostWorkflowActionAsync(wf!.Links["submit"], new { reviewerId = reviewerId.Id });
+        await admin.Workflow.PostWorkflowActionAsync(wf!.Links.Href("submit")!, new { reviewerId = reviewerId.Id });
 
         // The reviewer reads their intray: the notification carries the document + its parent folder.
         var reviewer = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl, email, password));

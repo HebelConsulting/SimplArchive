@@ -97,8 +97,8 @@ public partial class MainWindowViewModel
 
     // The export rel lives on the document RESOURCE, not the listing row — one fetch of the folder's own
     // resource, then the follow (ADR 0559).
-    private static async Task<byte[]> ExportRepositoryCoreAsync(SimplArchiveApiClient api, IReadOnlyDictionary<string, string> folderLinks, RepositoryArchiveClient.RepositoryExportOptions options) =>
-        await api.RepositoryArchive.ExportRepositoryAsync(await api.Documents.RelViaSelfAsync(folderLinks["self"], "export"), options);
+    private static async Task<byte[]> ExportRepositoryCoreAsync(SimplArchiveApiClient api, LinkMap folderLinks, RepositoryArchiveClient.RepositoryExportOptions options) =>
+        await api.RepositoryArchive.ExportRepositoryAsync(await api.Documents.RelViaSelfAsync(folderLinks.Href("self")!, "export"), options);
 
     // Imports an archive (ADR "Repository import") under the current folder, or as a new repository when at the
     // repository-list root, then rebuilds the tree so the imported content shows. Returns null if not signed in.
@@ -112,7 +112,7 @@ public partial class MainWindowViewModel
         // Into the open folder → its own `import` rel (resolved through its self address); at the repository
         // list root → null, and the client follows the repositories collection's import rel instead.
         var importHref = _currentFolderLinks is { } folderLinks
-            ? await api.Documents.RelViaSelfAsync(folderLinks["self"], "import")
+            ? await api.Documents.RelViaSelfAsync(folderLinks.Href("self")!, "import")
             : null;
         var result = await api.RepositoryArchive.ImportRepositoryAsync(importHref, zip, updateExisting, includePermissions, merge, leafConflict);
         await ReloadTreeAsync();

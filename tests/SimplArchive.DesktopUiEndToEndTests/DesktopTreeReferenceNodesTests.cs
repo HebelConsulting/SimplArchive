@@ -1,4 +1,5 @@
 using SimplArchive.DesktopClient.ViewModels;
+using SimplArchive.DesktopClient.Services;
 
 namespace SimplArchive.UiEndToEndTests;
 
@@ -18,7 +19,7 @@ public class DesktopTreeReferenceNodesTests
     {
         var node = new TreeNodeViewModel(
             Guid.NewGuid(), "Carol", hasSubfolders: true, loadChildren: null,
-            links: new Dictionary<string, string> { ["children"] = "/api/documents/x/children" });
+            links: LinkMap.FromHrefs(new Dictionary<string, string> { ["children"] = "/api/documents/x/children" }));
 
         Assert.Empty(await TreeReferenceNodes.ForAsync(node, references: null!, expand: _ => throw new Xunit.Sdk.XunitException("must not expand")));
     }

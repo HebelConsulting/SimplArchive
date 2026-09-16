@@ -179,7 +179,7 @@ public sealed partial class MainWindowViewModel
 
             foreach (var rel in TransitionOrder)
             {
-                if (workflow.Links.TryGetValue(rel, out var href))
+                if (workflow.Links.Href(rel) is { } href)
                 {
                     WorkflowTransitions.Add(new WorkflowTransitionViewModel(rel, TransitionLabel(rel), href));
                 }

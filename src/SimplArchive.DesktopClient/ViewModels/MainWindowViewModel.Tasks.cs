@@ -172,10 +172,10 @@ public partial class MainWindowViewModel
         }
 
         // Follow the row's `parent` and select the document there; a root document opens itself (#443).
-        if ((task.Links?.GetValueOrDefault("parent") ?? task.Links?.GetValueOrDefault("document")) is { } href)
+        if ((task.Links?.Href("parent") ?? task.Links?.Href("document")) is { } href)
         {
             SelectedTab = 0; // Repositories
-            await OpenFolderAsync(href, task.Links?.ContainsKey("parent") == true ? task.DocumentId : null);
+            await OpenFolderAsync(href, task.Links?.Has("parent") == true ? task.DocumentId : null);
         }
     }
 }

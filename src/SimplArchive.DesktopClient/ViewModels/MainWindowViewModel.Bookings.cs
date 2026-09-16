@@ -15,13 +15,13 @@ public partial class MainWindowViewModel
     public Func<BookingDialogViewModel, Task>? ShowBookingDialog { get; set; }
 
     /// <summary>True when the selected document advertises `bookings` — set with the detail links.</summary>
-    public bool CanOpenBookings => _detailLinks?.ContainsKey("bookings") == true;
+    public bool CanOpenBookings => _detailLinks?.Has("bookings") == true;
 
     [RelayCommand]
     private async Task OpenBookings()
     {
         if (_api is not { } api || ShowBookingDialog is null
-            || _detailLinks is not { } links || !links.TryGetValue("bookings", out var bookingsHref))
+            || _detailLinks is not { } links || links?.Href("bookings") is not { } bookingsHref)
         {
             return;
         }

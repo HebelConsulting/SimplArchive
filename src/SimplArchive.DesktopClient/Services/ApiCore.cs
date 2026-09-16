@@ -99,7 +99,7 @@ public sealed class ApiCore
             }
         }
 
-        return _rootLinks.TryGetValue(rel, out var href)
+        return _rootLinks?.GetValueOrDefault(rel) is { } href
             ? href
             : throw new InvalidOperationException($"The API root does not advertise the '{rel}' rel.");
     }
@@ -212,7 +212,7 @@ public sealed class ApiCore
     }
 
     /// <summary>The row's advertised links, or null when it carries none.</summary>
-    public static IReadOnlyDictionary<string, string>? ParseLinks(JsonElement item) =>
+    public static LinkMap? ParseLinks(JsonElement item) =>
         SimplArchiveApiClient.ParseLinks(item);
 
     /// <summary>Maps a Problem-Details refusal to a localized <see cref="ApiActionException"/>.</summary>
@@ -289,6 +289,34 @@ public sealed class ApiCore
         {
             return (null, null, null);
         }
+    }
+
+    /// <summary>
+    /// Sends AT a rel carried on an already-parsed ROW — the address and the method both come from the link
+    /// the server advertised, so the two cannot disagree.
+    /// </summary>
+    /// <remarks>
+    /// This is the overload the burn-down needed. The <see cref="JsonElement"/> one below can only serve a
+    /// caller that still holds the response, and the sites that actually name verbs do not:
+    /// <c>AddLegalHoldItemAsync(LegalHoldInfo hold, …)</c> takes a row, asks it for an href and then names
+    /// <c>PostAsJsonAsync</c> — by then the JSON is gone. Carrying the method on the row (see
+    /// <see cref="LinkMap"/>) is what makes those sites reachable at all (#1192).
+    /// </remarks>
+    public async Task<HttpResponseMessage> SendRelAsync(
+        LinkMap? links, string rel, object? body = null, CancellationToken cancellationToken = default)
+    {
+        if (links?.Href(rel) is not { } href)
+        {
+            throw new InvalidOperationException($"The '{rel}' rel was not advertised (ADR 0543).");
+        }
+
+        using var request = new HttpRequestMessage(Verb(links.Method(rel), rel), href);
+        if (body is not null)
+        {
+            request.Content = System.Net.Http.Json.JsonContent.Create(body);
+        }
+
+        return await Http.SendAsync(request, cancellationToken);
     }
 
     /// <summary>
@@ -377,7 +405,7 @@ public sealed class ApiCore
     // Follows a rel off a resource the client just READ or just CREATED — the case where the address is already
     // in hand and only needs picking up, as opposed to DocumentRelAsync's "I hold an id, fetch the resource".
     public static string RequireRel(JsonElement resource, string rel, string what) =>
-        ApiCore.ParseLinks(resource) is { } links && links.TryGetValue(rel, out var href)
+        ApiCore.ParseLinks(resource) is { } links && links.Href(rel) is { } href
             ? href
             : throw new InvalidOperationException($"{what} advertised no '{rel}' rel (ADR 0543).");
 

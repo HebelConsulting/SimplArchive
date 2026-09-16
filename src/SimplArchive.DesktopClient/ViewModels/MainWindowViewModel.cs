@@ -104,7 +104,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         try
         {
             var links = await api.GetRootLinksAsync();
-            _myExternalLinksHref = links.TryGetValue("externalLinks", out var href) ? href : null;
+            _myExternalLinksHref = links.GetValueOrDefault("externalLinks") is { } href ? href : null;
             HasMyExternalLinks = _myExternalLinksHref is not null;
         }
         catch (HttpRequestException)
@@ -527,7 +527,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     // there: `children` for the contents and `references` for the shortcuts, with the contents order riding in
     // the children envelope. One read, three follows — never a composed sub-resource path, and never a fetch per
     // rel, which is the failure mode that talks a codebase back into string paths (ADR 0543, issue #416).
-    private async Task LoadFolderContentsAsync(Guid folderId, IReadOnlyDictionary<string, string>? folderLinks = null)
+    private async Task LoadFolderContentsAsync(Guid folderId, LinkMap? folderLinks = null)
     {
         if (_api is null)
         {
@@ -562,9 +562,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
             // OWN advertised document address (a repository row calls the document view `document`, ADR 0200);
             // a reload of the folder already open reuses its stored links. There is no id fallback any more —
             // an id alone has no address (ADR 0543, #443).
-            var links = folderLinks is not null && folderLinks.ContainsKey("children") && folderLinks.ContainsKey("references")
+            var links = folderLinks is not null && folderLinks?.Has("children") == true && folderLinks?.Has("references") == true
                 ? folderLinks
-                : folderLinks is not null && (folderLinks.TryGetValue("document", out var ownAddress) || folderLinks.TryGetValue("self", out ownAddress))
+                : folderLinks is not null && (folderLinks.Href("document") ?? folderLinks.Href("self")) is { } ownAddress
                     ? await _api.Documents.GetDocumentLinksAsync(ownAddress)
                     : isReload && _currentFolderLinks is { } stored
                         ? stored
@@ -572,8 +572,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
             _currentFolderLinks = links;
             // The folder's persisted default contents order (ADR "Per-folder contents sort order") arrives with
             // the contents; opening a fresh folder resets any ephemeral column-header sort back to that default.
-            (var children, var sortOrder, CanCreateFolder) = await _api.Documents.GetFolderContentsAsync(links["children"]);
-            var references = await _api.References.GetReferencesAsync(links["references"]);
+            (var children, var sortOrder, CanCreateFolder) = await _api.Documents.GetFolderContentsAsync(links.Href("children")!);
+            var references = await _api.References.GetReferencesAsync(links.Href("references")!);
             _folderSortOrder = sortOrder;
             _headerSortActive = false;
             OnPropertyChanged(nameof(DetailSortText));
@@ -682,7 +682,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     // The open folder's advertised addresses, stored with its id so a same-folder reload and the
     // folder-scoped actions (create folder, upload, export, import) follow what the navigation row carried
     // (ADR 0555) instead of re-deriving anything from the id.
-    private IReadOnlyDictionary<string, string>? _currentFolderLinks;
+    private LinkMap? _currentFolderLinks;
 
     private int _folderSortOrder = 1; // DocumentDate
     private bool _headerSortActive;
@@ -826,7 +826,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         {
             // The `folders` rel the button is gated on, not `children` (#634): same address, different method,
             // and following the one that enabled the affordance keeps gate and action from drifting.
-            await _api.Documents.CreateFolderAsync(folderLinks["children"], name);
+            await _api.Documents.CreateFolderAsync(folderLinks.Href("children")!, name);
             Status = string.Format(Strings.Get("StCreatedFolder"), name);
             await ShowNewChildInTreeAsync(folderId); // refresh the parent's children in the tree, keep it expanded
             await LoadFolderContentsAsync(folderId);

@@ -18,9 +18,9 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
     // What the BIN itself offers — restore-selected, and the one purge rel (ADR 0797: emptying the bin and
     // purging a selection are one destructive act on one collection, the ids being an argument) — captured where the
     // collection is read, so a tab full of buttons costs no extra request (ADR 0557).
-    private IReadOnlyDictionary<string, string> _binLinks = new Dictionary<string, string>();
+    private LinkMap? _binLinks;
 
-    private string BinRel(string rel) => _binLinks.TryGetValue(rel, out var href)
+    private string BinRel(string rel) => _binLinks?.Href(rel) is { } href
         ? href
         : throw new InvalidOperationException($"The recycle bin advertised no '{rel}' rel (ADR 0543).");
 

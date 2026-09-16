@@ -42,12 +42,12 @@ public sealed partial class ContactRowViewModel : ObservableObject
     /// Answered by the rel the listing advertised, not by trying: a missing <c>photo</c> rel means the card
     /// carries no picture (ADR 0543), so the initials are the answer rather than a fallback from a 404.
     /// </remarks>
-    public bool HasPhoto => Links.ContainsKey("photo");
+    public bool HasPhoto => Links?.Has("photo") == true;
 
     partial void OnFullNameChanged(string value) => OnPropertyChanged(nameof(Initials));
 
     /// <summary>The row's own advertised addresses — the pane acts from these, never from a composed URL.</summary>
-    public required IReadOnlyDictionary<string, string> Links { get; init; }
+    public required LinkMap Links { get; init; }
 }
 
 /// <summary>One collection in the left pane: checked collections are overlaid in the list.</summary>
@@ -102,12 +102,12 @@ public sealed partial class ContactsTabViewModel : ObservableObject
     [RelayCommand]
     private async Task GoToDocumentAsync()
     {
-        if (Selected is not { } row || !row.Links.TryGetValue("self", out var self))
+        if (Selected is not { } row || row.Links?.Href("self") is not { } self)
         {
             return;
         }
 
-        await _shell.RevealDocumentAsync(row.Id, self, row.Links.GetValueOrDefault("parent"));
+        await _shell.RevealDocumentAsync(row.Id, self, row.Links?.Href("parent"));
     }
     [ObservableProperty] private bool _busy;
     [ObservableProperty] private string _filter = string.Empty;
@@ -168,7 +168,7 @@ public sealed partial class ContactsTabViewModel : ObservableObject
     /// save, addressed from the row's own `self` (ADR 0555).</remarks>
     public async Task MoveCardAsync(ContactRowViewModel row, Guid targetCollectionId)
     {
-        if (_api is null || !row.Links.TryGetValue("self", out var self))
+        if (_api is null || row.Links?.Href("self") is not { } self)
         {
             return;
         }
@@ -242,7 +242,7 @@ public sealed partial class ContactsTabViewModel : ObservableObject
     /// </remarks>
     public async Task<StructuredEditorClient.Loaded<ContactEditViewModel>?> LoadCardAsync(ContactRowViewModel row)
     {
-        if (_api is null || !row.Links.TryGetValue("self", out var self))
+        if (_api is null || row.Links?.Href("self") is not { } self)
         {
             return null;
         }
@@ -470,7 +470,7 @@ public sealed partial class ContactsTabViewModel : ObservableObject
         {
             try
             {
-                var bytes = await _api.Core.Http.GetByteArrayAsync(row.Links["photo"]);
+                var bytes = await _api.Core.Http.GetByteArrayAsync(row.Links.Href("photo")!);
                 using var stream = new MemoryStream(bytes);
                 row.Photo = new Bitmap(stream);
             }
@@ -505,7 +505,7 @@ public sealed partial class ContactsTabViewModel : ObservableObject
             {
                 Collection = new DavCollection(
                     Guid.NewGuid(), name, name.Split('/')[^1].Trim(), "addressbook", colour, true, personal, false,
-                    new Dictionary<string, string>(), string.Empty),
+                    LinkMap.Empty, string.Empty),
                 Color = colour,
                 IsChecked = true,
             });
@@ -531,7 +531,7 @@ public sealed partial class ContactsTabViewModel : ObservableObject
                 Organization = org,
                 Email = email,
                 Phone = phone,
-                Links = new Dictionary<string, string>(),
+                Links = LinkMap.Empty,
             });
         }
 

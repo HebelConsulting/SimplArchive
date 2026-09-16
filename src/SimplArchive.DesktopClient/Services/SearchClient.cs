@@ -102,9 +102,9 @@ public sealed class SearchClient(ApiCore core)
     // ShareScope: 0 = Private, 1 = Everyone, 2 = Specific (ADR "Scoped saved-search sharing").
     // Only the OWNER's rows advertise self/delete/shares, so a search shared with you carries none of them.
     public sealed record SavedSearchInfo(Guid Id, string Name, string QueryString, int ShareScope, bool IsMine, string OwnerName,
-        IReadOnlyDictionary<string, string>? Links = null)
+        LinkMap? Links = null)
     {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+        public string? Href(string rel) => Links?.Href(rel);
 
         public bool IsEveryone => ShareScope == 1;
         public bool IsSpecific => ShareScope == 2;
@@ -141,7 +141,7 @@ public sealed class SearchClient(ApiCore core)
         // `share-targets` is advertised by the saved-searches collection — the dialog that needs it opens from
         // that list, so the read is one the screen has effectively already paid for.
         var collection = await _core.Http.GetFromJsonAsync<JsonElement>(await _core.RootHrefAsync("savedSearches", cancellationToken), cancellationToken);
-        var targetsHref = ApiCore.ParseLinks(collection) is { } collectionLinks && collectionLinks.TryGetValue("share-targets", out var t)
+        var targetsHref = ApiCore.ParseLinks(collection) is { } collectionLinks && collectionLinks.Href("share-targets") is { } t
             ? t
             : throw new InvalidOperationException("Saved searches advertised no 'share-targets' rel (ADR 0543).");
 
@@ -206,7 +206,7 @@ public sealed class SearchClient(ApiCore core)
 
     public async Task DeleteSavedSearchAsync(SavedSearchInfo search, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.DeleteAsync(RequireHref(search, "delete"), cancellationToken);
+        using var response = await _core.SendRelAsync(search.Links, "delete", cancellationToken: cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 
@@ -235,7 +235,7 @@ public sealed class SearchClient(ApiCore core)
     // VersionsHref is the address the HIT advertised (#462) — the row carries its own addresses, so previewing a
     // result follows what the listing handed over instead of resolving the document again (ADR 0555/0557). Null
     // for a folder, which advertises no `versions` because it has nothing to preview.
-    public sealed record SearchResult(Guid Id, string Name, bool IsFolder, Guid? ParentId, string Path, string Highlight, string? VersionsHref = null, IReadOnlyDictionary<string, string>? Links = null, string? Icon = null);
+    public sealed record SearchResult(Guid Id, string Name, bool IsFolder, Guid? ParentId, string Path, string Highlight, string? VersionsHref = null, LinkMap? Links = null, string? Icon = null);
 
 
     private static SearchResult ParseSearchResult(JsonElement item) => new(

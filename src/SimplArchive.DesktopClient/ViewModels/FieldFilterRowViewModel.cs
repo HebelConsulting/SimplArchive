@@ -49,7 +49,7 @@ public partial class FieldFilterRowViewModel : ObservableObject
 
     private void UpdateForField()
     {
-        DataType = _typesByField.TryGetValue(FieldName, out var type) ? type : 0;
+        DataType = _typesByField.GetValueOrDefault(FieldName);
 
         Operators.Clear();
         foreach (var op in OperatorsFor(DataType))

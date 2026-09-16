@@ -172,7 +172,7 @@ internal sealed class WorkbenchDragDrop
         {
             var items = source.Where(n => !n.IsReference)
                 .Select(n => new DragOutItem(n.Name, n.IsFolder,
-                    n.Links?.GetValueOrDefault("versions"), n.Links?.GetValueOrDefault("children"),
+                    n.Links?.Href("versions"), n.Links?.Href("children"),
                     n.Id, n.DocumentType))
                 .ToList();
             if (items.Count > 0)
@@ -262,7 +262,7 @@ internal sealed class WorkbenchDragDrop
             dragVm.Status = Strings.Get("StPreparingDrag");
             try
             {
-                var files = await DragOutStager.StageAsync(dragApi, [new DragOutItem(node.Name, true, null, node.Links?.GetValueOrDefault("children"))]);
+                var files = await DragOutStager.StageAsync(dragApi, [new DragOutItem(node.Name, true, null, node.Links?.Href("children"))]);
                 if (files.Count > 0)
                 {
                     data.Set(DataFormats.FileNames, files);

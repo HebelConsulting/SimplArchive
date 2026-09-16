@@ -19,7 +19,7 @@ public sealed partial class WorkflowWindowViewModel : ObservableObject
     // address resolves the reviewer catalog when a submit/reassign is offered.
     private readonly string _versionsHref;
     private readonly string _documentSelfHref;
-    private Dictionary<string, string> _links = new();
+    private LinkMap _links = LinkMap.Empty;
 
     public WorkflowWindowViewModel(SimplArchiveApiClient api, string versionsHref, string documentSelfHref)
     {
@@ -82,17 +82,17 @@ public sealed partial class WorkflowWindowViewModel : ObservableObject
         HasWorkflow = true;
         StatusName = wf.StatusName;
         AssignedTo = wf.AssignedToName is { } a ? $"reviewer: {a}" : null;
-        _links = new Dictionary<string, string>(wf.Links);
-        CanSubmit = wf.Links.ContainsKey("submit");
+        _links = wf.Links;
+        CanSubmit = wf.Links?.Has("submit") == true;
         // Approve and Reject are asked SEPARATELY (#865). They were both gated on `approve`, on the assumption
         // that the two travel together — true today, and precisely the assumption that makes a conditional rel
         // pointless. The moment they diverge, which is the only reason to emit them conditionally at all,
         // Reject was offered on the strength of approve and then silently did nothing (it POSTs to `reject`).
-        CanApprove = wf.Links.ContainsKey("approve");
-        CanReject = wf.Links.ContainsKey("reject");
+        CanApprove = wf.Links?.Has("approve") == true;
+        CanReject = wf.Links?.Has("reject") == true;
         CanReview = CanApprove || CanReject; // the section is shown when EITHER is on offer
-        CanRelease = wf.Links.ContainsKey("release");
-        CanReassign = wf.Links.ContainsKey("reassign");
+        CanRelease = wf.Links?.Has("release") == true;
+        CanReassign = wf.Links?.Has("reassign") == true;
 
         foreach (var h in wf.History)
         {
@@ -132,7 +132,7 @@ public sealed partial class WorkflowWindowViewModel : ObservableObject
 
     private async Task PostAsync(string rel, object? body)
     {
-        if (!_links.TryGetValue(rel, out var href))
+        if (_links.Href(rel) is not { } href)
         {
             return;
         }
@@ -176,7 +176,7 @@ public sealed class TaskItemViewModel
     public Guid? ParentId { get; init; }
 
     /// <summary>The row's advertised addresses (`document`, `parent`, `workflow`) — opening follows these (#443).</summary>
-    public IReadOnlyDictionary<string, string>? Links { get; init; }
+    public LinkMap? Links { get; init; }
     public required string DocumentName { get; init; }
     public int? VersionNumber { get; init; }
     public DateTimeOffset AssignedAt { get; init; }

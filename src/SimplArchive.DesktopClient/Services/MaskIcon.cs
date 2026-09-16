@@ -68,5 +68,5 @@ public static class MaskIcon
 
     /// <summary>This client's glyph for a token, or null to keep whatever the caller would have drawn.</summary>
     public static string? For(string? token) =>
-        token is not null && Glyphs.TryGetValue(token, out var glyph) ? glyph : null;
+        token is not null && Glyphs.GetValueOrDefault(token) is { } glyph ? glyph : null;
 }

@@ -19,14 +19,14 @@ public sealed class RecycleBinClient(ApiCore core)
     // A soft-deleted document. Its own `restore`/`purge` addresses come from the ROW, because the document is
     // behind the soft-delete query filter — there is no resource left to fetch them from (ADR 0543/0555).
     public sealed record RecycleBinEntry(Guid Id, string Name, string Path, DateTimeOffset DeletedAt, string DeletedBy,
-        IReadOnlyDictionary<string, string>? Links = null) : IAdvertisesLinks
+        LinkMap? Links = null) : IAdvertisesLinks
     {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+        public string? Href(string rel) => Links?.Href(rel);
     }
 
     // The bin plus what can be done to it as a whole — captured where the collection is read, so the tab does
     // not pay a request per button (ADR 0557).
-    public sealed record RecycleBinList(IReadOnlyList<RecycleBinEntry> Items, IReadOnlyDictionary<string, string> Links);
+    public sealed record RecycleBinList(IReadOnlyList<RecycleBinEntry> Items, LinkMap Links);
 
     // Every soft-deleted document the caller can see, tenant-wide (ADR "Recycle bin tab") — capped at 500 by the
     // Api (Truncated flag ignored here; the tab tells the user if more exist via the status line).
@@ -48,7 +48,7 @@ public sealed class RecycleBinClient(ApiCore core)
             }
         }
 
-        return new RecycleBinList(items, ApiCore.ParseLinks(response) ?? new Dictionary<string, string>());
+        return new RecycleBinList(items, ApiCore.ParseLinks(response) ?? LinkMap.Empty);
     }
 
     // Empties the whole tenant-wide recycle bin — permanently purges every soft-deleted document (ADR "Recycle
@@ -104,16 +104,16 @@ public sealed class RecycleBinClient(ApiCore core)
     // The per-repository view of a soft-deleted item. Same actions as the tenant-wide row below and therefore
     // the same shape, so restore/purge are written ONCE and take either (CLAUDE.md: one generic, not N copies).
     public sealed record RecycleBinItem(Guid Id, string Name, DateTimeOffset DeletedAt,
-        IReadOnlyDictionary<string, string>? Links = null) : IAdvertisesLinks
+        LinkMap? Links = null) : IAdvertisesLinks
     {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+        public string? Href(string rel) => Links?.Href(rel);
     }
 
     // Restores a soft-deleted document/folder (and its cascade-deleted descendants). Idempotent, no If-Match
     // (ADR 0196). 403 = no permission (CanDelete).
     public async Task RestoreAsync(IAdvertisesLinks entry, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsync(ApiCore.RequireHref(entry, "restore"), null, cancellationToken);
+        using var response = await _core.SendRelAsync(entry.Links, "restore", cancellationToken: cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to restore this item.");
@@ -133,7 +133,7 @@ public sealed class RecycleBinClient(ApiCore core)
     // Permanently purges a recycle-bin item + its subtree (ADR "Manual hard-delete / purge") — tenant-admin only.
     public async Task PurgeAsync(IAdvertisesLinks entry, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsync(ApiCore.RequireHref(entry, "purge"), null, cancellationToken);
+        using var response = await _core.SendRelAsync(entry.Links, "purge", cancellationToken: cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("Only a tenant administrator can permanently purge items.");

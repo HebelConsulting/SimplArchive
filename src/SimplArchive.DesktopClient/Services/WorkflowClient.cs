@@ -22,10 +22,10 @@ public sealed class WorkflowClient(ApiCore core)
     // WorkflowStatus int; Links maps each valid-transition rel (submit/approve/reject/release) to its href.
     public sealed record WorkflowInfo(
         int Status, string StatusName, string? AssignedToName,
-        IReadOnlyList<WorkflowTransitionInfo> History, IReadOnlyDictionary<string, string> Links);
+        IReadOnlyList<WorkflowTransitionInfo> History, LinkMap Links);
 
     // A pending review task assigned to the caller (backs the Tasks tab).
-    public sealed record TaskInfo(Guid DocumentId, Guid? ParentId, Guid VersionId, string DocumentName, int? VersionNumber, DateTimeOffset AssignedAt, IReadOnlyDictionary<string, string>? Links = null, DateTimeOffset? DueAt = null);
+    public sealed record TaskInfo(Guid DocumentId, Guid? ParentId, Guid VersionId, string DocumentName, int? VersionNumber, DateTimeOffset AssignedAt, LinkMap? Links = null, DateTimeOffset? DueAt = null);
 
     // ---- Workflow + tasks (ADR "Workflow / document state model", 0009) -----------------------------------
 

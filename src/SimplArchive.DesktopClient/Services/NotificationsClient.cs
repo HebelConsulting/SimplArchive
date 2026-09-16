@@ -22,9 +22,9 @@ public sealed class NotificationsClient(ApiCore core)
 
     // A notification row, carrying its own `read` address (ADR 0543/0555) — an already-read one advertises
     // none, so "can this be marked read" is the server's answer rather than an IsRead flag re-interpreted here.
-    public sealed record NotificationInfo(Guid Id, string Type, string Title, string Body, Guid? DocumentId, Guid? DocumentParentId, DateTimeOffset CreatedAt, bool IsRead, int EventCount = 1, IReadOnlyDictionary<string, string>? Links = null)
+    public sealed record NotificationInfo(Guid Id, string Type, string Title, string Body, Guid? DocumentId, Guid? DocumentParentId, DateTimeOffset CreatedAt, bool IsRead, int EventCount = 1, LinkMap? Links = null)
     {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+        public string? Href(string rel) => Links?.Href(rel);
     }
 
     // ReadAllHref is the collection's own `read-all`; null when the server did not offer it.
@@ -55,13 +55,13 @@ public sealed class NotificationsClient(ApiCore core)
         return new NotificationList(
             items,
             json.TryGetProperty("unreadCount", out var uc) ? uc.GetInt32() : 0,
-            ApiCore.ParseLinks(json) is { } links && links.TryGetValue("read-all", out var readAll) ? readAll : null);
+            ApiCore.ParseLinks(json) is { } links && links.Href("read-all") is { } readAll ? readAll : null);
     }
 
     /// <summary>Marks one notification read at the address its own row advertised (ADR 0555).</summary>
     public async Task MarkNotificationReadAsync(NotificationInfo notification, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PutAsync(RequireHref(notification, "read"), null, cancellationToken);
+        using var response = await _core.SendRelAsync(notification.Links, "read", cancellationToken: cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 

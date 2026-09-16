@@ -149,15 +149,15 @@ public sealed class VersionsClient(ApiCore core)
 
     public sealed record VersionInfo(Guid Id, int? VersionNumber, string Status, string FileExtension, string? DownloadUrl,
         string DocumentDate = "", DateTimeOffset CreatedAt = default, string CreatedByName = "", bool IsCurrent = false,
-        string? Comment = null, IReadOnlyDictionary<string, string>? Links = null, string? WorkflowStatus = null)
+        string? Comment = null, LinkMap? Links = null, string? WorkflowStatus = null)
     {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+        public string? Href(string rel) => Links?.Href(rel);
     }
     // Restores (rolls back to) an earlier version (ADR "Version restore") — creates a new current version from
     // its content. Throws on a rejected request (403 no edit rights, 409 workflow/hold/checkout).
     public async Task RestoreVersionAsync(VersionInfo version, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsync(RequireHref(version, "restore"), null, cancellationToken);
+        using var response = await _core.SendRelAsync(version.Links, "restore", cancellationToken: cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             var reason = response.StatusCode == HttpStatusCode.Conflict
@@ -176,7 +176,7 @@ public sealed class VersionsClient(ApiCore core)
     public async Task<(List<VersionInfo> Versions, string? CompareHref)> GetVersionsWithLinksAsync(string versionsHref, CancellationToken cancellationToken = default)
     {
         var json = await _core.Http.GetFromJsonAsync<JsonElement>(versionsHref, cancellationToken);
-        var compareHref = ApiCore.ParseLinks(json) is { } links && links.TryGetValue("compare", out var href) ? href : null;
+        var compareHref = ApiCore.ParseLinks(json) is { } links && links.Href("compare") is { } href ? href : null;
         return (await GetVersionsAsync(versionsHref, cancellationToken), compareHref);
     }
 

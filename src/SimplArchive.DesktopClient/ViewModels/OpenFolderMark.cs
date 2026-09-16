@@ -1,3 +1,4 @@
+using SimplArchive.DesktopClient.Services;
 namespace SimplArchive.DesktopClient.ViewModels;
 
 /// <summary>
@@ -72,7 +73,7 @@ internal static class OpenFolderMark
     /// same pane rather than a thinner one. Built from the folder's OWN advertised links, which the contents
     /// load has already resolved — never from an id composed into an address (ADR 0543).
     /// </remarks>
-    internal static NodeViewModel AsRow(Guid id, string? name, IReadOnlyDictionary<string, string>? links, bool hasChildren) => new()
+    internal static NodeViewModel AsRow(Guid id, string? name, LinkMap? links, bool hasChildren) => new()
     {
         Id = id,
         Name = name ?? string.Empty,

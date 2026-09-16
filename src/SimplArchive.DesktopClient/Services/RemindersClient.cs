@@ -35,14 +35,14 @@ public sealed class RemindersClient(ApiCore core)
 
     // A document reminder (Wiedervorlage, ADR "Document reminders"). Carries its own links, so cancelling one
     // follows the `cancel` rel the row advertised rather than rebuilding a path from two ids (ADR 0543/0555).
-    public sealed record ReminderInfo(Guid Id, DateTimeOffset RemindAt, string? Note, int Recurrence, string RecurrenceName, string TargetName, IReadOnlyDictionary<string, string>? Links = null)
+    public sealed record ReminderInfo(Guid Id, DateTimeOffset RemindAt, string? Note, int Recurrence, string RecurrenceName, string TargetName, LinkMap? Links = null)
     {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+        public string? Href(string rel) => Links?.Href(rel);
     }
 
     // Dashboard rows (ADR "My work dashboard"): a due-soon reminder / a followed document, each with the
     // document + its parent folder for click-through.
-    public sealed record DashReminderInfo(Guid DocumentId, Guid? ParentId, string DocumentName, DateTimeOffset RemindAt, string? Note, int Recurrence, string RecurrenceName, bool Overdue, IReadOnlyDictionary<string, string>? Links = null);
+    public sealed record DashReminderInfo(Guid DocumentId, Guid? ParentId, string DocumentName, DateTimeOffset RemindAt, string? Note, int Recurrence, string RecurrenceName, bool Overdue, LinkMap? Links = null);
 
     // The caller's overdue + due-soon reminders across all documents (the dashboard's Reminders section).
     public async Task<IReadOnlyList<DashReminderInfo>> GetDashboardRemindersAsync(CancellationToken cancellationToken = default)
@@ -130,7 +130,7 @@ public sealed class RemindersClient(ApiCore core)
     /// <summary>Cancels the reminder at the address its own row advertised (ADR 0555).</summary>
     public async Task CancelReminderAsync(ReminderInfo reminder, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.DeleteAsync(RequireHref(reminder, "cancel"), cancellationToken);
+        using var response = await _core.SendRelAsync(reminder.Links, "cancel", cancellationToken: cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             throw new ApiActionException($"Could not cancel the reminder ({(int)response.StatusCode}).");

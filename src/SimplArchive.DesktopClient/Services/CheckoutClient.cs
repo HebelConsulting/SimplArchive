@@ -54,9 +54,9 @@ public sealed class CheckoutClient(ApiCore core)
     // ImplicitAgent: the client that took this lock without the user asking — a save-by-rename edit over the
     // WebDAV mount (ADR 0562); null for an explicit check-out. Client-supplied text: display it, never act on it.
 
-    public sealed record CheckoutItem(Guid Id, string Name, string Path, string Sha256, string FileExtension, bool HasStash, bool IsModified, string? StashDownloadUrl, DateTimeOffset? ExpiresAt, IReadOnlyDictionary<string, string>? Links = null, string? ImplicitAgent = null, bool? IsSigned = null, string? DownloadUrl = null)
+    public sealed record CheckoutItem(Guid Id, string Name, string Path, string Sha256, string FileExtension, bool HasStash, bool IsModified, string? StashDownloadUrl, DateTimeOffset? ExpiresAt, LinkMap? Links = null, string? ImplicitAgent = null, bool? IsSigned = null, string? DownloadUrl = null)
     {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+        public string? Href(string rel) => Links?.Href(rel);
     }
 
     // Acquire the exclusive edit lock. 409 = already held by someone else; 403 = no permission / not a User.
@@ -81,7 +81,7 @@ public sealed class CheckoutClient(ApiCore core)
     {
         var document = await _core.Http.GetFromJsonAsync<JsonElement>(documentSelfHref, cancellationToken);
         var links = ApiCore.ParseLinks(document);
-        return links is not null && links.TryGetValue(rel, out var href)
+        return links is not null && links.Href(rel) is { } href
             ? href
             : throw new ApiActionException(rel == "checkout"
                 ? "You don't have permission to check out this document."
@@ -125,7 +125,7 @@ public sealed class CheckoutClient(ApiCore core)
 
     public async Task CheckInFromStashAsync(CheckoutItem checkout, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsJsonAsync(RequireHref(checkout, "checkin"), new { }, cancellationToken);
+        using var response = await _core.SendRelAsync(checkout.Links, "checkin", new { }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to check in this document.");
@@ -144,7 +144,7 @@ public sealed class CheckoutClient(ApiCore core)
 
     public async Task ExtendCheckoutAsync(CheckoutItem checkout, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsync(RequireHref(checkout, "extend"), null, cancellationToken);
+        using var response = await _core.SendRelAsync(checkout.Links, "extend", cancellationToken: cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to extend this check-out.");
@@ -190,7 +190,7 @@ public sealed class CheckoutClient(ApiCore core)
 
     public async Task SaveWorkingCopyAsync(CheckoutItem checkout, byte[] bytes, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PutAsJsonAsync(RequireHref(checkout, "working-copy"), new { }, cancellationToken);
+        using var response = await _core.SendRelAsync(checkout.Links, "working-copy", new { }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't hold the check-out on this document.");

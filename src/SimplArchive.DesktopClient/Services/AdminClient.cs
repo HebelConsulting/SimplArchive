@@ -47,9 +47,9 @@ public sealed class AdminClient(ApiCore core)
     // deactivate for a user; rights, members, delete for a group. The client's methods take this row and follow
     // one of them, instead of rebuilding /users/{id}/… and /groups/{id}/… paths from an id.
     public sealed record PrincipalInfo(bool IsGroup, Guid Id, string Name, bool IsActive, SystemRightsData Rights, bool MfaEnabled = false, bool ImapShowAllDocuments = false,
-        IReadOnlyDictionary<string, string>? Links = null, string Email = "")
+        LinkMap? Links = null, string Email = "")
     {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+        public string? Href(string rel) => Links?.Href(rel);
     }
 
     // A machine-to-machine service account (ADR 0203/0534). ClientId is the OAuth client_id; the client_secret is
@@ -72,9 +72,9 @@ public sealed class AdminClient(ApiCore core)
     public sealed record ServiceAccountInfo(Guid Id, string Name, string ClientId, bool IsActive, bool CanManage,
         bool CanManageRepositories, bool CanManageMasks, bool CanManageServiceAccounts, bool CanImport, bool CanExport,
         bool CanBlockResources = false,
-        IReadOnlyDictionary<string, string>? Links = null)
+        LinkMap? Links = null)
     {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+        public string? Href(string rel) => Links?.Href(rel);
     }
 
     // The one-time client_id + client_secret shown after create/rotate — never retrievable again.
@@ -105,22 +105,22 @@ public sealed class AdminClient(ApiCore core)
         {
             foreach (var d in arr.EnumerateArray())
             {
-                var links = ApiCore.ParseLinks(d) ?? new Dictionary<string, string>();
+                var links = ApiCore.ParseLinks(d);
                 items.Add(new MailDomainInfo(
                     d.GetProperty("id").GetGuid(),
                     d.GetProperty("domain").GetString() ?? string.Empty,
                     d.TryGetProperty("verified", out var v) && v.ValueKind == JsonValueKind.True,
                     Text(d, "challengeName"),
                     Text(d, "challengeValue"),
-                    links.GetValueOrDefault("verify"),
-                    links.GetValueOrDefault("remove")));
+                    links?.Href("verify"),
+                    links?.Href("remove")));
             }
         }
 
         return new MailDomainList(
             items,
             json.TryGetProperty("canManage", out var cm) && cm.GetBoolean(),
-            (ApiCore.ParseLinks(json) ?? new Dictionary<string, string>()).GetValueOrDefault("add"));
+            ApiCore.ParseLinks(json)?.Href("add"));
     }
 
     /// <summary>Claims a domain at the address the collection advertised. Unverified until it is proven.</summary>
@@ -161,7 +161,7 @@ public sealed class AdminClient(ApiCore core)
         {
             foreach (var l in arr.EnumerateArray())
             {
-                var links = ApiCore.ParseLinks(l) ?? new Dictionary<string, string>();
+                var links = ApiCore.ParseLinks(l);
                 items.Add(new SensitivityLabelInfo(
                     l.GetProperty("id").GetGuid(),
                     l.GetProperty("name").GetString() ?? "",
@@ -169,11 +169,11 @@ public sealed class AdminClient(ApiCore core)
                     l.TryGetProperty("color", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null,
                     l.TryGetProperty("watermark", out var w) && w.ValueKind == JsonValueKind.True,
                     l.TryGetProperty("retired", out var rt) && rt.ValueKind == JsonValueKind.True,
-                    links.GetValueOrDefault("self"),
+                    links?.Href("self"),
                     // Exactly one of these is advertised, and which one IS the label's state — the client no
                     // longer decides "retire or un-retire?" from the Retired flag (issue #416).
-                    links.GetValueOrDefault("retire"),
-                    links.GetValueOrDefault("unretire")));
+                    links?.Href("retire"),
+                    links?.Href("unretire")));
             }
         }
 
@@ -202,7 +202,7 @@ public sealed class AdminClient(ApiCore core)
     // ---- Tenant-admin settings (ADR "Tenant-admin settings tab") -----------------------------------
 
     public sealed record TenantSettingsInfo(Guid Id, string Name, string Status, DateTimeOffset CreatedAt, string DefaultOcrLanguages, int AuditRetentionDays, int CheckoutTtlDays, int CheckoutWarningDays, int WormLockMode, bool RequireMfa, bool AllowPasskeyLogin, bool RequireDispositionReview, bool RestrictTagsToCatalog, bool EnforceClearance, bool ImapShowAllDocumentsDefault, bool ImapServerAvailable, bool AllowExternalLinks, int ExternalLinkMaxDays, int ExternalLinkDefaultAccesses, bool ShowExternalLinkUrl, long? StorageQuotaBytes, long StorageUsedBytes, int IncompleteUploadCleanupDays, string? AuditWebhookUrl, bool AuditWebhookConfigured, int AuditWebhookConsecutiveFailures, DateTimeOffset? AuditWebhookLastSuccessAt, DateTimeOffset? AuditWebhookLastFailureAt, DateTimeOffset? AuditWebhookNextAttemptAt, string? AuditWebhookLastError,
-        IReadOnlyDictionary<string, string>? Links = null);
+        LinkMap? Links = null);
 
     public async Task<TenantSettingsInfo> GetTenantSettingsAsync(CancellationToken cancellationToken = default)
     {
@@ -233,7 +233,7 @@ public sealed class AdminClient(ApiCore core)
     // payload. Follows the advertised settings-<group> rel (ADR 0543) — a missing rel means "not offered".
     public async Task<TenantSettingsInfo> SaveTenantSettingsGroupAsync(TenantSettingsInfo settings, string group, object body, CancellationToken cancellationToken = default)
     {
-        var href = settings.Links?.GetValueOrDefault($"settings-{group}")
+        var href = settings.Links?.Href($"settings-{group}")
             ?? throw new ApiActionException("The server offered no way to edit these settings.");
         using var response = await _core.Http.PutAsJsonAsync(href, body, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
@@ -282,7 +282,7 @@ public sealed class AdminClient(ApiCore core)
     /// null when the rel is absent — not available to this caller, here, now.</summary>
     public async Task<ModuleCatalog?> GetModulesAsync(TenantSettingsInfo settings, CancellationToken cancellationToken = default)
     {
-        if (settings.Links?.GetValueOrDefault("modules") is not { } href)
+        if (settings.Links?.Href("modules") is not { } href)
         {
             return null;
         }
@@ -293,7 +293,7 @@ public sealed class AdminClient(ApiCore core)
         {
             foreach (var m in arr.EnumerateArray())
             {
-                var links = ApiCore.ParseLinks(m) ?? new Dictionary<string, string>();
+                var links = ApiCore.ParseLinks(m);
                 items.Add(new ModuleInfo(
                     m.GetProperty("moduleId").GetString() ?? "",
                     m.GetProperty("displayName").GetString() ?? "",
@@ -303,13 +303,13 @@ public sealed class AdminClient(ApiCore core)
                     m.GetProperty("inGrace").GetBoolean(),
                     m.TryGetProperty("supportContractEndDate", out var end) && end.ValueKind == JsonValueKind.String ? end.GetDateTimeOffset() : null,
                     m.TryGetProperty("deactivatesAt", out var de) && de.ValueKind == JsonValueKind.String ? de.GetDateTimeOffset() : null,
-                    links.GetValueOrDefault("license"),
-                    links.GetValueOrDefault("settings")));
+                    links?.Href("license"),
+                    links?.Href("settings")));
             }
         }
 
         var listLinks = ApiCore.ParseLinks(json);
-        return new ModuleCatalog(items, listLinks?.GetValueOrDefault("license-documents"));
+        return new ModuleCatalog(items, listLinks?.Href("license-documents"));
     }
 
     /// <summary>Reads a module's declared settings and their configured values, at the advertised address.</summary>
@@ -499,7 +499,7 @@ public sealed class AdminClient(ApiCore core)
     // Deletes a group (409 if it still has child groups or members).
     public async Task DeleteGroupAsync(PrincipalInfo group, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.DeleteAsync(RequireHref(group, "delete"), cancellationToken);
+        using var response = await _core.SendRelAsync(group.Links, "delete", cancellationToken: cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException("The group still has child groups or members.");
@@ -586,7 +586,7 @@ public sealed class AdminClient(ApiCore core)
     // Rotate the secret — mints a new client_secret and invalidates the old one; returns the one-time secret.
     public async Task<ServiceAccountSecret> RotateServiceAccountSecretAsync(ServiceAccountInfo account, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsync(RequireHref(account, "rotate-secret"), null, cancellationToken);
+        using var response = await _core.SendRelAsync(account.Links, "rotate-secret", cancellationToken: cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to manage service accounts.");
@@ -626,7 +626,7 @@ public sealed class AdminClient(ApiCore core)
     // Admin reset — returns the generated password (shown once).
     public async Task<string> ResetUserPasswordAsync(PrincipalInfo user, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsync(RequireHref(user, "reset-password"), null, cancellationToken);
+        using var response = await _core.SendRelAsync(user.Links, "reset-password", cancellationToken: cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to reset passwords.");
@@ -640,7 +640,7 @@ public sealed class AdminClient(ApiCore core)
     // Admin reset — disables a locked-out user's two-factor.
     public async Task ResetUserMfaAsync(PrincipalInfo user, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsync(RequireHref(user, "reset-mfa"), null, cancellationToken);
+        using var response = await _core.SendRelAsync(user.Links, "reset-mfa", cancellationToken: cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to reset two-factor authentication.");
@@ -795,7 +795,7 @@ public sealed class AdminClient(ApiCore core)
     private async Task<string> TenantSettingsRelAsync(string rel, CancellationToken cancellationToken)
     {
         var settings = await _core.Http.GetFromJsonAsync<JsonElement>(await _core.RootHrefAsync("tenantSettings", cancellationToken), cancellationToken);
-        return ApiCore.ParseLinks(settings) is { } links && links.TryGetValue(rel, out var href)
+        return ApiCore.ParseLinks(settings) is { } links && links.Href(rel) is { } href
             ? href
             : throw new InvalidOperationException($"Tenant settings advertised no '{rel}' rel (ADR 0543).");
     }
@@ -826,12 +826,12 @@ public sealed class AdminClient(ApiCore core)
 
     // Links carries the repository's advertised addresses (`document`, `children`) — see #443.
     public sealed record AdminPersonalRepoInfo(Guid UserId, string DisplayName, string Email, bool UserIsActive, Guid RepositoryId, bool HasChildren, bool HasSubfolders,
-        IReadOnlyDictionary<string, string>? Links = null,
+        LinkMap? Links = null,
         // The capability answers for the tree node this row becomes (#858) — a tree node gets the Rename /
         // Move to / Delete menu, so this listing has to carry them like the others do.
         bool CanDelete = false, bool CanEditIndexData = false, bool CanMove = false, bool CanManagePermissions = false, bool CanCreateChildren = false)
     {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+        public string? Href(string rel) => Links?.Href(rel);
     }
 
     /// <summary>Follows a row's advertised <c>take-over</c> address (ADR 0672).</summary>

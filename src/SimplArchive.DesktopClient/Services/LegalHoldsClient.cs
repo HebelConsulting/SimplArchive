@@ -32,9 +32,9 @@ public sealed class LegalHoldsClient(ApiCore core)
 
     // A hold, carrying the addresses its own row advertised (ADR 0543/0555): `self`, plus `release`/`add-item`
     // only while it is active — a released hold offers neither, so the affordance is the server's answer.
-    public sealed record LegalHoldInfo(Guid Id, string Name, string? Reason, DateTimeOffset PlacedAt, bool IsActive, int ItemCount, List<LegalHoldItemInfo> Items, IReadOnlyDictionary<string, string>? Links = null)
+    public sealed record LegalHoldInfo(Guid Id, string Name, string? Reason, DateTimeOffset PlacedAt, bool IsActive, int ItemCount, List<LegalHoldItemInfo> Items, LinkMap? Links = null)
     {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+        public string? Href(string rel) => Links?.Href(rel);
     }
 
     // A covered document. RemoveHref is the pairing's own address — the item is the only thing that knows both
@@ -42,9 +42,9 @@ public sealed class LegalHoldsClient(ApiCore core)
     // The row's advertised addresses (ADR 0555): `remove` while the hold is active, plus `document`/`parent`
     // — what the Go-to follows (#443).
     public sealed record LegalHoldItemInfo(Guid DocumentId, string DocumentName, string? RemoveHref = null, Guid? ParentId = null,
-        IReadOnlyDictionary<string, string>? Links = null)
+        LinkMap? Links = null)
     {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+        public string? Href(string rel) => Links?.Href(rel);
     }
 
     public async Task<List<LegalHoldInfo>> GetLegalHoldsAsync(CancellationToken cancellationToken = default)
@@ -79,7 +79,7 @@ public sealed class LegalHoldsClient(ApiCore core)
 
     public async Task AddLegalHoldItemAsync(LegalHoldInfo hold, Guid documentId, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsJsonAsync(RequireHref(hold, "add-item"), new { documentId }, cancellationToken);
+        using var response = await _core.SendRelAsync(hold.Links, "add-item", new { documentId }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException("The document is already on this hold.");
@@ -101,7 +101,7 @@ public sealed class LegalHoldsClient(ApiCore core)
 
     public async Task ReleaseLegalHoldAsync(LegalHoldInfo hold, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsync(RequireHref(hold, "release"), null, cancellationToken);
+        using var response = await _core.SendRelAsync(hold.Links, "release", cancellationToken: cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 
@@ -131,9 +131,9 @@ public sealed class LegalHoldsClient(ApiCore core)
 
     // A scheduled document. `dispose` is CONDITIONAL server-side — absent while a review is required or a hold
     // suspends it — so the row's own links are what decide whether the action is offered (ADR 0543/0555).
-    public sealed record RetentionItemInfo(Guid DocumentId, string DocumentName, int RetentionYears, string DispositionDate, bool Overdue, bool SuspendedByHold, string? RetentionOverrideUntil, IReadOnlyDictionary<string, string>? Links = null)
+    public sealed record RetentionItemInfo(Guid DocumentId, string DocumentName, int RetentionYears, string DispositionDate, bool Overdue, bool SuspendedByHold, string? RetentionOverrideUntil, LinkMap? Links = null)
     {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+        public string? Href(string rel) => Links?.Href(rel);
     }
     public sealed record RetentionScheduleInfo(IReadOnlyList<RetentionItemInfo> Items, bool RequiresReview);
 
@@ -163,14 +163,14 @@ public sealed class LegalHoldsClient(ApiCore core)
     // Manually dispose an eligible document (ADR "Retention review-before-disposition").
     public async Task DisposeRetentionAsync(RetentionItemInfo item, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsync(RequireHref(item, "dispose"), null, cancellationToken);
+        using var response = await _core.SendRelAsync(item.Links, "dispose", cancellationToken: cancellationToken);
         await SimplArchiveApiClient.ThrowIfProblemAsync(response, "Could not dispose the document.", cancellationToken);
     }
 
     // Extend a document's retention to a new "retain until" date ("yyyy-MM-dd").
     public async Task ExtendRetentionAsync(RetentionItemInfo item, string until, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsJsonAsync(RequireHref(item, "extend"), new { until }, cancellationToken);
+        using var response = await _core.SendRelAsync(item.Links, "extend", new { until }, cancellationToken);
         await SimplArchiveApiClient.ThrowIfProblemAsync(response, "Could not extend retention.", cancellationToken);
     }
 }

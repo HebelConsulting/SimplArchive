@@ -246,9 +246,9 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
             // per-rel fetching is what ADR 0557 forbids, and this pane used to pay it for index-data alone.
             var selfHref = item.Href("self") ?? throw new InvalidOperationException("The check-out row advertised no 'self' rel (ADR 0543).");
             var detail = await _api.Documents.GetDocumentDetailAsync(selfHref);
-            _ocrLanguagesHref = detail.Links?.GetValueOrDefault("ocr-languages");
+            _ocrLanguagesHref = detail.Links?.Href("ocr-languages");
 
-            if (detail.Links?.GetValueOrDefault("index-data") is { } indexHref)
+            if (detail.Links?.Href("index-data") is { } indexHref)
             {
                 foreach (var field in await _api.Documents.GetIndexDataAsync(indexHref))
                 {
@@ -259,7 +259,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
                 }
             }
 
-            if (detail.Links?.GetValueOrDefault("versions") is { } versionsHref)
+            if (detail.Links?.Href("versions") is { } versionsHref)
             {
                 SetOcrLine(await _api.Documents.GetSystemFieldsAsync(versionsHref));
                 if (CanEditOcr && _ocrCatalog is not null)

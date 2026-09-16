@@ -486,7 +486,7 @@ public sealed partial class IntrayTabViewModel : ObservableObject
 
         foreach (var field in await _api.Masks.GetMaskFieldsAsync(chosen))
         {
-            var values = useDraftValues && _draftValues.TryGetValue(field.Id, out var v) ? v : [];
+            var values = useDraftValues && _draftValues.GetValueOrDefault(field.Id) is { } v ? v : [];
             MaskEditFields.Add(MaskFieldEditViewModel.Create(field, values));
         }
     }

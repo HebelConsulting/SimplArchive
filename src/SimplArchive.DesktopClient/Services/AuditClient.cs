@@ -91,7 +91,7 @@ public sealed class AuditClient(ApiCore core)
                 {
                     var href = await _core.RootHrefAsync("auditEvents", cancellationToken);
                     var page = await _core.Http.GetFromJsonAsync<JsonElement>($"{href}?limit=1", cancellationToken);
-                    _auditLinks = ApiCore.ParseLinks(page) ?? new Dictionary<string, string>();
+                    _auditLinks = ApiCore.ParseLinks(page) is { } lm ? lm.Rels.ToDictionary(r => r, r => lm.Href(r)!, StringComparer.Ordinal) : null;
                 }
             }
             finally
@@ -100,7 +100,7 @@ public sealed class AuditClient(ApiCore core)
             }
         }
 
-        return _auditLinks.TryGetValue(rel, out var relHref)
+        return _auditLinks?.GetValueOrDefault(rel) is { } relHref
             ? relHref
             : throw new InvalidOperationException($"The audit log advertised no '{rel}' rel (ADR 0543).");
     }

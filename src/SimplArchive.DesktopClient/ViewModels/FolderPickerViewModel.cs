@@ -16,14 +16,14 @@ namespace SimplArchive.DesktopClient.ViewModels;
 // them instead of composing anything from the ids beside them (#443).
 public sealed record DocumentFilingContext(
     Guid DocumentId, string DocumentName, string DocumentPath, Guid FolderId, string FolderName, string FolderPath,
-    IReadOnlyDictionary<string, string>? DocumentLinks = null, IReadOnlyDictionary<string, string>? FolderLinks = null);
+    LinkMap? DocumentLinks = null, LinkMap? FolderLinks = null);
 
 public enum FilingMode { AsVersion, InFolder, PickedFolder }
 
 // The dialog's outcome: file the item as a new version of TargetId (AsVersion) or into folder TargetId, plus
 // an optional feed comment (ADR "Filing posts a feed comment"). TargetLinks is the chosen row's own advertised
 // address set (ADR 0555) — the consumer follows it (`versions`, `children`, or `self` to resolve one).
-public sealed record FilingResult(FilingMode Mode, Guid TargetId, string? Comment, IReadOnlyDictionary<string, string>? TargetLinks = null);
+public sealed record FilingResult(FilingMode Mode, Guid TargetId, string? Comment, LinkMap? TargetLinks = null);
 
 // Backs the folder-picker dialog (ADR "S3-backed inbox", phase 2): a folders-only tree of repositories,
 // lazily loaded like the main workbench tree, for choosing where to file an intray item. When a document is

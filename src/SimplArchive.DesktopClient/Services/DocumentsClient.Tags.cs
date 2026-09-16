@@ -19,9 +19,9 @@ public sealed partial class DocumentsClient
     // ---- Tag catalog admin (ADR "Tag controlled vocabulary") ----------------------------------------
     // The catalog lists LIVE tags, each advertising self (rename/recolour), retire and merge (issue #416).
     public sealed record TagCatalogItem(Guid Id, string Name, string? Color,
-        IReadOnlyDictionary<string, string>? Links = null)
+        LinkMap? Links = null)
     {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+        public string? Href(string rel) => Links?.Href(rel);
     }
 
     public async Task UpdateTagAsync(TagCatalogItem tag, string? name, string? color, CancellationToken cancellationToken = default)
@@ -31,12 +31,12 @@ public sealed partial class DocumentsClient
     }
 
     public async Task RetireTagAsync(TagCatalogItem tag, CancellationToken cancellationToken = default) =>
-        (await _core.Http.DeleteAsync(RequireHref(tag, "retire"), cancellationToken)).EnsureSuccessStatusCode();
+        (await _core.SendRelAsync(tag.Links, "retire", cancellationToken: cancellationToken)).EnsureSuccessStatusCode();
 
     /// <summary>Merges one tag into another, following the source row's own `merge` rel.</summary>
     public async Task MergeTagAsync(TagCatalogItem tag, Guid intoId, CancellationToken cancellationToken = default)
     {
-        var resp = await _core.Http.PostAsJsonAsync(RequireHref(tag, "merge"), new { intoId }, cancellationToken);
+        var resp = await _core.SendRelAsync(tag.Links, "merge", new { intoId }, cancellationToken);
         if (!resp.IsSuccessStatusCode) throw new ApiActionException(await SimplArchiveApiClient.ErrorMessageAsync(resp, "Could not merge the tags."));
     }
 

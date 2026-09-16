@@ -95,8 +95,8 @@ public class DesktopUserEmailTests
             IsActive: true,
             Rights: NoRights,
             Links: withEmailRel
-                ? new Dictionary<string, string> { ["email"] = "https://example.test/some/advertised/address" }
-                : new Dictionary<string, string>(),
+                ? LinkMap.FromHrefs(new Dictionary<string, string> { ["email"] = "https://example.test/some/advertised/address" })
+                : LinkMap.Empty,
             Email: email);
 
         return new PrincipalRowViewModel(false, id, email, true, NoRights, source: source);

@@ -35,9 +35,9 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
     private readonly SemaphoreSlim _bulkGate = new(1, 1);
 
     public sealed record GrantablePrincipalInfo(string Type, Guid Id, string Name,
-        IReadOnlyDictionary<string, string>? Links = null) : IAdvertisesLinks
+        LinkMap? Links = null) : IAdvertisesLinks
     {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+        public string? Href(string rel) => Links?.Href(rel);
     }
 
     public sealed record ChatThread(List<Comment> Messages, string? MentionableUsersHref);
@@ -164,13 +164,13 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
     // instead of composing a path (ADR 0543, issue #416). ExternalLinksHref predates this and stays: its ABSENCE
     // is meaningful (tenant switch off, or a folder), which is a different question from "what is its address".
     public sealed record DocumentDetailInfo(string Name, DocumentSensitivityInfo Sensitivity, string? ExternalLinksHref, int ContentsSortOrder,
-        IReadOnlyDictionary<string, string>? Links = null, IReadOnlyList<GenericActionInfo>? GenericActions = null,
+        LinkMap? Links = null, IReadOnlyList<GenericActionInfo>? GenericActions = null,
         IReadOnlyList<MachineStatusInfo>? MachineStatuses = null,
         IReadOnlyList<ModuleActionInfo>? ModuleActions = null)
     {
         /// <summary>The advertised href for <paramref name="rel"/>; throws rather than composing one.</summary>
         public string Href(string rel) =>
-            Links is not null && Links.TryGetValue(rel, out var href)
+            Links is not null && Links.Href(rel) is { } href
                 ? href
                 : throw new InvalidOperationException(
                     $"The '{rel}' rel was not advertised for '{Name}'. Follow a rel the resource offers, or fetch "
@@ -281,7 +281,7 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         }
 
         var json = await _core.Http.GetFromJsonAsync<JsonElement>(wfLink.TrimStart('/'), cancellationToken);
-        var links = new Dictionary<string, string>();
+        var links = new Dictionary<string, string>(StringComparer.Ordinal);
         if (json.TryGetProperty("links", out var ls))
         {
             foreach (var l in ls.EnumerateArray())
@@ -304,7 +304,7 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         return new WorkflowClient.WorkflowInfo(
             json.GetProperty("status").GetInt32(),
             json.GetProperty("statusName").GetString() ?? "",
-            SimplArchiveApiClient.StrOrNull(json, "assignedToName"), history, links);
+            SimplArchiveApiClient.StrOrNull(json, "assignedToName"), history, LinkMap.FromHrefs(links));
     }
 
     public async Task<bool> GetSubscriptionAsync(string subscriptionHref, CancellationToken cancellationToken = default) =>
@@ -486,7 +486,7 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
     public async Task SetPrimaryLocationAsync(string documentSelfHref, Guid folderId, CancellationToken cancellationToken = default)
     {
         var (links, etag) = await GetLinksAndETagAsync(documentSelfHref, cancellationToken);
-        using var request = new HttpRequestMessage(HttpMethod.Put, links.TryGetValue("set-primary-location", out var h) ? h : throw new InvalidOperationException("The document advertised no 'set-primary-location' rel (ADR 0543)."))
+        using var request = new HttpRequestMessage(HttpMethod.Put, links.Href("set-primary-location") is { } h ? h : throw new InvalidOperationException("The document advertised no 'set-primary-location' rel (ADR 0543)."))
         {
             Content = JsonContent.Create(new { folderId }),
         };
@@ -524,7 +524,7 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         // answer, not a fault: it earns the same sentence the server's 403 would have, rather than the crash
         // dialog an InvalidOperationException gets from the global handler (ADR 0275). The menu should not have
         // offered it, and gating it there is the follow-up; this is the floor beneath that.
-        if (!links.TryGetValue("move", out var h))
+        if (links?.Href("move") is not { } h)
         {
             throw new ApiActionException(Strings.Get("MoveNotPermitted"));
         }
@@ -779,7 +779,7 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
     // One GET of the document resource for the writes that need BOTH a rel to follow and an If-Match: the
     // links come from the body and the ETag from the same response's headers, so following the rel costs one
     // request instead of a HEAD plus a fetch (ADR 0557).
-    private async Task<(IReadOnlyDictionary<string, string> Links, EntityTagHeaderValue? ETag)> GetLinksAndETagAsync(string documentSelfHref, CancellationToken cancellationToken)
+    private async Task<(LinkMap Links, EntityTagHeaderValue? ETag)> GetLinksAndETagAsync(string documentSelfHref, CancellationToken cancellationToken)
     {
         using var response = await _core.Http.GetAsync(documentSelfHref, cancellationToken);
         response.EnsureSuccessStatusCode();
@@ -934,11 +934,11 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
     /// Throws when the resource does not offer the rel — that absence is the server's answer (ADR 0543).
     /// </summary>
     public async Task<string> RelViaSelfAsync(string documentSelfHref, string rel, CancellationToken cancellationToken = default) =>
-        (await GetDocumentLinksAsync(documentSelfHref, cancellationToken)).TryGetValue(rel, out var href)
+        (await GetDocumentLinksAsync(documentSelfHref, cancellationToken))?.Href(rel) is { } href
             ? href
             : throw new InvalidOperationException($"The document advertised no '{rel}' rel (ADR 0543).");
 
-    public async Task<IReadOnlyDictionary<string, string>> GetDocumentLinksAsync(string documentSelfHref, CancellationToken cancellationToken = default) =>
+    public async Task<LinkMap> GetDocumentLinksAsync(string documentSelfHref, CancellationToken cancellationToken = default) =>
         ApiCore.ParseLinks(await _core.Http.GetFromJsonAsync<JsonElement>(documentSelfHref, cancellationToken))
         ?? throw new InvalidOperationException($"'{documentSelfHref}' advertised no links at all (ADR 0543).");
 

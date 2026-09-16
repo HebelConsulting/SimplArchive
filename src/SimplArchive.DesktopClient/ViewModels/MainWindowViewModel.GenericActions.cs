@@ -178,7 +178,7 @@ public partial class MainWindowViewModel
 
             // The action changed the subject's state, so its rels — including this surface — are stale;
             // re-reading the resource is what makes a state transition's NEW actions appear (ADR 0550).
-            if (_detailLinks is { } links && links.TryGetValue("self", out var selfHref))
+            if (_detailLinks is { } links && links.Href("self") is { } selfHref)
             {
                 var detail = await _api.Documents.GetDocumentDetailAsync(selfHref);
                 SetDetailGenericActions(detail.GenericActions);
@@ -199,9 +199,9 @@ public partial class MainWindowViewModel
     /// <summary>The populate rels from the raw link map (they are filtered OUT of the action buttons —
     /// ADR 0764), shaped as executable actions.</summary>
     private List<DocumentsClient.GenericActionInfo> AutoRefreshActions() =>
-        (_detailLinks ?? new Dictionary<string, string>())
-            .Where(kv => IsAutoRefresh(kv.Key))
-            .Select(kv => new DocumentsClient.GenericActionInfo(kv.Key, string.Empty, "POST", kv.Value))
+        (_detailLinks?.Rels ?? [])
+            .Where(IsAutoRefresh)
+            .Select(rel => new DocumentsClient.GenericActionInfo(rel, string.Empty, "POST", _detailLinks!.Href(rel)!))
             .ToList();
 
     // A per-href cooldown keeps rapid clicking in the weather area from hammering the provider, and doubles
@@ -222,7 +222,7 @@ public partial class MainWindowViewModel
         }
 
         var due = AutoRefreshActions()
-            .Where(a => !_autoRefreshedAt.TryGetValue(a.Href, out var at) || DateTimeOffset.UtcNow - at >= AutoRefreshCooldown)
+            .Where(a => _autoRefreshedAt?.GetValueOrDefault(a.Href) is not { } at || DateTimeOffset.UtcNow - at >= AutoRefreshCooldown)
             .ToList();
         if (due.Count == 0)
         {

@@ -26,9 +26,9 @@ namespace SimplArchive.DesktopClient.Services;
 /// <param name="Links">Its advertised addresses; the tab follows these and composes nothing (ADR 0543).</param>
 public sealed record DavCollection(
     Guid Id, string DisplayName, string Name, string Kind, string? Color, bool Writable, bool IsPersonalDefault,
-    bool CanCreateEntries, IReadOnlyDictionary<string, string> Links, string CollectionKind)
+    bool CanCreateEntries, LinkMap Links, string CollectionKind)
 {
-    public string Href(string rel) => Links.TryGetValue(rel, out var href)
+    public string Href(string rel) => Links.Href(rel) is { } href
         ? href
         : throw new ApiActionException($"This collection does not offer '{rel}'.");
 
@@ -36,7 +36,7 @@ public sealed record DavCollection(
     /// The address for <paramref name="rel"/>, or null when the collection does not advertise it — which means
     /// "not available to you, here, now" (ADR 0543) and is what an affordance is gated on, not an error.
     /// </summary>
-    public string? HrefOrNull(string rel) => Links.GetValueOrDefault(rel);
+    public string? HrefOrNull(string rel) => Links.Href(rel);
 }
 
 /// <summary>
@@ -82,7 +82,7 @@ public sealed class DavCollectionsClient
             c.TryGetProperty("writable", out var w) && w.GetBoolean(),
             c.TryGetProperty("isPersonalDefault", out var p) && p.GetBoolean(),
             c.TryGetProperty("canCreateEntries", out var cc) && cc.GetBoolean(),
-            ApiCore.ParseLinks(c) ?? new Dictionary<string, string>(),
+            ApiCore.ParseLinks(c) ?? LinkMap.Empty,
             c.TryGetProperty("collectionKind", out var ck) ? ck.GetString() ?? string.Empty : string.Empty)).ToList();
     }
 
@@ -137,7 +137,7 @@ public sealed class DavCollectionsClient
             Text(e, "email"),
             Text(e, "phone"),
             Text(e, "organization"),
-            ApiCore.ParseLinks(e) ?? new Dictionary<string, string>(),
+            ApiCore.ParseLinks(e) ?? LinkMap.Empty,
             Text(e, "repeats"),
             Text(e, "recurrenceId"))).ToList();
     }
@@ -165,7 +165,7 @@ public sealed class DavCollectionsClient
 public sealed record DavEntry(
     Guid Id, string Name, string? Start, string? End, string? Location, bool AllDay,
     string? FullName, string? Email, string? Phone, string? Organization,
-    IReadOnlyDictionary<string, string> Links,
+    LinkMap Links,
     string? Repeats = null,
     // WHICH occurrence this row is, when the listing was asked for a window (#1133) — the instant the server
     // gave, sent back verbatim when an edit names one. Never reconstructed from the wall clock: a floating
@@ -175,7 +175,7 @@ public sealed record DavEntry(
     /// <summary>Whether this entry repeats.</summary>
     public bool Recurring => !string.IsNullOrEmpty(Repeats);
 
-    public string? HrefOrNull(string rel) => Links.GetValueOrDefault(rel);
+    public string? HrefOrNull(string rel) => Links.Href(rel);
 
     /// <summary>The start as an instant, or null when it is a day or absent — what a list orders by.</summary>
     public DateTimeOffset? StartsAt =>

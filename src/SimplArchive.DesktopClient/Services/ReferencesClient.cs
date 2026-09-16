@@ -40,7 +40,7 @@ public sealed class ReferencesClient(ApiCore core)
     // it are still here because the tree needs them, but nothing composes a URL out of them any more.
     public sealed record Reference(
         Guid ReferenceId, Guid TargetId, string Name, bool HasChildren, bool HasVersions, bool HasSubfolders, bool HasReferences, Guid? RealParentId,
-        string? DeleteHref = null, IReadOnlyDictionary<string, string>? Links = null,
+        string? DeleteHref = null, LinkMap? Links = null,
         // The TARGET's list-row columns, exactly as a children row carries them (#768). Without these a
         // shortcut row drew blank Type / Doc date / Size / Tags / Owner cells beside a real row that filled
         // them — the same defect on both clients, from the same missing projection.

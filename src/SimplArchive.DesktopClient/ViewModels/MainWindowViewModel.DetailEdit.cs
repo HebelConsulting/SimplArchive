@@ -111,12 +111,12 @@ public sealed partial class MainWindowViewModel
             // Machine proposals (ABI 0.11, ADR 0769): the rels rode in with the document; the items are
             // fetched NOW so the candidate list is as fresh as the form. Best-effort like the tag catalog —
             // a failed fetch costs the picker, never the edit.
-            foreach (var link in (_detailLinks ?? new Dictionary<string, string>())
-                .Where(l => l.Key.StartsWith("machine-proposal:", StringComparison.Ordinal)))
+            foreach (var rel in (_detailLinks?.Rels ?? [])
+                .Where(r => r.StartsWith("machine-proposal:", StringComparison.Ordinal)).ToList())
             {
                 try
                 {
-                    var proposal = await _api.Documents.GetProposalAsync(link.Value);
+                    var proposal = await _api.Documents.GetProposalAsync(_detailLinks!.Href(rel)!);
                     MaskEditFields.FirstOrDefault(f => f.Name == proposal.FillsField)
                         ?.OfferProposals(proposal.Label, proposal.Items.Select(i => (i.Value, i.Label, i.Detail)));
                 }
@@ -162,7 +162,7 @@ public sealed partial class MainWindowViewModel
 
         foreach (var field in fields)
         {
-            var values = valuesByName.TryGetValue(field.Name, out var v) ? v : [];
+            var values = valuesByName.GetValueOrDefault(field.Name) is { } v ? v : [];
             var editor = MaskFieldEditViewModel.Create(field, values, CanManageMailRouting);
 
             // What the field completes from (#1127) — the values already filed under it. Assigned here rather

@@ -70,7 +70,7 @@ public static class SortThumbnailsCheck
             first.RotateRight();
             first.RotateRight();
             first.RotateLeft();
-            rotations = dialog.CurrentRotations.TryGetValue(first.OriginalNumber, out var degrees) && degrees == 90
+            rotations = dialog.CurrentRotations.GetValueOrDefault(first.OriginalNumber) is { } degrees && degrees == 90
                 && dialog.CurrentRotations.Count == 1 ? "ok" : $"WRONG:{string.Join(',', dialog.CurrentRotations)}";
         }
 

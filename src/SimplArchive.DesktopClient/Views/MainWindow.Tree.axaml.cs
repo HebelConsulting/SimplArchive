@@ -231,7 +231,7 @@ public partial class MainWindow
         if (await new FolderPickerDialog { DataContext = picker }.ShowDialog<FilingResult?>(this) is { } result)
         {
             await vm.PlaceReferenceAsync(node.Id, node.Name,
-                result.TargetLinks?.GetValueOrDefault("references")
+                result.TargetLinks?.Href("references")
                 ?? throw new InvalidOperationException("The picked folder advertised no 'references' rel (ADR 0543/0555)."));
         }
     });

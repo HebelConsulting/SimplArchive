@@ -320,7 +320,7 @@ public partial class SearchTabViewModel : ObservableObject
             FieldFacets.Clear();
             foreach (var field in page.Facets.Fields)
             {
-                var set = _facetFieldSets.TryGetValue(field.Name, out var s) ? s : [];
+                var set = _facetFieldSets.GetValueOrDefault(field.Name) is { } s ? s : [];
                 var buckets = field.Buckets.Select(b => new FacetBucketViewModel(b.Value, b.Count, set.Contains(b.Value)));
                 FieldFacets.Add(new FieldFacetGroupViewModel(field.Name, buckets, ToggleFieldFacet));
             }
@@ -548,7 +548,7 @@ public partial class SearchTabViewModel : ObservableObject
 
     private Task ToggleFieldFacet(string field, FacetBucketViewModel? b)
     {
-        if (!_facetFieldSets.TryGetValue(field, out var set))
+        if (_facetFieldSets.GetValueOrDefault(field) is not { } set)
         {
             set = _facetFieldSets[field] = [];
         }

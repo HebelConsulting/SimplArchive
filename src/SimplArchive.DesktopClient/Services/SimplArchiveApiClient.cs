@@ -192,7 +192,7 @@ public sealed class SimplArchiveApiClient
 
 
     /// <summary>The essentials of a document reached by ADDRESS — what a cross-tab open needs in one read.</summary>
-    public sealed record DocumentStub(Guid Id, string Name, IReadOnlyDictionary<string, string> Links);
+    public sealed record DocumentStub(Guid Id, string Name, LinkMap Links);
 
     /// <summary>
     /// A document by its ADVERTISED address (#443): id, name and rels from one GET. This is what a payload-row
@@ -342,7 +342,7 @@ public sealed class SimplArchiveApiClient
         return fallback;
     }
 
-    public sealed record DashFollowedInfo(Guid DocumentId, Guid? ParentId, string DocumentName, IReadOnlyDictionary<string, string>? Links = null);
+    public sealed record DashFollowedInfo(Guid DocumentId, Guid? ParentId, string DocumentName, LinkMap? Links = null);
 
     // The documents the caller follows (the dashboard's Following section).
     public async Task<IReadOnlyList<DashFollowedInfo>> GetDashboardFollowingAsync(CancellationToken cancellationToken = default)
@@ -382,25 +382,9 @@ public sealed class SimplArchiveApiClient
         Action<JsonElement>? onPage = null) => Core.LoadPagedAsync(url, arrayProperty, parse, cancellationToken, onPage);
 
     // rel -> href for one resource's advertised links, relative (the HttpClient has the base address).
-    internal static IReadOnlyDictionary<string, string>? ParseLinks(JsonElement item)
-    {
-        if (!item.TryGetProperty("links", out var links) || links.ValueKind != JsonValueKind.Array)
-        {
-            return null;
-        }
-
-        var map = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var l in links.EnumerateArray())
-        {
-            if (l.TryGetProperty("rel", out var rel) && rel.GetString() is { Length: > 0 } r
-                && l.TryGetProperty("href", out var href) && href.GetString() is { Length: > 0 } h)
-            {
-                map[r] = h.TrimStart('/');
-            }
-        }
-
-        return map.Count == 0 ? null : map;
-    }
+    // Returns the METHOD alongside the href (#1192). It used to return rel -> href and throw the method away,
+    // which is why every call site named its own verb and why ADR 0797's six method changes broke five of them.
+    internal static LinkMap? ParseLinks(JsonElement item) => LinkMap.From(item);
 
     // The root document, fetched once per client instance. Cached because the root is a constant for a session:
     // re-reading it before every call would turn one request into two, which is the usual reason a codebase
@@ -433,7 +417,7 @@ public sealed class SimplArchiveApiClient
     internal static UserOptionInfo ParseMember(JsonElement e) =>
         new(e.GetProperty("id").GetGuid(),
             e.GetProperty("displayName").GetString() ?? "",
-            ParseLinks(e) is { } links && links.TryGetValue("remove", out var removeHref) ? removeHref : null);
+            ParseLinks(e) is { } links && links.Href("remove") is { } removeHref ? removeHref : null);
 
 
     internal static string? StrOrNull(JsonElement e, string name) =>

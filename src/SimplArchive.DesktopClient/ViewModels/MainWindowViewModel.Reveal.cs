@@ -26,8 +26,8 @@ public sealed partial class MainWindowViewModel
             Preview.FindQuery = Search.SearchQuery.Trim();
         }
 
-        if (!result.IsFolder && result.Links?.GetValueOrDefault("parent") is { } parentHref
-            && result.Links?.GetValueOrDefault("self") is { } docHref)
+        if (!result.IsFolder && result.Links?.Href("parent") is { } parentHref
+            && result.Links?.Href("self") is { } docHref)
         {
             // Reveal the document in context: expand + select its parent folder in the tree, load the folder into
             // the list pane, and select the document there (issue #340). Both loads follow the hit's own
@@ -37,7 +37,7 @@ public sealed partial class MainWindowViewModel
         else
         {
             // A folder, or a document filed at a repository root (itself a top-level tree node).
-            await RevealFolderInTreeAsync(result.Links?.GetValueOrDefault("self")
+            await RevealFolderInTreeAsync(result.Links?.Href("self")
                 ?? throw new InvalidOperationException($"The search hit '{result.Name}' advertised no 'self' rel (ADR 0543)."));
         }
     }
@@ -75,7 +75,7 @@ public sealed partial class MainWindowViewModel
         }
 
         var stub = await _api.GetDocumentByAddressAsync(folderSelfHref);
-        var chain = await _api.Documents.GetAncestorsAsync(stub.Links["ancestors"]);
+        var chain = await _api.Documents.GetAncestorsAsync(stub.Links.Href("ancestors")!);
         chain.Add(stub.Id); // ancestors are up to the parent; append the folder itself as the reveal target
         var node = await ExpandTreePathAsync(chain);
         if (node is not null)

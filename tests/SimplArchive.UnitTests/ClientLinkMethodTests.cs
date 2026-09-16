@@ -76,17 +76,9 @@ public partial class ClientLinkMethodTests
         ["src/SimplArchive.Client/Dialogs/ServiceAccountsDialog.razor"] = 1,
         ["src/SimplArchive.Client/Services/BrowseService.cs"] = 1,
         ["src/SimplArchive.Client/Services/DocumentActions.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/AdminClient.cs"] = 6,
+        ["src/SimplArchive.DesktopClient/Services/AdminClient.cs"] = 2,
         ["src/SimplArchive.DesktopClient/Services/AuditClient.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/CheckoutClient.cs"] = 3,
-        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.Tags.cs"] = 2,
-        ["src/SimplArchive.DesktopClient/Services/LegalHoldsClient.cs"] = 4,
-        ["src/SimplArchive.DesktopClient/Services/NotificationsClient.cs"] = 1,
         ["src/SimplArchive.DesktopClient/Services/ProfileClient.cs"] = 4,
-        ["src/SimplArchive.DesktopClient/Services/RecycleBinClient.cs"] = 2,
-        ["src/SimplArchive.DesktopClient/Services/RemindersClient.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/SearchClient.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/VersionsClient.cs"] = 1,
     };
 
     /// <summary>

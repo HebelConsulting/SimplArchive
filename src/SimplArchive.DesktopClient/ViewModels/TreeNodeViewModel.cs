@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
+using SimplArchive.DesktopClient.Services;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -14,7 +15,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     private readonly Func<TreeNodeViewModel, Task<IEnumerable<TreeNodeViewModel>>>? _loadChildren;
     private bool _loaded;
 
-    public TreeNodeViewModel(Guid id, string name, bool hasSubfolders, Func<TreeNodeViewModel, Task<IEnumerable<TreeNodeViewModel>>>? loadChildren, bool isReference = false, bool isPersonal = false, string? syntheticIcon = null, string? personalKind = null, bool hasReferences = false, bool hasChildren = true, IReadOnlyDictionary<string, string>? links = null, IReadOnlyList<Services.CreatableChild>? admits = null, string? icon = null,
+    public TreeNodeViewModel(Guid id, string name, bool hasSubfolders, Func<TreeNodeViewModel, Task<IEnumerable<TreeNodeViewModel>>>? loadChildren, bool isReference = false, bool isPersonal = false, string? syntheticIcon = null, string? personalKind = null, bool hasReferences = false, bool hasChildren = true, LinkMap? links = null, IReadOnlyList<Services.CreatableChild>? admits = null, string? icon = null,
         bool canDelete = false, bool canEditIndexData = false, bool canMove = false, bool canManagePermissions = false, bool canCreateChildren = false)
     {
         Id = id;
@@ -50,7 +51,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     // The addresses the server advertised for this node, as the listing carried them (ADR 0543). Null for the
     // SYNTHETIC rows — Administration, the personal-space groupings, the placeholder — which stand for no server
     // resource at all, so there is nothing to follow and Href() correctly refuses.
-    public IReadOnlyDictionary<string, string>? Links { get; }
+    public LinkMap? Links { get; }
 
     /// <summary>
     /// The kinds of child this node will accept, with the address that creates each (#673).
@@ -87,11 +88,11 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     /// <summary>May a plain child be created in this node? (#854, replaces the `create-child` rel.)</summary>
     public bool CanCreateChildren { get; }
 
-    public bool HasRel(string rel) => Links is not null && Links.ContainsKey(rel);
+    public bool HasRel(string rel) => Links is not null && Links?.Has(rel) == true;
 
     /// <summary>The advertised href for <paramref name="rel"/>; throws rather than composing one.</summary>
     public string Href(string rel) =>
-        Links is not null && Links.TryGetValue(rel, out var href)
+        Links?.Href(rel) is { } href
             ? href
             : throw new InvalidOperationException(
                 $"The '{rel}' rel was not advertised for tree node '{Name}'. Follow a rel the resource offers, or "
@@ -102,7 +103,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     /// <c>self</c> is the repository view (ADR 0200) — while every other row's <c>self</c> IS the document.
     /// </summary>
     public string DocumentSelfHref =>
-        Links is not null && Links.TryGetValue("document", out var doc) ? doc : Href("self");
+        Links is not null && Links.Href("document") is { } doc ? doc : Href("self");
 
     public Guid Id { get; }
 

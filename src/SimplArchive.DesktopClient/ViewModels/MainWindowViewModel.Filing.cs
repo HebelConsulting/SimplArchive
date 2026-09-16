@@ -22,7 +22,7 @@ public sealed partial class MainWindowViewModel
     // Uploads files dropped onto the contents pane as new documents. Dropped onto a folder row, they go into
     // that folder (overrideFolderId); anywhere else, the currently-open folder. See ADR "Desktop drag-and-drop
     // upload" + ADR "List-pane drop filing".
-    public async Task UploadDroppedFilesAsync(IReadOnlyList<Avalonia.Platform.Storage.IStorageFile> files, IReadOnlyDictionary<string, string>? targetFolderLinks = null)
+    public async Task UploadDroppedFilesAsync(IReadOnlyList<Avalonia.Platform.Storage.IStorageFile> files, LinkMap? targetFolderLinks = null)
     {
         // The drop target's own addresses, carried by the row it landed on (ADR 0555), else the open folder's.
         // Resolved ONCE for the whole drop — following a rel must not cost a request per file (ADR 0557).
@@ -37,7 +37,7 @@ public sealed partial class MainWindowViewModel
         // question the drop target and the menu entry were gated on. It is also the backstop for the path
         // neither of those covers — a drop on the EMPTY list area falls back to the open folder, which with
         // `Personal` open is the first level that refuses it (#634).
-        if (!folderLinks.TryGetValue("children", out var childrenHref))
+        if (folderLinks?.Href("children") is not { } childrenHref)
         {
             ReportError(Strings.Get("StErrUploadNotHere"));
             return;
@@ -82,7 +82,7 @@ public sealed partial class MainWindowViewModel
 
                         if (choice.Action == "reference")
                         {
-                            await _api.References.CreateReferenceAsync(folderLinks["references"], choice.TargetId);
+                            await _api.References.CreateReferenceAsync(folderLinks.Href("references")!, choice.TargetId);
                             uploaded++;
                             continue;
                         }
@@ -150,7 +150,7 @@ public sealed partial class MainWindowViewModel
             document.Links,
             // "Into its folder": a reference row's real home travels as its `go-to` address; a real row files
             // into the OPEN folder, whose links the navigation stored (ADR 0555).
-            document.IsReference ? document.Links?.GetValueOrDefault("go-to") is { } goTo ? new Dictionary<string, string> { ["self"] = goTo } : null : _currentFolderLinks);
+            document.IsReference ? document.Links?.Href("go-to") is { } goTo ? LinkMap.FromHrefs(new Dictionary<string, string> { ["self"] = goTo }) : null : _currentFolderLinks);
         return new FolderPickerViewModel(_api, context, bulk: fileCount > 1);
     }
 
@@ -223,9 +223,9 @@ public sealed partial class MainWindowViewModel
     // The filing target's address for a rel: from the links the picked row carried where it advertised the
     // rel, else resolved once through the row's document address (ADR 0559).
     private async Task<string> TargetHrefAsync(FilingResult result, string rel) =>
-        result.TargetLinks?.GetValueOrDefault(rel)
+        result.TargetLinks?.Href(rel)
         ?? await _api!.Documents.RelViaSelfAsync(
-            result.TargetLinks?.GetValueOrDefault("self")
+            result.TargetLinks?.Href("self")
             ?? throw new InvalidOperationException($"The filing target advertised no address at all (ADR 0543)."),
             rel);
 }

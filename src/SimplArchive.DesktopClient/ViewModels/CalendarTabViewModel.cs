@@ -186,7 +186,7 @@ public sealed partial class AppointmentRowViewModel : ObservableObject
     };
 
     /// <summary>The row's own advertised addresses — the pane acts from these, never from a composed URL.</summary>
-    public required IReadOnlyDictionary<string, string> Links { get; init; }
+    public required LinkMap Links { get; init; }
 }
 
 /// <summary>One calendar in the left pane: checked calendars are overlaid in the list.</summary>
@@ -308,12 +308,12 @@ public sealed partial class CalendarTabViewModel : ObservableObject
     [RelayCommand]
     private async Task GoToDocumentAsync()
     {
-        if (Selected is not { } row || !row.Links.TryGetValue("self", out var self))
+        if (Selected is not { } row || row.Links?.Href("self") is not { } self)
         {
             return;
         }
 
-        await _shell.RevealDocumentAsync(row.Id, self, row.Links.GetValueOrDefault("parent"));
+        await _shell.RevealDocumentAsync(row.Id, self, row.Links?.Href("parent"));
     }
 
     /// <summary>The chips the month grid last built, so a selection can light them without a rebuild.</summary>
@@ -376,7 +376,7 @@ public sealed partial class CalendarTabViewModel : ObservableObject
     /// </remarks>
     private async Task LoadDetailAsync(AppointmentRowViewModel row)
     {
-        if (_api is null || !row.Links.TryGetValue("appointment", out var href))
+        if (_api is null || row.Links?.Href("appointment") is not { } href)
         {
             return;
         }
@@ -661,7 +661,7 @@ public sealed partial class CalendarTabViewModel : ObservableObject
     /// </remarks>
     public async Task<StructuredEditorClient.Loaded<AppointmentEditViewModel>?> LoadEntryAsync(AppointmentRowViewModel row)
     {
-        if (_api is null || !row.Links.TryGetValue("self", out var self))
+        if (_api is null || row.Links?.Href("self") is not { } self)
         {
             return null;
         }
@@ -687,7 +687,7 @@ public sealed partial class CalendarTabViewModel : ObservableObject
     /// </remarks>
     public async Task MoveEntryAsync(AppointmentRowViewModel row, Guid targetCollectionId)
     {
-        if (_api is null || !row.Links.TryGetValue("self", out var self))
+        if (_api is null || row.Links?.Href("self") is not { } self)
         {
             return;
         }
@@ -916,7 +916,7 @@ public sealed partial class CalendarTabViewModel : ObservableObject
             {
                 Collection = new DavCollection(
                     Guid.NewGuid(), name, name.Split('/')[^1].Trim(), "calendar", colour, writable, personal, false,
-                    new Dictionary<string, string>(), string.Empty),
+                    LinkMap.Empty, string.Empty),
                 Color = colour,
                 IsChecked = true,
             });
@@ -951,7 +951,7 @@ public sealed partial class CalendarTabViewModel : ObservableObject
                 End = day.AddDays(toDay).AddHours(to),
                 Location = location,
                 Repeats = repeats,
-                Links = new Dictionary<string, string>(),
+                Links = LinkMap.Empty,
             });
         }
 

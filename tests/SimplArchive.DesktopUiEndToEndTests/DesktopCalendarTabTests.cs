@@ -142,7 +142,7 @@ public class DesktopCalendarTabTests
             CollectionName = "Personal / My Calendar",
             AllDay = false,
             Title = "No date at all",
-            Links = new Dictionary<string, string>(),
+            Links = LinkMap.Empty,
         });
 
         var ordered = vm.Appointments

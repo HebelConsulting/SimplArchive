@@ -112,10 +112,10 @@ public sealed partial class MainWindowViewModel
 
         // Follow the row's `parent` (its home folder) and select the document there; a root document has no
         // parent, so its own `document` address opens as the folder (#443). Ids only for the row-matching.
-        if (n.DocumentId is { } documentId && (n.Notification.Links?.GetValueOrDefault("parent") ?? n.Notification.Links?.GetValueOrDefault("document")) is { } href)
+        if (n.DocumentId is { } documentId && (n.Notification.Links?.Href("parent") ?? n.Notification.Links?.Href("document")) is { } href)
         {
             SelectedTab = 0; // Repositories
-            await OpenFolderAsync(href, n.Notification.Links?.ContainsKey("parent") == true ? documentId : null);
+            await OpenFolderAsync(href, n.Notification.Links?.Has("parent") == true ? documentId : null);
         }
     }
 }

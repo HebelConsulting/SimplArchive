@@ -38,12 +38,12 @@ public class DesktopWorkflowReassignTests
         // Submit to U1.
         var wf = await client.Documents.GetWorkflowAsync(doc.Href("versions"));
         Assert.NotNull(wf);
-        await client.Workflow.PostWorkflowActionAsync(wf!.Links["submit"], new { reviewerId = u1.Id });
+        await client.Workflow.PostWorkflowActionAsync(wf!.Links.Href("submit")!, new { reviewerId = u1.Id });
 
         // The reassign link is now offered (the demo admin is an editor); reassign to U2.
         wf = await client.Documents.GetWorkflowAsync(doc.Href("versions"));
-        Assert.True(wf!.Links.ContainsKey("reassign"));
-        await client.Workflow.PostWorkflowActionAsync(wf.Links["reassign"], new { reviewerId = u2.Id });
+        Assert.True(wf!.Links.Has("reassign"));
+        await client.Workflow.PostWorkflowActionAsync(wf.Links.Href("reassign")!, new { reviewerId = u2.Id });
 
         wf = await client.Documents.GetWorkflowAsync(doc.Href("versions"));
         Assert.Equal("In Review", wf!.StatusName);
