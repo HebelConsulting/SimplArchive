@@ -61,7 +61,7 @@ bao kv put secret/simplarchive/bootstrap clientSecret="${BOOTSTRAP_CLIENT_SECRET
 bao secrets enable database 2>/dev/null || true
 until bao write database/config/simplarchive \
   plugin_name=postgresql-database-plugin \
-  allowed_roles=simplarchive,simplarchive-owner \
+  allowed_roles=simplarchive,simplarchive-owner,simplarchive-runtime \
   connection_url="postgresql://{{username}}:{{password}}@${PG_HOST}:5432/simplarchive?sslmode=${PG_SSLMODE:-disable}" \
   username=simplarchive_vault password=simplarchive_vault_bootstrap 2>/dev/null; do
   echo 'waiting for the simplarchive_vault role (db-init)...'; sleep 2;
@@ -75,13 +75,30 @@ bao write database/static-roles/simplarchive-owner db_name=simplarchive username
   rotation_period=86400 rotation_statements="ALTER ROLE \"{{name}}\" WITH PASSWORD '{{password}}';"
 bao write -f database/rotate-role/simplarchive-owner
 
+# The RUNTIME role the app actually connects as (ADR 0721). A STATIC role, not a dynamic one, and the reason is
+# the whole point: a dynamic credential's creation_statements is CREATE ROLE "{{name}}", so every lease mints a
+# new USERNAME — and a username cannot be swapped underneath a live connection pool. The app therefore read one
+# dynamic credential at startup and kept it, and at default_ttl (24h) Postgres revoked the role and every new
+# connection failed 28P01 until a restart. A static role rotates the PASSWORD of a FIXED username, which Npgsql
+# picks up for new physical connections without the app noticing.
+#
+# The chart never had this: db-init did not create the role, allowed_roles did not permit it, the policy did not
+# grant it and the deployment did not set OpenBao__DatabaseRuntimeStaticRole — four omissions that agreed with
+# each other, so nothing failed and every chart install quietly ran the model 0721 replaced (#1249).
+bao write database/static-roles/simplarchive-runtime db_name=simplarchive username=simplarchive_runtime \
+  rotation_period=43200 rotation_statements="ALTER ROLE \"{{name}}\" WITH PASSWORD '{{password}}';"
+# Forced rotation on EVERY provision: writing a static-role config only rotates on first creation, so on a
+# re-run against an existing OpenBao the stored credential and the database password drift apart (ADR 0213's
+# static-role drift note). An explicit rotate makes the two re-agree every time.
+bao write -f database/rotate-role/simplarchive-runtime
+
 # Transit — encrypts the TOTP secret at rest (the key never leaves OpenBao).
 bao secrets enable transit 2>/dev/null || true
 bao write -f transit/keys/simplarchive-mfa
 
 # AppRole machine auth for the Api (fixed ids for the kiosk).
 bao auth enable approle 2>/dev/null || true
-printf 'path "secret/data/simplarchive/*" { capabilities = ["read"] }\npath "database/creds/simplarchive" { capabilities = ["read"] }\npath "database/static-creds/simplarchive-owner" { capabilities = ["read"] }\npath "transit/encrypt/simplarchive-mfa" { capabilities = ["update"] }\npath "transit/decrypt/simplarchive-mfa" { capabilities = ["update"] }\n' | bao policy write simplarchive -
+printf 'path "secret/data/simplarchive/*" { capabilities = ["read"] }\npath "database/creds/simplarchive" { capabilities = ["read"] }\npath "database/static-creds/simplarchive-owner" { capabilities = ["read"] }\npath "database/static-creds/simplarchive-runtime" { capabilities = ["read"] }\npath "transit/encrypt/simplarchive-mfa" { capabilities = ["update"] }\npath "transit/decrypt/simplarchive-mfa" { capabilities = ["update"] }\n' | bao policy write simplarchive -
 bao write auth/approle/role/simplarchive token_policies=simplarchive token_ttl=1h token_max_ttl=4h
 bao write auth/approle/role/simplarchive/role-id role_id="${APPROLE_ROLE_ID:-simplarchive-role}"
 bao write auth/approle/role/simplarchive/custom-secret-id secret_id="${APPROLE_SECRET_ID:-simplarchive-secret}" 2>/dev/null || true

@@ -3,10 +3,16 @@
 -- thing that account is ever used for. After this runs it owns nothing application-related and is never used
 -- by the app, migrations, or OpenBao again.
 --
+-- ONE FILE, TWO DEPLOYMENT SHAPES. The Helm chart cannot read outside itself, so charts/simplarchive/files/
+-- carries a COPY of this — kept byte-identical and checked by DbInitCopyLockstepTests. They used to be two
+-- files that drifted, and the drift was not cosmetic: ADR 0721 added `simplarchive_runtime` here and the chart
+-- copy never got it, so every chart install silently ran the dynamic-credential model 0721 exists to replace
+-- (#1249). One statement was all that genuinely differed; the rest was one copy being a year stale.
+--
 -- That administrator is NOT necessarily a superuser: on the compose stack it is `postgres` and is, but on a
 -- managed database (RDS, ADR 0677) the master account deliberately is not. Everything here must therefore work
 -- with CREATEROLE and ownership alone — see the note at the ALTER DEFAULT PRIVILEGES block, which is where the
--- difference actually bites.
+-- difference is known to bite.
 --
 --   * simplarchive       (LOGIN)             — OWNS the database + schema + every object; runs DDL migrations.
 --                         Its password is OpenBao-managed + rotated (a database static role), so the literal
@@ -15,8 +21,20 @@
 --                         mint the dynamic runtime roles + rotate the static role; root-rotated by OpenBao (its
 --                         literal is a bootstrap seed too). NOINHERIT + admin-only membership so it can
 --                         administer `simplarchive`/`simplarchive_app` without inheriting the owner's rights.
---   * simplarchive_app   (NOLOGIN group)     — the least-privilege runtime bundle; the OpenBao dynamic
---                         per-startup roles join it (IN ROLE) and inherit its DML grants.
+--   * simplarchive_app   (NOLOGIN group)     — the least-privilege runtime bundle; the runtime login role and
+--                         the OpenBao dynamic per-startup roles join it (IN ROLE) and inherit its DML grants.
+--   * simplarchive_runtime (LOGIN)           — the FIXED identity the running app connects as, whose password
+--                         OpenBao owns and rotates as a database STATIC role. It owns nothing and holds only
+--                         the app group's DML, so it is emphatically not the schema owner.
+--
+--                         It exists because a dynamic credential cannot be refreshed in place: each lease mints
+--                         a NEW username, and a running process cannot swap the username underneath a live
+--                         connection pool. A static role rotates the PASSWORD of a fixed username, which Npgsql
+--                         can pick up for new physical connections without the app noticing. Before this, the
+--                         app read one dynamic credential at startup and kept it for the life of the process —
+--                         so at `default_ttl` (24h) Postgres revoked the role and EVERY new connection failed
+--                         `28P01` until someone restarted the container. Observed in the dev stack after ~2
+--                         days: a permanently unhealthy api, with `/health/ready` correctly reporting 503.
 --
 -- ALTER DEFAULT PRIVILEGES makes anything `simplarchive` creates auto-granted (DML) to the app group, so a
 -- table created during a migration is usable by an already-minted dynamic role regardless of ordering.
@@ -32,8 +50,21 @@ BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'simplarchive_vault') THEN
     CREATE ROLE simplarchive_vault LOGIN CREATEROLE NOINHERIT PASSWORD 'simplarchive_vault_bootstrap';
   END IF;
+  -- Created here rather than by OpenBao, because a static role can only rotate a password for a user that
+  -- already exists. Idempotent, so an EXISTING dev volume gains it on the next boot without a `down -v`.
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'simplarchive_runtime') THEN
+    CREATE ROLE simplarchive_runtime LOGIN PASSWORD 'simplarchive_runtime_bootstrap' IN ROLE simplarchive_app;
+  END IF;
 END
 $$;
+
+-- Belt and braces: an existing volume may have the role from an earlier run without the group membership.
+GRANT simplarchive_app TO simplarchive_runtime;
+GRANT CONNECT ON DATABASE simplarchive TO simplarchive_runtime;
+
+-- The OpenBao engine admin must be able to ALTER this role's password (CREATEROLE + ADMIN on the target), the
+-- same pairing that lets it rotate the owner role.
+GRANT simplarchive_runtime TO simplarchive_vault WITH ADMIN OPTION;
 
 -- simplarchive administers the app group so it can add each newly-minted dynamic role to it.
 GRANT simplarchive_app TO simplarchive WITH ADMIN OPTION;
@@ -94,3 +125,35 @@ ALTER DEFAULT PRIVILEGES FOR ROLE simplarchive IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO simplarchive_app;
 ALTER DEFAULT PRIVILEGES FOR ROLE simplarchive IN SCHEMA public
   GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO simplarchive_app;
+
+-- The MTA's read-only role (ADR 0628). Postfix asks one question of this database — "is this domain one we
+-- accept?" — so it gets exactly the privilege to ask it and nothing else. A single shared credential would
+-- have let the component most exposed to the internet read every document row in the archive.
+--
+-- The grant is deliberately per-table rather than schema-wide: TenantMailDomains is created by a migration, so
+-- the grant is applied idempotently below once the table exists, and stays absent (harmlessly) until then.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'simplarchive_postfix') THEN
+    EXECUTE 'CREATE ROLE simplarchive_postfix WITH LOGIN PASSWORD ''postfix''';
+  END IF;
+END
+$$;
+
+GRANT CONNECT ON DATABASE simplarchive TO simplarchive_postfix;
+GRANT USAGE ON SCHEMA public TO simplarchive_postfix;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables
+             WHERE table_schema = 'public' AND table_name = 'TenantMailDomains') THEN
+    EXECUTE 'GRANT SELECT ON public."TenantMailDomains" TO simplarchive_postfix';
+  END IF;
+END
+$$;
+
+-- NOTE: deliberately NO `ALTER DEFAULT PRIVILEGES … GRANT SELECT ON TABLES` for this role. That would have
+-- been the convenient way to cover the run where the table does not exist yet, and it would have granted read
+-- on every table the migrations create from then on — handing the most internet-exposed component in the
+-- stack the whole archive, under a comment claiming least privilege. The grant above is conditional instead,
+-- and `postfix-grant` in the compose stack re-applies it once the migration has created the table.

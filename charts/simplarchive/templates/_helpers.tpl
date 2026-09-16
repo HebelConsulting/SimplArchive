@@ -212,6 +212,16 @@ rolls the Deployment automatically (the pod template changes). Secrets come from
       key: OpenBao__SecretId
 - name: OpenBao__DatabaseOwnerStaticRole
   value: "simplarchive-owner"
+{{- /*
+  The RUNTIME static role (ADR 0721, #1249). Program.cs gates the static-password provider on this being
+  non-empty, so while it was unset the app silently took the DYNAMIC credential — read once at startup and
+  revoked by Postgres at default_ttl, after which every new connection fails 28P01 until a restart.
+
+  It is deliberately beside the owner's: the two were added by the same ADR and only one reached the chart,
+  which is precisely the kind of half-applied change a reader cannot spot from either half alone.
+*/}}
+- name: OpenBao__DatabaseRuntimeStaticRole
+  value: "simplarchive-runtime"
 {{- end }}
 - name: Bootstrap__PlatformAdministrator__Name
   value: {{ .Values.config.bootstrap.name | quote }}
