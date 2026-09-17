@@ -65,7 +65,9 @@ public sealed partial class VersionsViewModel : ObservableObject
         var list = await _api.Versions.GetVersionsAsync(_versionsHref); // confirmed, newest first; IsCurrent = the server pointer
         foreach (var v in list)
         {
-            Versions.Add(new VersionRowViewModel(v.Id, v.VersionNumber ?? 0, v.DocumentDate,
+            // DocumentDateText, not the raw stored date: this row and the index-data pane describe the same
+            // pair, and a document near midnight would otherwise read as two different days (ADR 0801).
+            Versions.Add(new VersionRowViewModel(v.Id, v.VersionNumber ?? 0, v.DocumentDateText,
                 v.CreatedAt == default ? "" : v.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
                 v.CreatedByName, v.DownloadUrl, v.FileExtension, v.IsCurrent, v.Comment, v));
         }

@@ -69,6 +69,15 @@ public sealed class ApiCore
         // German UI must be German even on an English OS.
         Http.DefaultRequestHeaders.AcceptLanguage.ParseAdd(
             System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName);
+        // Which zone this MACHINE is in (#1254), so a search for "the 6th" means the caller's calendar day
+        // rather than the server's. Set once here rather than per request, for the same reason as the language:
+        // a header a call site has to remember is one a new call site forgets, and the symptom — a
+        // near-midnight document missing from exactly one day's results — is invisible from the code.
+        //
+        // The MACHINE zone, deliberately, and never the stored preference: this header answers "where am I",
+        // and the server prefers a preference the user has set over whatever it says. Always an IANA id
+        // (TimeZoneInfo.Local is a Windows id on Windows, which the server cannot resolve).
+        Http.DefaultRequestHeaders.Add("X-Time-Zone", SimplArchive.Presentation.DisplayZone.IanaId(TimeZoneInfo.Local));
     }
 
     /// <summary>

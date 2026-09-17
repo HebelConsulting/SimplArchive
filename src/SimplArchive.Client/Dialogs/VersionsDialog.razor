@@ -121,7 +121,10 @@
             // #265), else the latest confirmed — not simply the newest row.
             var currentId = resp?.CurrentVersionId ?? confirmed.FirstOrDefault()?.Id;
             _versions = confirmed.Select(v => new Row(
-                v.Id, v.VersionNumber ?? 0, v.DocumentDate ?? "", v.CreatedAt, v.CreatedByName ?? "",
+                // The formatted PAIR, not the raw stored date: this row and the index-data pane describe the
+                // same value, and a document near midnight would otherwise read as two different days
+                // depending on which one you looked at (ADR 0801).
+                v.Id, v.VersionNumber ?? 0, DocumentDateFormat.Display(v.DocumentDate, v.DocumentTime, SessionTimeZone.Current), v.CreatedAt, v.CreatedByName ?? "",
                 Abs(Href(v.Links, "preview")) ?? Abs(Href(v.Links, "download")),
                 Abs(Href(v.Links, "download")),
                 Href(v.Links, "restore"),
@@ -242,6 +245,7 @@
         public DateTimeOffset CreatedAt { get; set; }
         public string? CreatedByName { get; set; }
         public string? DocumentDate { get; set; }
+        public string? DocumentTime { get; set; }
         public string? Comment { get; set; }
         public List<LinkResponse> Links { get; set; } = [];
     }

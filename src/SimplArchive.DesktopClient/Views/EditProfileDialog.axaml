@@ -28,6 +28,18 @@
 
         <Separator />
 
+        <!-- The display zone (#1254). Applied IMMEDIATELY on change rather than on this window's Save, for the
+             same reason the password is: Save is enabled only once the photo editor holds an image, so anything
+             deferred to it would be silently lost by a user who only came here to change their zone. -->
+        <StackPanel Spacing="4">
+            <TextBlock Text="{loc:Tr EpTimeZone}" FontWeight="SemiBold" FontSize="12" />
+            <ComboBox x:Name="TimeZoneBox" HorizontalAlignment="Stretch" MaxDropDownHeight="320"
+                      SelectionChanged="OnTimeZoneChanged" />
+            <TextBlock x:Name="TimeZoneStatus" Foreground="{DynamicResource WbMuted}" FontSize="11" />
+        </StackPanel>
+
+        <Separator />
+
         <StackPanel Orientation="Horizontal" Spacing="12">
             <Button Content="{loc:Tr AccountChangePassword}" Click="OnChangePassword" />
             <TextBlock x:Name="PasswordStatus" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />

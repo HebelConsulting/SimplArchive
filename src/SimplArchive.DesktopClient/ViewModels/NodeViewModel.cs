@@ -142,7 +142,11 @@ public sealed class NodeViewModel
     public string TypeText => IsFolder && (DocumentType.Length == 0 || DocumentType == "Folder")
         ? SimplArchive.Localization.Strings.Get("FolderType")
         : DocumentType;
-    public string DocumentDateText => DocumentDate is { } d ? DocumentDateFormat.Display(d, DocumentTime) : "";
+    // Stored in UTC, shown in the viewer's own zone (#1254) — the zone is ambient rather than a property on
+    // every row, because these are built in bulk by half a dozen parsers and a forgotten one would show UTC
+    // beside rows showing local without failing anything.
+    public string DocumentDateText =>
+        DocumentDate is { } d ? DocumentDateFormat.Display(d, DocumentTime, Services.SessionTimeZone.Current) : "";
     public string TagsText => string.Join(", ", Tags);
 
     /// <summary>Who filed the current version, falling back to who created the document (#768).</summary>

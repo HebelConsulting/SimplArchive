@@ -111,11 +111,11 @@ public sealed class OpenSearchService : ISearchService
         {
             if (FacetSystemFields.Contains(systemFilter.Field) && systemFilter.Operator is "eq" or "in")
             {
-                facetSelections.Add((systemFilter.Field, BuildSystemFilterClause(systemFilter)));
+                facetSelections.Add((systemFilter.Field, BuildSystemFilterClause(systemFilter, filters.TimeZoneId)));
             }
             else
             {
-                baseClauses.Add(BuildSystemFilterClause(systemFilter)); // date ranges, contains, sensitivity, …
+                baseClauses.Add(BuildSystemFilterClause(systemFilter, filters.TimeZoneId)); // date ranges, contains, sensitivity, …
             }
         }
 
@@ -474,11 +474,94 @@ public sealed class OpenSearchService : ISearchService
 
     // A system-field filter → a flat clause on a top-level field (ADR "System-field search"): a date
     // range/term, or a keyword clause on a resolved creator name (eq/contains/in).
-    private static object BuildSystemFilterClause(SystemFilter filter)
+    // The caller's zone, or null when there is none or this host cannot resolve it. Null means "read the dates
+    // as UTC", which is exactly the behaviour every caller had before #1254 — so an unknown zone degrades to
+    // the old answer rather than to no answer.
+    private static TimeZoneInfo? Zone(string? timeZoneId)
+    {
+        if (string.IsNullOrWhiteSpace(timeZoneId))
+        {
+            return null;
+        }
+
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// A documentDate filter asked as a question about the CALLER's calendar day (#1254).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Two clauses, OR'd, because the corpus holds two kinds of document and only one of them is an instant:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>a TIMED document (an e-mail, an appointment) is an instant, so the caller's day is a UTC RANGE —
+    /// 00:30 in Zurich on the 16th is 22:30 UTC on the 15th, and a search for the 16th must still find it;</item>
+    /// <item>a DATE-ONLY document never was an instant. Somebody chose a calendar date, and no conversion
+    /// applies: it matches that date in every zone. Shifting it would make a document filed "on the 15th" read
+    /// as the 14th for anyone west of the server — inventing a bug to fix one that is not there.</item>
+    /// </list>
+    /// <para>
+    /// The date-only half keys on <c>documentInstant</c> being ABSENT rather than on a flag, because absence
+    /// is what the indexer actually writes for those documents — one fact, asked where it lives.
+    /// </para>
+    /// </remarks>
+    private static object DocumentDayClause(string op, object value, TimeZoneInfo zone)
+    {
+        if (!DateOnly.TryParse(value.ToString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var day))
+        {
+            return Comparison("documentDate", op, value, isDate: true);
+        }
+
+        var (from, to) = SimplArchive.Domain.Documents.DocumentInstant.DayIn(day, zone);
+
+        object instantClause = op switch
+        {
+            "eq" => Range("documentInstant", ("gte", from), ("lt", to)),
+            "gte" => Range("documentInstant", ("gte", from)),
+            "gt" => Range("documentInstant", ("gte", to)),   // "after that day" starts when the day ENDS
+            "lt" => Range("documentInstant", ("lt", from)),
+            "lte" => Range("documentInstant", ("lt", to)),   // "up to and including" ends when the day ends
+            _ => Range("documentInstant", ("gte", from), ("lt", to)),
+        };
+
+        var dateOnlyClause = new
+        {
+            @bool = new
+            {
+                must_not = new object[] { new { exists = new { field = "documentInstant" } } },
+                filter = new object[] { Comparison("documentDate", op, value, isDate: true) },
+            },
+        };
+
+        return new { @bool = new { should = new object[] { instantClause, dateOnlyClause }, minimum_should_match = 1 } };
+    }
+
+    private static object Range(string field, params (string Op, DateTimeOffset Value)[] bounds) =>
+        new
+        {
+            range = new Dictionary<string, object>
+            {
+                [field] = bounds.ToDictionary(
+                    b => b.Op,
+                    b => (object)b.Value.ToString("o", CultureInfo.InvariantCulture)),
+            },
+        };
+
+    private static object BuildSystemFilterClause(SystemFilter filter, string? timeZoneId = null)
     {
         if (filter.Kind == FieldFilterKind.Date)
         {
-            return Comparison(filter.Field, filter.Operator, filter.Values[0], isDate: true);
+            return filter.Field == "documentDate" && Zone(timeZoneId) is { } zone
+                ? DocumentDayClause(filter.Operator, filter.Values[0], zone)
+                : Comparison(filter.Field, filter.Operator, filter.Values[0], isDate: true);
         }
 
         return filter.Operator switch

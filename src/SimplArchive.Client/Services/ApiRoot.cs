@@ -92,6 +92,7 @@ public sealed class ApiRoot
                 {
                     var me = meHref is null ? null : await _http.GetFromJsonAsync<RootResponse>(meHref, cancellationToken);
                     _meEmail = me?.Email;
+                    _meTimeZoneId = me?.DisplayTimeZoneId;
                     // The LINKS, not just their hrefs: a Link carries a Method, and a caller that drops it has
                     // to name its own verb — which is how a route that keeps its rel and changes its method
                     // still breaks the client (#1192). MeHrefAsync below still answers with an href, because
@@ -147,10 +148,25 @@ public sealed class ApiRoot
         return _meEmail;
     }
 
+    /// <summary>
+    /// The caller's stored display-zone preference — an IANA id, or null for "follow my device" (#1254).
+    /// </summary>
+    /// <remarks>
+    /// Rides the same "me" read as the email and the rels (ADR 0557: one read, everything it carried).
+    /// Resolving the null is <see cref="SessionTimeZone"/>'s job — the server reports what the user CHOSE, and
+    /// only the client knows what they get when they chose nothing.
+    /// </remarks>
+    public async Task<string?> MyTimeZoneIdAsync(CancellationToken cancellationToken = default)
+    {
+        await MeHrefAsync("self", cancellationToken);
+        return _meTimeZoneId;
+    }
+
     private readonly SemaphoreSlim _meGate = new(1, 1);
     private Dictionary<string, string>? _meRels;
     private List<LinkResponse>? _meLinks;
     private string? _meEmail;
+    private string? _meTimeZoneId;
 
     private async Task<Dictionary<string, string>> LoadAsync(CancellationToken cancellationToken)
     {
@@ -193,5 +209,8 @@ public sealed class ApiRoot
         // Only the "me" resource carries this; the API root leaves it null, which is exactly what a principal
         // with no personal account gets too (#464).
         public string? Email { get; set; }
+
+        // Likewise the display-zone preference (#1254); null means "follow my device".
+        public string? DisplayTimeZoneId { get; set; }
     }
 }

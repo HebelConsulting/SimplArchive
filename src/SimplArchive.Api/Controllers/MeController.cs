@@ -60,6 +60,16 @@ public class MeController : ControllerBase
         public string? Email { get; set; }
 
         /// <summary>
+        /// The zone this user's timestamps are rendered in, or <c>null</c> to follow their own device (#1254).
+        /// </summary>
+        /// <remarks>
+        /// Null is the DEFAULT and the common case, not a missing value — the client resolves it from the
+        /// browser or OS, which is the only place that answer exists. A non-null value is an explicit
+        /// override, and "UTC" is simply one of them.
+        /// </remarks>
+        public string? DisplayTimeZoneId { get; set; }
+
+        /// <summary>
         /// Whether crooked scans arriving in this user's intray are straightened automatically (#491).
         /// </summary>
         /// <remarks>
@@ -111,7 +121,7 @@ public class MeController : ControllerBase
         // screen asking "who am I" should not cost a full entity load.
         var me = await _dbContext.Users
             .Where(u => u.Id == userId)
-            .Select(u => new { u.Email, u.DeskewIntrayUploads, u.CutIntrayUploadsAtPatchCodes, u.RotateIntrayUploads })
+            .Select(u => new { u.Email, u.DeskewIntrayUploads, u.CutIntrayUploadsAtPatchCodes, u.RotateIntrayUploads, u.DisplayTimeZoneId })
             .FirstOrDefaultAsync(cancellationToken);
 
         return Ok(new MeResource
@@ -121,6 +131,10 @@ public class MeController : ControllerBase
             DeskewIntrayUploads = me?.DeskewIntrayUploads ?? true,
             RotateIntrayUploads = me?.RotateIntrayUploads ?? true,
             CutIntrayUploadsAtPatchCodes = me?.CutIntrayUploadsAtPatchCodes ?? true,
+            // Null travels as null: it means "follow my device", which only the CLIENT can resolve, so the
+            // server must not substitute its own zone here (#1254). Doing so would make every user inherit
+            // whatever zone the container happens to run in.
+            DisplayTimeZoneId = me?.DisplayTimeZoneId,
             Links =
             [
                 new Link("self", "/api/me", "GET"),
@@ -135,6 +149,10 @@ public class MeController : ControllerBase
                 new Link("webdavPassword", "/api/me/webdav-password", "GET"),
                 new Link("imapAccess", "/api/me/imap-access", "GET"),
                 new Link("personalRepository", "/api/me/personal-repository", "POST"),
+                // The display-zone preference (#1254). Advertised so a client can FOLLOW it rather than
+                // compose the address — an endpoint no resource links to is unreachable by a conforming
+                // client, and therefore unfinished (ADR 0543).
+                new Link("timeZone", "/api/me/time-zone", "PUT"),
             // The caller's addressbooks and calendars, for the Calendar/Contacts tabs (#564). The DAV home set
             // answers the same question for external clients; our own clients follow this rel and get JSON.
             new Link("davCollections", "/api/dav-collections", "GET"),
@@ -156,27 +174,61 @@ public class MeController : ControllerBase
     public Task<IActionResult> SetDeskewPreference(
         [FromBody] PreferenceRequest request,
         CancellationToken cancellationToken) =>
-        SetPreferenceAsync((user, enabled) => user.DeskewIntrayUploads = enabled, request, cancellationToken);
+        SetPreferenceAsync((user, enabled) => user.DeskewIntrayUploads = enabled, request.Enabled, cancellationToken);
 
     /// <summary>Turns automatic rotation of upside-down intray pages on or off for the caller (#492).</summary>
     [HttpPut("rotate")]
     public Task<IActionResult> SetRotatePreference(
         [FromBody] PreferenceRequest request,
         CancellationToken cancellationToken) =>
-        SetPreferenceAsync((user, enabled) => user.RotateIntrayUploads = enabled, request, cancellationToken);
+        SetPreferenceAsync((user, enabled) => user.RotateIntrayUploads = enabled, request.Enabled, cancellationToken);
 
     /// <summary>Turns automatic cutting of batch scans at their separator sheets on or off for the caller (#492).</summary>
     [HttpPut("patch-codes")]
     public Task<IActionResult> SetPatchCodePreference(
         [FromBody] PreferenceRequest request,
         CancellationToken cancellationToken) =>
-        SetPreferenceAsync((user, enabled) => user.CutIntrayUploadsAtPatchCodes = enabled, request, cancellationToken);
+        SetPreferenceAsync((user, enabled) => user.CutIntrayUploadsAtPatchCodes = enabled, request.Enabled, cancellationToken);
 
-    // Which flag differs; nothing else does. Passed as a lambda at the call site so the difference and the
-    // delegation read on one line, rather than as a second copy of the load-check-save.
-    private async Task<IActionResult> SetPreferenceAsync(
-        Action<User, bool> apply,
-        PreferenceRequest request,
+    /// <summary>The zone this user's timestamps are rendered in; null or empty follows their device (#1254).</summary>
+    /// <remarks>
+    /// <para>
+    /// A PUT of the intended value, like its siblings above. Clearing it is a legitimate act and the way back
+    /// to the default — so an empty body means "follow my device", not "ignore this request".
+    /// </para>
+    /// <para>
+    /// VALIDATED AGAINST THE SHARED CHOICES rather than against this host's zone database. A server without
+    /// tzdata would otherwise accept nothing at all, and this project has already shipped an image with none —
+    /// every zoned calendar entry stored ~2 h out, silently, because no test host lacked it. Checking the list
+    /// both clients pick from keeps the answer the same everywhere the app runs.
+    /// </para>
+    /// </remarks>
+    [HttpPut("time-zone")]
+    public Task<IActionResult> SetTimeZone(
+        [FromBody] TimeZoneRequest request,
+        CancellationToken cancellationToken)
+    {
+        var zoneId = string.IsNullOrWhiteSpace(request.TimeZoneId) ? null : request.TimeZoneId.Trim();
+
+        if (zoneId is not null && !SimplArchive.Presentation.TimeZoneChoices.Contains(zoneId))
+        {
+            throw new Errors.Exceptions.Principals.UnknownTimeZoneException(zoneId);
+        }
+
+        return SetPreferenceAsync((user, id) => user.DisplayTimeZoneId = id, zoneId, cancellationToken);
+    }
+
+    public class TimeZoneRequest
+    {
+        public string? TimeZoneId { get; set; }
+    }
+
+    // Which setting differs; nothing else does. Passed as a lambda at the call site so the difference and the
+    // delegation read on one line, rather than as a second copy of the load-check-save. Generic over the VALUE
+    // so a string preference reuses it rather than forking a near-identical copy (#1254).
+    private async Task<IActionResult> SetPreferenceAsync<T>(
+        Action<User, T> apply,
+        T value,
         CancellationToken cancellationToken)
     {
         if (_currentUser.UserId is not { } userId)
@@ -193,7 +245,7 @@ public class MeController : ControllerBase
         // Through the user's verb contract (ADR 0795) — one call covering all three preferences, since every
         // one of them funnels here. They are the caller's OWN settings, so a collision is rarer than on an
         // admin screen, but the same session open in two tabs is enough.
-        apply(user, request.Enabled);
+        apply(user, value);
         await _users.MutateAsync(Request, user, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
 
         return NoContent();

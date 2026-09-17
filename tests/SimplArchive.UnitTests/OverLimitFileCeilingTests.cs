@@ -251,7 +251,12 @@ public class OverLimitFileCeilingTests
         // is how an expired session took the client down. The forwarder that hands the await to Safe.Fire costs
         // two lines and removes a crash; raised deliberately rather than worked around, because the alternative
         // (moving one hook to another file to dodge the number) would scatter the tab logic to protect a count.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 1556,
+        // +5 for #1254 (ADR 0801): the session's display zone is resolved once at sign-in and reset at
+        // sign-out, and the document-date line converts through it. All three belong where the session's other
+        // per-user state already lives; splitting one of them out to another file would scatter the session
+        // setup to protect a count. Trimmed to the minimum first -- the reasoning lives in the ADR and in
+        // SessionTimeZone's own remarks rather than being repeated here.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 1561,
 
         // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
         // the one authenticated ApiCore. Four areas left it:

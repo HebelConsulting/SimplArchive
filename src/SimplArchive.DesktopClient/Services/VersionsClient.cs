@@ -149,9 +149,18 @@ public sealed class VersionsClient(ApiCore core)
 
     public sealed record VersionInfo(Guid Id, int? VersionNumber, string Status, string FileExtension, string? DownloadUrl,
         string DocumentDate = "", DateTimeOffset CreatedAt = default, string CreatedByName = "", bool IsCurrent = false,
-        string? Comment = null, LinkMap? Links = null, string? WorkflowStatus = null)
+        string? Comment = null, LinkMap? Links = null, string? WorkflowStatus = null, string? DocumentTime = null)
     {
         public string? Href(string rel) => Links?.Href(rel);
+
+        /// <summary>The date+time pair as the viewer reads it (ADR 0801) — stored in UTC, shown in their zone.</summary>
+        /// <remarks>
+        /// Carried here rather than formatted in the dialog, because a version row and the index-data pane
+        /// describe the SAME pair: showing the stored date in one and the converted one in the other would have
+        /// a document near midnight read as two different days depending on which pane you looked at.
+        /// </remarks>
+        public string DocumentDateText =>
+            SimplArchive.Presentation.DocumentDateFormat.Display(DocumentDate, DocumentTime, SessionTimeZone.Current);
     }
     // Restores (rolls back to) an earlier version (ADR "Version restore") — creates a new current version from
     // its content. Throws on a rejected request (403 no edit rights, 409 workflow/hold/checkout).
@@ -207,7 +216,8 @@ public sealed class VersionsClient(ApiCore core)
                     v.TryGetProperty("createdAt", out var ca) && ca.ValueKind == JsonValueKind.String ? ca.GetDateTimeOffset() : default,
                     v.TryGetProperty("createdByName", out var cb) ? cb.GetString() ?? "" : "",
                     Comment: v.TryGetProperty("comment", out var cm) && cm.ValueKind == JsonValueKind.String ? cm.GetString() : null,
-                    Links: ApiCore.ParseLinks(v), WorkflowStatus: SimplArchiveApiClient.StrOrNull(v, "workflowStatus")));
+                    Links: ApiCore.ParseLinks(v), WorkflowStatus: SimplArchiveApiClient.StrOrNull(v, "workflowStatus"),
+                    DocumentTime: SimplArchiveApiClient.StrOrNull(v, "documentTime")));
             }
         }
 

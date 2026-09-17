@@ -160,7 +160,11 @@ public partial class SearchController : ControllerBase
 
         var fieldFilters = await BuildFieldFiltersAsync(cancellationToken);
         var systemFilters = BuildSystemFilters();
-        var filters = new SearchFilters(fieldFilters, systemFilters);
+        // The caller's zone, so a documentDate filter means THEIR calendar day rather than UTC's (#1254). Taken
+        // from the request rather than from the stored preference, because the preference is null for most
+        // people BY DESIGN — it means "follow my device", and only the device knows what that is. The stored
+        // value is the override, so it wins when set.
+        var filters = new SearchFilters(fieldFilters, systemFilters, null, await CallerTimeZoneAsync(cancellationToken));
 
         if (string.IsNullOrWhiteSpace(q) && filters.IsEmpty)
         {
@@ -466,6 +470,32 @@ public partial class SearchController : ControllerBase
         }
 
         return builder.ToString();
+    }
+
+    /// <summary>The zone the caller's date filters are expressed in, or null to read them as UTC.</summary>
+    /// <remarks>
+    /// The stored preference WINS over the header: it is the explicit override a user chose, and a device in
+    /// another zone must not silently undo it. Absent both, null — and a null zone leaves the old behaviour
+    /// exactly as it was, which is what keeps scripted callers working unchanged.
+    /// </remarks>
+    private async Task<string?> CallerTimeZoneAsync(CancellationToken cancellationToken)
+    {
+        if (_currentUserAccessor.UserId is { } userId)
+        {
+            var stored = await _dbContext.Users
+                .Where(u => u.Id == userId)
+                .Select(u => u.DisplayTimeZoneId)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(stored))
+            {
+                return stored;
+            }
+        }
+
+        return Request.Headers.TryGetValue("X-Time-Zone", out var header) && header.Count > 0
+            ? header[0]
+            : null;
     }
 
     // Standing convention: every GET action gets a companion HEAD action.

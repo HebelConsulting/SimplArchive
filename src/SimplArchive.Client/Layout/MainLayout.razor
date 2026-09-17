@@ -430,6 +430,11 @@
     {
         try
         {
+            // The display zone, before anything renders a document date (#1254). It rides the cached "me"
+            // read, so it costs no request of its own — and it is set HERE, once, rather than per pane: a pane
+            // that resolved its own would show a different time for the same document than the pane beside it.
+            SessionTimeZone.Set(await ApiRoot.MyTimeZoneIdAsync());
+
             var me = await Http.GetFromJsonAsync<WhoAmI>(await ApiRoot.RequireAsync("whoami"));
             _userId = me?.UserId;
             _displayName = me?.UserName;

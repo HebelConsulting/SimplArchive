@@ -80,9 +80,15 @@ public sealed partial class MainWindowViewModel
             (_detailBaseline, _detailEtag) = await _api.Documents.GetDetailAsync(DetailHref("detail"));
 
             _originalName = SysName;
+            // The originals stay the STORED (UTC) pair, because Cancel restores them verbatim. The FIELDS are
+            // filled with the same instant in the viewer's zone (#1254): the pane shows a local time read-only,
+            // so opening the pencil on the UTC value would jump the clock the moment it was clicked.
             _originalDocumentDate = SysDocumentDate;
             _originalDocumentTime = SysDocumentTime;
-            DocumentTimeEntry = SysDocumentTime ?? string.Empty;
+            var (localDate, localTime) =
+                DocumentDateFormat.FieldsInZone(SysDocumentDate, SysDocumentTime, Services.SessionTimeZone.Current);
+            SysDocumentDate = localDate;
+            DocumentTimeEntry = localTime ?? string.Empty;
             _stagedOcrCodes = _sysOcrCodes;
             RebuildSensitivityPicker();
             SelectedSensitivityItem = SensitivityPickerItems.FirstOrDefault(i => i.Id == DetailSensitivityId) ?? SensitivityPickerItems.FirstOrDefault();
@@ -194,7 +200,7 @@ public sealed partial class MainWindowViewModel
 
         // The typed time is the one thing that can be wrong before anything is sent (ADR 0758), so it is
         // checked here rather than becoming a refusal from the server.
-        if (!DocumentDateFormat.TryParseTypedTime(DocumentTimeEntry, out var parsedTime))
+        if (!DocumentDateFormat.TryParseTypedTime(DocumentTimeEntry, out _))
         {
             ReportError(string.Format(Strings.Get("StErrSaveJoin"), Strings.Get("SaveFailDocumentTime")));
             return;
@@ -202,7 +208,11 @@ public sealed partial class MainWindowViewModel
 
         var newName = SysName?.Trim() ?? string.Empty;
         var nameChanged = newName.Length > 0 && newName != _originalName;
-        var timeStr = DocumentDateFormat.FormatTime(parsedTime);
+        // Back out of the viewer's zone into the UTC the API stores (#1254). The DATE moves with the time — a
+        // 00:30 entry typed in Zurich is the previous day in UTC — so both come from one conversion rather
+        // than the date being sent as typed.
+        var (utcDateStr, timeStr) =
+            DocumentDateFormat.FieldsInUtc(SysDocumentDate, DocumentTimeEntry, Services.SessionTimeZone.Current);
         var editTags = EditTags.Select(t => t.Trim().ToLowerInvariant()).Where(t => t.Length is > 0 and <= 100).Distinct().ToList();
         var chosenLabelId = SelectedSensitivityItem?.Id;
         var newMaskId = SelectedMaskChoice?.MaskId;
@@ -219,7 +229,7 @@ public sealed partial class MainWindowViewModel
         object Body(bool confirmDuplicateClaims) => new
         {
             name = newName.Length > 0 ? newName : Baseline("name"),
-            documentDate = SysDocumentDate?.ToString("yyyy-MM-dd") ?? Baseline("documentDate"),
+            documentDate = utcDateStr ?? Baseline("documentDate"),
             documentTime = timeStr ?? Baseline("documentTime"),
             ocrLanguages = _stagedOcrCodes,
             sensitivityLabelId = chosenLabelId,
@@ -249,7 +259,7 @@ public sealed partial class MainWindowViewModel
             return;
         }
 
-        AdoptSavedDetail(saved, chosenLabelId, timeStr, newMaskId, editTags, sortOrderChanged, documentId);
+        AdoptSavedDetail(saved, chosenLabelId, utcDateStr, timeStr, newMaskId, editTags, sortOrderChanged, documentId);
 
         IsEditing = false;
         Status = Strings.Get("StSaved");
@@ -263,13 +273,18 @@ public sealed partial class MainWindowViewModel
 
     // Takes the SAVED detail as the pane's new truth, so nothing is left describing what was merely sent.
     private void AdoptSavedDetail(
-        JsonElement saved, Guid? labelId, string? timeStr, Guid? maskId, List<string> tags, bool sortOrderChanged, Guid documentId)
+        JsonElement saved, Guid? labelId, string? utcDateStr, string? timeStr, Guid? maskId, List<string> tags, bool sortOrderChanged, Guid documentId)
     {
         DetailTitle = _originalName = saved.TryGetProperty("name", out var name) && name.ValueKind != JsonValueKind.Null
             ? name.GetString() ?? _originalName
             : _originalName;
 
-        _originalDocumentDate = SysDocumentDate;
+        // Back to the STORED pair the read-only line converts for display (#1254). Leaving the picker's local
+        // date here would have the display convert an already-local value a second time, shifting the document
+        // by the offset on every save — a drift that compounds and that no single save looks wrong in.
+        SysDocumentDate = _originalDocumentDate =
+            DateTime.TryParse(utcDateStr, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var storedDay) ? storedDay : _originalDocumentDate;
         SysDocumentTime = _originalDocumentTime = timeStr;
         DocumentTimeEntry = timeStr ?? string.Empty;
         _sysOcrCodes = _stagedOcrCodes;

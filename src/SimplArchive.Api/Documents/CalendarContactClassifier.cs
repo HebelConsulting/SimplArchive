@@ -304,10 +304,29 @@ public sealed class CalendarContactClassifier
 
         if (start is { } startDate)
         {
-            version.DocumentDate = DateOnly.FromDateTime(startDate);
-            // A timed appointment carries its start time-of-day; an all-day event (DtStart.HasTime == false)
-            // stays date-only (ADR "Optional time on the document date"). Mirrors the source of the date above.
-            version.DocumentTime = occurrence.DtStart is { HasTime: true } ? TimeOnly.FromDateTime(startDate) : null;
+            // THE UTC INSTANT WHERE THERE IS ONE (#1254). DtStart.Value is the entry's own WALL CLOCK, so
+            // writing it straight into DocumentDate/DocumentTime — a pair documented as UTC — recorded a
+            // 10:00 Europe/Zurich appointment as 10:00 rather than 08:00. Nothing downstream could detect
+            // that: a TimeOnly carries no offset, so the wrong value and the right one are the same bits.
+            //
+            // BOTH HALVES MOVE TOGETHER, and that is not a detail: the two columns are ONE instant, so
+            // converting the time and leaving the date produces a row that disagrees with itself. 00:30 in
+            // Zurich is 22:30 on the PREVIOUS day in UTC.
+            //
+            // The offset resolution is the one Stamp already uses for the Start/End index fields, which were
+            // correct all along — this is the system-field pair catching up to it, not a new mechanism.
+            if (UtcInstantOf(occurrence.DtStart) is { } instant)
+            {
+                version.DocumentDate = DateOnly.FromDateTime(instant.UtcDateTime);
+                version.DocumentTime = TimeOnly.FromDateTime(instant.UtcDateTime);
+            }
+            else
+            {
+                // No zone to convert FROM: an all-day event (no time at all) or a FLOATING time, which means
+                // "10:00 wherever you are" by definition. Stamping either with a zone is the bug, not the fix.
+                version.DocumentDate = DateOnly.FromDateTime(startDate);
+                version.DocumentTime = occurrence.DtStart is { HasTime: true } ? TimeOnly.FromDateTime(startDate) : null;
+            }
         }
 
         return true;
@@ -453,5 +472,24 @@ public sealed class CalendarContactClassifier
     /// the item indexed and findable rather than dropping its time entirely, which is the failure that would
     /// make a whole calendar unsortable because of one exotic zone.
     /// </remarks>
+    /// <summary>
+    /// The UTC instant a zoned calendar value denotes, or <c>null</c> when it does not denote one.
+    /// </summary>
+    /// <remarks>
+    /// Null has two causes and they are the same answer: an ALL-DAY value has no time, and a FLOATING one has
+    /// no zone. Neither can be converted, and a caller must keep the wall clock rather than invent an offset —
+    /// which is exactly what stamping a floating entry with the server's zone would do.
+    /// </remarks>
+    private static DateTimeOffset? UtcInstantOf(Ical.Net.DataTypes.CalDateTime? when)
+    {
+        if (when?.Value is not { } value || !when.HasTime || string.IsNullOrEmpty(when.TzId))
+        {
+            return null;
+        }
+
+        var local = DateTime.SpecifyKind(value, DateTimeKind.Unspecified);
+        return new DateTimeOffset(local, ZoneOffset(when.TzId, local)).ToUniversalTime();
+    }
+
     private static TimeSpan ZoneOffset(string timeZoneId, DateTime local) => CalendarInstants.ZoneOffset(timeZoneId, local);
 }

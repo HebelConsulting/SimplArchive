@@ -31,6 +31,26 @@ public static class TimeZoneChoices
             .OrderBy(id => id, StringComparer.Ordinal),
     ];
 
+    /// <summary>Whether <paramref name="id"/> is a zone this host offers — see the remarks before relying on it.</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>An empty zone database answers TRUE, deliberately.</b> The list comes from the host, and a host with
+    /// no IANA database yields nothing — so a strict check there would reject every zone rather than none,
+    /// turning a host fault into "you cannot save your own preference". That is not hypothetical: this project
+    /// shipped an Alpine image without tzdata and every zoned calendar entry stored ~2 h out (#1138, since
+    /// fixed). The missing database is the bug to fix; refusing the user's input is not the way to report it.
+    /// </para>
+    /// <para>
+    /// So this rejects a value the host KNOWS to be wrong, and declines to have an opinion when it knows
+    /// nothing at all — which is the honest shape for a check whose evidence can be absent.
+    /// </para>
+    /// </remarks>
+    public static bool Contains(string id)
+    {
+        var all = All();
+        return all.Count == 0 || all.Contains(id, StringComparer.Ordinal);
+    }
+
     /// <summary>
     /// This machine's own zone, as an IANA id — what a NEW appointment is stamped with (#1126).
     /// </summary>

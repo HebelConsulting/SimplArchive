@@ -161,6 +161,28 @@ public class User : ITenantScoped, IConcurrencyTracked
     // it is stored here rather than in a client, and the same reason it carries no HasDefaultValue.
     public bool CutIntrayUploadsAtPatchCodes { get; set; } = true;
 
+    /// <summary>
+    /// The IANA zone this user's timestamps are RENDERED in, or <c>null</c> to follow their own device (#1254).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Null is the answer, not the absence of one.</b> It means "use whatever the browser or OS reports",
+    /// which is right for almost everybody and costs no write — so the common case stores nothing, and a user
+    /// who moves country is simply correct again without touching a setting.
+    /// </para>
+    /// <para>
+    /// <b>Per USER rather than per tenant, deliberately.</b> A tenant spanning two zones must be wrong for
+    /// somebody under a single setting, and the client already knows the right answer. It also means UTC is
+    /// available — by picking it — without being a MODE somebody can impose on everyone: showing every
+    /// timestamp in UTC makes each one need mental arithmetic to help nobody.
+    /// </para>
+    /// <para>
+    /// This is a DISPLAY concern only. What is stored is always the instant (ADR 0800's sibling rule for
+    /// temporal values); this decides how it is read back, and never what is written.
+    /// </para>
+    /// </remarks>
+    public string? DisplayTimeZoneId { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     /// <summary>

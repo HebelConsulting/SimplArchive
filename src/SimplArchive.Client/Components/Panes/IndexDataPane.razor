@@ -97,13 +97,15 @@
                         {
                             <MudDatePicker Editable="true" @bind-Date="Detail.EditDocumentDate" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" />
                             @* Keyboard-first time entry (ADR 0758 / the typed-not-picked principle): a plain
-                               text field the user types HH:mm into; empty clears the time. UTC. *@
-                            <MudTextField @bind-Value="Detail.EditDocumentTime" Placeholder="HH:mm UTC" Clearable="true"
+                               text field the user types HH:mm into; empty clears the time. The pair is EDITED
+                               in the viewer's own zone and stored in UTC (#1254) — the date picker above moves
+                               with it, because the two fields are one instant. *@
+                            <MudTextField @bind-Value="Detail.EditDocumentTime" Placeholder="@($"HH:mm {SessionTimeZone.IanaId}")" Clearable="true"
                                           Margin="Margin.Dense" Variant="Variant.Outlined" Class="mt-1" />
                         }
                         else
                         {
-                            @DocumentDateFormat.Display(Detail.SysDocumentDate?.ToString("yyyy-MM-dd"), Detail.SysDocumentTime)
+                            @DocumentDateFormat.Display(Detail.SysDocumentDate?.ToString("yyyy-MM-dd"), Detail.SysDocumentTime, SessionTimeZone.Current)
                         }
                     </td>
                 </tr>

@@ -198,6 +198,18 @@
   <data name="EpNoPhoto" xml:space="preserve">
     <value>Nessuna foto — scegline una qui sotto.</value>
   </data>
+  <data name="EpTimeZone" xml:space="preserve">
+    <value>Fuso orario di visualizzazione</value>
+  </data>
+  <data name="EpTimeZoneDevice" xml:space="preserve">
+    <value>Segui il dispositivo ({0})</value>
+  </data>
+  <data name="EpTimeZoneSaved" xml:space="preserve">
+    <value>Fuso orario salvato.</value>
+  </data>
+  <data name="EpTimeZoneError" xml:space="preserve">
+    <value>Impossibile salvare il fuso orario.</value>
+  </data>
   <data name="AccountChangePassword" xml:space="preserve">
     <value>Cambia password…</value>
   </data>

@@ -155,7 +155,11 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
             SysCreated = fields is null ? "" : fields.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
             SysCreatedBy = fields?.CreatedByName ?? "";
             SysFileExtension = fields?.FileExtension ?? "";
-            SysDocumentDate = fields?.DocumentDate ?? "";
+            // The formatted PAIR in the viewer's zone (ADR 0801), not the raw stored date — a deleted document
+            // must not read as a different day here than it did in the workbench it was deleted from.
+            SysDocumentDate = fields is null
+                ? string.Empty
+                : SimplArchive.Presentation.DocumentDateFormat.Display(fields.DocumentDate, fields.DocumentTime, Services.SessionTimeZone.Current);
             SysOcrLanguages = fields?.OcrLanguages ?? "";
 
             await Preview.RenderAsync(await _api.Documents.GetPreviewAsync(Rel("versions")));

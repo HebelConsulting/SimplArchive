@@ -137,6 +137,17 @@ public sealed class SearchReindexService : BackgroundService
                     _logger.LogInformation("Search alias missing at startup — running an initial backfill.");
                     _state.Request();
                 }
+                else if (await rebuilder.MappingIsStaleAsync(stoppingToken))
+                {
+                    // An UPGRADE, not a first run: the alias exists and search works, but the live index
+                    // predates a field the code now maps. Without this the field is absent for every document
+                    // indexed before the deploy, and the queries using it answer correctly only for new ones —
+                    // a half-right search being worse than an obviously broken one, since nobody investigates
+                    // results that look plausible (#1254).
+                    _logger.LogInformation(
+                        "Search index predates the current mapping — rebuilding so every document carries the new fields.");
+                    _state.Request();
+                }
 
                 return; // OpenSearch answered — decision made
             }

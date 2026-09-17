@@ -22,6 +22,7 @@ public sealed class ProfileClient(ApiCore core)
     // second codebase.
     private LinkMap? _meLinks;
     private string? _myEmail;
+    private string? _myTimeZoneId;
     private readonly SemaphoreSlim _meGate = new(1, 1);
 
     /// <summary>
@@ -36,6 +37,33 @@ public sealed class ProfileClient(ApiCore core)
         // Any rel will do: resolving one populates the whole document, email included.
         await MeHrefAsync("self", cancellationToken);
         return _myEmail;
+    }
+
+    /// <summary>
+    /// The caller's stored display-zone preference — an IANA id, or <c>null</c> for "follow my device" (#1254).
+    /// </summary>
+    /// <remarks>
+    /// From the same "me" read as the email and the rels. Resolving the null is <see cref="SessionTimeZone"/>'s
+    /// job, not this one's: a client asks the server what the user CHOSE and asks its own host what they get
+    /// when they chose nothing.
+    /// </remarks>
+    public async Task<string?> MyTimeZoneIdAsync(CancellationToken cancellationToken = default)
+    {
+        await MeHrefAsync("self", cancellationToken);
+        return _myTimeZoneId;
+    }
+
+    /// <summary>Stores the caller's display-zone preference; a blank id clears it back to "follow my device".</summary>
+    public async Task SetMyTimeZoneAsync(string? ianaId, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendMeAsync("timeZone", new { timeZoneId = ianaId }, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        // Keep the cached "me" honest rather than re-reading it: the preference the user just set is the one
+        // the rest of the session must display in, and a stale cache here shows every document in the old zone
+        // until the next sign-in.
+        _myTimeZoneId = string.IsNullOrWhiteSpace(ianaId) ? null : ianaId.Trim();
+        SessionTimeZone.Set(_myTimeZoneId);
     }
 
     /// <summary>
@@ -78,6 +106,12 @@ public sealed class ProfileClient(ApiCore core)
                     // everything it carried.
                     _myEmail = me.TryGetProperty("email", out var email) && email.ValueKind is JsonValueKind.String
                         ? email.GetString()
+                        : null;
+
+                    // The display-zone preference rides in the same response for the same reason (#1254). Null
+                    // is a real answer here — it means "follow my device", which only this side can resolve.
+                    _myTimeZoneId = me.TryGetProperty("displayTimeZoneId", out var zone) && zone.ValueKind is JsonValueKind.String
+                        ? zone.GetString()
                         : null;
                 }
             }

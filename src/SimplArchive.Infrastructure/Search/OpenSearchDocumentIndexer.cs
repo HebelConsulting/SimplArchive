@@ -144,6 +144,12 @@ public sealed class OpenSearchDocumentIndexer : IDocumentIndexer
                 versionCreatedAt = version?.CreatedAt,
                 versionCreatedBy,
                 documentDate = version is null ? (DateOnly?)null : version.DocumentDate,
+                // The same date+time as ONE instant, for a search asked in the user's zone (#1254). NULL for a
+                // document dated to the day, which never was an instant — those match their calendar date in
+                // every zone, and giving them a notional midnight would make them drift between them.
+                documentInstant = version is null
+                    ? null
+                    : SimplArchive.Domain.Documents.DocumentInstant.Of(version.DocumentDate, version.DocumentTime),
                 documentType,
                 // Sensitivity label (ADR "Data classification / sensitivity labels") — the name as a keyword, null
                 // when unclassified, for the system[sensitivityLabel] filter.

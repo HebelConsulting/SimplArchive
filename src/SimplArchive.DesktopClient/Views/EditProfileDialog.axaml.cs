@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
@@ -39,10 +41,12 @@ public partial class EditProfileDialog : Window
             return;
         }
 
-        // Which account this is. Costs no request of its own — it rides in the same "me" read the rels use.
+        // Which account this is, and which zone they chose. Both cost no request of their own — they ride in
+        // the same "me" read the rels use.
         try
         {
             EmailText.Text = await _api.Profile.MyEmailAsync() ?? "";
+            await LoadTimeZonesAsync();
         }
         catch (Exception)
         {
@@ -84,6 +88,59 @@ public partial class EditProfileDialog : Window
         catch (Exception)
         {
             PasswordStatus.Text = Strings.Get("PwdChangeError");
+        }
+    });
+
+    // A null Id is "follow my device", labelled with the device's own zone so that "I have not chosen" is a
+    // visible, reversible state rather than an empty row the user has to guess the meaning of. ToString is the
+    // label because a ComboBox renders its items with it, and a bare id would show nothing for that entry.
+    private sealed record ZoneChoice(string? Id, string Label)
+    {
+        public override string ToString() => Label;
+    }
+
+    private bool _timeZonesLoaded;
+
+    private async System.Threading.Tasks.Task LoadTimeZonesAsync()
+    {
+        if (_api is null)
+        {
+            return;
+        }
+
+        var stored = await _api.Profile.MyTimeZoneIdAsync();
+        var choices = new List<ZoneChoice>
+        {
+            new(null, string.Format(Strings.Get("EpTimeZoneDevice"), SessionTimeZone.IanaId)),
+        };
+        choices.AddRange(SimplArchive.Presentation.TimeZoneChoices.All().Select(id => new ZoneChoice(id, id)));
+
+        TimeZoneBox.ItemsSource = choices;
+        TimeZoneBox.SelectedItem = choices.FirstOrDefault(c => c.Id == stored) ?? choices[0];
+
+        // Only AFTER the initial selection is in place: SelectionChanged fires on the assignment above, and
+        // writing the preference back in response to merely opening the dialog would be a PUT nobody asked for.
+        _timeZonesLoaded = true;
+    }
+
+    private void OnTimeZoneChanged(object? sender, SelectionChangedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (_api is null || !_timeZonesLoaded || TimeZoneBox.SelectedItem is not ZoneChoice chosen)
+        {
+            return;
+        }
+
+        try
+        {
+            // Stored AND applied to the running session: the panes behind this window show document dates in
+            // that zone, and leaving them on the old one until the next sign-in would make the setting look
+            // like it had not worked.
+            await _api.Profile.SetMyTimeZoneAsync(chosen.Id);
+            TimeZoneStatus.Text = Strings.Get("EpTimeZoneSaved");
+        }
+        catch (Exception)
+        {
+            TimeZoneStatus.Text = Strings.Get("EpTimeZoneError");
         }
     });
 

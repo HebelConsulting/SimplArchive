@@ -124,6 +124,15 @@ builder.Services.AddHttpClient("SimplArchive.Api", client =>
         // German UI must be German even on an English OS. Culture is already applied here — Blazor.start
         // set applicationCulture before Main ran.
         client.DefaultRequestHeaders.AcceptLanguage.ParseAdd(System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName);
+        // Which zone this DEVICE is in (#1254), so a search for "the 6th" means the caller's calendar day
+        // rather than the server's. Set once on the client rather than per request: a header a call site has
+        // to remember is one a new call site forgets, and the symptom — a near-midnight document missing from
+        // exactly one day's results — is invisible from the code.
+        //
+        // The DEVICE zone, deliberately, and never the stored preference: this header answers "where am I",
+        // and the server prefers a preference the user has set over whatever it says. Always an IANA id
+        // (TimeZoneInfo.Local is a Windows id on Windows, which the server cannot resolve).
+        client.DefaultRequestHeaders.Add("X-Time-Zone", SimplArchive.Presentation.DisplayZone.IanaId(TimeZoneInfo.Local));
     })
     .AddHttpMessageHandler(sp => sp.GetRequiredService<SimplArchive.Client.Services.SessionExpiredHandler>())
     .AddHttpMessageHandler(sp => sp.GetRequiredService<AuthorizationMessageHandler>()

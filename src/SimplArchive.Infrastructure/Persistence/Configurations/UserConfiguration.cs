@@ -14,6 +14,11 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.NormalizedEmail).IsRequired().HasMaxLength(320);
         builder.Property(u => u.DisplayName).IsRequired().HasMaxLength(200);
 
+        // An IANA zone id ("Europe/Zurich"); the longest in the database is comfortably under this. Nullable
+        // by design — null means "follow the user's own device" (#1254), which is the default and stores
+        // nothing.
+        builder.Property(u => u.DisplayTimeZoneId).HasMaxLength(64);
+
         builder.HasIndex(u => new { u.TenantId, u.NormalizedEmail }).IsUnique();
 
         // Defense-in-depth backstop rejecting blank/space-only display names — see ADR "User DisplayName

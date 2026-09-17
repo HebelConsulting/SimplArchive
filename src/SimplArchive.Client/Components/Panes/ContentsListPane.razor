@@ -131,7 +131,7 @@
                    server was already giving (#824). Only the genuine plain Folder is localised; a mask name is
                    tenant data and renders as itself, exactly as the mask line in the detail pane does. *@
                 <span class="wb-ccell" title="@node.DocumentType">@(node.IsFolder && (node.DocumentType.Length == 0 || node.DocumentType == "Folder") ? Strings.Get("FolderType") : node.DocumentType)</span>
-                <span class="wb-ccell" title="@(node.DocumentDate is { } dd ? DocumentDateFormat.Display(dd, node.DocumentTime) : "")">@(node.DocumentDate is { } dd2 ? DocumentDateFormat.Display(dd2, node.DocumentTime) : "")</span>
+                <span class="wb-ccell" title="@(node.DocumentDate is { } dd ? DocumentDateFormat.Display(dd, node.DocumentTime, SessionTimeZone.Current) : "")">@(node.DocumentDate is { } dd2 ? DocumentDateFormat.Display(dd2, node.DocumentTime, SessionTimeZone.Current) : "")</span>
                 <span class="wb-ccell" title="@ByteSize.Format(node.SizeBytes)">@ByteSize.Format(node.SizeBytes)</span>
                 <span class="wb-ccell" title="@string.Join(", ", node.TagList)">@string.Join(", ", node.TagList)</span>
                 <span class="wb-ccell" title="@node.CreatedBy">@node.CreatedBy</span>

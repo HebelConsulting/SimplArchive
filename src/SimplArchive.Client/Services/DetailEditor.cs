@@ -115,8 +115,13 @@ public sealed class DetailEditor(HttpClient http, DetailState detail, DetailCata
         try
         {
             detail.EditName = detail.OrigName = detail.SysName;
-            detail.EditDocumentDate = detail.OrigDocumentDate = detail.SysDocumentDate;
-            detail.EditDocumentTime = detail.OrigDocumentTime = detail.SysDocumentTime;
+            // The pane DISPLAYS the pair in the viewer's zone, so it must EDIT it there too (#1254): opening
+            // an editor on the UTC value would show one time read-only and a different one the moment the
+            // pencil is clicked. The save converts back.
+            var (localDate, localTime) =
+                DocumentDateFormat.FieldsInZone(detail.SysDocumentDate, detail.SysDocumentTime, SessionTimeZone.Current);
+            detail.EditDocumentDate = detail.OrigDocumentDate = localDate;
+            detail.EditDocumentTime = detail.OrigDocumentTime = localTime;
             detail.EditOcrCodes = [.. detail.SysOcrCodes];
             detail.OrigOcrCodes = [.. detail.SysOcrCodes];
             detail.EditMaskId = detail.OrigMaskId = detail.MaskId;
@@ -342,11 +347,16 @@ public sealed class DetailEditor(HttpClient http, DetailState detail, DetailCata
                 ? value.GetString()
                 : null;
 
+        // Back out of the viewer's zone into the UTC the API stores (#1254). Both halves move together or
+        // neither does — a date sent unconverted beside a converted time is a row whose two columns disagree.
+        var (utcDate, utcTime) =
+            DocumentDateFormat.FieldsInUtc(detail.EditDocumentDate, detail.EditDocumentTime, SessionTimeZone.Current);
+
         return new
         {
             name = name ?? Text("name"),
-            documentDate = detail.EditDocumentDate?.ToString("yyyy-MM-dd") ?? Text("documentDate"),
-            documentTime = detail.EditDocumentTime ?? Text("documentTime"),
+            documentDate = utcDate ?? Text("documentDate"),
+            documentTime = utcTime ?? Text("documentTime"),
             ocrLanguages = detail.EditOcrCodes,
             sensitivityLabelId = detail.EditSensitivityId,
             tags,
@@ -366,8 +376,15 @@ public sealed class DetailEditor(HttpClient http, DetailState detail, DetailCata
             saved.TryGetProperty(property, out var value) && value.ValueKind != JsonValueKind.Null ? value.GetString() : null;
 
         detail.SysName = detail.OrigName = Text("name") ?? detail.SysName;
-        detail.OrigDocumentDate = detail.SysDocumentDate = detail.EditDocumentDate;
-        detail.OrigDocumentTime = detail.SysDocumentTime = detail.EditDocumentTime;
+        // Sys* is the STORED pair, so what was just sent goes back in — not the local pair the fields hold
+        // (#1254). Adopting the local values here would leave the read-only line converting an already-local
+        // time a second time, shifting the document by the offset on every save.
+        var (savedDate, savedTime) =
+            DocumentDateFormat.FieldsInUtc(detail.EditDocumentDate, detail.EditDocumentTime, SessionTimeZone.Current);
+        detail.OrigDocumentDate = detail.SysDocumentDate =
+            DateTime.TryParse(savedDate, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var utcDay) ? utcDay : null;
+        detail.OrigDocumentTime = detail.SysDocumentTime = savedTime;
         detail.SysOcrCodes = [.. detail.EditOcrCodes];
         detail.OrigOcrCodes = [.. detail.EditOcrCodes];
         detail.SensitivityId = detail.EditSensitivityId;

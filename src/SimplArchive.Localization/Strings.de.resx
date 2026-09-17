@@ -198,6 +198,18 @@
   <data name="EpNoPhoto" xml:space="preserve">
     <value>Noch kein Bild — wählen Sie unten eines aus.</value>
   </data>
+  <data name="EpTimeZone" xml:space="preserve">
+    <value>Anzeigezeitzone</value>
+  </data>
+  <data name="EpTimeZoneDevice" xml:space="preserve">
+    <value>Zeitzone des Geräts ({0})</value>
+  </data>
+  <data name="EpTimeZoneSaved" xml:space="preserve">
+    <value>Zeitzone gespeichert.</value>
+  </data>
+  <data name="EpTimeZoneError" xml:space="preserve">
+    <value>Die Zeitzone konnte nicht gespeichert werden.</value>
+  </data>
   <data name="AccountChangePassword" xml:space="preserve">
     <value>Passwort ändern…</value>
   </data>

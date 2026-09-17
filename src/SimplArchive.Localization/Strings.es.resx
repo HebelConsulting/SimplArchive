@@ -198,6 +198,18 @@
   <data name="EpNoPhoto" xml:space="preserve">
     <value>Aún no hay foto: elija una abajo.</value>
   </data>
+  <data name="EpTimeZone" xml:space="preserve">
+    <value>Zona horaria de visualización</value>
+  </data>
+  <data name="EpTimeZoneDevice" xml:space="preserve">
+    <value>Seguir el dispositivo ({0})</value>
+  </data>
+  <data name="EpTimeZoneSaved" xml:space="preserve">
+    <value>Zona horaria guardada.</value>
+  </data>
+  <data name="EpTimeZoneError" xml:space="preserve">
+    <value>No se ha podido guardar la zona horaria.</value>
+  </data>
   <data name="AccountChangePassword" xml:space="preserve">
     <value>Cambiar contraseña…</value>
   </data>

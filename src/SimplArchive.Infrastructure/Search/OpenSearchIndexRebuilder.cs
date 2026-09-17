@@ -52,6 +52,50 @@ public sealed class OpenSearchIndexRebuilder
         return response.IsSuccessStatusCode;
     }
 
+    /// <summary>
+    /// Whether the live index is missing a field the current mapping declares — i.e. an upgrade needs a rebuild.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Asked of the MAPPING rather than of a version number.</b> A stored schema version is a claim somebody
+    /// has to remember to bump, and the failure when they do not is silent: the new field is simply absent for
+    /// every document indexed before the upgrade, and the queries that use it quietly return nothing. Comparing
+    /// what the index actually has against what the code declares makes the trigger the thing that matters.
+    /// </para>
+    /// <para>
+    /// This matters because the startup backfill only fires when the ALIAS IS MISSING. On an upgrade it is not
+    /// missing — the index is there and working — so without this check a field added to the mapping would
+    /// never reach existing documents, and #1254's local-date search would answer correctly only for documents
+    /// written after the deploy.
+    /// </para>
+    /// <para>
+    /// Unreadable mapping ⇒ <c>false</c>: a rebuild is expensive, and "OpenSearch did not answer" is not
+    /// evidence that one is needed. The caller retries; a genuinely missing field is still missing next time.
+    /// </para>
+    /// </remarks>
+    public async Task<bool> MappingIsStaleAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await _http.GetAsync($"{Alias}/_mapping", cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return false;
+            }
+
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            // Named individually rather than diffed wholesale: a mapping carries analyzer settings and
+            // per-field options that differ harmlessly between versions, and a blanket comparison would
+            // request a full rebuild on every startup.
+            return !body.Contains("\"documentInstant\"", StringComparison.Ordinal);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
     public async Task<int> RebuildAsync(CancellationToken cancellationToken)
     {
         var newIndex = $"documents-{Guid.NewGuid():N}";
@@ -167,6 +211,7 @@ public sealed class OpenSearchIndexRebuilder
                     versionCreatedAt = new { type = "date" },
                     versionCreatedBy = new { type = "keyword" },
                     documentDate = new { type = "date" },
+                    documentInstant = new { type = "date" },
                     // Sensitivity label (ADR "Data classification / sensitivity labels").
                     sensitivityLabel = new { type = "keyword" },
                     // Numeric label rank for the clearance-ceiling filter (ADR "Sensitivity clearance enforcement").
@@ -324,6 +369,10 @@ public sealed class OpenSearchIndexRebuilder
             versionCreatedAt = version?.CreatedAt,
             versionCreatedBy,
             documentDate = version is null ? (DateOnly?)null : version.DocumentDate,
+            // See the indexer: one instant, null when the document was dated to the day (#1254).
+            documentInstant = version is null
+                ? null
+                : SimplArchive.Domain.Documents.DocumentInstant.Of(version.DocumentDate, version.DocumentTime),
             documentType,
             sensitivityLabel = doc.SensitivityLabelName,
             sensitivityRank = doc.SensitivityLabelRank ?? 0,

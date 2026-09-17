@@ -280,9 +280,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         }
     }
 
-    // Read-only display of the document date + its optional UTC time (edit mode uses the DatePicker + a typed
-    // time field). "2026-09-06" or "2026-09-06 09:50 UTC".
-    public string SysDocumentDateText => DocumentDateFormat.Display(SysDocumentDate?.ToString("yyyy-MM-dd"), SysDocumentTime);
+    // Read-only display of the document date + its optional time (edit mode uses the DatePicker + a typed time
+    // field). Stored in UTC, shown in the viewer's zone (ADR 0801): "2026-09-06 11:50 +02:00".
+    public string SysDocumentDateText => DocumentDateFormat.Display(
+        SysDocumentDate?.ToString("yyyy-MM-dd"), SysDocumentTime, Services.SessionTimeZone.Current);
 
     private Guid _sysCurrentVersionId;
 
@@ -461,6 +462,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         _currentUserId = null;
         UserEmail = string.Empty;
         UserDisplayName = string.Empty;
+        Services.SessionTimeZone.Reset();   // this user's preference; the next to sign in must not inherit it
 
         // Reset the right-gated tabs so the next user's rights apply cleanly.
         IsTenantAdmin = false;
@@ -858,6 +860,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
 
         try
         {
+            // Once for the session, before anything renders a document date (ADR 0801): two view-models
+            // resolving their own zone would show one document at two different times.
+            Services.SessionTimeZone.Set(await _api.Profile.MyTimeZoneIdAsync());
             var me = await _api.GetWhoAmIAsync();
             IsTenantAdmin = me.IsTenantAdmin;
             RecycleBin.IsTenantAdmin = me.IsTenantAdmin;

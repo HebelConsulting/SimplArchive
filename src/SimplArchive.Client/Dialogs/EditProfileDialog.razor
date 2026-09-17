@@ -36,6 +36,24 @@
 
             <MudDivider Class="my-3" />
 
+            @* The display zone (#1254). Applied IMMEDIATELY on change rather than on this dialog's Save, for
+               the same reason the password is: Save is gated on the photo editor having an image, so anything
+               deferred to it would be silently lost by a user who only came here to change their zone. *@
+            <MudText Typo="Typo.caption"><b>@Strings.Get("EpTimeZone")</b></MudText>
+            <MudSelect T="string" Value="@(_timeZoneId ?? string.Empty)" ValueChanged="SetTimeZoneAsync"
+                       Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined" Class="mt-1">
+                @* The blank entry FIRST and named with the device's own zone, so "I have not chosen" is a
+                   visible, reversible state rather than an empty box the user has to guess the meaning of. *@
+                <MudSelectItem T="string" Value="@(string.Empty)">@string.Format(Strings.Get("EpTimeZoneDevice"), SessionTimeZone.IanaId)</MudSelectItem>
+                @foreach (var zone in TimeZoneChoices.All())
+                {
+                    <MudSelectItem T="string" Value="@zone">@zone</MudSelectItem>
+                }
+            </MudSelect>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@_timeZoneStatus</MudText>
+
+            <MudDivider Class="my-3" />
+
             <div class="d-flex align-center gap-3">
                 <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Password" OnClick="ChangePasswordAsync">@Strings.Get("AccountChangePassword")</MudButton>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">@_passwordStatus</MudText>
@@ -66,13 +84,36 @@
     private ProfilePhotoEditor? _editor;
     private string? _email;
     private string? _passwordStatus;
+    private string? _timeZoneId;
+    private string? _timeZoneStatus;
     private bool _busy;
 
     protected override async Task OnInitializedAsync()
     {
-        // Which account this is. Costs no request of its own — it rides in the same "me" read the rels use
-        // (ADR 0557), which the layout has already performed by the time this dialog opens.
+        // Which account this is, and which zone they chose. Both cost no request of their own — they ride in
+        // the same "me" read the rels use (ADR 0557), which the layout has already performed by the time this
+        // dialog opens.
         _email = await ApiRoot.MyEmailAsync();
+        _timeZoneId = await ApiRoot.MyTimeZoneIdAsync();
+    }
+
+    // Stored on change, and applied to the running session in the same breath: the panes behind this dialog
+    // show document dates in that zone, and leaving them on the old one until the next sign-in would make the
+    // setting look like it had not worked.
+    private async Task SetTimeZoneAsync(string chosen)
+    {
+        _timeZoneId = string.IsNullOrWhiteSpace(chosen) ? null : chosen;
+        try
+        {
+            using var response = await ApiRoot.SendMeAsync("timeZone", new { timeZoneId = _timeZoneId });
+            response.EnsureSuccessStatusCode();
+            SessionTimeZone.Set(_timeZoneId);
+            _timeZoneStatus = Strings.Get("EpTimeZoneSaved");
+        }
+        catch (Exception)
+        {
+            _timeZoneStatus = Strings.Get("EpTimeZoneError");
+        }
     }
 
     // The existing password dialog, opened from here and applied IMMEDIATELY on its OK — not deferred to this

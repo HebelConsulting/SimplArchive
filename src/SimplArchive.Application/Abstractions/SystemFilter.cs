@@ -14,7 +14,12 @@ public sealed record SearchFilters(
     // The Select-type index-field names to compute per-field facets over (ADR "Search facet refinements") —
     // configuration, not a filter, so it doesn't affect IsEmpty. The OpenSearch path emits one nested terms
     // aggregation per name; the metadata fallback ignores it.
-    IReadOnlyCollection<string>? FacetFields = null)
+    IReadOnlyCollection<string>? FacetFields = null,
+    // The zone the CALLER's dates are expressed in (#1254), or null to take them as UTC. A documentDate
+    // filter is a question about a CALENDAR DAY — "the documents I filed on the 16th" — and the stored value
+    // is an instant, so the two only agree once somebody says whose day is meant. Null keeps the old
+    // behaviour for callers that do not care (an export filter, a script).
+    string? TimeZoneId = null)
 {
     public static readonly SearchFilters None = new([], []);
 
