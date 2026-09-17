@@ -60,9 +60,25 @@ public partial class Home
     {
         _treeDrawerOpen = false; // phone: navigating a folder closes the tree drawer (no-op on desktop)
         // The synthetic Administration/Users nodes (ADR "Tenant-admin Administration → Users view") aren't real
-        // folders — clicking them just expands; a user's personal repo node (a real repo id) browses normally.
+        // folders, so there is no `children` rel to follow — but they DO have contents, and the list-pane shows
+        // them (#1160). Selecting Administration lists its single Users entry; selecting Users lists one row per
+        // user, which is what makes the column filter able to find somebody by name or e-mail instead of
+        // scrolling a tree of hundreds.
+        //
+        // From the SAME source the tree reads, not a second fetch shaped like it: two surfaces describing one
+        // thing must not be able to disagree about what it contains.
+        //
+        // The detail pane stays empty here on purpose: an admin node is not a document, so there is no subject
+        // to describe (ADR 0559 — a pane that has nothing to show shows nothing, never the previous subject's).
         if (folder is { AdminKind: not "" })
         {
+            _archiveDocument = null;
+            _selectedFolder = folder;
+            _currentRepositoryId = Guid.Empty;
+            ClearDetail();
+            _listPane?.ResetHeaderSort();
+            _folderContents = [.. await Tree.AdminChildNodesAsync(folder)];
+            StateHasChanged();
             return;
         }
 

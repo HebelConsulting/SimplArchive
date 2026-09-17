@@ -313,6 +313,59 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
     }
 
     // Loads the synthetic Administration branch's children (ADR "Tenant-admin Administration → Users view").
+    /// <summary>
+    /// The children of a synthetic Administration node, as plain nodes — the ONE source the tree and the
+    /// list-pane both render (#1160).
+    /// </summary>
+    /// <remarks>
+    /// Separated from the tree's own <see cref="LoadAdminChildrenAsync"/> so the two surfaces cannot come to
+    /// disagree about what Administration contains. The tree wraps these into <c>TreeItemData</c>; the
+    /// list-pane renders them as rows, which is what lets the column filter find a user by name or e-mail
+    /// instead of scrolling the tree.
+    /// </remarks>
+    public async Task<IReadOnlyList<BrowseNode>> AdminChildNodesAsync(BrowseNode node)
+    {
+        if (node.AdminKind == "admin-root")
+        {
+            return [new BrowseNode(Guid.Empty, "Users", true, false, true, AdminKind: "admin-users")];
+        }
+
+        // admin-users → one node per user's personal repository (browsable via the admin's ACL bypass). Reached
+        // by following root → `admin` → `personal-repositories`.
+        //
+        // The row carries the user's real RepositoryId and its own links, so opening one browses exactly as
+        // clicking the tree node does — one subject, two ways in.
+        //
+        // E-mail lands in CreatedBy, which the list-pane renders under its OWNER column — and for a personal
+        // repository the owner IS that user, so this is the most precise value that column can hold rather than
+        // a field borrowed to smuggle a string through. Active state rides in the NAME, exactly as the tree
+        // spells it ("Anna Meyer (inactive)"), so the two surfaces read identically and the column filter
+        // matches what the eye sees. Both already arrive from the endpoint; neither needed a server change.
+        AdminPersonalReposResponse? users;
+        try
+        {
+            var index = await http.GetFromJsonAsync<AdminIndexResponse>(await apiRoot.RequireAsync("admin"));
+            users = Links.Href(index?.Links, "personal-repositories") is { } address
+                ? await http.GetFromJsonAsync<AdminPersonalReposResponse>(address)
+                : null;
+        }
+        catch (Exception)
+        {
+            // An empty branch rather than a broken tree — the same choice the tree load has always made.
+            users = null;
+        }
+
+        return (users?.Repositories ?? []).Select(r => new BrowseNode(
+            r.RepositoryId,
+            r.UserIsActive ? r.DisplayName : $"{r.DisplayName} (inactive)",
+            r.HasChildren, false, r.HasSubfolders,
+            RepositoryId: r.RepositoryId,
+            CreatedBy: r.Email,
+            CanDelete: r.CanDelete, CanEditIndexData: r.CanEditIndexData, CanMove: r.CanMove,
+            CanManagePermissions: r.CanManagePermissions, CanCreateChildren: r.CanCreateChildren,
+            Links: r.Links.ToDictionary(l => l.Rel, l => l.Href))).ToList();
+    }
+
     private async Task<IReadOnlyCollection<TreeItemData<BrowseNode>>> LoadAdminChildrenAsync(BrowseNode node)
     {
         if (node.AdminKind == "admin-root")
