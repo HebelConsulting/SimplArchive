@@ -25,10 +25,24 @@ public sealed partial class MainWindowViewModel
 
         if (node.RealParentId is not null)
         {
-            await OpenFolderAsync(
+            // REVEAL, not merely open (#1264). OpenFolderAsync moves the contents pane and says so itself —
+            // "the tree isn't re-synced" — which left the list showing the target's real home while the tree
+            // still pointed at the folder holding the shortcut. The tree's one job is to answer "where am I"
+            // (ADR 0703), and after a Go to it was answering wrongly.
+            //
+            // The sibling path was right the whole time: a search hit reveals, because OpenSearchResultAsync
+            // calls this same method. One act — take me to where this really lives — must not behave two ways
+            // depending on which surface it started from.
+            //
+            // Both addresses come from the row: `self` is the TARGET document, `go-to` its real parent. The
+            // reveal expands the ancestor chain, opens the folder, and selects the tree node without loading it
+            // twice.
+            await RevealDocumentInTreeAsync(
+                node.Id,
+                node.Links?.Href("self")
+                ?? throw new InvalidOperationException($"The shortcut '{node.Name}' advertised no 'self' rel (ADR 0543/0555)."),
                 node.Links?.Href("go-to")
-                ?? throw new InvalidOperationException($"The shortcut '{node.Name}' advertised no 'go-to' rel (ADR 0543/0555)."),
-                node.Id);
+                ?? throw new InvalidOperationException($"The shortcut '{node.Name}' advertised no 'go-to' rel (ADR 0543/0555)."));
         }
         else
         {
