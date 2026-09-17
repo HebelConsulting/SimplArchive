@@ -88,6 +88,37 @@ public class DavCollectionKindRegistryTests
     }
 
     [Fact]
+    public void A_module_declares_WHICH_FIELDS_span_an_entry()
+    {
+        // The appointments listing reads index fields literally named "Start" and "End" — the CORE Appointment
+        // mask's names. A module names its times for its domain (a flight-log entry has Block off, Takeoff,
+        // Landing, Block on), so it declares which pair spans the entry (ABI 0.13).
+        //
+        // Without this, making a module collection LISTABLE (#1242) left every row with a null start and the
+        // Calendar tab nothing to place on a day: the collection appeared, and was permanently empty — which
+        // looks exactly like the defect #1242 set out to fix.
+        var registry = new DavCollectionKindRegistry([Loaded(WithSpannedLogbook())]);
+
+        var kind = registry.ForFolderMask(ModuleFolderMask);
+
+        Assert.Equal("Block off", kind!.StartFieldName);
+        Assert.Equal("Block on", kind.EndFieldName);
+    }
+
+    [Fact]
+    public void A_kind_that_declares_NOTHING_leaves_the_core_names_to_apply()
+    {
+        // The default must stay null rather than "Start"/"End": the projection falls back to those itself, and
+        // a kind that answered with them would be indistinguishable from one that had chosen them.
+        var registry = new DavCollectionKindRegistry([Loaded(WithLogbook())]);
+
+        var kind = registry.ForFolderMask(ModuleFolderMask);
+
+        Assert.Null(kind!.StartFieldName);
+        Assert.Null(kind.EndFieldName);
+    }
+
+    [Fact]
     public void A_WRITABLE_module_collection_admits_both()
     {
         // The other side, and why the fix is not "exclude modules": a module may declare a writable calendar,
@@ -145,6 +176,20 @@ public class DavCollectionKindRegistryTests
             new ModuleMaskSeed(ModuleFolderMask, "Test Logbook", IsFolderMask: true, IsBookable: false, Fields: [])
             {
                 DavCollection = new ModuleDavCollection(".ics", ModuleItemMask, "Event UID", ReadOnly: true),
+            },
+            new ModuleMaskSeed(ModuleItemMask, "Test Log Entry", IsFolderMask: false, IsBookable: false, Fields: []),
+        ]);
+
+    private static FakeModule WithSpannedLogbook() =>
+        new(
+        [
+            new ModuleMaskSeed(ModuleFolderMask, "Test Logbook", IsFolderMask: true, IsBookable: false, Fields: [])
+            {
+                DavCollection = new ModuleDavCollection(".ics", ModuleItemMask, "Event UID", ReadOnly: true)
+                {
+                    StartFieldName = "Block off",
+                    EndFieldName = "Block on",
+                },
             },
             new ModuleMaskSeed(ModuleItemMask, "Test Log Entry", IsFolderMask: false, IsBookable: false, Fields: []),
         ]);

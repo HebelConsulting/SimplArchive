@@ -106,7 +106,38 @@ public sealed record ModuleMaskSeed(
 /// (<c>.ics</c>/<c>.vcf</c>), the mask those items wear, the item field the resource name derives from, and
 /// whether the collection is read-only (append-only history a client may only read, like a logbook).
 /// </summary>
-public sealed record ModuleDavCollection(string Extension, Guid ItemMaskId, string UidFieldName, bool ReadOnly);
+public sealed record ModuleDavCollection(string Extension, Guid ItemMaskId, string UidFieldName, bool ReadOnly)
+{
+    /// <summary>
+    /// The item field carrying an entry's START, when it is not called "Start" (ABI 0.13).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The appointments listing reads an entry's times from index fields named <c>Start</c> and <c>End</c> —
+    /// the core Appointment mask's own names. A module's item mask names its times for its DOMAIN: a
+    /// flight-log entry has <c>Block off</c>, <c>Takeoff</c>, <c>Landing</c> and <c>Block on</c>, and which
+    /// pair spans the entry is a question only the module can answer. Left unanswered, every row came back
+    /// with a null start and the Calendar tab had nothing to place on a day — the collection listed, and was
+    /// empty.
+    /// </para>
+    /// <para>
+    /// Declared here beside <see cref="UidFieldName"/>, which exists for exactly the same reason one field
+    /// earlier: the core cannot guess what a module calls things.
+    /// </para>
+    /// <para>
+    /// <b>An init-only PROPERTY, not a constructor parameter, and that is deliberate.</b> This record's
+    /// primary constructor is part of the binary contract: adding a parameter changes its signature, and a
+    /// module compiled against the previous ABI then fails to load at runtime rather than at build — a
+    /// crash-loop for what reads on paper like an additive minor. Properties with defaults are additive in
+    /// both directions.
+    /// </para>
+    /// </remarks>
+    public string? StartFieldName { get; init; }
+
+    /// <summary>The item field carrying an entry's END, when it is not called "End" (ABI 0.13).</summary>
+    /// <remarks>See <see cref="StartFieldName"/> — same reasoning, same binary-compatibility constraint.</remarks>
+    public string? EndFieldName { get; init; }
+}
 
 /// <summary>
 /// The handful of CORE mask ids the ABI promises to a module's containment declarations (ABI 0.8) — an

@@ -373,6 +373,18 @@ public partial class MainWindowViewModel
         ClearDetail();
         Items.Clear();
 
+        // THERE IS NO OPEN FOLDER HERE, and saying so is what keeps the detail pane honest.
+        //
+        // Unselecting a row falls back to "describe the folder you are standing in" (ADR 0703). Left as they
+        // were, these still named the last REAL folder — so unselecting a user under Administration described
+        // that folder's document while wearing this node's NAME: the previous subject's mask under the title
+        // "Users". A pane with nothing to show must show nothing, never a previous subject's values (ADR 0559).
+        //
+        // Nulled rather than pointed at the synthetic node, because Guid.Empty has no document either — the
+        // fallback then finds nothing and the pane stays as ClearDetail left it.
+        _currentFolderId = null;
+        _currentFolderLinks = null;
+
         if (_api is null)
         {
             return;

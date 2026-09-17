@@ -246,6 +246,24 @@ public partial class Home
     /// <remarks>Shared with the deselect path: "no selection" and "just opened" are one situation (ADR 0703).</remarks>
     private async Task ShowFolderDetailAsync(BrowseNode folder)
     {
+        // A SYNTHETIC node stands for no document: the Administration branch and the Personal launchers all
+        // carry Guid.Empty. Describing one means fetching `/api/documents/00000000-...`, which 404s — and the
+        // 404 escaped this async event handler into the framework's error banner, taking the WHOLE WORKBENCH
+        // down for a node that simply has nothing to describe.
+        //
+        // Guarded HERE rather than at the callers, because this is the one function that describes a folder —
+        // a guard at one caller leaves the next one to rediscover the crash. Keyed on Guid.Empty rather than on
+        // AdminKind: every synthetic node carries it, including kinds nobody has added yet.
+        //
+        // Reachable since #1160 gave the Administration nodes a real selection (before, selecting one
+        // early-returned and `_selectedFolder` kept pointing at the last REAL folder, so this never fired).
+        // The trigger is Esc or a click on the list's empty area while an admin node is selected.
+        if (folder.Id == Guid.Empty)
+        {
+            ClearDetail();
+            return;
+        }
+
         _selectedNode = folder;
         await LoadDetailForAsync(folder);
         await LoadFolderSubscriptionAsync(folder);

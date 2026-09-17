@@ -24,7 +24,23 @@ namespace SimplArchive.Domain.CalDav;
 /// writable (the default), so a Schedule booking or a calendar appointment can still be created over DAV.
 /// </param>
 public sealed record DavCollectionKind(
-    Guid FolderMaskId, Guid ItemMaskId, string Extension, string UidFieldName, string Name, bool ReadOnly = false);
+    Guid FolderMaskId, Guid ItemMaskId, string Extension, string UidFieldName, string Name, bool ReadOnly = false)
+{
+    /// <summary>
+    /// The item field carrying an entry's START, when the kind does not call it "Start" — and its END
+    /// counterpart (#1242 follow-up).
+    /// </summary>
+    /// <remarks>
+    /// Null for every CORE kind, whose Appointment-shaped item masks genuinely do call them Start and End. A
+    /// MODULE names its times for its domain — a flight-log entry has Block off, Takeoff, Landing and Block on
+    /// — so the module declares which pair spans the entry (ABI 0.13). Without it every row listed with a null
+    /// start and the Calendar tab had nothing to place: the collection appeared, and was empty.
+    /// </remarks>
+    public string? StartFieldName { get; init; }
+
+    /// <inheritdoc cref="StartFieldName"/>
+    public string? EndFieldName { get; init; }
+}
 
 /// <summary>
 /// The collection kinds, stated ONCE in the Domain (#806). The Api's protocol objects carry the wire half

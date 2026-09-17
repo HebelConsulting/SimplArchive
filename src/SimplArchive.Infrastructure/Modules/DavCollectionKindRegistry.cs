@@ -28,7 +28,14 @@ public sealed class DavCollectionKindRegistry : IDavCollectionKindRegistry
                         Extension: dav.Extension,
                         UidFieldName: dav.UidFieldName,
                         Name: mask.Name,
-                        ReadOnly: dav.ReadOnly));
+                        ReadOnly: dav.ReadOnly)
+                    {
+                        // Which of the module's own fields span an entry (ABI 0.13). Null unless declared, and
+                        // then the projection falls back to the core names — so a module that does call them
+                        // Start and End needs to say nothing.
+                        StartFieldName = dav.StartFieldName,
+                        EndFieldName = dav.EndFieldName,
+                    });
                 }
             }
         }

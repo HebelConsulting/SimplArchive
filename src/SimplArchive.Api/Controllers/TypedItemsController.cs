@@ -281,11 +281,18 @@ public class TypedItemsController : ControllerBase
             {
                 Id = id,
                 Name = name,
-                Start = field("Start"),
-                End = field("End"),
+                // WHICH FIELDS SPAN THE ENTRY. "Start" and "End" are the CORE Appointment mask's own field
+                // names; a module names its times for its domain — a flight-log entry has Block off, Takeoff,
+                // Landing and Block on — so the kind may declare which pair to read (ABI 0.13).
+                //
+                // Without this, #1242 made a module's Logbook LISTABLE and left every row unplaceable: a null
+                // start, and a Calendar tab with nothing to put on a day. The collection appeared and was
+                // empty, which looks exactly like the bug #1242 set out to fix.
+                Start = field(StartFieldOf(documentId)),
+                End = field(EndFieldOf(documentId)),
                 Location = field("Location"),
                 // A day, not a moment: the indexed value carries no time at all (ADR 0647).
-                AllDay = field("Start") is { } start && !start.Contains('T', StringComparison.Ordinal),
+                AllDay = field(StartFieldOf(documentId)) is { } start && !start.Contains('T', StringComparison.Ordinal),
                 Repeats = field("Repeats"),
                 // The cancelled occurrences, so expansion can leave them out (#1133) — without this an
                 // occurrence cancelled through "this occurrence" keeps being drawn.
@@ -393,10 +400,18 @@ public class TypedItemsController : ControllerBase
         where TEntry : HypermediaResource
         where TList : HypermediaResource
     {
-        if (await RequireFolderAsync(documentId, folderMaskIds, cancellationToken) is null)
+        if (await RequireFolderAsync(documentId, folderMaskIds, cancellationToken) is not { } listedFolder)
         {
             return NotFound();
         }
+
+        // Which kind this collection is, so the projection knows what the entries call their times (ABI 0.13).
+        // Once per request: one listing describes one collection.
+        var listedMaskId = await _dbContext.MaskVersions
+            .Where(v => v.Id == listedFolder.MaskVersionId)
+            .Select(v => (Guid?)v.MaskId)
+            .FirstOrDefaultAsync(cancellationToken);
+        _listingKind = _kinds.ForFolderMask(listedMaskId);
 
         if (!await CanListAsync(documentId, cancellationToken))
         {
@@ -515,6 +530,32 @@ public class TypedItemsController : ControllerBase
     // decides, so a new kind needs nothing here beyond being in the registry.
     private Guid[] CalendarFamily =>
         [.. _kinds.All.Where(kind => kind.Extension == ".ics" && !kind.ReadOnly).Select(kind => kind.FolderMaskId)];
+
+    /// <summary>
+    /// The item field naming an entry's start for the collection behind <paramref name="folderDocumentId"/> —
+    /// the kind's declaration, else the core's "Start".
+    /// </summary>
+    /// <remarks>
+    /// Resolved from the folder rather than passed in, because the projection callback sees only an ENTRY.
+    /// <see cref="ListAsync"/> resolves the kind ONCE for the listing — one request describes one collection —
+    /// and the shape lambda closes over the answer.
+    /// </remarks>
+    private string StartFieldOf(Guid folderDocumentId) =>
+        _listingKind?.StartFieldName ?? "Start";
+
+    /// <inheritdoc cref="StartFieldOf"/>
+    private string EndFieldOf(Guid folderDocumentId) =>
+        _listingKind?.EndFieldName ?? "End";
+
+    /// <summary>
+    /// The kind of the collection THIS request is listing, resolved once in <see cref="ListAsync"/>.
+    /// </summary>
+    /// <remarks>
+    /// A controller is per-request, so one field is enough and there is nothing to key. It began as a
+    /// dictionary that nothing populated — which compiled, fell back to the core field names, and would have
+    /// left the defect exactly as it was while looking fixed.
+    /// </remarks>
+    private SimplArchive.Domain.CalDav.DavCollectionKind? _listingKind;
 
     /// <summary>Every .ics collection, read-only ones included — what may be LISTED (#1242).</summary>
     private Guid[] ReadableCalendarFamily =>

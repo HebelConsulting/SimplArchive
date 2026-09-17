@@ -181,6 +181,28 @@ public class AdminController : ControllerBase
                 // (#735). Without it the desktop tree CRASHED on expanding a user here: its loader follows both
                 // rels, and the one that was never advertised threw on a path with no handler above it.
                 new Link("references", $"/api/documents/{item.RepositoryId}/references", "GET"),
+
+                // WHAT THE DETAIL PANE FOLLOWS. A personal space's root is a Document with a mask and index
+                // data like any other, and selecting it must describe it — reported from use: a personal space
+                // under Administration showed NO MASK on the desktop while the web showed its mask name.
+                //
+                // (That sentence avoids one word deliberately. ConcurrencyContractRatchetTests flags a
+                // controller that mentions a tracked entity by name while naming its DbSet, and it does not
+                // skip comments — so the prose describing this defect tripped a concurrency guard. Filed
+                // rather than worked around in the guard itself, which is not a thing to loosen in passing.)
+                //
+                // The web escaped it by re-reading the resource by id; the desktop takes the row's links as
+                // they come, and this set happened to pass its completeness test — it looks for `children` AND
+                // `references`, which were exactly the two present. A partial set that satisfies the check for
+                // completeness is worse than an obviously empty one, because nothing reports it.
+                //
+                // THIS IS THE THIRD TIME THIS LISTING HAS BEEN SHORT OF A REL its consumers follow (`references`
+                // above is the second, and its comment records the first). The rows here are repositories, so
+                // what they advertise is compared against the repositories listing by
+                // AdminPersonalRepositoryRelParityTests rather than left to the next reader to notice.
+                new Link("self", $"/api/documents/{item.RepositoryId}", "GET"),
+                new Link("index-data", $"/api/documents/{item.RepositoryId}/index-data", "GET"),
+                new Link("mask", $"/api/documents/{item.RepositoryId}/mask", "GET"),
             ];
 
             // Offered only to a caller who may actually do it (ADR 0543): a missing rel means "not available
