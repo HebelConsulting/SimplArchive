@@ -12,7 +12,6 @@
 # without mixed-content blocking. Set the api's ObjectStorage:PublicServiceUrl to https://<PROXY_HOST>:9444 so
 # it signs presigned URLs against this host; Caddy v2 preserves the incoming Host header, so SeaweedFS's SigV4
 # validation matches (the AWS signature covers the host, not the scheme).
-
 {
 	# Never attempt public ACME / HTTP->HTTPS redirects — this is an internal self-signed setup.
 	auto_https disable_redirects
@@ -20,6 +19,40 @@
 	# to present and the handshake fails with "internal error". default_sni tells Caddy which site's cert to
 	# serve when SNI is absent — set it to PROXY_HOST so an IP (or a name accessed without SNI) still works.
 	default_sni {$PROXY_HOST:localhost}
+
+	# IMAP fronted at layer 4 (#1245) — the reason this image is built with `caddy-l4` rather than pulled.
+	#
+	# TWO LISTENERS, ONE BACKEND. :143 is the plaintext port the account dialog advertises, unchanged in
+	# behaviour but now arriving through the proxy; :993 terminates TLS here and speaks plaintext onward to the
+	# same listener. That second one is what a mail client refusing plaintext needs — and several refuse it
+	# SILENTLY, showing an empty mailbox rather than an error, which is why it is worth having in a stack people
+	# point real clients at.
+	#
+	# The certificate is Caddy's internal CA, the same one serving :9443 — so a device that has accepted the
+	# warning once for the app has accepted it for IMAPS too. `default_sni` above covers a client connecting by
+	# IP, which cannot send SNI.
+	#
+	# WHY A PROXY AT ALL, when one api container could publish 143 itself: because the point is the SECOND
+	# instance. When #1245 gives the single-instance shapes a rolling cutover, this becomes a two-upstream
+	# `proxy` with health checks gated on the api's HTTP /health/ready — and only these two `upstream` lines
+	# change. Standing it up now means the cutover work does not also have to debug the proxy.
+	layer4 {
+		:143 {
+			route {
+				proxy {
+					upstream api:143
+				}
+			}
+		}
+		:993 {
+			route {
+				tls
+				proxy {
+					upstream api:143
+				}
+			}
+		}
+	}
 }
 
 {$PROXY_HOST:localhost}:9443 {

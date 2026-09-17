@@ -441,10 +441,10 @@ services:
         condition: service_completed_successfully
     ports:
       - "8080:8080"
-      # The IMAP endpoint's dev plaintext port (ADR 0594) — point a mail client at localhost:143 with the
-      # generated IMAP password from the account menu. Plaintext is Development-only; production uses
-      # Imap__TlsPort with a real certificate and the readiness gate refuses this port.
-      - "143:143"
+      # IMAP is NOT published here any more — the caddy service fronts it at layer 4 (#1245), on 143 plaintext
+      # and 993 with TLS. Publishing it from both would be a host port conflict, and the whole point of the
+      # proxy is to be the one place a client connects to when there is more than one api instance.
+      # The listener itself is unchanged (ADR 0594): Imap__Port below, reachable as `api:143` on this network.
     volumes:
       # What modules-init installed (ADR 0799).
       #
@@ -573,7 +573,13 @@ services:
   # (no mixed-content). PROXY_HOST = the host's LAN IP/hostname (default localhost). Caddy adds the
   # X-Forwarded-* headers and transparently proxies the SignalR WebSocket. Dev only.
   caddy:
-    image: caddy:${CADDY_TAG:-2.11.4-alpine}
+    # BUILT, not pulled: the layer-4 app that fronts IMAP is a plugin absent from the official image. The
+    # version is pinned once in images.env and passed in — see docker/caddy-l4/Dockerfile for the retirement
+    # trigger.
+    build:
+      context: ./docker/caddy-l4
+      args:
+        CADDY_VERSION: ${CADDY_VERSION:-2.11.4}
     restart: unless-stopped
     depends_on:
       api:
@@ -585,6 +591,10 @@ services:
     ports:
       - "9443:9443"
       - "9444:9444"
+      # IMAP, fronted at layer 4 (#1245): 143 plaintext as before, plus 993 with TLS terminated here — which is
+      # what a mail client that refuses plaintext needs, and several do so SILENTLY.
+      - "143:143"
+      - "993:993"
     volumes:
       - ./scripts/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

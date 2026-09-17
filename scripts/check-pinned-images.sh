@@ -42,7 +42,7 @@ repo_for() {
     MAILPIT_TAG) echo axllent/mailpit ;;
     PGADMIN_TAG) echo dpage/pgadmin4 ;;
     OPENBAO_TAG) echo openbao/openbao ;;
-    CADDY_TAG) echo caddy ;;
+    CADDY_VERSION) echo caddy ;;
     AWSCLI_TAG) echo amazon/aws-cli ;;
     *) echo "" ;;
   esac
