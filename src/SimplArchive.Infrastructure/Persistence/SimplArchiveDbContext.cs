@@ -73,6 +73,24 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
     }
 
     /// <summary>The kinds the change recorder records against — the registry's when present, else the core set.</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The null branch is dead on every path that records a change, and that is verified rather than
+    /// assumed (#1261).</b> Exactly two sites construct this context without a registry — <c>DatabaseMigrator</c>
+    /// and the design-time <c>SimplArchiveDbContextFactory</c> — and neither writes a document, so neither
+    /// reaches <c>DavChangeRecorder</c>. Everywhere else it arrives through DI. Measured on a live demo with a
+    /// module loaded: <c>DavCollectionChanges</c> carries rows for the module's own collections, which it could
+    /// not if the core-only fallback were the one in force.
+    /// </para>
+    /// <para>
+    /// <b>So why is it still nullable?</b> Because making it required would break those two legitimate
+    /// construction sites and every integration test that builds a context directly — for a parameter none of
+    /// them can meaningfully supply. The cost of the nullable is that a THIRD construction site would silently
+    /// inherit the core-only answer and lose DAV sync for module collections, with no error and no log: a
+    /// subscribed client would simply never be told a module collection changed. If you add one, inject the
+    /// registry.
+    /// </para>
+    /// </remarks>
     private IReadOnlyList<SimplArchive.Domain.CalDav.DavCollectionKind> DavKinds =>
         _davCollectionKinds?.All ?? SimplArchive.Domain.CalDav.DavCollectionKinds.All;
 

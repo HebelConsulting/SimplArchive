@@ -54,7 +54,15 @@ public partial class SimplArchiveDbContext
 
         // Derived from the kind table by extension, never a hand-written list of three: that list is what
         // left Maintenance and Availability out of the dav-collections listing (ADR 0786's sibling lesson),
-        // and a kind added later must arrive here without anybody remembering this file.
+        // and a core kind added later must arrive here without anybody remembering this file.
+        //
+        // CORE-ONLY IS DELIBERATE, and this is the one place in the DAV layer where that is true (#1261).
+        // This provisions a RESOURCE's own collections when the resource becomes bookable. A module provisions
+        // its own, where it wants them — the flight school's Logbooks sit under aircraft AND pilot dossiers
+        // rather than uniformly on every bookable resource — so taking the kinds from IDavCollectionKindRegistry
+        // here would auto-create a module's read-only collection on every bookable resource, duplicating what
+        // the module already seeded. Measured on a live demo before this comment was written, because the
+        // sibling site that DID need the registry (#1242) looked identical from here.
         var kinds = DavCollectionKinds.All.Where(k => k.Extension == ".ics" && k.FolderMaskId != Domain.Masks.WellKnownMaskIds.Calendar).ToList();
 
         foreach (var resource in becameBookable.Where(d => bookableVersions.Contains(d.MaskVersionId)))
