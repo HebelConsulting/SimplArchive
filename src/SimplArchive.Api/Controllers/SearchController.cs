@@ -43,7 +43,8 @@ public partial class SearchController : ControllerBase
         ICurrentUserAccessor currentUserAccessor,
         Documents.IClearanceScopeResolver clearanceScope,
         ICurrentTenantAccessor currentTenantAccessor,
-        SimplArchive.Infrastructure.Masks.IMaskContainmentProvider containment)
+        SimplArchive.Infrastructure.Masks.IMaskContainmentProvider containment,
+        Documents.ICallerTimeZone callerTimeZone)
     {
         _dbContext = dbContext;
         _searchService = searchService;
@@ -53,11 +54,16 @@ public partial class SearchController : ControllerBase
         _clearanceScope = clearanceScope;
         _currentTenantAccessor = currentTenantAccessor;
         _containment = containment;
+        _callerTimeZone = callerTimeZone;
     }
 
     private readonly Documents.IClearanceScopeResolver _clearanceScope;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly SimplArchive.Infrastructure.Masks.IMaskContainmentProvider _containment;
+
+    // Shared with the EXPORT path (#1256): both ask the same question about the same columns, and a private
+    // copy here is what let export answer it differently for months.
+    private readonly Documents.ICallerTimeZone _callerTimeZone;
 
     // Plain mutable classes, not records — XmlSerializer (ADR "JSON/XML content negotiation") needs a
     // parameterless constructor and settable properties.
@@ -164,7 +170,7 @@ public partial class SearchController : ControllerBase
         // from the request rather than from the stored preference, because the preference is null for most
         // people BY DESIGN — it means "follow my device", and only the device knows what that is. The stored
         // value is the override, so it wins when set.
-        var filters = new SearchFilters(fieldFilters, systemFilters, null, await CallerTimeZoneAsync(cancellationToken));
+        var filters = new SearchFilters(fieldFilters, systemFilters, null, await _callerTimeZone.ResolveAsync(Request, cancellationToken));
 
         if (string.IsNullOrWhiteSpace(q) && filters.IsEmpty)
         {
@@ -472,31 +478,6 @@ public partial class SearchController : ControllerBase
         return builder.ToString();
     }
 
-    /// <summary>The zone the caller's date filters are expressed in, or null to read them as UTC.</summary>
-    /// <remarks>
-    /// The stored preference WINS over the header: it is the explicit override a user chose, and a device in
-    /// another zone must not silently undo it. Absent both, null — and a null zone leaves the old behaviour
-    /// exactly as it was, which is what keeps scripted callers working unchanged.
-    /// </remarks>
-    private async Task<string?> CallerTimeZoneAsync(CancellationToken cancellationToken)
-    {
-        if (_currentUserAccessor.UserId is { } userId)
-        {
-            var stored = await _dbContext.Users
-                .Where(u => u.Id == userId)
-                .Select(u => u.DisplayTimeZoneId)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (!string.IsNullOrWhiteSpace(stored))
-            {
-                return stored;
-            }
-        }
-
-        return Request.Headers.TryGetValue("X-Time-Zone", out var header) && header.Count > 0
-            ? header[0]
-            : null;
-    }
 
     // Standing convention: every GET action gets a companion HEAD action.
     [HttpHead]

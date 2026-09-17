@@ -246,6 +246,9 @@ if (!string.IsNullOrWhiteSpace(webAuthnBaseUrl))
 // used by both TenantsController and the Compose demo-data seeder below — see ADR "Compose demo-data
 // seeding".
 builder.Services.AddScoped<ITenantProvisioningService, TenantProvisioningService>();
+// Which zone a caller's DATE filters are expressed in (ADR 0801). Registered once so search and export ask one
+// question rather than two that can drift — which is exactly what happened while it was private to search.
+builder.Services.AddScoped<SimplArchive.Api.Documents.ICallerTimeZone, SimplArchive.Api.Documents.CallerTimeZoneResolver>();
 
 // Confirms + auto-classifies an uploaded/filed DocumentVersion — shared by version finalize and intray
 // filing (ADR "S3-backed inbox").

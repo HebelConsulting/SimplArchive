@@ -367,6 +367,10 @@ public sealed class RepositoryExporter
             {
                 documentDateFrom = filters.DocumentDateFrom?.ToString("yyyy-MM-dd"),
                 documentDateTo = filters.DocumentDateTo?.ToString("yyyy-MM-dd"),
+                // WHICH ZONE those two dates were read in (#1256). Without it the manifest records a filter
+                // whose meaning depends on who ran the export and says nothing about which — the archive would
+                // be a permanent claim nobody can check. Null means they were read as UTC.
+                documentDateTimeZone = filters.TimeZoneId,
                 filedFrom = filters.FiledFrom,
                 filedTo = filters.FiledTo,
                 versions = filters.Versions == ExportVersionSelection.ActiveOnly ? "active" : "all",
@@ -410,14 +414,88 @@ public sealed class RepositoryExporter
         return all;
     }
 
+    /// <summary>
+    /// Whether a version falls inside the caller's document-date range, read in the caller's own zone (#1256).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Two kinds of version, and only one of them is an instant</b> — the same split the search query makes
+    /// (ADR 0801), because a filter that answered differently from search would be a second definition of "the
+    /// 16th":
+    /// </para>
+    /// <list type="bullet">
+    /// <item>a <b>timed</b> version is an instant, so the caller's day is a UTC <b>range</b>: 00:30 in Zurich on
+    /// the 16th is 22:30 UTC on the 15th, and an export of "the 16th" must still contain it;</item>
+    /// <item>a <b>date-only</b> version never was an instant. Somebody chose a calendar date, and it is that
+    /// date in every zone — shifting it would drop a document filed "on the 15th" out of an export for the
+    /// 15th, which is inventing a bug to fix one that is not there.</item>
+    /// </list>
+    /// <para>
+    /// <b>Why getting this wrong is worse here than in search.</b> A missing search hit prompts another search;
+    /// a missing document in an exported archive is discovered by whoever receives it, if at all. The export
+    /// succeeds, reports a plausible count, and nothing distinguishes "the filter excluded it" from "it was
+    /// never there".
+    /// </para>
+    /// <para>
+    /// With no zone (a scripted caller, a service account) this is the literal comparison it always was.
+    /// </para>
+    /// </remarks>
+    // internal so the two subtle halves — the date-only exception and the INCLUSIVE upper bound — get unit
+    // coverage in the fast tier. The end-to-end tests prove the wiring; they run only behind the e2e label, and
+    // logic this easy to get quietly wrong should not wait for a gated tier to say so.
+    internal static bool WithinDocumentDateRange(DocumentVersion version, RepositoryExportFilters filters)
+    {
+        if (filters.DocumentDateFrom is null && filters.DocumentDateTo is null)
+        {
+            return true;
+        }
+
+        var zone = ResolveZone(filters.TimeZoneId);
+
+        // Date-only, or no zone to read the bounds in: compare the calendar dates as they stand.
+        if (zone is null || DocumentInstant.Of(version.DocumentDate, version.DocumentTime) is not { } instant)
+        {
+            if (filters.DocumentDateFrom is { } df && version.DocumentDate < df) return false;
+            if (filters.DocumentDateTo is { } dt && version.DocumentDate > dt) return false;
+            return true;
+        }
+
+        // Timed: the caller's first and last day become one half-open UTC window. `To` is INCLUSIVE of its day,
+        // so the window ends where that day ends — an exclusive end would silently drop everything filed on the
+        // last day of the range, which reads as "the export is short" rather than as an off-by-one.
+        if (filters.DocumentDateFrom is { } from && instant < DocumentInstant.DayIn(from, zone).From) return false;
+        if (filters.DocumentDateTo is { } to && instant >= DocumentInstant.DayIn(to, zone).To) return false;
+        return true;
+    }
+
+    /// <remarks>
+    /// An unknown id falls back to <c>null</c> — the literal comparison — rather than throwing: a stale
+    /// preference should cost the caller the conversion, not the whole export.
+    /// </remarks>
+    private static TimeZoneInfo? ResolveZone(string? timeZoneId)
+    {
+        if (string.IsNullOrWhiteSpace(timeZoneId))
+        {
+            return null;
+        }
+
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId.Trim());
+        }
+        catch (Exception exception) when (exception is TimeZoneNotFoundException or InvalidTimeZoneException)
+        {
+            return null;
+        }
+    }
+
     private static bool MatchesFilters(
         DocumentVersion version,
         RepositoryExportFilters filters,
         IReadOnlyDictionary<Guid, UserLite> userById,
         IReadOnlyDictionary<Guid, ServiceAccountLite> serviceAccountById)
     {
-        if (filters.DocumentDateFrom is { } df && version.DocumentDate < df) return false;
-        if (filters.DocumentDateTo is { } dt && version.DocumentDate > dt) return false;
+        if (!WithinDocumentDateRange(version, filters)) return false;
         if (filters.FiledFrom is { } ff && version.CreatedAt < ff) return false;
         if (filters.FiledTo is { } ft && version.CreatedAt > ft) return false;
 

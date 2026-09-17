@@ -35,13 +35,18 @@ public class DocumentTransferController : ControllerBase
     private readonly Documents.RepositoryExporter _exporter;
     private readonly Documents.RepositoryImporter _importer;
 
+    // Shared with the SEARCH path (#1256): both ask which zone the caller's date filters are expressed in, and
+    // a private copy on one of them is how they came to answer it differently.
+    private readonly Documents.ICallerTimeZone _callerTimeZone;
+
     public DocumentTransferController(
         IAuditRecorder audit,
         ICurrentUserAccessor currentUserAccessor,
         SimplArchiveDbContext dbContext,
         Documents.DocumentAccessService access,
         Documents.RepositoryExporter exporter,
-        Documents.RepositoryImporter importer)
+        Documents.RepositoryImporter importer,
+        Documents.ICallerTimeZone callerTimeZone)
     {
         _audit = audit;
         _currentUserAccessor = currentUserAccessor;
@@ -49,6 +54,7 @@ public class DocumentTransferController : ControllerBase
         _access = access;
         _exporter = exporter;
         _importer = importer;
+        _callerTimeZone = callerTimeZone;
     }
 
     // Exports this document (a repository root or any sub-folder) + its subtree to a downloadable .zip an import
@@ -83,7 +89,11 @@ public class DocumentTransferController : ControllerBase
         var selection = string.Equals(versions, "active", StringComparison.OrdinalIgnoreCase)
             ? Documents.ExportVersionSelection.ActiveOnly
             : Documents.ExportVersionSelection.All;
-        var filters = new Documents.RepositoryExportFilters(documentDateFrom, documentDateTo, filedFrom, filedTo, selection, createdBy);
+        // The caller's own day, not the server's (#1256). Same resolver the search path uses, so "the 16th"
+        // cannot mean one thing in a search and another in an export of the very same documents.
+        var filters = new Documents.RepositoryExportFilters(
+            documentDateFrom, documentDateTo, filedFrom, filedTo, selection, createdBy,
+            await _callerTimeZone.ResolveAsync(Request, cancellationToken));
 
         var fileName = $"{SanitizeFileName(root.Name)}-export-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.zip";
         Response.ContentType = "application/zip";
