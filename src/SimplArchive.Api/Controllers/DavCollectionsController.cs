@@ -198,7 +198,17 @@ public class DavCollectionsController : ControllerBase
             // or offers one that is refused, and the second is what an unqualified rel would now do.
             var typedItems = new List<Link>();
             var contacts = ChildCreationPolicy.AdmitsTypedItem(folderMaskId, WellKnownMaskIds.Contact);
-            var appointments = ChildCreationPolicy.AdmitsCalendarEntries(folderMaskId);
+
+            // READ and CREATE asked separately, and both off the kind registry (#1242).
+            //
+            // The rel used to come from ChildCreationPolicy.AdmitsCalendarEntries, which asks a CONTAINMENT
+            // question against a CORE-ONLY static table — so no module kind could satisfy it, and a Logbook was
+            // advertised without the one address its entries live at. It listed in the tab, ticked, and stayed
+            // empty. Worse, the create capability below is `... && appointments`, so deriving the rel from the
+            // create question also made that answer right BY ACCIDENT: fixing the rel alone would have flipped
+            // canCreateEntries TRUE on a read-only collection and offered a New the POST then refuses.
+            var appointments = _kinds.ServesCalendarEntries(folderMaskId);
+            var canCreateAppointments = _kinds.AdmitsCalendarEntryCreation(folderMaskId);
             if (contacts)
             {
                 typedItems.Add(new Link("contacts", $"/api/documents/{candidate.Id}/contacts", "GET"));
@@ -220,7 +230,7 @@ public class DavCollectionsController : ControllerBase
                     ?? defaults.GetValueOrDefault(candidate.Id)
                     ?? kindColourByMaskVersion.GetValueOrDefault(candidate.MaskVersionId),
                 Writable = effective.CanEditContent,
-                CanCreateEntries = effective.CanCreateSubItems && (contacts || appointments),
+                CanCreateEntries = effective.CanCreateSubItems && (contacts || canCreateAppointments),
                 IsPersonalDefault = personal,
                 Links =
                 [

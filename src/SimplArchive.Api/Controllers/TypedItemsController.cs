@@ -274,7 +274,9 @@ public class TypedItemsController : ControllerBase
         [FromQuery] DateTimeOffset? to,
         CancellationToken cancellationToken) =>
         ListAsync(
-            documentId, CalendarFamily, cursor, limit, cancellationToken,
+            // READABLE, not writable (#1242): a read-only module collection lists here even though nothing
+            // may be created in it — this is the only address the Calendar tab reads entries from.
+            documentId, ReadableCalendarFamily, cursor, limit, cancellationToken,
             (id, name, field) => new AppointmentEntryResource
             {
                 Id = id,
@@ -350,7 +352,9 @@ public class TypedItemsController : ControllerBase
 
     [HttpHead("appointments")]
     public async Task<IActionResult> HeadAppointments(Guid documentId, CancellationToken cancellationToken) =>
-        await RequireFolderAsync(documentId, CalendarFamily, cancellationToken) is null
+        // Mirrors the GET exactly, readable family included — a HEAD that 404s where the GET returns rows is a
+        // companion action that answers a different question (the standing every-GET-has-a-HEAD convention).
+        await RequireFolderAsync(documentId, ReadableCalendarFamily, cancellationToken) is null
             ? NotFound()
             : await CanListAsync(documentId, cancellationToken) ? NoContent() : Forbid();
 
@@ -498,15 +502,23 @@ public class TypedItemsController : ControllerBase
     // half would have been worse than neither: a create rel the server then refuses is exactly the affordance
     // ADR 0543 exists to prevent.
     //
-    // READ-ONLY kinds are excluded: this endpoint both lists AND creates, and a module's Logbook (ADR 0791)
-    // is append-only history nobody creates entries in from the app — its entries are the module's to write.
-    // So the writable .ics kinds are the appointments surface; the read-only ones are served over CalDAV for
-    // subscription and are addressed there, not here.
+    // READ-ONLY kinds are excluded FROM CREATION ONLY (#1242). A module's Logbook (ADR 0791) is append-only
+    // history nobody creates entries in from the app — its entries are the module's to write — but its entries
+    // must still LIST here, because this is the only address the Calendar tab reads from. Excluding read-only
+    // kinds from the whole surface made the Logbook subscribable over CalDAV (which works) and permanently
+    // empty in the app (which is what was reported): the tab ticks it and gets nothing.
+    //
+    // So the two questions are asked separately, and both off the registry so they cannot drift:
+    // ReadableCalendarFamily for GET/HEAD, CalendarFamily for POST.
     //
     // The items themselves stay maskless at creation — the classifier reads the bytes and the parent and
     // decides, so a new kind needs nothing here beyond being in the registry.
     private Guid[] CalendarFamily =>
         [.. _kinds.All.Where(kind => kind.Extension == ".ics" && !kind.ReadOnly).Select(kind => kind.FolderMaskId)];
+
+    /// <summary>Every .ics collection, read-only ones included — what may be LISTED (#1242).</summary>
+    private Guid[] ReadableCalendarFamily =>
+        [.. _kinds.All.Where(kind => kind.Extension == ".ics").Select(kind => kind.FolderMaskId)];
 
     private async Task<Document?> RequireFolderAsync(Guid documentId, IReadOnlyList<Guid> maskIds, CancellationToken cancellationToken)
     {

@@ -41,6 +41,14 @@ public sealed class DavCollectionKindRegistry : IDavCollectionKindRegistry
     public DavCollectionKind? ForFolderMask(Guid? folderMaskId) =>
         folderMaskId is { } id ? _all.FirstOrDefault(k => k.FolderMaskId == id) : null;
 
+    /// <inheritdoc />
+    public bool ServesCalendarEntries(Guid? folderMaskId) =>
+        ForFolderMask(folderMaskId) is { Extension: ".ics" };
+
+    /// <inheritdoc />
+    public bool AdmitsCalendarEntryCreation(Guid? folderMaskId) =>
+        ForFolderMask(folderMaskId) is { Extension: ".ics", ReadOnly: false };
+
     public IReadOnlyList<Guid> FolderMaskIds(string extension) =>
         [.. _all.Where(k => k.Extension == extension).Select(k => k.FolderMaskId)];
 

@@ -41,18 +41,25 @@ public sealed class DocumentResourceLinks
     private readonly IUserSystemRightsResolver _userSystemRights;
     private readonly SimplArchive.Infrastructure.Modules.StateMachineCatalog _machines;
 
+    // The kinds a module may have added (#1242). The create affordance below used a CORE-ONLY static table, so
+    // a module's writable collection would silently advertise no create — the same shape that made a Logbook
+    // unreadable, one door along.
+    private readonly SimplArchive.Application.Abstractions.IDavCollectionKindRegistry _kinds;
+
     public DocumentResourceLinks(
         SimplArchiveDbContext dbContext,
         DocumentAccessService access,
         ICurrentUserAccessor currentUserAccessor,
         IUserSystemRightsResolver userSystemRights,
-        SimplArchive.Infrastructure.Modules.StateMachineCatalog machines)
+        SimplArchive.Infrastructure.Modules.StateMachineCatalog machines,
+        SimplArchive.Application.Abstractions.IDavCollectionKindRegistry kinds)
     {
         _dbContext = dbContext;
         _access = access;
         _currentUserAccessor = currentUserAccessor;
         _userSystemRights = userSystemRights;
         _machines = machines;
+        _kinds = kinds;
     }
 
     public async Task<(List<Link> Links, bool CanCreateChildren)> BuildAsync(
@@ -327,7 +334,10 @@ public sealed class DocumentResourceLinks
                 links.Add(new Link("contacts", $"/api/documents/{documentId}/contacts", "POST"));
             }
 
-            if (ChildCreationPolicy.AdmitsCalendarEntries(folderMaskId))
+            // The CREATE question — this rel is emitted with POST — so read-only kinds are excluded and
+            // module kinds are included. Both come off the registry rather than a containment predicate over a
+            // static table (#1242).
+            if (_kinds.AdmitsCalendarEntryCreation(folderMaskId))
             {
                 links.Add(new Link("appointments", $"/api/documents/{documentId}/appointments", "POST"));
             }

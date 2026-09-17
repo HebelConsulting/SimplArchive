@@ -25,4 +25,34 @@ public interface IDavCollectionKindRegistry
 
     /// <summary>Item mask ids for collections of <paramref name="extension"/> (.ics/.vcf).</summary>
     IReadOnlyList<Guid> ItemMaskIds(string extension);
+
+    /// <summary>
+    /// Whether this folder's entries can be READ through the appointments surface — any <c>.ics</c> kind,
+    /// read-only ones included.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Separate from <see cref="AdmitsCalendarEntryCreation"/> on purpose, and this is the whole point of
+    /// #1242.</b> One rel serves both methods on one address (ADR 0719): <c>GET</c> lists, <c>POST</c> creates.
+    /// Deriving the REL from the create question makes a read-only collection unreadable — a module's Logbook
+    /// listed in the Calendar tab, tickable, and permanently empty, because the tab correctly treats the absent
+    /// rel as "not available here" (ADR 0543).
+    /// </para>
+    /// <para>
+    /// Both answers come from THIS registry so that advertising and accepting cannot drift: they were two
+    /// derivations of one question — a containment predicate over a core-only static table on the advertising
+    /// side, the kind table on the accepting side — and drift is exactly what happened.
+    /// </para>
+    /// </remarks>
+    bool ServesCalendarEntries(Guid? folderMaskId);
+
+    /// <summary>
+    /// Whether entries may be CREATED in this folder from the app — an <c>.ics</c> kind that is not read-only.
+    /// </summary>
+    /// <remarks>
+    /// A module's read-only collection (ADR 0791) is append-only history the module writes; the app never
+    /// creates in it. That is a property of the KIND, not of the caller's rights, so it belongs here rather
+    /// than being re-derived beside each rights check.
+    /// </remarks>
+    bool AdmitsCalendarEntryCreation(Guid? folderMaskId);
 }

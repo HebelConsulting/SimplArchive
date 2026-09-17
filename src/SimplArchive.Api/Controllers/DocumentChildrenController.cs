@@ -48,6 +48,9 @@ public class DocumentChildrenController : ControllerBase
     private readonly IReadOnlyList<Infrastructure.Modules.ModuleLoader.LoadedModule> _modules;
     private readonly ILogger<DocumentChildrenController> _logger;
 
+    // Module-declared DAV kinds (#1242) — see the create affordance below.
+    private readonly IDavCollectionKindRegistry _davKinds;
+
     public DocumentChildrenController(
         ICurrentUserAccessor currentUserAccessor,
         SimplArchiveDbContext dbContext,
@@ -58,10 +61,12 @@ public class DocumentChildrenController : ControllerBase
         ICurrentTenantAccessor currentTenantAccessor,
         IMaskContainmentProvider containment,
         IReadOnlyList<Infrastructure.Modules.ModuleLoader.LoadedModule> modules,
+        IDavCollectionKindRegistry davKinds,
         ILogger<DocumentChildrenController> logger)
     {
         _modules = modules;
         _logger = logger;
+        _davKinds = davKinds;
         _currentUserAccessor = currentUserAccessor;
         _dbContext = dbContext;
         _access = access;
@@ -445,7 +450,9 @@ public class DocumentChildrenController : ControllerBase
     }
 
     /// <summary>The addresses a listed row carries — see the call site for which rels belong here and why.</summary>
-    private static List<Link> RowLinks(DocumentSummaryRow d)
+    // No longer static: the create affordances now ask the KIND REGISTRY, which a module contributes to, rather
+    // than a core-only static table (#1242). Its only caller is an instance action, so nothing else moves.
+    private List<Link> RowLinks(DocumentSummaryRow d)
     {
         var links = new List<Link>
         {
@@ -476,7 +483,9 @@ public class DocumentChildrenController : ControllerBase
             links.Add(new Link("contacts", $"/api/documents/{d.Id}/contacts", "POST"));
         }
 
-        if (ChildCreationPolicy.AdmitsCalendarEntries(d.MaskId))
+        // The CREATE question — emitted with POST — so read-only module kinds are excluded and module kinds
+        // are seen at all. Off the registry, not a containment predicate over a core-only table (#1242).
+        if (_davKinds.AdmitsCalendarEntryCreation(d.MaskId))
         {
             links.Add(new Link("appointments", $"/api/documents/{d.Id}/appointments", "POST"));
         }
