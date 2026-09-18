@@ -81,23 +81,36 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
 
     // The item's ancestor folder ids, repository-root first down to its immediate parent (issue #340) — used to
     // reveal a search hit in the lazy tree. Empty for an item filed at a repository root.
-    public async Task<List<Guid>> GetAncestorsAsync(string ancestorsHref, CancellationToken cancellationToken = default)
+    public async Task<List<Guid>> GetAncestorsAsync(string ancestorsHref, CancellationToken cancellationToken = default) =>
+        [.. (await GetAncestorChainAsync(ancestorsHref, cancellationToken)).Select(a => a.Id)];
+
+    // The same walk, keeping the NAME and the ADDRESS the listing advertises — what a breadcrumb needs (#1266).
+    // The ids-only overload above stays because the tree reveal genuinely wants only ids, and asking callers to
+    // discard two thirds of a record to expand a tree would be worse than one extra method.
+    public async Task<IReadOnlyList<AncestorInfo>> GetAncestorChainAsync(
+        string ancestorsHref, CancellationToken cancellationToken = default)
     {
         var json = await _core.Http.GetFromJsonAsync<JsonElement>(ancestorsHref, cancellationToken);
-        var ids = new List<Guid>();
+        var chain = new List<AncestorInfo>();
         if (json.TryGetProperty("ancestors", out var arr) && arr.ValueKind == JsonValueKind.Array)
         {
             foreach (var a in arr.EnumerateArray())
             {
                 if (a.TryGetProperty("id", out var idEl) && idEl.TryGetGuid(out var id))
                 {
-                    ids.Add(id);
+                    chain.Add(new AncestorInfo(
+                        id,
+                        a.TryGetProperty("name", out var nameEl) ? nameEl.GetString() ?? string.Empty : string.Empty,
+                        LinkMap.From(a)));
                 }
             }
         }
 
-        return ids;
+        return chain;
     }
+
+    /// <summary>One ancestor folder: its id, its display name, and the address the listing advertised for it.</summary>
+    public sealed record AncestorInfo(Guid Id, string Name, LinkMap? Links);
 
     // Lists a .zip document's entries on demand (ADR "Zip file browsing") — nothing is unpacked.
     public async Task<IReadOnlyList<ArchiveEntryInfo>> GetArchiveEntriesAsync(string archiveEntriesHref, CancellationToken cancellationToken = default)

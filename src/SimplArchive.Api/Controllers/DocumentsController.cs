@@ -416,7 +416,18 @@ public class DocumentsController : ControllerBase
                 break;
             }
 
-            ancestors.Add(new AncestorResource { Id = folder.Id, Name = folder.Name });
+            ancestors.Add(new AncestorResource
+            {
+                Id = folder.Id,
+                Name = folder.Name,
+                // The row's own address, so a consumer can OPEN an ancestor rather than only name it (#1266).
+                // Without it the listing hands out ids with no way to follow them, and a client that wants to
+                // navigate has to compose a URL — which ADR 0543 forbids and which is exactly why the desktop
+                // breadcrumb settled for "Repositories / <folder>" instead of the real path. `document` rather
+                // than `self`: `self` here is the ancestors listing, and a repository's own view is called
+                // `document` everywhere else on this API (ADR 0200).
+                Links = [new Link("document", $"/api/documents/{folder.Id}", "GET")],
+            });
             currentId = folder.ParentId;
         }
 
@@ -444,7 +455,9 @@ public class DocumentsController : ControllerBase
         public List<AncestorResource> Ancestors { get; set; } = [];
     }
 
-    public class AncestorResource
+    // A HypermediaResource so each ancestor carries its own address (#1266) — a breadcrumb has to be
+    // clickable, and a name plus an id is not an address.
+    public class AncestorResource : HypermediaResource
     {
         public Guid Id { get; set; }
 

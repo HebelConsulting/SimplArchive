@@ -82,9 +82,7 @@ public sealed partial class MainWindowViewModel
     private async Task OpenLoadedFolderAsync(Guid folderId, string name, LinkMap? folderLinks, Guid? selectTargetId)
     {
         await LoadFolderContentsAsync(folderId, folderLinks);
-        Breadcrumbs.Clear();
-        Breadcrumbs.Add(new BreadcrumbViewModel { Name = "Repositories", FolderId = null, ShowSeparator = false });
-        Breadcrumbs.Add(new BreadcrumbViewModel { Name = name, FolderId = folderId, ShowSeparator = true });
+        await SetBreadcrumbFromAncestorsAsync(folderId, name, folderLinks);
         if (selectTargetId is { } targetId)
         {
             // Prefer the item's real row; fall back to its reference (shortcut) row when the folder holds only
@@ -92,6 +90,70 @@ public sealed partial class MainWindowViewModel
             SelectedItem = Items.FirstOrDefault(i => i.Id == targetId && !i.IsReference)
                 ?? Items.FirstOrDefault(i => i.Id == targetId);
         }
+    }
+
+    /// <summary>
+    /// Rebuilds the breadcrumb as the folder's REAL path, from the ancestors the resource advertises (#1266).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This used to add exactly two crumbs — <c>Repositories / &lt;folder&gt;</c> — however deep the folder
+    /// actually sat, so a document filed four levels down reported a two-level path. That is not merely
+    /// incomplete: it says the folder is a child of the repositories root, which is a different and wrong
+    /// answer to the question the breadcrumb exists to answer (ADR 0703, "where am I").
+    /// </para>
+    /// <para>
+    /// It lived in the SHARED TAIL rather than in the reveal path on purpose. "Go to …", the references
+    /// dialog and every payload-row consumer (a task, a notification, a reminder, a search hit) come through
+    /// here, so fixing the reveal alone would have left all the others reporting the short path — the same
+    /// one-entrance fix that #1266 was split out of.
+    /// </para>
+    /// <para>
+    /// The original comment justified the two crumbs as a slice simplification because "the read API doesn't
+    /// expose full ancestry". That was stale: the <c>ancestors</c> rel exists and the tree already follows it.
+    /// What it did NOT expose was an ADDRESS per ancestor, so a crumb built from it could be named but not
+    /// clicked — fixed at the source, by having the listing advertise each ancestor's own address, rather than
+    /// by composing a URL here (ADR 0543).
+    /// </para>
+    /// <para>
+    /// <b>Falls back to the short form honestly.</b> When the folder advertises no <c>ancestors</c> rel, or the
+    /// read fails, the breadcrumb says what it can rather than guessing a path — a wrong path is worse than a
+    /// short one, because it looks like a fact.
+    /// </para>
+    /// </remarks>
+    private async Task SetBreadcrumbFromAncestorsAsync(Guid folderId, string name, LinkMap? folderLinks)
+    {
+        var chain = new List<DocumentsClient.AncestorInfo>();
+        if (_api is not null && folderLinks?.Href("ancestors") is { } ancestorsHref)
+        {
+            try
+            {
+                chain = [.. await _api.Documents.GetAncestorChainAsync(ancestorsHref)];
+            }
+            catch (Exception)
+            {
+                // Left empty: the short breadcrumb below is the honest answer when the path cannot be read.
+            }
+        }
+
+        Breadcrumbs.Clear();
+        Breadcrumbs.Add(new BreadcrumbViewModel { Name = "Repositories", FolderId = null, ShowSeparator = false });
+        foreach (var ancestor in chain)
+        {
+            Breadcrumbs.Add(new BreadcrumbViewModel
+            {
+                Name = ancestor.Name,
+                FolderId = ancestor.Id,
+                Links = ancestor.Links,
+                ShowSeparator = true,
+            });
+        }
+
+        Breadcrumbs.Add(new BreadcrumbViewModel { Name = name, FolderId = folderId, Links = folderLinks, ShowSeparator = true });
+
+        // The recycle bin lists against the repository ROOT, which is the top of the chain when there is one
+        // and the folder itself when there is not (a repository opened directly).
+        _currentRepositoryId = chain.Count > 0 ? chain[0].Id : folderId;
     }
 
     // Builds the references-dialog view model for the selected item (the view owns the dialog); the row's own
