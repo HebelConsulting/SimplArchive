@@ -85,32 +85,8 @@ builder.Services.AddControllers()
     // Npgsql rejects a DateTimeOffset carrying any other offset, so without this a caller in a non-UTC timezone
     // turns a valid request into a 500 deep inside SaveChanges. See UtcDateTimeOffsetConverter.
     .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new UtcDateTimeOffsetConverter()))
-    .AddMvcOptions(options =>
-    {
-        foreach (var formatter in options.OutputFormatters)
-        {
-            if (formatter is SystemTextJsonOutputFormatter)
-            {
-                ((TextOutputFormatter)formatter).SupportedMediaTypes.Add("application/vnd.simplarchive.v1+json");
-            }
-            else if (formatter is XmlSerializerOutputFormatter)
-            {
-                ((TextOutputFormatter)formatter).SupportedMediaTypes.Add("application/vnd.simplarchive.v1+xml");
-            }
-        }
-
-        foreach (var formatter in options.InputFormatters)
-        {
-            if (formatter is SystemTextJsonInputFormatter)
-            {
-                ((TextInputFormatter)formatter).SupportedMediaTypes.Add("application/vnd.simplarchive.v1+json");
-            }
-            else if (formatter is XmlSerializerInputFormatter)
-            {
-                ((TextInputFormatter)formatter).SupportedMediaTypes.Add("application/vnd.simplarchive.v1+xml");
-            }
-        }
-    });
+    // Content negotiation: the vendor media types and the UTC-normalising XML reader (ADR 0190, #1259).
+    .AddMvcOptions(ContentNegotiationSetup.Configure);
 
 // OpenAPI document generation (ADR "OpenAPI definition endpoint"). Microsoft.AspNetCore.OpenApi (built-in,
 // no third-party generator) produces the machine-readable spec at /openapi/v1.json; Scalar renders a

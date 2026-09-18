@@ -123,6 +123,83 @@ public class ApiTimeContractTests
             + "outlives the reason it was granted for:\n  " + string.Join("\n  ", stale));
     }
 
+    // ---- The XML representation (#1259) ------------------------------------------------------------------
+    //
+    // The converter above is a System.Text.Json one, so it covers the JSON surface and NOTHING ELSE. The XML
+    // formatter (ADR 0190) has its own pipeline and runs no STJ converters, so the rule held on one negotiated
+    // representation and silently did not hold on the other — a note, not a rule, in ADR 0802's own terms.
+    //
+    // MEASURED BEFORE FIXING, and it corrected the expectation: `XmlSerializer` already writes a zero-offset
+    // value as `...35Z` rather than `+00:00`, so the OUTBOUND half was never broken on this path. Only the
+    // inbound half was, and normalising there is what makes the outbound half true as a consequence.
+
+    // PUBLIC, and not by preference: XmlSerializer refuses a non-public type outright ("Only public types can
+    // be processed"), which is the same constraint that makes every DTO on this API a plain public class with a
+    // parameterless constructor. A probe that did not share that shape would not be probing the real thing.
+    public sealed class XmlProbe
+    {
+        public DateTimeOffset At { get; set; }
+
+        public DateTimeOffset? MaybeAt { get; set; }
+
+        public XmlProbeChild? Child { get; set; }
+
+        public List<XmlProbeChild> Children { get; set; } = [];
+    }
+
+    public sealed class XmlProbeChild
+    {
+        public DateTimeOffset At { get; set; }
+    }
+
+    [Fact]
+    public void An_inbound_XML_timestamp_is_normalised_to_the_same_instant_in_UTC()
+    {
+        // A NON-ZERO offset, deliberately: a fixture written with UtcNow asserts nothing about offset handling,
+        // which is the documented reason this class of bug survived a full green suite the first time.
+        var model = new XmlProbe
+        {
+            At = new DateTimeOffset(2026, 9, 17, 11, 14, 35, TimeSpan.FromHours(2)),
+            MaybeAt = new DateTimeOffset(2026, 9, 17, 11, 14, 35, TimeSpan.FromHours(2)),
+            Child = new XmlProbeChild { At = new DateTimeOffset(2026, 9, 17, 11, 14, 35, TimeSpan.FromHours(2)) },
+            Children = [new XmlProbeChild { At = new DateTimeOffset(2026, 9, 17, 11, 14, 35, TimeSpan.FromHours(2)) }],
+        };
+
+        UtcModelNormalizer.Normalize(model);
+
+        var expected = new DateTimeOffset(2026, 9, 17, 9, 14, 35, TimeSpan.Zero);
+
+        // The INSTANT is unchanged — this is normalisation, not truncation — and the offset is now zero, which
+        // is the only thing Npgsql will store for `timestamp with time zone`.
+        Assert.Equal(expected, model.At);
+        Assert.Equal(TimeSpan.Zero, model.At.Offset);
+
+        // Nullable, nested and collection members too: the bug is not a property of the top-level type, and a
+        // walk that stopped at the surface would leave a request that fails exactly as before.
+        Assert.Equal(TimeSpan.Zero, model.MaybeAt!.Value.Offset);
+        Assert.Equal(expected, model.MaybeAt!.Value);
+        Assert.Equal(TimeSpan.Zero, model.Child!.At.Offset);
+        Assert.Equal(TimeSpan.Zero, model.Children[0].At.Offset);
+    }
+
+    [Fact]
+    public void A_normalised_model_is_then_written_as_Zulu_by_the_XML_serializer()
+    {
+        // The outbound half, asserted rather than assumed — and it is a CONSEQUENCE of the inbound fix rather
+        // than a second mechanism: XmlSerializer spells a zero offset `Z` on its own.
+        var model = new XmlProbe { At = new DateTimeOffset(2026, 9, 17, 11, 14, 35, TimeSpan.FromHours(2)) };
+        UtcModelNormalizer.Normalize(model);
+
+        var serializer = new System.Xml.Serialization.XmlSerializer(typeof(XmlProbe));
+        using var writer = new StringWriter();
+        serializer.Serialize(writer, model);
+        var xml = writer.ToString();
+
+        Assert.Contains("2026-09-17T09:14:35Z", xml, StringComparison.Ordinal);
+        Assert.DoesNotContain("+02:00", xml, StringComparison.Ordinal);
+        Assert.DoesNotContain("+00:00", xml, StringComparison.Ordinal);
+    }
+
     private static JsonSerializerOptions Options() => new() { Converters = { new UtcDateTimeOffsetConverter() } };
 
     private static Type Unwrap(Type type) => Nullable.GetUnderlyingType(type) ?? type;
