@@ -40,6 +40,22 @@ public partial class Home
     // order"). A tree-child load wants the rows only, and calls the service directly.
     private async Task<List<BrowseNode>> OpenFolderContentsAsync(BrowseNode folder)
     {
+        // A synthetic Administration node HAS contents but no `children` rel (#1160) — it is not a document, so
+        // there is nothing to follow. Asking the API for them fails, and the catch below reports that as
+        // "you do not have access to this folder": a refusal the server never made, about a node the user is
+        // looking at and plainly does have access to.
+        //
+        // The branch belongs HERE rather than at the call sites. SelectFolderAsync already had one, so
+        // SELECTING an admin node worked and only REFRESHING it failed — which is why returning to the
+        // Repositories tab was the way to see it, and why it survived #1160's own tests. Six call sites reload
+        // through this method (tab return, a filed version, an index-data save); a per-site fix would have left
+        // five of them still reporting a refusal nobody issued.
+        if (folder is { AdminKind: not "" })
+        {
+            _listPane?.ResetHeaderSort();
+            return [.. await Tree.AdminChildNodesAsync(folder)];
+        }
+
         try
         {
             var contents = await Browse.LoadContentsAsync(folder.Id, folder.RepositoryId, BrowseService.ChildrenHrefOf(folder), BrowseService.ReferencesHrefOf(folder));
