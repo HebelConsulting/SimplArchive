@@ -453,6 +453,42 @@ public class DocumentFinalizer
         }
     }
 
+    /// <summary>
+    /// Runs auto-classification over an ALREADY-CONFIRMED version, for a document that never had it (#1272).
+    /// </summary>
+    /// <returns><c>true</c> when the document was classified by this call.</returns>
+    /// <remarks>
+    /// <para>
+    /// <see cref="FileAsync"/> cannot be used for this: it early-returns on a confirmed version — deliberately,
+    /// so a re-finalize cannot post a second chat entry or count the blob against the quota twice. That
+    /// idempotence is right for its own job and is exactly why it is useless for a heal.
+    /// </para>
+    /// <para>
+    /// Exposed for the DEMO SEEDER, whose rows are the ones that can predate a classification step. An
+    /// idempotent seeder only ever touches rows it creates, so a long-lived volume keeps whatever shape it was
+    /// first written with: the demo's e-mail sat unclassified for ten days after the seeder began filing
+    /// through this class, showing a date with no time and no From/To/Subject, while every fresh volume got it
+    /// right (#1272).
+    /// </para>
+    /// <para>
+    /// It does the same pair a fresh filing does — classify, then file an e-mail's attachments as children —
+    /// because the point of a heal is to reach the state a fresh seed reaches, not a near-miss of it. It
+    /// writes only MACHINE-DERIVED values: the mask, the index fields read from the content, the document date
+    /// and time from the message header. Nothing a person could have typed is invented here.
+    /// </para>
+    /// </remarks>
+    public async Task<bool> ReclassifyAsync(DocumentVersion version, CancellationToken cancellationToken)
+    {
+        if (!await AutoClassifyAsync(version, cancellationToken))
+        {
+            return false;
+        }
+
+        await FileEmailAttachmentsAsync(version, cancellationToken);
+        await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
+        return true;
+    }
+
     private async Task<bool> AutoClassifyAsync(DocumentVersion version, CancellationToken cancellationToken)
     {
         var document = await _dbContext.Documents.SingleAsync(d => d.Id == version.DocumentId, cancellationToken);
