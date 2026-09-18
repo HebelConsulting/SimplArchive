@@ -4161,6 +4161,9 @@
   <data name="IntrayDeleteManyConfirm" xml:space="preserve">
     <value>{0} Elemente aus Ihrer Eingangsbox löschen?</value>
   </data>
+  <data name="ContentsFilterActiveHint" xml:space="preserve">
+    <value>{0} von {1} angezeigt — gefiltert</value>
+  </data>
   <data name="FilterHint" xml:space="preserve">
     <value>Filtern…</value>
   </data>

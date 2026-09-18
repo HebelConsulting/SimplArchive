@@ -41,6 +41,26 @@ public class WebContentsFilterTests
         await Expect(list.Locator(".wb-list-row")).ToHaveCountAsync(1);
         await Expect(list.Locator(".wb-list-row").First).ToContainTextAsync("03 March");
 
+        // The hint says how much of the folder is on screen (#1275). It matters most at ZERO, where a filtered
+        // list and an empty folder look identical — so the numbers are the content, not the word "filtered".
+        // Matched on both counts rather than on the surrounding text, which is localized.
+        var hint = list.Locator("[data-testid='contents-filter-hint']");
+        await Expect(hint).ToBeVisibleAsync();
+        await Expect(hint).ToContainTextAsync("1");
+        await Expect(hint).ToContainTextAsync("12");
+
+        await nameFilter.FillAsync("zzz-no-such-folder-zzz");
+        await Expect(list.Locator(".wb-list-row")).ToHaveCountAsync(0);
+        await Expect(hint).ToContainTextAsync("0");
+
+        // ...and it is gone entirely when nothing is filtered, rather than standing as permanent furniture.
+        await nameFilter.FillAsync("March");
+        await Expect(list.Locator(".wb-list-row")).ToHaveCountAsync(1);
+        await nameFilter.FillAsync(string.Empty);
+        await Expect(hint).ToHaveCountAsync(0);
+        await nameFilter.FillAsync("March");
+        await Expect(list.Locator(".wb-list-row")).ToHaveCountAsync(1);
+
         // A filter is per-folder view state: navigating to another folder clears it rather than silently
         // hiding the new folder's rows behind last folder's filter.
         await list.Locator(".wb-list-row").First.DblClickAsync();

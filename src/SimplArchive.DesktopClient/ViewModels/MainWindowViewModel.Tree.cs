@@ -33,6 +33,7 @@ public sealed partial class MainWindowViewModel
 
         Items.Clear();
         ClearDetail();
+        ClearContentsFilter(); // back at the roots — nothing the filter was asking about is on screen (#1275)
         _currentFolderId = null;
         _currentRepositoryId = null;
         CanCreateFolder = false;

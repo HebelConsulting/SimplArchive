@@ -4161,6 +4161,9 @@
   <data name="IntrayDeleteManyConfirm" xml:space="preserve">
     <value>Delete {0} items from your intray?</value>
   </data>
+  <data name="ContentsFilterActiveHint" xml:space="preserve">
+    <value>{0} of {1} shown — filtered</value>
+  </data>
   <data name="FilterHint" xml:space="preserve">
     <value>Filter…</value>
   </data>

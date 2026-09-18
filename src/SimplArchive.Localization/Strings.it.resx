@@ -4161,6 +4161,9 @@
   <data name="IntrayDeleteManyConfirm" xml:space="preserve">
     <value>Eliminare {0} elementi dalla casella in arrivo?</value>
   </data>
+  <data name="ContentsFilterActiveHint" xml:space="preserve">
+    <value>{0} di {1} mostrati — filtrati</value>
+  </data>
   <data name="FilterHint" xml:space="preserve">
     <value>Filtra…</value>
   </data>

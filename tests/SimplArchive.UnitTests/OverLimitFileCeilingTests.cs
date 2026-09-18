@@ -256,7 +256,13 @@ public class OverLimitFileCeilingTests
         // per-user state already lives; splitting one of them out to another file would scatter the session
         // setup to protect a count. Trimmed to the minimum first -- the reasoning lives in the ADR and in
         // SessionTimeZone's own remarks rather than being repeated here.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 1561,
+        // +2 for #1275: the two ClearContentsFilter() CALLS -- one on the navigation branch, one in Logout.
+        // Both are one line each and carry no reasoning; the explanation lives beside the method in
+        // MainWindowViewModel.ContentsFilter.cs. The navigation branch is the right home precisely because it
+        // already distinguishes navigating from a same-folder reload, which is the distinction the fix turns
+        // on -- hooking the reset somewhere else to dodge the number would scatter it across the five call
+        // paths this one branch covers, which is the shape the file's own history keeps warning about.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 1563,
 
         // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
         // the one authenticated ApiCore. Four areas left it:

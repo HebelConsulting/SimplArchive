@@ -451,6 +451,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         // Clear loaded state so nothing from the previous session lingers behind the login prompt.
         Tree.Clear();
         Items.Clear();
+        ClearContentsFilter(); // one user's filter must not narrow the next user's list (#1275)
         Breadcrumbs.Clear();
         SelectedItem = null;
         SelectedTreeNode = null;
@@ -545,6 +546,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         {
             SelectedItem = null;
             ClearDetail();
+            ClearContentsFilter(); // the filter described the folder being left (#1275; see the partial)
         }
 
         var isReload = _currentFolderId == folderId;

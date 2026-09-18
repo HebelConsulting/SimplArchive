@@ -17,6 +17,7 @@
     .wb-cfilters { padding: 0 12px 3px 12px; border-bottom: 1px solid var(--mud-palette-lines-default); }
     .wb-cfilters .mud-input-control { margin: 0; }
     .wb-cfilters input { font-size: .75rem; padding: 3px 6px; }
+    .wb-cfilter-hint { padding: 0 12px 3px 12px; font-size: .7rem; color: var(--mud-palette-text-secondary); }
     .wb-chead > span { cursor: pointer; user-select: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .wb-ccell { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; color: var(--mud-palette-text-secondary); }
     .wb-cname { display: flex; align-items: center; gap: 6px; color: var(--mud-palette-text-primary); font-size: unset; }
@@ -98,6 +99,17 @@
                 <span></span>
             </div>
         </div>
+        @if (FilterActive)
+        {
+            @* "Where did my rows go?" — the desktop's hint, matched here (ADR 0511). A list narrowed to
+               nothing looks exactly like an empty folder, and only the counts tell the two apart, which is
+               why the numbers are the content rather than the word "filtered". Outside the scrolling rows so
+               it stays put, and absent entirely when nothing is filtered: a permanent row count would spend
+               pane height the preview wants (ADR 0550). *@
+            <div class="wb-cfilter-hint" data-testid="contents-filter-hint">
+                @string.Format(Strings.Get("ContentsFilterActiveHint"), Rows.Count(Matches), Rows.Count)
+            </div>
+        }
         @foreach (var node in SortedContents())
         {
             var attrs = BrowseService.DropAttributes(node);
@@ -217,6 +229,10 @@
     private string _filterType = string.Empty;
     private string _filterTags = string.Empty;
     private string _filterOwner = string.Empty;
+
+    /// <summary>True while any column filter narrows the list — mirrors the desktop's ContentsFilterActive.</summary>
+    private bool FilterActive =>
+        _filterName.Length > 0 || _filterType.Length > 0 || _filterTags.Length > 0 || _filterOwner.Length > 0;
 
     /// <summary>Drops the header override AND the column filters — both are ephemeral per-folder view state,
     /// and a filter that silently survives into the next folder reads as missing rows, not as a filter.</summary>

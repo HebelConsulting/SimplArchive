@@ -371,6 +371,7 @@ public partial class MainWindowViewModel
     {
         SetBreadcrumbFromTreeNode(node);
         ClearDetail();
+        ClearContentsFilter(); // a synthetic node is a different list; the filter described the last one (#1275)
         Items.Clear();
 
         // THERE IS NO OPEN FOLDER HERE, and saying so is what keeps the detail pane honest.

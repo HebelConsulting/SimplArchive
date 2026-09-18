@@ -93,6 +93,21 @@
     </StackPanel>
     </StackPanel>
     </ScrollViewer>
+    <!-- "Where did my rows go?" — answered next to the inputs that narrowed the list, not at the pane's
+         foot (ADR 0550). Docked on the ROOT rather than placed inside the header scroller: that scroller
+         pans horizontally with the columns, so a hint living in it would slide out of view exactly when a
+         wide folder is being read — which is the opposite of the property this is here for.
+
+         Present only while a filter is applied: a permanent row count would spend pane height the list
+         wants, on a question nobody is asking the rest of the time.
+
+         The COUNTS carry it. A list filtered to nothing is indistinguishable from an empty folder, and
+         "0 of 27" separates them at a glance — which is the whole reason the view-model exposes this. It
+         was declared for exactly that purpose and then bound in no view at all, so the answer existed and
+         was never shown; that is what made an uncleared filter (#1275) silent rather than merely wrong. -->
+    <TextBlock DockPanel.Dock="Top" IsVisible="{Binding ContentsFilterActive}" Text="{Binding ContentsFilterActiveHint}"
+               Margin="8,0,0,2" FontSize="11" Foreground="{DynamicResource WbMuted}"
+               AutomationProperties.AutomationId="contents-filter-hint" />
     <ScrollViewer x:Name="ContentsBodyScroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" AllowAutoHide="False"
                   SizeChanged="OnContentsPaneSizeChanged" ScrollChanged="OnContentsBodyScroll">
     <ListBox x:Name="ContentsList" Width="{Binding ContentsTotalWidth}" HorizontalAlignment="Left" ScrollViewer.VerticalScrollBarVisibility="Disabled" ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.AutomationId="tour:pane-list" DragDrop.AllowDrop="True" SelectionMode="Multiple"

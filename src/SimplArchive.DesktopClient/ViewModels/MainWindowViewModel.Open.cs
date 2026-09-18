@@ -150,6 +150,9 @@ public sealed partial class MainWindowViewModel
             CanCreateFolder = false;
             CanExport = false;
 
+            // Stepping INTO an archive replaces the list with its entries — a different set of rows, so the
+            // filter typed against the folder no longer means anything (#1275).
+            ClearContentsFilter();
             Items.Clear();
             Items.Add(new NodeViewModel { Id = Guid.Empty, Name = $"⬆ {zip.Name}", HasChildren = false, HasVersions = false, IsArchiveBack = true });
             foreach (var entry in entries)

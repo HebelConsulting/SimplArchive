@@ -4161,6 +4161,9 @@
   <data name="IntrayDeleteManyConfirm" xml:space="preserve">
     <value>¿Eliminar {0} elementos de su bandeja de documentos?</value>
   </data>
+  <data name="ContentsFilterActiveHint" xml:space="preserve">
+    <value>{0} de {1} mostrados — filtrados</value>
+  </data>
   <data name="FilterHint" xml:space="preserve">
     <value>Filtrar…</value>
   </data>

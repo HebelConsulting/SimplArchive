@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Threading;
@@ -76,11 +77,29 @@ internal static class ListScrollCheck
         vm.ContentsFilterName = "Row 00";
         Dispatcher.UIThread.RunJobs();
         var filtered = vm.VisibleItems.Count == 10 && list.ItemCount == 10;
+
+        // And the hint is ON SCREEN while it is narrowed (#1275). Asserted through IsEffectivelyVisible on a
+        // composed frame rather than on the view-model flag: the property was DECLARED for this and bound in
+        // no view for months, so "the flag is true" is exactly the evidence that proved worthless. A binding
+        // that resolves to nothing, or a control placed where it cannot be seen, passes every other check here.
+        using (var _ = window.CaptureRenderedFrame()) { }
+        Dispatcher.UIThread.RunJobs();
+        var hint = window.GetVisualDescendants().OfType<TextBlock>()
+            .FirstOrDefault(t => (string?)t.GetValue(AutomationProperties.AutomationIdProperty) == "contents-filter-hint");
+        var hintShown = hint is { IsEffectivelyVisible: true } h
+            && h.Bounds.Width > 0 && h.Bounds.Height > 0
+            && !string.IsNullOrWhiteSpace(h.Text);
+        Console.WriteLine($"DIAG hint shown={hintShown} text='{hint?.Text}' bounds={hint?.Bounds}");
+
         vm.ContentsFilterName = string.Empty;
         Dispatcher.UIThread.RunJobs();
+        using (var _ = window.CaptureRenderedFrame()) { }
+        Dispatcher.UIThread.RunJobs();
         var restored = vm.VisibleItems.Count == 200;
+        // ...and gone again once nothing is filtered, so it is not permanent furniture in the pane.
+        var hintHidden = hint is null || !hint.IsEffectivelyVisible;
 
-        Console.WriteLine($"scrollable={scrollable} moved={moved} barVisible={barVisible} filtered={filtered} restored={restored} extent={scroller.Extent.Height:F0} viewport={scroller.Viewport.Height:F0}");
-        Console.WriteLine(scrollable && moved && barVisible && filtered && restored ? "OK" : "FAILED");
+        Console.WriteLine($"scrollable={scrollable} moved={moved} barVisible={barVisible} filtered={filtered} restored={restored} hintShown={hintShown} hintHidden={hintHidden} extent={scroller.Extent.Height:F0} viewport={scroller.Viewport.Height:F0}");
+        Console.WriteLine(scrollable && moved && barVisible && filtered && restored && hintShown && hintHidden ? "OK" : "FAILED");
     }
 }
