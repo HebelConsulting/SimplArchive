@@ -36,6 +36,9 @@ public partial class ExemptControllerShapeTests
     // came from counting, and the test recounts rather than trusting them.
     private static readonly Dictionary<string, int> ShapeWhenJudged = new(StringComparer.Ordinal)
     {
+        // Six added with #1270: the detector now sees a controller by its DbSet USE rather than by the
+        // entity name appearing anywhere in the file, so these carry a verdict for the first time and
+        // need their shape pinned like every other judged controller.
         ["AclEntriesController.cs"] = 3,
         ["AdminController.cs"] = 1,
         ["AuditEventsController.cs"] = 2,
@@ -56,15 +59,21 @@ public partial class ExemptControllerShapeTests
         ["DocumentVersionsController.cs"] = 4,
         ["DocumentsController.cs"] = 3,
         ["GroupsController.cs"] = 6,
+        ["IntrayController.cs"] = 6,
         ["LegalHoldsController.cs"] = 4,
         ["MachineTransitionsController.cs"] = 1,
         ["MasksController.cs"] = 1,
+        ["ModulesController.cs"] = 3,
         ["NotebookController.cs"] = 2,
+        ["NotificationsController.cs"] = 3,
         ["PasskeysController.cs"] = 3,
         ["PersonalRepositoryController.cs"] = 1,
         ["RecycleBinController.cs"] = 2,
         ["RepositoriesController.cs"] = 4,
+        ["RetentionController.cs"] = 2,
         ["SavedSearchesController.cs"] = 3,
+        ["SearchablePdfBackfillController.cs"] = 1,
+        ["SensitivityLabelsController.cs"] = 4,
         ["TenantsController.cs"] = 1,
         ["TokenController.cs"] = 1,
         ["TypedItemsController.cs"] = 2,

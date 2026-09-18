@@ -46,16 +46,52 @@ public class ImapOptions
 
     public int? PublicTlsPort { get; set; }
 
+    /// <summary>
+    /// A TLS port reachable at this host that the app does NOT bind — something in front terminates it (#1268).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A third port concept, and worth the cost of being a third one. <see cref="PublicTlsPort"/> is a
+    /// PORT MAPPING: the app binds TLS on one port and it is published on another — the kiosk sets
+    /// <c>TlsPort: 9993</c> and <c>PublicTlsPort: 993</c> together, because it terminates TLS itself on a
+    /// non-privileged port. This is a different fact: the app binds NOTHING and a reverse proxy terminates
+    /// IMAPS, which is the shape the layer-4 Caddy stack introduced.
+    /// </para>
+    /// <para>
+    /// Kept apart rather than folded into <c>PublicTlsPort</c> by relaxing its gate, which was the smaller
+    /// diff. One field meaning "the outside port for the listener I bind" in one deployment and "a port
+    /// somebody else terminates" in another is precisely the ambiguity that produced #682 — the mapping said
+    /// one thing and the dialog advertised another. A field that means two things cannot be read correctly
+    /// without knowing the deployment, which is the opposite of what configuration is for.
+    /// </para>
+    /// <para>
+    /// <b>This is a claim the app cannot verify.</b> It does not know what is in front of it, so setting this
+    /// asserts that somebody arranged the termination. That is why it is unset by default and never guessed:
+    /// advertising a port nothing answers on is the same class of defect as advertising the wrong one.
+    /// </para>
+    /// </remarks>
+    public int? ExternalTlsPort { get; set; }
+
     /// <summary>The plaintext port to SHOW a user, or null when plaintext is off.</summary>
     public int? AdvertisedPort => Port == 0 ? null : PublicPort ?? Port;
 
-    /// <summary>The TLS port to SHOW a user, or null when TLS is off.</summary>
+    /// <summary>The TLS port to SHOW a user, or null when no TLS port is reachable.</summary>
     /// <remarks>
+    /// <para>
     /// Here rather than inline where the dialog is built, because "which port does a user dial" is a question
     /// about the OPTIONS — both halves of the answer live on this object — and because it is the fact that was
     /// wrong (#682). A property can be tested; an expression inside a controller's projection cannot.
+    /// </para>
+    /// <para>
+    /// <see cref="ExternalTlsPort"/> is preferred and is checked FIRST, because it is the only one of the three
+    /// that can be true while the app binds no TLS listener at all. Gating on <c>TlsPort == 0</c> alone is what
+    /// made the server accept more than it advertised: Caddy answered IMAPS on 993 while this said "plaintext
+    /// only", and the clients that need 993 fail SILENTLY — Apple's Internet Accounts refuses plaintext IMAP
+    /// without an error, so the account simply never syncs.
+    /// </para>
     /// </remarks>
-    public int? AdvertisedTlsPort => TlsPort == 0 ? null : PublicTlsPort ?? TlsPort;
+    public int? AdvertisedTlsPort =>
+        ExternalTlsPort ?? (TlsPort == 0 ? null : PublicTlsPort ?? TlsPort);
 
     /// <summary>Seconds an AUTHENTICATED session may sit between commands before autologout (ADR 0618).
     /// Default 1800 — RFC 3501's "SHOULD NOT be less than 30 minutes" floor.</summary>

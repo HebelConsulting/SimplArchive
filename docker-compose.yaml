@@ -483,6 +483,15 @@ services:
       Imap__Enabled: "true"
       Imap__Port: "143"
       Imap__PublicHost: "localhost"
+      # 993 is terminated by CADDY (#1245), not by the app — the app binds nothing for TLS here. So it is
+      # stated as an ExternalTlsPort rather than a PublicTlsPort: the latter is a port MAPPING for a listener
+      # this process owns (the kiosk's shape), and one field meaning both is the #682 ambiguity.
+      #
+      # Truthful in this stack because caddy is not optional — it carries no compose profile, so it starts with
+      # every `docker compose up` and 993 answers whenever the api does. A deployment where the proxy is
+      # optional must NOT set this: advertising a port nothing listens on is the same defect as advertising the
+      # wrong one (#1268).
+      Imap__ExternalTlsPort: "993"
 
       # LAN reverse-proxy origin (ADR "Reverse proxy for LAN testing"): when other devices reach the app over
       # HTTPS via the caddy proxy at https://<PROXY_HOST>:9443, the blazor-client's seeded OIDC redirect URIs

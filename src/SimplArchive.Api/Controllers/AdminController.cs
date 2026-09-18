@@ -183,13 +183,8 @@ public class AdminController : ControllerBase
                 new Link("references", $"/api/documents/{item.RepositoryId}/references", "GET"),
 
                 // WHAT THE DETAIL PANE FOLLOWS. A personal space's root is a Document with a mask and index
-                // data like any other, and selecting it must describe it — reported from use: a personal space
-                // under Administration showed NO MASK on the desktop while the web showed its mask name.
-                //
-                // (That sentence avoids one word deliberately. ConcurrencyContractRatchetTests flags a
-                // controller that mentions a tracked entity by name while naming its DbSet, and it does not
-                // skip comments — so the prose describing this defect tripped a concurrency guard. Filed
-                // rather than worked around in the guard itself, which is not a thing to loosen in passing.)
+                // data like any other, and selecting it must describe it — reported from use: selecting a User
+                // under Administration showed NO MASK on the desktop while the web showed "User Folder".
                 //
                 // The web escaped it by re-reading the resource by id; the desktop takes the row's links as
                 // they come, and this set happened to pass its completeness test — it looks for `children` AND

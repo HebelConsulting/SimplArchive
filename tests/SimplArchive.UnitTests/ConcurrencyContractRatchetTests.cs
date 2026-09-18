@@ -156,6 +156,45 @@ public partial class ConcurrencyContractRatchetTests
     // claim is removed rather than left standing unverifiable.
     private static readonly Dictionary<string, string> ReadsOnly = new(StringComparer.Ordinal)
     {
+        // ---- Surfaced by the #1270 detector change -------------------------------------------------------
+        // These fourteen were never watched before: the old detector needed the ENTITY'S NAME as a whole word
+        // somewhere in the file, and in each of these the DbSet is used without the bare word appearing. Every
+        // one was read before being listed — projections, existence checks and name lookups, no Add/Remove/
+        // ExecuteUpdate, and no assignment to a fetched entity.
+        ["AclEntriesController.cs:Group"] =
+            "Reads only: projects a group's Name onto an ACL row and walks ParentGroupId to find the "
+            + "tenant-admin groups. The grants it writes are AclEntry rows, not group edits.",
+        ["AdminController.cs:User"] =
+            "Reads only: joins Users to name the owner of each personal repository, and projects "
+            + "DisplayName/IsActive when taking one over. The takeover writes AclEntry rows.",
+        ["BookingsController.cs:ServiceAccount"] =
+            "Reads only: projects the booker's Name when the booking was made by a service account.",
+        ["BookingsController.cs:User"] =
+            "Reads only: projects the booker's DisplayName — the user half of the line above.",
+        ["CheckoutsController.cs:User"] =
+            "Reads only: projects the holder's DisplayName onto a check-out row.",
+        ["DocumentExternalLinksController.cs:User"] =
+            "Reads only: projects the creator's DisplayName onto each link row.",
+        ["IntrayController.cs:Group"] =
+            "Reads only: names the group intrays and checks a target group exists before filing into it.",
+        ["IntrayController.cs:User"] =
+            "Reads only: names the user intrays and checks the target user exists AND is active before "
+            + "filing to them.",
+        ["ModulesController.cs:Document"] =
+            "Reads only: fetches the licence document to verify it exists and to read its bytes. The "
+            + "activation it writes is module state, not a document edit.",
+        ["NotificationsController.cs:Document"] =
+            "Reads only: projects each notified document's ParentId so a row can carry where to go.",
+        ["RetentionController.cs:Tenant"] =
+            "Reads only: projects RequireDispositionReview to decide whether disposition needs review.",
+        ["SavedSearchesController.cs:Group"] =
+            "Reads only: validates the group ids a saved search is shared with, and projects their names.",
+        ["SearchablePdfBackfillController.cs:Document"] =
+            "Reads only: uses Documents as a queryable to find candidate versions. The backfill enqueues "
+            + "conversions; it does not edit the documents.",
+        ["SensitivityLabelsController.cs:Document"] =
+            "Reads only: collects the ids carrying a label before the label itself is changed.",
+
         ["DocumentAnnotationsController.cs:Document"] =
             "Reads only: writes DocumentAnnotation rows and projects the document's NAME for its audit lines. "
             + "Like a chat message, an annotation is not an edit of the document, so the token stays put — "
@@ -320,9 +359,14 @@ public partial class ConcurrencyContractRatchetTests
 
         var flagged = controllers
             .Select(path => (Name: Path.GetFileName(path), Text: File.ReadAllText(path)))
-            .Where(c => MutatingAction().IsMatch(c.Text))
+            .Select(c => (c.Name, c.Text, Code: WithoutCommentLines(c.Text)))
+            .Where(c => MutatingAction().IsMatch(c.Code))
+            // ASYMMETRIC ON PURPOSE. The MENTION is matched against CODE only, so prose cannot raise a flag;
+            // the CONTRACT is looked for in the WHOLE file, comments included, so prose cannot remove one.
+            // Both halves lean the same way — towards not accusing a controller of something it does not do,
+            // and towards not silently clearing one that might.
             .SelectMany(c => ContractByEntity
-                .Where(e => MentionsEntitySet(c.Text, e.Key) && !c.Text.Contains(e.Value, StringComparison.Ordinal))
+                .Where(e => MentionsEntitySet(c.Code, e.Key) && !c.Text.Contains(e.Value, StringComparison.Ordinal))
                 .Select(e => $"{c.Name}:{e.Key}"))
             .OrderBy(n => n, StringComparer.Ordinal)
             .ToList();
@@ -397,10 +441,96 @@ public partial class ConcurrencyContractRatchetTests
             + string.Join("\n", duplicates));
     }
 
-    // A whole-word DbSet mention, so `User` does not match `UserId` or `CurrentUserAccessor`, and `Document`
-    // does not match `DocumentVersions`. Calibration matters more than reach here: a guard that flags nearly
-    // every file is one people suppress rather than read.
-    private static bool MentionsEntitySet(string text, string entity) =>
-        Regex.IsMatch(text, $@"\b{Regex.Escape(entity)}\b(?!\w)")
-        && Regex.IsMatch(text, $@"(_dbContext|dbContext)\.{Regex.Escape(DbSetByEntity[entity])}\b");
+    /// <summary>The file with whole-line comments removed — what the detector matches against (#1270).</summary>
+    /// <remarks>
+    /// <para>
+    /// This guard once failed because of a COMMENT: a paragraph describing an unrelated bug contained the
+    /// phrase "User Folder", `\bUser\b` matched it, and `AdminController` was accused of mutating a
+    /// concurrency-tracked entity without its verb contract — in a change that mutates nothing.
+    /// </para>
+    /// <para>
+    /// <b>A guard that punishes documenting teaches people to stop documenting</b>, and the cheapest way to go
+    /// green is then to delete the sentence. The rel-scanner learned this first (#862) and skips comment lines
+    /// for the same reason; this is that fix, applied to the second detector that needed it.
+    /// </para>
+    /// <para>
+    /// <b>Comment LINES only — never string literals.</b> An entity named inside a string may well be real: a
+    /// route template, an error message naming the resource. Comments are the safe exclusion; strings are not.
+    /// Line-based rather than a real comment parser, because stripping `//` mid-line would also cut a URL out
+    /// of a string literal, and a guard that mangles code to avoid prose has traded one false reading for
+    /// another.
+    /// </para>
+    /// </remarks>
+    private static string WithoutCommentLines(string text) =>
+        string.Join('\n', text.Split('\n').Where(line =>
+        {
+            var trimmed = line.TrimStart();
+            return !trimmed.StartsWith("//", StringComparison.Ordinal)
+                && !trimmed.StartsWith("/*", StringComparison.Ordinal)
+                && !trimmed.StartsWith('*');
+        }));
+
+    [Fact]
+    public void The_detector_reads_code_and_not_prose()
+    {
+        // BOTH DIRECTIONS, which is the pair a relaxed guard needs and rarely gets. A guard loosened without
+        // the negative half is a guard nobody has watched work.
+
+        // Prose alone does not flag — this is the exact shape that failed the build: a comment describing an
+        // unrelated bug, naming the entity, in a file that also reads some other DbSet.
+        const string proseOnly = """
+            // The synthetic Administration node shows "User Folder" in the detail pane, which it did not
+            // before. Nothing here mutates a User.
+            public class Probe { void M() { var x = _dbContext.Tags.ToList(); } }
+            """;
+        Assert.False(MentionsEntitySet(WithoutCommentLines(proseOnly), "User"),
+            "A comment naming the entity must not flag the controller — that is #1270, and a guard that "
+            + "punishes documenting teaches people to stop documenting.");
+
+        // Real use still flags, comment or no comment.
+        const string realUse = """
+            public class Probe { void M() { var x = _dbContext.Users.Where(u => u.IsActive).ToList(); } }
+            """;
+        Assert.True(MentionsEntitySet(WithoutCommentLines(realUse), "User"),
+            "A controller that reads or writes the entity's DbSet in code must still be flagged — the guard "
+            + "is coarse ON PURPOSE, and this is the signal it is coarse about.");
+
+        // And the DbSet named only in a comment does not count as use either, by the same rule.
+        const string dbSetInProse = """
+            // Reads _dbContext.Users to name the owner — described here, not done here.
+            public class Probe { void M() { } }
+            """;
+        Assert.False(MentionsEntitySet(WithoutCommentLines(dbSetInProse), "User"),
+            "Describing a DbSet access is not performing one.");
+    }
+
+    /// <summary>Does this controller touch the entity's DbSet, in CODE? (#1270)</summary>
+    /// <remarks>
+    /// <para>
+    /// It used to also require the entity's name as a whole word anywhere in the file — and that half was
+    /// doing more harm than work. It fired on PROSE: a paragraph describing an unrelated bug contained
+    /// "User Folder", `\bUser\b` matched, and `AdminController` was accused of mutating a tracked entity
+    /// without its verb contract, in a change that mutates nothing.
+    /// </para>
+    /// <para>
+    /// <b>Measured before removing it, and the number is the argument.</b> Excluding comments from the
+    /// word check un-flagged <b>29 of 54</b> listed pairs — so over half this guard's apparent coverage rested
+    /// on a word in a comment rather than on code. In `AclEntriesController` all three `User` mentions are
+    /// comment lines. A condition that is usually satisfied by prose is not a condition; it is noise that
+    /// happened to correlate.
+    /// </para>
+    /// <para>
+    /// What remains is the half that always carried the signal: the controller names the entity's DbSet, in
+    /// code. That is prose-immune AND broader than the pair it replaces (93 flagged pairs against 79), so
+    /// nothing that was watched has stopped being watched — the opposite of the usual cost of relaxing a
+    /// guard.
+    /// </para>
+    /// <para>
+    /// <b>Still deliberately coarse:</b> it cannot tell a write from a read of that DbSet, which is why the
+    /// lists carry stated reasons rather than the detector carrying more cleverness. Measuring the coarse
+    /// thing honestly beats measuring the precise thing badly.
+    /// </para>
+    /// </remarks>
+    private static bool MentionsEntitySet(string code, string entity) =>
+        Regex.IsMatch(code, $@"(_dbContext|dbContext)\.{Regex.Escape(DbSetByEntity[entity])}\b");
 }

@@ -27,6 +27,38 @@ public class ImapAdvertisedPortTests
         Assert.Equal(9993, new ImapOptions { TlsPort = 9993 }.AdvertisedTlsPort);
     }
 
+    // A proxy in front terminates IMAPS and the app binds NOTHING (#1268). The old gate asked "did I bind a
+    // TLS listener", so with Caddy terminating, the dialog said plaintext only while 993 answered perfectly —
+    // the server accepting more than it advertised. The clients that need 993 fail SILENTLY (Apple's Internet
+    // Accounts refuses plaintext IMAP with no error), so nobody reports it; the account just never syncs.
+    [Fact]
+    public void A_TLS_port_terminated_in_front_is_advertised_even_though_nothing_is_bound()
+    {
+        Assert.Equal(993, new ImapOptions { TlsPort = 0, ExternalTlsPort = 993 }.AdvertisedTlsPort);
+    }
+
+    // Kept SEPARATE from PublicTlsPort rather than relaxing its gate, because the two state different facts and
+    // one field meaning both cannot be read without knowing the deployment — the #682 ambiguity. This pins that
+    // the kiosk's mapping case is untouched: it binds 9993 and publishes 993, and still advertises 993.
+    [Fact]
+    public void The_port_mapping_case_is_unchanged_by_the_new_setting()
+    {
+        Assert.Equal(993, new ImapOptions { TlsPort = 9993, PublicTlsPort = 993 }.AdvertisedTlsPort);
+
+        // And PublicTlsPort still advertises NOTHING on its own — a mapping for a listener that does not exist
+        // is a contradiction, and answering it would be guessing.
+        Assert.Null(new ImapOptions { TlsPort = 0, PublicTlsPort = 993 }.AdvertisedTlsPort);
+    }
+
+    // Both set is a deployment that binds TLS *and* sits behind a terminating proxy. The OUTERMOST port is the
+    // one a user can actually dial, so the external one wins — and it is asserted rather than left to the
+    // reading order of a null-coalescing chain.
+    [Fact]
+    public void The_outermost_port_wins_when_a_deployment_states_both()
+    {
+        Assert.Equal(993, new ImapOptions { TlsPort = 9993, PublicTlsPort = 8993, ExternalTlsPort = 993 }.AdvertisedTlsPort);
+    }
+
     // Off is off: nothing to dial, so nothing is shown — a port of 0 must not surface as "0".
     [Fact]
     public void A_disabled_port_advertises_nothing()
