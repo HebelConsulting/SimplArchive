@@ -61,35 +61,45 @@ public static class DependencyInjection
         // which is what lets the process outlive a single credential lifetime without ever swapping a username
         // or rebuilding the pool. With no provider registered — every test, and any deployment not using
         // OpenBao — the connection string carries its own password and nothing changes.
+        // The holder of the current password, refreshed ON DEMAND rather than on a timer (#1274). Registered
+        // only when a provider is — with none, the connection string carries its own password and none of this
+        // applies, which is every test and every non-OpenBao deployment.
+        services.AddSingleton(sp => new RefreshableDatabasePassword(
+            sp.GetService<IDatabasePasswordProvider>(),
+            sp.GetRequiredService<ILoggerFactory>().CreateLogger("SimplArchive.Infrastructure.DatabaseCredentials")));
+
         services.AddSingleton(sp =>
         {
             var builder = new Npgsql.NpgsqlDataSourceBuilder(connectionString);
 
-            if (sp.GetService<IDatabasePasswordProvider>() is { } passwords)
+            if (sp.GetRequiredService<RefreshableDatabasePassword>() is { IsActive: true } password)
             {
-                var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("SimplArchive.Infrastructure.DatabaseCredentials");
-
-                builder.UsePeriodicPasswordProvider(
-                    async (_, cancellationToken) =>
-                    {
-                        var password = await passwords.GetPasswordAsync(cancellationToken);
-                        logger.LogDebug("Refreshed the database password from the secrets store.");
-                        return password;
-                    },
-                    // Comfortably inside the 12h rotation period, so a refresh has many chances to land before
-                    // the password it holds stops working.
-                    successRefreshInterval: TimeSpan.FromHours(1),
-                    // On failure Npgsql KEEPS the password it already has and retries on this interval, which is
-                    // the "keep serving, retry, warn" behaviour the outage story argues for: a brief secrets-store
-                    // blip must not take down an app whose current credential is still perfectly valid.
-                    failureRefreshInterval: TimeSpan.FromSeconds(30));
+                // PER CONNECTION, not periodic. A timer does not run while the host is suspended, so a rotation
+                // during a sleep left Npgsql holding a dead password and every connection failing 28P01 until a
+                // restart (#1274). Asked per connection, the password can be re-read the moment the database
+                // says it is wrong.
+                //
+                // The cost this would otherwise carry is why RefreshableDatabasePassword exists: a naive
+                // per-connection provider calls the secrets store on every physical connection open, turning an
+                // OpenBao blip into an app outage. Behind the cache this is a memory read in the steady state.
+                builder.UsePasswordProvider(
+                    _ => password.GetAsync(CancellationToken.None).AsTask().GetAwaiter().GetResult(),
+                    (_, cancellationToken) => password.GetAsync(cancellationToken));
             }
 
             return builder.Build();
         });
 
         services.AddDbContext<SimplArchiveDbContext>((sp, options) =>
-            options.UseNpgsql(sp.GetRequiredService<Npgsql.NpgsqlDataSource>()));
+        {
+            options.UseNpgsql(sp.GetRequiredService<Npgsql.NpgsqlDataSource>());
+
+            // The database is the authority on whether the credential is current, and 28P01 is it saying so.
+            if (sp.GetRequiredService<RefreshableDatabasePassword>() is { IsActive: true } password)
+            {
+                options.AddInterceptors(new DatabaseCredentialInterceptor(password));
+            }
+        });
 
         // Startup states the effective ceiling (Program.cs). The number is otherwise invisible — it lives inside
         // a connection string nobody may print, because that string carries the password.
