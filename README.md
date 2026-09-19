@@ -105,6 +105,19 @@ Production deploys via the **Helm chart** in [`charts/simplarchive`](charts/simp
 
 .NET 10 · ASP.NET Core · Blazor WebAssembly · Avalonia · EF Core (PostgreSQL) · OpenIddict · OpenSearch + Apache Tika · Gotenberg · S3-compatible object storage · OpenBao · Serilog · Docker/Kubernetes.
 
+## Support the project
+
+SimplArchive is free and open source under Apache 2.0, and it stays that way — there is no paid tier, no
+telemetry and nothing held back for a commercial edition. The public demo, the container images and the
+desktop builds all cost something to run and publish.
+
+If the project is useful to you, or you enjoyed poking around the architecture, you can support it here:
+
+**[☕ Buy me a coffee](https://buymeacoffee.com/hebel.it)**
+
+Entirely optional, and it buys no influence over the roadmap. Starring the repository or opening a thoughtful
+issue is just as welcome.
+
 ## License
 
 Licensed under the [Apache License 2.0](LICENSE).

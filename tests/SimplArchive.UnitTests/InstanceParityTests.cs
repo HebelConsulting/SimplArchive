@@ -17,6 +17,13 @@ namespace SimplArchive.UnitTests;
 // WHAT IS DELIBERATELY ALLOWED TO DIFFER: the seed configuration (one instance seeds, config-gated, so the
 // other is a no-op rather than a second seeder racing it) and, on the kiosk, one host port bound to loopback
 // for on-host troubleshooting — a host port belongs to exactly one container by necessity.
+//
+// THE KIOSK CASES ARE PRIVATE-REPOSITORY-ONLY, and this cost a red build on the public mirror to learn. `tests/`
+// is published byte-for-byte while `tools/` is WITHHELD (ADR 0484), so a test living here that reads
+// tools/kiosk/... compiles and runs on the mirror against a file that cannot exist there — five failures, on
+// main, discovered only because a release was being cut. Every case therefore reads its file through
+// KioskFileMissing(), which stands the kiosk half down where the input is absent BY DESIGN and nowhere else:
+// inside this repo the file is required and a missing one still fails loudly.
 public class InstanceParityTests
 {
     public static TheoryData<string, string, string> ComposeFiles() => new()
@@ -35,6 +42,11 @@ public class InstanceParityTests
     [MemberData(nameof(ComposeFiles))]
     public void Both_instances_take_their_environment_from_the_same_anchor(string file, string envAnchor, string buildAnchor)
     {
+        if (Withheld(file))
+        {
+            return; // the public mirror has no tools/, by design
+        }
+
         var text = Read(file);
 
         Assert.True(text.Contains($"x-{envAnchor}: &{envAnchor}", StringComparison.Ordinal),
@@ -67,6 +79,11 @@ public class InstanceParityTests
     [MemberData(nameof(ComposeFiles))]
     public void Only_the_seeding_instance_carries_seed_configuration(string file, string envAnchor, string _)
     {
+        if (Withheld(file))
+        {
+            return; // the public mirror has no tools/, by design
+        }
+
         var text = Read(file);
 
         // The seed keys must appear exactly once each — under the one instance that merges the anchor. A second
@@ -87,6 +104,11 @@ public class InstanceParityTests
     [MemberData(nameof(ComposeFileNames))]
     public void Neither_instance_applies_migrations_at_startup(string file)
     {
+        if (Withheld(file))
+        {
+            return; // the public mirror has no tools/, by design
+        }
+
         var text = Read(file);
 
         // Two instances migrating at once race each other — the reason the one-shot exists. The setting lives in
@@ -103,6 +125,11 @@ public class InstanceParityTests
     [MemberData(nameof(ComposeFileNames))]
     public void The_connection_pool_is_sized_for_more_than_one_instance(string file)
     {
+        if (Withheld(file))
+        {
+            return; // the public mirror has no tools/, by design
+        }
+
         var text = Read(file);
 
         // The ceiling is PER PROCESS, so the database sees it multiplied by the instance count. The application
@@ -125,6 +152,11 @@ public class InstanceParityTests
     [MemberData(nameof(ComposeFileNames))]
     public void A_locally_installed_module_reaches_every_instance_through_the_shared_volume(string file)
     {
+        if (Withheld(file))
+        {
+            return; // the public mirror has no tools/, by design
+        }
+
         var text = Read(file);
 
         // The override hazard this replaced: mounting a module onto the `api` service only gives one instance
@@ -162,6 +194,14 @@ public class InstanceParityTests
     }
 
     private static string Read(string relative) => File.ReadAllText(Path.Combine(RepoRoot(), relative));
+
+    /// <summary>
+    /// True when this case names a file the public mirror withholds and we are on the mirror. Deliberately
+    /// narrow: it is false inside the private repository, so a genuinely deleted kiosk compose still fails.
+    /// </summary>
+    private static bool Withheld(string relative) =>
+        relative.StartsWith("tools", StringComparison.Ordinal)
+        && (PrivateRepositoryGate.RepoRoot() is not { } root || !PrivateRepositoryGate.IsPrivateRepository(root));
 
     private static int Count(string haystack, string needle)
     {
