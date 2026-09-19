@@ -449,7 +449,11 @@ public partial class Home
     {
         ClearDetail();
         _selectionEpoch++;
+
+        // Set BEFORE describing, so the row highlights even when there is nothing to describe: a synthetic
+        // Administration row is selectable (#1160) and must look selected.
         _selectedNode = folder;
+
         // No reveal, and no mark. Selecting a row in the list does not move you, so the tree has nothing to
         // say about it — the ring stays on the folder you are standing in. Revealing on selection made the
         // tree answer two questions at once and gave the ring a meaning that changed with the row type.
@@ -457,9 +461,12 @@ public partial class Home
         //
         // The detail pane still follows the selection: a child folder's metadata is editable without
         // navigating into it (issue #408).
-        await LoadDetailForAsync(folder);
-        await LoadFolderSubscriptionAsync(folder);
-        await LoadCommentsAsync(folder);
+        //
+        // DELEGATED rather than repeated (#1297). This used to run the same three loads itself, which made
+        // `ShowFolderDetailAsync`'s claim to be "the one function that describes a folder" false — and a
+        // synthetic row (Guid.Empty) went straight past its guard and 404'd the workbench down. Delegating
+        // makes the claim true, so the guard covers this path instead of this path needing its own.
+        await ShowFolderDetailAsync(folder);
     }
 
     private async Task SelectItemAsync(BrowseNode item)
@@ -789,8 +796,35 @@ public partial class Home
         }
     }
 
-    private async Task LoadFolderSubscriptionAsync(BrowseNode folder) =>
+    /// <summary>Whether the open folder is subscribed — for a folder that IS a document.</summary>
+    /// <remarks>
+    /// A SYNTHETIC node stands for no document and carries <c>Guid.Empty</c>: the Administration branch, its
+    /// child rows, the Personal launchers. Asking for its subscription means fetching
+    /// <c>/api/documents/00000000-…</c>, which 404s — and the 404 escaped an async event handler into the
+    /// framework's error banner, taking the WHOLE WORKBENCH down for a node that has nothing to subscribe to.
+    ///
+    /// BELT AND BRACES, and the braces came first. <see cref="ShowFolderDetailAsync"/> carries the same check
+    /// and said it was placed there "because this is the one function that describes a folder" — which was not
+    /// true: <see cref="SelectContentFolderAsync"/> and the still-listed branch of the reselect path ran the
+    /// same three loads without it, and clicking an Administration row went through the gap (#1297).
+    /// `SelectContentFolderAsync` now DELEGATES, which makes that claim true for it.
+    ///
+    /// This leaf check stays for the third path, which does not delegate. Worth knowing why it is not
+    /// sufficient on its own: guarding only here stopped the CRASH but left the other two loads still fetching
+    /// a Guid.Empty document, so the click produced two pointless 404s and the UI test — which asserts on any
+    /// "Not Found", not merely on an unhandled exception — kept failing. Stopping the throw is not the same as
+    /// not asking.
+    /// </remarks>
+    private async Task LoadFolderSubscriptionAsync(BrowseNode folder)
+    {
+        if (folder.Id == Guid.Empty)
+        {
+            _folderSubscribed = false;
+            return;
+        }
+
         _folderSubscribed = await Actions.IsSubscribedAsync(await Browse.FetchRelAsync(folder.Id, "subscription"));
+    }
 
     private async Task ToggleFolderSubscriptionAsync()
     {
