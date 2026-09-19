@@ -495,6 +495,13 @@ using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
 
+    // Two instances booting together must not both seed the same well-known rows (#1295): every seeder below
+    // is "safe to run twice" but not "safe to run twice AT ONCE", and the loser of that race crashed the
+    // process — which cost the kiosk its MTA on every nightly reset. Released when this scope ends.
+    await using var seedLock = await SimplArchive.Api.Startup.StartupSeedLock.AcquireAsync(
+        services.GetRequiredService<SimplArchiveDbContext>(),
+        services.GetRequiredService<ILoggerFactory>().CreateLogger("SimplArchive.Api.Startup.Seeding"));
+
     // Config-gated automatic migration — off by default (existing manual/test workflows are unchanged), on
     // in the Docker Compose stack so `docker compose up` works against a fresh database with no manual
     // `dotnet-ef database update` step. See ADR "Local development Docker Compose stack".
