@@ -10,16 +10,29 @@ namespace SimplArchive.Api.HealthChecks;
 /// </summary>
 public static class HealthCheckResponseWriter
 {
+    // A healthy check has no description, and emitting "description": null for each of them would make the
+    // common response noisier than the shape ADR 0205 deliberately kept minimal.
+    private static readonly JsonSerializerOptions OmitNulls =
+        new() { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
+
     public static Task WriteResponse(HttpContext context, HealthReport report)
     {
         context.Response.ContentType = "application/json";
 
+        // The description rides along when a check set one, because the status alone cannot distinguish the two
+        // things a reader most needs to tell apart: a database that refused our credential from one that is
+        // simply full (#1287, ADR 0807). A probe still reads only the status code; this is for the human.
         var payload = new
         {
             status = report.Status.ToString(),
-            checks = report.Entries.Select(e => new { name = e.Key, status = e.Value.Status.ToString() }),
+            checks = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString(),
+                description = e.Value.Description,
+            }),
         };
 
-        return context.Response.WriteAsync(JsonSerializer.Serialize(payload));
+        return context.Response.WriteAsync(JsonSerializer.Serialize(payload, OmitNulls));
     }
 }

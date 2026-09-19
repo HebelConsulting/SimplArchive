@@ -9,9 +9,10 @@ namespace SimplArchive.Application.Abstractions;
 /// It exists because the app used to read ONE credential at startup and keep it for the life of the process.
 /// The dev stack made the consequence concrete: after ~2 days the credential's 24h lease had expired, Postgres
 /// had revoked the role, and every new connection failed <c>28P01 password authentication failed</c> — a
-/// permanently unhealthy api that only a restart could fix. <c>/health/ready</c> reported it correctly the whole
-/// time, which is why an orchestrator would have masked it by restarting the pod, and why it went unnoticed
-/// outside a long-lived dev container.
+/// permanently unhealthy api that only a restart could fix. <c>/health/ready</c> reported it HEALTHY throughout
+/// — it took a pooled connection, which performs no handshake, so it never presented the dead credential (the
+/// separate defect fixed in #1287 / ADR 0807). An orchestrator would have masked the whole thing by restarting
+/// the pod, which is why it went unnoticed outside a long-lived dev container.
 /// </para>
 /// <para>
 /// The interface deliberately hands back a PASSWORD and not a connection string. A dynamic credential mints a

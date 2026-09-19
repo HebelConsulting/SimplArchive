@@ -261,6 +261,12 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
     public static string BucketForTenant(Guid tenantId) => $"{Bucket}-{tenantId:D}";
 
     /// <summary>
+    /// The container's superuser connection string, for the one test that needs to make roles of its own and
+    /// break them on purpose (#1287). Every other test reaches the database through the Api.
+    /// </summary>
+    public string PostgresSuperuserConnectionString => _postgres.GetConnectionString();
+
+    /// <summary>
     /// The DNS the mail-domain challenge is checked against (#667) — a stub, so tests can publish a record.
     /// </summary>
     /// <remarks>

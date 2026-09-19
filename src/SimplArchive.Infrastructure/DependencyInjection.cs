@@ -90,6 +90,15 @@ public static class DependencyInjection
             return builder.Build();
         });
 
+        // The readiness probe's own unpooled data source (#1287, ADR 0807). Separate from the one above on
+        // purpose: that one exists to be a pool, and a pooled open performs no handshake, so it can never see a
+        // database that has started refusing NEW connections. This one holds nothing between checks, so it does
+        // not touch the ceiling ADR 0701 protects.
+        services.AddSingleton<IDatabaseReachabilityProbe>(sp => new NpgsqlDatabaseReachabilityProbe(
+            connectionString,
+            sp.GetRequiredService<RefreshableDatabasePassword>(),
+            sp.GetRequiredService<ILoggerFactory>().CreateLogger("SimplArchive.Infrastructure.DatabaseReadiness")));
+
         services.AddDbContext<SimplArchiveDbContext>((sp, options) =>
         {
             options.UseNpgsql(sp.GetRequiredService<Npgsql.NpgsqlDataSource>());
