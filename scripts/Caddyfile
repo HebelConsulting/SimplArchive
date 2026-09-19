@@ -37,10 +37,29 @@
 	# `proxy` with health checks gated on the api's HTTP /health/ready — and only these two `upstream` lines
 	# change. Standing it up now means the cutover work does not also have to debug the proxy.
 	layer4 {
+		# TWO UPSTREAMS, and the health check here is TCP-ONLY. caddy-l4's active check makes a CONNECTION
+		# attempt — it has no health_uri and cannot fetch /health/ready, whatever `health_port` might suggest
+		# (checked against the plugin's own docs; an earlier note on #1245 claimed otherwise and was wrong).
+		# So it is deliberately pointed at :143 ITSELF rather than at the HTTP port: 8080 can be listening
+		# while the IMAP listener is not, which would make the "smarter" option strictly less truthful.
+		#
+		# The REAL readiness gate is scripts/rolling-update.sh, which polls each instance's /health/ready
+		# before moving on. This block's job is the narrower one it can actually do: never hand a connection
+		# to a port that is closed. close_if_unhealthy severs a session on a dying instance so the client
+		# reconnects onto the healthy one instead of hanging.
 		:143 {
 			route {
 				proxy {
+					lb_policy round_robin
+					health_interval 3s
+					health_timeout 2s
+					# Same window, same fix as the HTTP side: until the next probe an instance being replaced is
+					# not yet known-dead, so a connection would be handed to it and fail.
+					lb_try_duration 5s
+					lb_try_interval 250ms
+					close_if_unhealthy
 					upstream api:143
+					upstream api-b:143
 				}
 			}
 		}
@@ -48,16 +67,79 @@
 			route {
 				tls
 				proxy {
+					lb_policy round_robin
+					health_interval 3s
+					health_timeout 2s
+					# Same window, same fix as the HTTP side: until the next probe an instance being replaced is
+					# not yet known-dead, so a connection would be handed to it and fail.
+					lb_try_duration 5s
+					lb_try_interval 250ms
+					close_if_unhealthy
 					upstream api:143
+					upstream api-b:143
+				}
+			}
+		}
+		# LMTP (ADR 0628). Postfix delivers here rather than straight at an instance, for the same reason as
+		# everything else: an instance being replaced must not be a delivery failure. Postfix would retry, so
+		# this is the difference between degraded and invisible.
+		:2525 {
+			route {
+				proxy {
+					lb_policy round_robin
+					health_interval 3s
+					health_timeout 2s
+					# Same window, same fix as the HTTP side: until the next probe an instance being replaced is
+					# not yet known-dead, so a connection would be handed to it and fail.
+					lb_try_duration 5s
+					lb_try_interval 250ms
+					upstream api:2525
+					upstream api-b:2525
 				}
 			}
 		}
 	}
 }
 
+# The app's own entry point, plain HTTP on the port the README and the demo login both name. It is served
+# by the PROXY rather than published by an instance, because a host port can only belong to one container —
+# so publishing it from an instance would mean restarting that instance drops http://localhost:8080, which
+# is precisely the outage this arrangement removes (#1245).
+#
+# Unlike the layer-4 block above, this IS gated on readiness: Caddy's ordinary reverse_proxy does have
+# health_uri, so an instance that is up but not ready receives no HTTP traffic. The asymmetry between the
+# two halves is real; it is stated here so nobody assumes IMAP is gated the same way.
+:8080 {
+	reverse_proxy api:8080 api-b:8080 {
+		lb_policy round_robin
+		health_uri /health/ready
+		health_interval 3s
+		health_timeout 2s
+		# RETRY THE OTHER INSTANCE (#1245). Health checks alone leave a hole: an instance killed for replacement
+		# is not known-dead until the next probe, so for up to health_interval Caddy still routes to it and the
+		# user gets a 502. Measured on a real cutover: 2 failures in 83 requests, one per instance replaced.
+		# lb_try_duration re-dispatches a request whose connection failed to a healthy upstream, which closes
+		# that window — the request is slower, not lost.
+		lb_try_duration 5s
+		lb_try_interval 250ms
+	}
+}
+
 {$PROXY_HOST:localhost}:9443 {
 	tls internal
-	reverse_proxy api:8080
+	reverse_proxy api:8080 api-b:8080 {
+		lb_policy round_robin
+		health_uri /health/ready
+		health_interval 3s
+		health_timeout 2s
+		# RETRY THE OTHER INSTANCE (#1245). Health checks alone leave a hole: an instance killed for replacement
+		# is not known-dead until the next probe, so for up to health_interval Caddy still routes to it and the
+		# user gets a 502. Measured on a real cutover: 2 failures in 83 requests, one per instance replaced.
+		# lb_try_duration re-dispatches a request whose connection failed to a healthy upstream, which closes
+		# that window — the request is slower, not lost.
+		lb_try_duration 5s
+		lb_try_interval 250ms
+	}
 }
 
 {$PROXY_HOST:localhost}:9444 {

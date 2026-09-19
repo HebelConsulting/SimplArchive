@@ -24,8 +24,21 @@ spec:
       {{- include "simplarchive.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
       annotations:
+        {{- /*
+          WITHOUT THIS, CHANGING A MODULE PIN DOES NOTHING (#1245, ADR 0808). The version + digest the
+          initContainer installs live in the modules ConfigMap, i.e. in a mounted FILE — not in this pod
+          template. So `helm upgrade` with a new module version rewrites the ConfigMap, sees an unchanged pod
+          spec, and rolls NOTHING: the initContainer only runs when a pod is created, so the new module is
+          never installed and the old one keeps serving. Nothing fails; the upgrade reports success and the
+          cluster quietly runs the previous module — which is #1242's shape one layer down, and exactly what
+          that issue cost.
+
+          Hashing the rendered ConfigMap puts the pin back into the pod spec by proxy, so a changed pin is a
+          changed pod template and the Deployment performs its ordinary rolling update.
+        */}}
+        checksum/modules: {{ include (print $.Template.BasePath "/modules-configmap.yaml") . | sha256sum }}
+      {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
