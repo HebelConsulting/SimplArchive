@@ -63,6 +63,25 @@ public interface IStateMachineBuilder
     IStateMachineBuilder AutoRefreshOnOpen(string name, string label, Func<TransitionContext, Task> handler);
 
     /// <summary>
+    /// The same hook, declaring whether a PROTOCOL read — a WebDAV <c>PROPFIND</c>, an IMAP <c>SELECT</c> —
+    /// may also invoke it (ABI 0.27, core issue #1286).
+    /// </summary>
+    /// <remarks>
+    /// A SEPARATE OVERLOAD, not a new parameter on the one above, and that is not style: adding a parameter to
+    /// an existing interface member is binary-breaking, so a module compiled against an older ABI would fail
+    /// with <c>MissingMethodException</c> at declaration time — the shape that took the kiosk down for 1h34m
+    /// (#1147, ADR 0789's rule). An overload is additive; the old signature keeps meaning
+    /// <see cref="ProtocolReadRefresh.Never"/>, which is what it has always meant in practice.
+    ///
+    /// Declaring <see cref="ProtocolReadRefresh.WhenTenantEnables"/> does NOT switch anything on. It makes the
+    /// host offer the tenant administrator a per-tenant toggle for this machine; until that is enabled, a
+    /// protocol read behaves exactly as before. See <see cref="ProtocolReadRefresh"/> for why the answer is
+    /// split between the module author and the tenant.
+    /// </remarks>
+    IStateMachineBuilder AutoRefreshOnOpen(
+        string name, string label, Func<TransitionContext, Task> handler, ProtocolReadRefresh protocolRead);
+
+    /// <summary>
     /// A proposal query (ABI 0.11, ADRs 0736/0769): the machine answers "who/what could fill this field?"
     /// for its subject — the epic's signature feature ("propose instructors who hold a valid Examiner
     /// Certificate"). The handler runs UNDER THE MODULE PRINCIPAL, because a proposal must read what the

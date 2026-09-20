@@ -19,7 +19,18 @@ public sealed class StateMachineCatalog : IStateMachineDefinitions
     // AutoRefreshOnOpen (ABI 0.6): the clients invoke this transition the moment the subject folder is opened,
     // rather than waiting for a button — the DABS/METAR populate-on-open hook. The subject resource advertises
     // it with the marker so the clients know which action to auto-run.
-    public sealed record TransitionDefinition(string Label, IReadOnlyList<StateCondition> Guard, Func<TransitionContext, Task> Handler, bool AutoRefreshOnOpen = false);
+    //
+    // ProtocolRead (ABI 0.27, #1286): whether a read over WebDAV/IMAP may invoke it too. Those surfaces browse
+    // the same tree and never ran the hook, so a user who reaches the archive only through a mounted drive saw
+    // an EMPTY weather folder — the sweep had purged the content and nothing on that path could refetch it.
+    // The module declares eligibility (its source may or may not be lawfully fetched unattended, ADR 0756) and
+    // the tenant administrator enables it per tenant; both, or no fetch.
+    public sealed record TransitionDefinition(
+        string Label,
+        IReadOnlyList<StateCondition> Guard,
+        Func<TransitionContext, Task> Handler,
+        bool AutoRefreshOnOpen = false,
+        ProtocolReadRefresh ProtocolRead = ProtocolReadRefresh.Never);
 
     /// <summary>A declared proposal query (ABI 0.11, ADR 0769): label for the picker affordance, the field
     /// its answers fill, and the module's handler — run under the module principal, read-only.</summary>
@@ -87,10 +98,13 @@ public sealed class StateMachineCatalog : IStateMachineDefinitions
         }
 
         public IStateMachineBuilder AutoRefreshOnOpen(string name, string label, Func<TransitionContext, Task> handler)
+            => AutoRefreshOnOpen(name, label, handler, ProtocolReadRefresh.Never);
+
+        public IStateMachineBuilder AutoRefreshOnOpen(string name, string label, Func<TransitionContext, Task> handler, ProtocolReadRefresh protocolRead)
         {
             // A transition like any other (executable, refusable, listed) but flagged auto-invoke-on-open —
             // ungated, because a populate has nothing to refuse (ABI 0.6).
-            definition.Transitions[name] = new TransitionDefinition(label, [], handler, AutoRefreshOnOpen: true);
+            definition.Transitions[name] = new TransitionDefinition(label, [], handler, AutoRefreshOnOpen: true, ProtocolRead: protocolRead);
             return this;
         }
 

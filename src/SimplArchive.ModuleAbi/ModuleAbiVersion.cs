@@ -37,5 +37,5 @@ public static class ModuleAbiVersion
     /// only an additive ABI makes the promise itself true. 0.21 is best treated as withdrawn.
     /// </para>
     /// </remarks>
-    public const int Minor = 25;
+    public const int Minor = 27;
 }

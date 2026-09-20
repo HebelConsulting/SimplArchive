@@ -451,6 +451,14 @@ internal static class ImapMailboxes
         var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
         var tenantId = scope.ServiceProvider.GetRequiredService<ICurrentTenantAccessor>().TenantId!.Value;
 
+        // Opening a mailbox is this protocol's "open" (ADR 0810, #1286) — the populate hook the two clients
+        // invoke, which a mail client never could, leaving a weather folder EMPTY once the sweep had run. Here
+        // rather than in SelectAsync on purpose: SELECT, STATUS and LIST all resolve through this method, so
+        // placing it at the one chokepoint is what keeps a mailbox's count and its contents telling the same
+        // story. Gated on the module's declaration and the tenant's setting; it never throws.
+        await scope.ServiceProvider.GetRequiredService<SimplArchive.Api.Modules.ProtocolReadRefreshRunner>()
+            .RefreshAsync(entry.FolderId, "IMAP SELECT", CancellationToken.None);
+
         // The message list: child documents WITH content (a confirmed version), emails only unless the user's
         // toggle shows everything (#562). Ordered by (CreatedAt, Id) — the stable sequence-number order.
         var docs = await db.Documents

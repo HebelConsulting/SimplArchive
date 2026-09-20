@@ -37,6 +37,7 @@ public class ModulesController : ControllerBase
     private readonly ModuleActivationService _activation;
     private readonly IAuditRecorder _audit;
     private readonly ITransitEncryptor _transit;
+    private readonly StateMachineCatalog _machines;
 
     public ModulesController(
         SimplArchiveDbContext dbContext,
@@ -47,7 +48,8 @@ public class ModulesController : ControllerBase
         IReadOnlyList<ModuleLoader.LoadedModule> modules,
         ModuleActivationService activation,
         IAuditRecorder audit,
-        ITransitEncryptor transit)
+        ITransitEncryptor transit,
+        StateMachineCatalog machines)
     {
         _dbContext = dbContext;
         _currentTenantAccessor = currentTenantAccessor;
@@ -58,6 +60,7 @@ public class ModulesController : ControllerBase
         _activation = activation;
         _audit = audit;
         _transit = transit;
+        _machines = machines;
     }
 
     public class ModuleResource : HypermediaResource
@@ -248,7 +251,7 @@ public class ModulesController : ControllerBase
             cancellationToken: cancellationToken);
 
         return Ok(ToResource(module.ModuleId, module.DisplayName, module.AbiMajorVersion, installed: true, activation,
-            hasSettings: module.Settings.Count > 0, build: loaded?.Build));
+            hasSettings: DeclaredSettings(module.ModuleId).Count > 0, build: loaded?.Build));
     }
 
     /// <summary>
@@ -310,6 +313,16 @@ public class ModulesController : ControllerBase
             var setting = declared.FirstOrDefault(s => string.Equals(s.Key, key, StringComparison.Ordinal))
                 ?? throw new ModuleSettingNotDeclaredException(moduleId, key);
 
+            // A Boolean means one of two things or it means nothing. Refusing anything else here is what keeps
+            // the read side a straight equality test: a stored "yes" or "1" would read as FALSE at the moment
+            // it matters, and silently — the tenant would see the toggle on and the behaviour off.
+            if (setting.Kind == ModuleAbi.ModuleSettingKind.Boolean && !string.IsNullOrEmpty(value)
+                && !string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ModuleSettingValueInvalidException(moduleId, key);
+            }
+
             var row = existing.FirstOrDefault(v => string.Equals(v.Key, key, StringComparison.Ordinal));
 
             if (string.IsNullOrEmpty(value))
@@ -367,9 +380,38 @@ public class ModulesController : ControllerBase
     }
 
     /// <summary>The module's declarations, or a 404 when nothing installed here answers to that id.</summary>
-    private IReadOnlyList<ModuleAbi.ModuleSetting> DeclaredSettings(string moduleId) =>
-        _modules.FirstOrDefault(m => string.Equals(m.Module.ModuleId, moduleId, StringComparison.Ordinal))?.Module.Settings
+    /// <remarks>
+    /// <para>
+    /// The ONE place the declared set is composed, which is what lets the host add to it: both the form and
+    /// the PUT's undeclared-key refusal read this, so a setting appended here is rendered, validated and
+    /// storable without a second edit. Two copies of the composition is how a key becomes renderable and
+    /// unsaveable at the same time.
+    /// </para>
+    /// <para>
+    /// The appended one is the protocol-read toggle (ABI 0.27, ADR 0810): the host renders it exactly when
+    /// this module declares a populate hook eligible for a WebDAV/IMAP read, because the host is what reads
+    /// the answer back on a PROPFIND. A module declaring its own key would leave the host guessing the name.
+    /// </para>
+    /// </remarks>
+    private IReadOnlyList<ModuleAbi.ModuleSetting> DeclaredSettings(string moduleId)
+    {
+        var module = _modules.FirstOrDefault(m => string.Equals(m.Module.ModuleId, moduleId, StringComparison.Ordinal))?.Module
             ?? throw new ModuleNotInstalledException(moduleId);
+
+        var declaresProtocolRead = _machines.Machines.Values.Any(machine =>
+            string.Equals(machine.ModuleId, moduleId, StringComparison.Ordinal)
+            && machine.Transitions.Values.Any(t => t is { AutoRefreshOnOpen: true, ProtocolRead: ModuleAbi.ProtocolReadRefresh.WhenTenantEnables }));
+
+        return declaresProtocolRead
+            ? [.. module.Settings, new ModuleAbi.ModuleSetting(
+                ModuleAbi.ProtocolReadRefreshSetting.Key,
+                "Refresh content when a drive or mail client opens the folder",
+                Description: "This module fetches its content on demand when the folder is opened. The two SimplArchive "
+                    + "clients always do so; enable this to let a mounted drive or a mail client do it too, otherwise "
+                    + "those surfaces show only what is already filed.")
+                { Kind = ModuleAbi.ModuleSettingKind.Boolean }]
+            : module.Settings;
+    }
 
     private async Task<ModuleSettingsResource> BuildSettingsAsync(string moduleId, CancellationToken cancellationToken)
     {
@@ -391,6 +433,7 @@ public class ModulesController : ControllerBase
                     Label = setting.Label,
                     Description = setting.Description,
                     IsSecret = setting.IsSecret,
+                    Kind = setting.Kind.ToString(),
                     HasValue = stored is not null,
                     // A secret's value never crosses the wire; a plain setting's does, or the form could not
                     // show what it is about to change.
@@ -417,6 +460,10 @@ public class ModulesController : ControllerBase
         public string? Description { get; set; }
 
         public bool IsSecret { get; set; }
+
+        /// <summary>What the value holds, so the form draws a checkbox rather than a text box (ABI 0.27).
+        /// Serialized as the enum's NAME, which is what a client matches on.</summary>
+        public string Kind { get; set; } = nameof(ModuleAbi.ModuleSettingKind.Text);
 
         /// <summary>Whether a value is configured — the only thing reported for a secret.</summary>
         public bool HasValue { get; set; }
@@ -476,7 +523,7 @@ public class ModulesController : ControllerBase
         var items = _modules
             .Select(m => ToResource(
                 m.Module.ModuleId, m.Module.DisplayName, m.Module.AbiMajorVersion, installed: true,
-                byModuleId.GetValueOrDefault(m.Module.ModuleId), hasSettings: m.Module.Settings.Count > 0,
+                byModuleId.GetValueOrDefault(m.Module.ModuleId), hasSettings: DeclaredSettings(m.Module.ModuleId).Count > 0,
                 build: m.Build))
             .ToList();
 

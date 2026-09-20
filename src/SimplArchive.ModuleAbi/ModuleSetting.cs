@@ -32,4 +32,31 @@ public sealed record ModuleSetting(
     string Key,
     string Label,
     bool IsSecret = false,
-    string? Description = null);
+    string? Description = null)
+{
+    /// <summary>
+    /// What kind of value this holds, so the admin form can render the right control and the host can reject
+    /// a value the setting cannot mean. Defaults to <see cref="ModuleSettingKind.Text"/>, which is what every
+    /// setting declared before ABI 0.27 is.
+    /// </summary>
+    /// <remarks>
+    /// An INIT-ONLY PROPERTY rather than a fifth primary-constructor parameter, per ADR 0789: adding a
+    /// parameter changes the record's constructor, and a module compiled against an older ABI then dies with
+    /// <c>MissingMethodException</c> — after loading successfully, so the version gate does not catch it. That
+    /// is exactly how ABI 0.21 took the kiosk down for 1h34m (#1147).
+    /// </remarks>
+    public ModuleSettingKind Kind { get; init; } = ModuleSettingKind.Text;
+}
+
+/// <summary>What a <see cref="ModuleSetting"/> holds (ABI 0.27).</summary>
+public enum ModuleSettingKind
+{
+    /// <summary>Free text — an endpoint, an account name, a credential. Every setting before ABI 0.27.</summary>
+    Text = 0,
+
+    /// <summary>
+    /// A yes/no. Stored as <c>"true"</c> or <c>"false"</c>; the host renders a checkbox and refuses anything
+    /// else, so a typo cannot become a third state nobody handles.
+    /// </summary>
+    Boolean = 1,
+}

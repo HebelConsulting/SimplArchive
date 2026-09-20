@@ -88,10 +88,14 @@ public sealed partial class ModuleSettingEntryViewModel : ObservableObject
         Description = setting.Description ?? string.Empty;
         IsSecret = setting.IsSecret;
         HasValue = setting.HasValue;
+        IsBoolean = string.Equals(setting.Kind, "Boolean", StringComparison.Ordinal);
 
         // A secret starts EMPTY even when set: its value never crossed the wire, so there is nothing to
         // prefill — and the watermark is what says the box being empty does not mean "not configured".
-        Entry = setting.IsSecret ? string.Empty : setting.Value ?? string.Empty;
+        // A Boolean has no such state: an absent row IS false, so it starts unchecked and saves either way.
+        Entry = IsBoolean
+            ? (string.Equals(setting.Value, "true", StringComparison.OrdinalIgnoreCase) ? "true" : "false")
+            : setting.IsSecret ? string.Empty : setting.Value ?? string.Empty;
     }
 
     public string Key { get; }
@@ -101,6 +105,21 @@ public sealed partial class ModuleSettingEntryViewModel : ObservableObject
     public string Description { get; }
 
     public bool IsSecret { get; }
+
+    /// <summary>A yes/no renders as a CHECKBOX, not a box you type "true" into — the server refuses anything
+    /// else, so a text field would hand the administrator a way to fail the save (ABI 0.27).</summary>
+    public bool IsBoolean { get; }
+
+    /// <summary>The text form's visibility — the two are mutually exclusive, and expressing the negation here
+    /// keeps the template free of a converter that only this one screen would use.</summary>
+    public bool IsText => !IsBoolean;
+
+    /// <summary>The checkbox's two-way face over the string the form actually sends.</summary>
+    public bool Checked
+    {
+        get => string.Equals(Entry, "true", StringComparison.OrdinalIgnoreCase);
+        set => Entry = value ? "true" : "false";
+    }
 
     /// <summary>Whether a value is already configured — for a secret this is all the administrator learns.</summary>
     public bool HasValue { get; }
@@ -114,4 +133,9 @@ public sealed partial class ModuleSettingEntryViewModel : ObservableObject
     public string Watermark => IsSecret && HasValue ? Strings.Get("ModSettingsSecretSet") : string.Empty;
 
     [ObservableProperty] private string _entry = string.Empty;
+
+    /// <summary>Raised from the hook that actually changes the value <see cref="Checked"/> is computed FROM.
+    /// A computed property notified from the wrong hook — or from none — is a control that silently stops
+    /// tracking the state it draws.</summary>
+    partial void OnEntryChanged(string value) => OnPropertyChanged(nameof(Checked));
 }

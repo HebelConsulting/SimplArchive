@@ -274,7 +274,10 @@ public sealed class AdminClient(ApiCore core)
     /// <summary>One declared setting plus what is configured. A SECRET's value is never here — only whether
     /// one is set (ADR 0772); the module reads the plaintext, the administrator never does.</summary>
     public sealed record ModuleSettingInfo(
-        string Key, string Label, string? Description, bool IsSecret, bool HasValue, string? Value);
+        string Key, string Label, string? Description, bool IsSecret, bool HasValue, string? Value,
+        // What the value holds (ABI 0.27) — "Text" or "Boolean". Defaulted rather than required so an
+        // older server, which sends no kind at all, still parses as the text form it has always been.
+        string Kind = "Text");
 
     /// <summary>A filed license artefact the Activate dialog offers — the stamped fields are the verified
     /// claims' projection and stay empty until a license has been through a successful activation.</summary>
@@ -333,7 +336,8 @@ public sealed class AdminClient(ApiCore core)
                     s.TryGetProperty("description", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() : null,
                     s.GetProperty("isSecret").GetBoolean(),
                     s.GetProperty("hasValue").GetBoolean(),
-                    s.TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null));
+                    s.TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null,
+                    s.TryGetProperty("kind", out var k) && k.ValueKind == JsonValueKind.String ? k.GetString() ?? "Text" : "Text"));
             }
         }
 

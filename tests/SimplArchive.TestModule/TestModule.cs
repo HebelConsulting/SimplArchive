@@ -13,6 +13,10 @@ public sealed class TestModule : IIndustryModule
     public static readonly Guid DossierMaskId = Guid.Parse("7E57AB1E-0000-0000-0000-000000000000");
     public static readonly Guid CertificateMaskId = Guid.Parse("7E57AB1E-0000-0000-0000-000000000001");
     public static readonly Guid EntryMaskId = Guid.Parse("7E57AB1E-0000-0000-0000-000000000002");
+
+    /// <summary>What the PROTOCOL-eligible populate hook names what it stages (ABI 0.27) — distinct from the
+    /// clients-only hook's, so a test can tell which of the two ran without a second mask to seed.</summary>
+    public const string ProtocolStagedName = "Protocol staged entry";
     // A module-declared CalDAV collection and its item (ABI 0.24, ADR 0791). Nothing exercised that path
     // end to end before #1242 — a module could declare a calendar and no test asked whether the core SERVED it.
     public static readonly Guid LogMaskId = Guid.Parse("7E57AB1E-0000-0000-0000-000000000003");
@@ -299,7 +303,21 @@ public sealed class TestModule : IIndustryModule
                     context.SubjectDocumentId, EntryMaskId, "Staged entry",
                     System.Text.Encoding.UTF8.GetBytes("staged content"), "txt",
                     DateTimeOffset.UtcNow.AddHours(1), replaceDocumentId: replaceId);
-            });
+            })
+            // The same hook declared eligible for a PROTOCOL read (ABI 0.27, ADR 0810) — what a mounted drive
+            // or a mail client may invoke, where the one above stays clients-only. Two transitions rather than
+            // one flag flipped, so the fixture carries BOTH answers: a test asserting that an ineligible hook
+            // is left alone needs an ineligible hook to point at.
+            .AutoRefreshOnOpen("refresh-protocol", "Refresh over a protocol", async context =>
+                {
+                    var existing = await context.Archive.GetChildrenAsync(context.SubjectDocumentId, EntryMaskId);
+                    var replaceId = existing.FirstOrDefault(d => d.Name == ProtocolStagedName)?.Id;
+                    await context.Archive.StageContentAsync(
+                        context.SubjectDocumentId, EntryMaskId, ProtocolStagedName,
+                        System.Text.Encoding.UTF8.GetBytes("protocol staged content"), "txt",
+                        DateTimeOffset.UtcNow.AddHours(1), replaceDocumentId: replaceId);
+                },
+                ProtocolReadRefresh.WhenTenantEnables);
 
     private static async Task IncrementAsync(TransitionContext context, int by)
     {

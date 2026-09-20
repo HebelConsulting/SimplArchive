@@ -28,11 +28,26 @@
             {
                 @foreach (var item in _items)
                 {
-                    <MudTextField T="string" Label="@item.Label" @bind-Value="_entries[item.Key]"
-                                  Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2 wb-mod-setting"
-                                  InputType="@(item.IsSecret ? InputType.Password : InputType.Text)"
-                                  Placeholder="@(item.IsSecret && item.HasValue ? Strings.Get("ModSettingsSecretSet") : null)"
-                                  HelperText="@item.Description" />
+                    @if (item.Kind == "Boolean")
+                    {
+                        @* A yes/no is a CHECKBOX, not a box you type "true" into. The server refuses anything
+                           else, so a text field here would hand the user a way to fail the save. *@
+                        <MudCheckBox T="bool" Value="@(_entries.GetValueOrDefault(item.Key) == "true")"
+                                     ValueChanged="@(v => _entries[item.Key] = v ? "true" : "false")"
+                                     Label="@item.Label" Class="mb-1 wb-mod-setting" Dense="true" />
+                        @if (item.Description is { Length: > 0 })
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2 d-block">@item.Description</MudText>
+                        }
+                    }
+                    else
+                    {
+                        <MudTextField T="string" Label="@item.Label" @bind-Value="_entries[item.Key]"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2 wb-mod-setting"
+                                      InputType="@(item.IsSecret ? InputType.Password : InputType.Text)"
+                                      Placeholder="@(item.IsSecret && item.HasValue ? Strings.Get("ModSettingsSecretSet") : null)"
+                                      HelperText="@item.Description" />
+                    }
                 }
             }
 
@@ -75,7 +90,11 @@
             {
                 // A secret starts EMPTY even when set — its value never crossed the wire, so there is nothing
                 // to prefill and an empty box must not be read as "clear it".
-                _entries[item.Key] = item.IsSecret ? string.Empty : item.Value ?? string.Empty;
+                // A Boolean has no "untouched" state to preserve — an absent row IS false, so the box starts
+                // unchecked and saving writes whichever way the user left it.
+                _entries[item.Key] = item.Kind == "Boolean"
+                    ? (string.Equals(item.Value, "true", StringComparison.OrdinalIgnoreCase) ? "true" : "false")
+                    : item.IsSecret ? string.Empty : item.Value ?? string.Empty;
             }
         }
         catch (Exception)
@@ -125,6 +144,7 @@
         public string Label { get; set; } = string.Empty;
         public string? Description { get; set; }
         public bool IsSecret { get; set; }
+        public string Kind { get; set; } = "Text";
         public bool HasValue { get; set; }
         public string? Value { get; set; }
     }

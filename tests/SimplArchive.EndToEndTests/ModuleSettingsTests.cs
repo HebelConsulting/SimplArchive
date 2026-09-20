@@ -35,10 +35,22 @@ public class ModuleSettingsTests
             await ActivateAsync(rig, vendorKey);
 
             // The declarations reach the client even with nothing configured — that IS the form.
+            //
+            // `core.protocolReadRefresh` is the HOST's contribution (ABI 0.27, ADR 0810), not the module's: it
+            // appears because this module declares a populate hook eligible for a protocol read, and the host
+            // is what renders the toggle, stores the answer and reads it back on a PROPFIND. So the form is
+            // "what the module declared, PLUS what the host adds on its behalf" — still a closed set, which is
+            // what this assertion is really guarding, since the PUT refuses anything not in it.
             var before = await TestJson.Get(rig.Admin, SettingsUrl);
             var declared = before.GetProperty("items").EnumerateArray().ToList();
-            Assert.Equal(["apiSecret", "endpoint"], declared.Select(i => i.GetProperty("key").GetString()).Order());
+            Assert.Equal(["apiSecret", "core.protocolReadRefresh", "endpoint"],
+                declared.Select(i => i.GetProperty("key").GetString()).Order());
             Assert.All(declared, item => Assert.False(item.GetProperty("hasValue").GetBoolean()));
+
+            // The kind crosses the wire, because it is what tells both clients to draw a checkbox rather than
+            // a box you type "true" into — and an older server that sends none must still read as text.
+            Assert.Equal("Boolean", Item(before, "core.protocolReadRefresh").GetProperty("kind").GetString());
+            Assert.Equal("Text", Item(before, "endpoint").GetProperty("kind").GetString());
 
             await TestJson.Put(rig.Admin, SettingsUrl, new
             {
@@ -238,6 +250,74 @@ public class ModuleSettingsTests
 
         var missing = await rig.Admin.SendAsync(new HttpRequestMessage(HttpMethod.Head, "/api/modules/no-such-module/settings"));
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+    }
+
+    // The host-contributed toggle (ABI 0.27, ADR 0810), over the real wire and the real loader. It exists
+    // because the TestModule declares `refresh-protocol` with ProtocolReadRefresh.WhenTenantEnables; a module
+    // whose hooks are all Never gets no toggle, which is what keeps the form from growing a control that
+    // answers nothing.
+    [Fact]
+    public async Task The_protocol_read_toggle_is_storable_and_reads_back()
+    {
+        var rig = await RigAsync();
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", vendorKey.ExportSubjectPublicKeyInfoPem());
+        try
+        {
+            await ActivateAsync(rig, vendorKey);
+
+            // It is a setting the MODULE never declared, so this also proves the PUT validates against the
+            // same composed set the form is rendered from — two copies of that set is how a key becomes
+            // renderable and unsaveable at once.
+            await TestJson.Put(rig.Admin, SettingsUrl, new
+            {
+                values = new Dictionary<string, string?> { [ProtocolReadRefreshSetting.Key] = "true" },
+            });
+
+            var after = Item(await TestJson.Get(rig.Admin, SettingsUrl), ProtocolReadRefreshSetting.Key);
+            Assert.True(after.GetProperty("hasValue").GetBoolean());
+
+            // Not a secret: the value comes back, or the checkbox could not show its own state.
+            Assert.Equal("true", after.GetProperty("value").GetString());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", null);
+        }
+    }
+
+    // A Boolean means one of two things or it means nothing. The read side is a straight equality test against
+    // "true", so a stored "yes" would read as FALSE at the moment it matters — leaving an administrator
+    // looking at a toggle that is on and a behaviour that is off, with nothing anywhere saying why.
+    [Fact]
+    public async Task A_boolean_setting_refuses_a_value_it_cannot_mean()
+    {
+        var rig = await RigAsync();
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", vendorKey.ExportSubjectPublicKeyInfoPem());
+        try
+        {
+            await ActivateAsync(rig, vendorKey);
+
+            var response = await rig.Admin.PutAsJsonAsync(SettingsUrl, new
+            {
+                values = new Dictionary<string, string?> { [ProtocolReadRefreshSetting.Key] = "yes" },
+            });
+
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            var problem = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
+            Assert.Equal("MODULE_SETTING_VALUE_INVALID", problem.GetProperty("errorCode").GetString());
+
+            // And the refusal left nothing behind — a rejected write that half-stored would be worse than
+            // either outcome, because the form would then show a state the server refuses to accept.
+            var items = (await TestJson.Get(rig.Admin, SettingsUrl)).GetProperty("items").EnumerateArray();
+            Assert.False(items.Single(i => i.GetProperty("key").GetString() == ProtocolReadRefreshSetting.Key)
+                .GetProperty("hasValue").GetBoolean());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", null);
+        }
     }
 
     private static JsonElement Item(JsonElement settings, string key) =>

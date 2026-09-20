@@ -127,6 +127,17 @@ internal static class WebDavReads
             return;
         }
 
+        // A PROPFIND that will LIST a folder is this protocol's "open" (ADR 0810, #1286): the populate hook was
+        // invoked by the two clients and by nothing else, so a mounted drive showed an EMPTY weather folder once
+        // the sweep had purged the expired content. Runs only where a module declared the folder's source
+        // eligible AND the tenant administrator enabled it; never throws, so a failed populate degrades to
+        // "what is already filed" rather than to a broken mount. Depth 0 is a property read, not an open.
+        if (depth != "0" && node.IsCollection && node.Document is { } refreshSubject)
+        {
+            await services.GetRequiredService<SimplArchive.Api.Modules.ProtocolReadRefreshRunner>()
+                .RefreshAsync(refreshSubject.Id, "WebDAV PROPFIND", context.RequestAborted);
+        }
+
         var propStorage = services.GetRequiredService<IObjectStorageClient>();
         var responses = new List<PropStatXml>
         {

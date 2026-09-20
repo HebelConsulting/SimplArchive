@@ -17,6 +17,10 @@ public static class ModuleApiServices
     {
         services.AddScoped<IModuleCallerContext, ModuleCallerContext>();
         services.AddScoped<IModuleDocumentRights, ModuleDocumentRights>();
+
+        // Not an ABI seam — the host's own, invoked by the protocol surfaces rather than by a module
+        // (ADR 0810). Registered here because it lives and dies with the module machinery beside it.
+        services.AddScoped<ProtocolReadRefreshRunner>();
         return services;
     }
 }
