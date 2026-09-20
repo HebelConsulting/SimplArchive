@@ -269,7 +269,12 @@ public sealed class AdminClient(ApiCore core)
         // WHICH BUILD is loaded (#1247): "1.0.0+<sha>". The SHA is the identity — every module reports version
         // 1.0.0 until they become versioned packages (#1246) — and without it a stale module is invisible,
         // because it loads, seeds and serves while only post-build features are missing (#1242).
-        string? Build = null);
+        string? Build = null,
+        // Whether the module's on-demand content is still arriving (ADR 0811). Zero failing is healthy; the
+        // rest is what makes a dead feed visible rather than indistinguishable from a quiet one.
+        int FailingContentSources = 0,
+        DateTimeOffset? ContentFailingSince = null,
+        string? ContentLastError = null);
 
     /// <summary>One declared setting plus what is configured. A SECRET's value is never here — only whether
     /// one is set (ADR 0772); the module reads the plaintext, the administrator never does.</summary>
@@ -312,7 +317,10 @@ public sealed class AdminClient(ApiCore core)
                     m.TryGetProperty("deactivatesAt", out var de) && de.ValueKind == JsonValueKind.String ? de.GetDateTimeOffset() : null,
                     links?.Href("license"),
                     links?.Href("settings"),
-                    m.TryGetProperty("build", out var b) && b.ValueKind == JsonValueKind.String ? b.GetString() : null));
+                    m.TryGetProperty("build", out var b) && b.ValueKind == JsonValueKind.String ? b.GetString() : null,
+                    m.TryGetProperty("failingContentSources", out var fc) && fc.ValueKind == JsonValueKind.Number ? fc.GetInt32() : 0,
+                    m.TryGetProperty("contentFailingSince", out var cs) && cs.ValueKind == JsonValueKind.String ? cs.GetDateTimeOffset() : null,
+                    m.TryGetProperty("contentLastError", out var ce) && ce.ValueKind == JsonValueKind.String ? ce.GetString() : null));
             }
         }
 

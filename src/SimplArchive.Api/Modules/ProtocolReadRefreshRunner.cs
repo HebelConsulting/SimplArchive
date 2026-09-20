@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SimplArchive.Application.Abstractions;
 using SimplArchive.Infrastructure.Modules;
 using SimplArchive.Infrastructure.Persistence;
 using SimplArchive.ModuleAbi;
@@ -26,6 +27,8 @@ public sealed class ProtocolReadRefreshRunner(
     SimplArchiveDbContext dbContext,
     StateMachineCatalog machines,
     StateMachineEngine engine,
+    ModuleContentHealthRecorder health,
+    ICurrentTenantAccessor tenant,
     ILogger<ProtocolReadRefreshRunner> logger)
 {
     /// <summary>
@@ -45,14 +48,23 @@ public sealed class ProtocolReadRefreshRunner(
 
         try
         {
-            var maskId = await dbContext.Documents
+            var subject = await dbContext.Documents
                 .Where(d => d.Id == folderId)
-                .Join(dbContext.MaskVersions, d => d.MaskVersionId, v => (Guid?)v.Id, (d, v) => (Guid?)v.MaskId)
+                .Join(dbContext.MaskVersions, d => d.MaskVersionId, v => (Guid?)v.Id, (d, v) => new { MaskId = (Guid?)v.MaskId, d.Name })
                 .FirstOrDefaultAsync(cancellationToken);
-            if (maskId is not { } subjectMask)
+            if (subject?.MaskId is not { } subjectMask)
             {
                 return;
             }
+
+            // The NAME, read here rather than at the failure: a notification saying which folder stopped
+            // refreshing is the difference between something an administrator can act on and a module id.
+            var folderName = subject.Name;
+
+            // A protocol read always has a resolved tenant — the session authenticated as somebody. Absent is
+            // a programming error rather than a caller state, and health recording is the only thing that
+            // needs it, so it degrades to "do not record" rather than refusing the populate.
+            var tenantId = tenant.TenantId;
 
             var candidates = machines.Machines.Values
                 .Where(m => m.SubjectMaskId == subjectMask && HasEligibleTransition(m))
@@ -114,26 +126,63 @@ public sealed class ProtocolReadRefreshRunner(
                     logger.LogDebug(
                         "{Surface} invoking populate hook {MachineId}/{TransitionName} on folder {FolderId}.",
                         surface, machine.MachineId, transitionName, folderId);
-                    var result = await engine.ExecuteTransitionAsync(
-                        machine.MachineId, transitionName, folderId, now, cancellationToken);
-                    if (!result.Satisfied)
+
+                    // PER TRANSITION, not around the whole method. The outer catch below is a backstop for
+                    // faults in THIS class; wrapping the hook in it too would attribute our own defects to the
+                    // module's source — which is not hypothetical: a LINQ predicate that SQLite could not
+                    // translate threw here and was logged as "the module's source failed", a false cause for a
+                    // defect that was entirely ours (#1286). It would now also record that against the
+                    // module's health, which is the same lie made durable and put in front of a tenant.
+                    //
+                    // It also keeps one dead source from stopping the others: a second machine over the same
+                    // folder still runs.
+                    try
                     {
-                        logger.LogWarning(
-                            "Populate hook {MachineId}/{TransitionName} was refused on folder {FolderId} during a "
-                            + "{Surface} read, so the folder is served as filed. Trace carries the exchange.",
-                            machine.MachineId, transitionName, folderId, surface);
+                        var result = await engine.ExecuteTransitionAsync(
+                            machine.MachineId, transitionName, folderId, now, cancellationToken);
+                        if (!result.Satisfied)
+                        {
+                            // A refusal is the machine WORKING — a guard said no — so it is not a failure and
+                            // must not count toward the health threshold. Counting it would notify an
+                            // administrator about a rule doing its job.
+                            logger.LogWarning(
+                                "Populate hook {MachineId}/{TransitionName} was refused on folder {FolderId} during a "
+                                + "{Surface} read, so the folder is served as filed. Trace carries the exchange.",
+                                machine.MachineId, transitionName, folderId, surface);
+                        }
+                        else if (tenantId is { } okTenant)
+                        {
+                            await health.RecordSuccessAsync(okTenant, moduleId, machine.MachineId, folderId, cancellationToken);
+                        }
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        logger.LogWarning(ex,
+                            "Populate hook {MachineId}/{TransitionName} failed during a {Surface} read of folder "
+                            + "{FolderId}; serving what is filed. Trace carries the exchange with the provider.",
+                            machine.MachineId, transitionName, surface, folderId);
+                        if (tenantId is { } failTenant)
+                        {
+                            await health.RecordFailureAsync(
+                                failTenant, moduleId, machine.MachineId, folderId, folderName,
+                                ex.Message, cancellationToken);
+                        }
                     }
                 }
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // A populate is an ENRICHMENT of somebody else's read. Failing it must degrade to "what is already
-            // filed", never to a failed PROPFIND — the mounted drive would appear broken rather than stale.
+            // The backstop for THIS class's own faults — the gate queries, the catalog walk. A populate is an
+            // enrichment of somebody else's read, so failing it must degrade to "what is already filed", never
+            // to a failed PROPFIND: a mounted drive would appear broken rather than stale.
+            //
+            // Says "while preparing", not "the module's source failed", because everything reachable from here
+            // is ours. The hook's own failures are caught per transition above and attributed to the module.
             logger.LogWarning(ex,
-                "A populate hook failed during a {Surface} read of folder {FolderId}; serving what is filed. "
-                + "Trace carries the exchange with the module's source.",
-                surface, folderId);
+                "Preparing the populate hooks for folder {FolderId} failed during a {Surface} read; serving what "
+                + "is filed. This is a fault in the host, not in a module's source.",
+                folderId, surface);
         }
     }
 

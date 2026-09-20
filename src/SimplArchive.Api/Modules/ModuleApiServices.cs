@@ -21,6 +21,10 @@ public static class ModuleApiServices
         // Not an ABI seam — the host's own, invoked by the protocol surfaces rather than by a module
         // (ADR 0810). Registered here because it lives and dies with the module machinery beside it.
         services.AddScoped<ProtocolReadRefreshRunner>();
+
+        // Records whether a module's on-demand sources are refreshing, and tells the tenant's admins when one
+        // stops (ADR 0811). Invoked from both hook paths — the protocol read and the client-triggered open.
+        services.AddScoped<ModuleContentHealthRecorder>();
         return services;
     }
 }

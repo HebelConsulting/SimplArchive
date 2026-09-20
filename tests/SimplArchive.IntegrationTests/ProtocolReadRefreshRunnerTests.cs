@@ -133,7 +133,10 @@ public class ProtocolReadRefreshRunnerTests
 
         return new Rig(
             context,
-            new ProtocolReadRefreshRunner(context, catalog, engine, NullLogger<ProtocolReadRefreshRunner>.Instance),
+            new ProtocolReadRefreshRunner(context, catalog, engine,
+                new ModuleContentHealthRecorder(context, NullLogger<ModuleContentHealthRecorder>.Instance),
+                new CurrentTenantAccessor { TenantId = tenantId },
+                NullLogger<ProtocolReadRefreshRunner>.Instance),
             facade,
             tenantId,
             dossierId,

@@ -270,6 +270,21 @@
                         {
                             <MudText Typo="Typo.caption" Class="wb-muted" title="@m.Build">build @sha</MudText>
                         }
+                        @* Whether the module's on-demand content is still arriving (ADR 0811). The same shape
+                           as the audit-webhook delivery line above, for the same reason: a feed that has
+                           stopped is invisible otherwise — the hook degrades to "serve what is filed", and the
+                           only record was a log line in the operator's collector. Shown only when something is
+                           WRONG: a healthy line on every module would be noise on a screen that is mostly rows. *@
+                        @if (m.FailingContentSources > 0)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Warning"
+                                     title="@m.ContentLastError">
+                                @string.Format(
+                                    m.FailingContentSources == 1 ? Strings.Get("ModContentFailingOne") : Strings.Get("ModContentFailingMany"),
+                                    m.FailingContentSources,
+                                    m.ContentFailingSince is { } since ? since.ToLocalTime().ToString("g") : "")
+                            </MudText>
+                        }
                     </div>
                     @* Only where the module DECLARED settings — the server withholds the rel otherwise, so
                        no module is ever offered an empty form (ADR 0543/0772). *@
@@ -575,6 +590,11 @@
         public bool InGrace { get; set; }
         public DateTimeOffset? SupportContractEndDate { get; set; }
         public DateTimeOffset? DeactivatesAt { get; set; }
+        // Whether this module's on-demand content is still arriving (ADR 0811). Zero is healthy; the rest is
+        // what makes a dead feed visible instead of looking like a quiet one.
+        public int FailingContentSources { get; set; }
+        public DateTimeOffset? ContentFailingSince { get; set; }
+        public string? ContentLastError { get; set; }
     }
 
     private record ModuleListDto

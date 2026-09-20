@@ -38,16 +38,22 @@ public class MachineTransitionsController : ControllerBase
     private readonly StateMachineCatalog _catalog;
     private readonly StateMachineEngine _engine;
     private readonly IAuditRecorder _audit;
+    private readonly SimplArchive.Api.Modules.ModuleContentHealthRecorder _health;
+    private readonly ICurrentTenantAccessor _currentTenantAccessor;
 
     public MachineTransitionsController(
         SimplArchiveDbContext dbContext, DocumentAccessService access, StateMachineCatalog catalog,
-        StateMachineEngine engine, IAuditRecorder audit)
+        StateMachineEngine engine, IAuditRecorder audit,
+        SimplArchive.Api.Modules.ModuleContentHealthRecorder health,
+        ICurrentTenantAccessor currentTenantAccessor)
     {
         _dbContext = dbContext;
         _access = access;
         _catalog = catalog;
         _engine = engine;
         _audit = audit;
+        _health = health;
+        _currentTenantAccessor = currentTenantAccessor;
     }
 
     [HttpPost("{transitionName}")]
@@ -90,7 +96,36 @@ public class MachineTransitionsController : ControllerBase
             return Forbid();
         }
 
-        var verdict = await _engine.ExecuteTransitionAsync(machineId, transitionName, documentId, DateTimeOffset.UtcNow, cancellationToken);
+        // The populate hook's outcome is also a HEALTH fact when it is an auto-refresh (ADR 0811), and this
+        // path counts alongside the protocol one: "failing since 14:05" has to mean every attempt, or it is
+        // not a duration. A failure here still surfaces to THIS caller as a 500, which is why the recording is
+        // the addition rather than the reporting — the caller learns, the tenant's administrators did not.
+        var autoRefresh = machine.Transitions[transitionName].AutoRefreshOnOpen;
+        var healthTenant = autoRefresh && machine.ModuleId is not null ? _currentTenantAccessor.TenantId : null;
+
+        SimplArchive.ModuleAbi.StatusResult verdict;
+        try
+        {
+            verdict = await _engine.ExecuteTransitionAsync(machineId, transitionName, documentId, DateTimeOffset.UtcNow, cancellationToken);
+        }
+        catch (Exception ex) when (healthTenant is not null && ex is not OperationCanceledException)
+        {
+            var failedName = await _dbContext.Documents
+                .Where(d => d.Id == documentId).Select(d => d.Name).FirstOrDefaultAsync(cancellationToken);
+            await _health.RecordFailureAsync(
+                healthTenant.Value, machine.ModuleId!, machineId, documentId, failedName ?? string.Empty,
+                ex.Message, cancellationToken);
+            throw;   // the caller still gets its error; recording is an addition, never a swallow
+        }
+
+        if (verdict.Satisfied)
+        {
+            if (healthTenant is { } okTenant)
+            {
+                await _health.RecordSuccessAsync(okTenant, machine.ModuleId!, machineId, documentId, cancellationToken);
+            }
+        }
+
         if (!verdict.Satisfied)
         {
             // The refusal IS the explanation (ADR 0742): the module's sentences as detail, the

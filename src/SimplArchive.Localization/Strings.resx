@@ -4923,6 +4923,12 @@
   <data name="ModActivate" xml:space="preserve">
     <value>Activate…</value>
   </data>
+  <data name="ModContentFailingOne" xml:space="preserve">
+    <value>1 content source has not refreshed since {1}</value>
+  </data>
+  <data name="ModContentFailingMany" xml:space="preserve">
+    <value>{0} content sources have not refreshed since {1}</value>
+  </data>
   <data name="ModRenew" xml:space="preserve">
     <value>Renew…</value>
   </data>

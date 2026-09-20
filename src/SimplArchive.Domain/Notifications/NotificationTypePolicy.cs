@@ -35,6 +35,14 @@ public static class NotificationTypePolicy
             NotificationType.CheckoutExpiring => false,
             NotificationType.StorageQuotaWarning => false,
 
+            // NOT mutable, on the storage-quota reading rather than the collaboration one: this says a part
+            // of the archive has stopped being fed, and the tenant's administrators are the only people who
+            // can act on it — the module's credential has lapsed, the provider changed, the source is gone.
+            // It is already gated behind a consecutive-failure threshold and sent once per episode, so the
+            // volume argument for mutability does not apply; what would remain is an administrator switching
+            // off the only signal that an entire content feed is dead.
+            NotificationType.ModuleContentFailing => false,
+
             // NOT mutable, and this is the type where that matters most: the entire justification for allowing
             // an administrator into a private space is that the access is not SILENT (ADR 0672). A mutable
             // announcement is one the owner can switch off and then never learn of — which would leave the

@@ -108,6 +108,27 @@ public class ModulesController : ControllerBase
         public Guid? LicenseDocumentId { get; set; }
 
         public DateTimeOffset? ActivatedAt { get; set; }
+
+        /// <summary>
+        /// How many of this module's on-demand content sources are currently failing to refresh, and since
+        /// when (ADR 0811). Zero means every source this module feeds is healthy.
+        /// </summary>
+        /// <remarks>
+        /// Here for the reason <see cref="Build"/> is: without it the state is INVISIBLE. A populate hook
+        /// degrades to "serve what is already filed" when its fetch fails — deliberately, so a failed
+        /// enrichment cannot break somebody else's read — and the only record was a log line in the
+        /// operator's collector, which a tenant administrator cannot see. A dead weather feed therefore
+        /// looked exactly like a quiet one, indefinitely, inside an installation where every other check was
+        /// green. This is the audit-webhook delivery-health line applied to module content.
+        /// </remarks>
+        public int FailingContentSources { get; set; }
+
+        /// <summary>When the oldest current failure episode began — the fact an administrator acts on, where
+        /// a count alone is not. Null when nothing is failing.</summary>
+        public DateTimeOffset? ContentFailingSince { get; set; }
+
+        /// <summary>The most recent failure's message, truncated. A message, never a payload (ADR 0626).</summary>
+        public string? ContentLastError { get; set; }
     }
 
     public class ModuleListResource : HypermediaResource
@@ -251,7 +272,8 @@ public class ModulesController : ControllerBase
             cancellationToken: cancellationToken);
 
         return Ok(ToResource(module.ModuleId, module.DisplayName, module.AbiMajorVersion, installed: true, activation,
-            hasSettings: DeclaredSettings(module.ModuleId).Count > 0, build: loaded?.Build));
+            hasSettings: DeclaredSettings(module.ModuleId).Count > 0, build: loaded?.Build,
+            health: (await ContentHealthAsync(cancellationToken)).GetValueOrDefault(module.ModuleId)));
     }
 
     /// <summary>
@@ -519,12 +541,13 @@ public class ModulesController : ControllerBase
             .OrderBy(a => a.ModuleId)
             .ToListAsync(cancellationToken);
         var byModuleId = activations.ToDictionary(a => a.ModuleId, StringComparer.Ordinal);
+        var health = await ContentHealthAsync(cancellationToken);
 
         var items = _modules
             .Select(m => ToResource(
                 m.Module.ModuleId, m.Module.DisplayName, m.Module.AbiMajorVersion, installed: true,
                 byModuleId.GetValueOrDefault(m.Module.ModuleId), hasSettings: DeclaredSettings(m.Module.ModuleId).Count > 0,
-                build: m.Build))
+                build: m.Build, health: health.GetValueOrDefault(m.Module.ModuleId)))
             .ToList();
 
         // Activation rows whose module is no longer on disk: the data outlives the code (ADR 0740), and an
@@ -533,7 +556,8 @@ public class ModulesController : ControllerBase
         items.AddRange(activations
             .Where(a => !loadedIds.Contains(a.ModuleId))
             // Not installed: no code here to declare settings, so no form to offer.
-            .Select(a => ToResource(a.ModuleId, a.ModuleId, abiMajorVersion: 0, installed: false, a, hasSettings: false)));
+            .Select(a => ToResource(a.ModuleId, a.ModuleId, abiMajorVersion: 0, installed: false, a, hasSettings: false,
+                health: health.GetValueOrDefault(a.ModuleId))));
 
         return new ModuleListResource
         {
@@ -548,13 +572,47 @@ public class ModulesController : ControllerBase
         };
     }
 
+    /// <summary>One module's content-health answer: how many sources are failing, since when, and the last
+    /// message. Absence of a row means healthy, so a module with nothing failing simply has no entry.</summary>
+    private sealed record ContentHealthSummary(int Failing, DateTimeOffset Since, string LastError);
+
+    /// <summary>
+    /// The health of every module's content sources, in ONE query rather than one per module.
+    /// </summary>
+    /// <remarks>
+    /// Per module, aggregated from the per-SOURCE rows. The counting happens per source on purpose (ADR
+    /// 0811) — counting consecutive failures per module would let one permanently-broken source hide behind
+    /// its healthy siblings — but what an administrator acts on is the module, so the rows are folded here.
+    /// </remarks>
+    private async Task<Dictionary<string, ContentHealthSummary>> ContentHealthAsync(CancellationToken cancellationToken)
+    {
+        var rows = await _dbContext.ModuleContentHealth
+            .Select(h => new { h.ModuleId, h.FirstFailureAt, h.LastFailureAt, h.LastError })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .GroupBy(h => h.ModuleId, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => new ContentHealthSummary(
+                    g.Count(),
+                    g.Min(h => h.FirstFailureAt),
+                    // The most RECENT message, not the oldest: an administrator arriving at this line wants
+                    // what is wrong now, and an episode's first error is often the least informative one.
+                    g.OrderByDescending(h => h.LastFailureAt).First().LastError),
+                StringComparer.Ordinal);
+    }
+
     private static ModuleResource ToResource(
         string moduleId, string displayName, int abiMajorVersion, bool installed, ModuleActivation? activation,
-        bool hasSettings, string? build = null)
+        bool hasSettings, string? build = null, ContentHealthSummary? health = null)
     {
         var now = DateTimeOffset.UtcNow;
         return new ModuleResource
         {
+            FailingContentSources = health?.Failing ?? 0,
+            ContentFailingSince = health?.Since,
+            ContentLastError = health?.LastError,
             ModuleId = moduleId,
             DisplayName = displayName,
             AbiMajorVersion = abiMajorVersion,

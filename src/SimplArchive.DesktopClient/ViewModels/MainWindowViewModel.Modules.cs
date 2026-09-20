@@ -106,6 +106,25 @@ public sealed class ModuleRowViewModel(AdminClient.ModuleInfo module)
         _ => GraceBrush, // deactivated: the state an administrator must act on, same channel as in-grace
     };
 
+    /// <summary>Whether to draw the content-health line at all. Only when something is WRONG: a healthy line
+    /// on every module would be noise on a pane that is mostly rows, and the audit-webhook line above shows
+    /// its healthy state because there is exactly one of it.</summary>
+    public bool ContentFailing => Module.FailingContentSources > 0;
+
+    /// <summary>The same sentence the web client renders (ADR 0511) — one surface, two clients.</summary>
+    public string ContentHealthText => Module.FailingContentSources switch
+    {
+        0 => string.Empty,
+        1 => string.Format(Strings.Get("ModContentFailingOne"), 1,
+            Module.ContentFailingSince?.LocalDateTime.ToString("g") ?? string.Empty),
+        var n => string.Format(Strings.Get("ModContentFailingMany"), n,
+            Module.ContentFailingSince?.LocalDateTime.ToString("g") ?? string.Empty),
+    };
+
+    /// <summary>The last message, as a tooltip — on the line, never in it: a provider's sentence is the wrong
+    /// length for a status row and this pane has no room to be wrong about that.</summary>
+    public string ContentHealthTooltip => Module.ContentLastError ?? string.Empty;
+
     public string ActivateLabel => Strings.Get(Module.Activated ? "ModRenew" : "ModActivate");
 
     public bool CanActivate => Module.LicenseHref is not null;

@@ -240,6 +240,17 @@
                                         <SelectableTextBlock Text="{Binding BuildSha, StringFormat='build {0}'}"
                                                              IsVisible="{Binding BuildSha, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                                              FontSize="10" Foreground="{DynamicResource WbFaint}" />
+                                        <!-- Whether the module's on-demand content is still arriving (ADR 0811),
+                                             the same shape as the audit-webhook delivery line in this pane and
+                                             for the same reason: a populate hook degrades to "serve what is
+                                             filed", so a dead feed is otherwise indistinguishable from a quiet
+                                             one. Drawn only while something is failing — a healthy line on
+                                             every module would be noise on a pane that is mostly rows. -->
+                                        <SelectableTextBlock Text="{Binding ContentHealthText}"
+                                                             ToolTip.Tip="{Binding ContentHealthTooltip}"
+                                                             IsVisible="{Binding ContentFailing}"
+                                                             TextWrapping="Wrap"
+                                                             FontSize="10" Foreground="{DynamicResource SystemErrorTextColor}" />
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                                         <Button Content="{loc:Tr ModConfigure}" FontSize="11"

@@ -182,6 +182,10 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
 
     public DbSet<ModuleSettingValue> ModuleSettingValues => Set<ModuleSettingValue>();
 
+    /// <summary>Module content sources that are currently failing to refresh (ADR 0811). Present only while
+    /// broken — absence means healthy.</summary>
+    public DbSet<ModuleContentHealth> ModuleContentHealth => Set<ModuleContentHealth>();
+
     // Shares of a document with people who have no account (ADR 0546).
     public DbSet<ExternalLink> ExternalLinks => Set<ExternalLink>();
 

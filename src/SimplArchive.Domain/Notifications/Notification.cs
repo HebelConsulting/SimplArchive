@@ -75,6 +75,16 @@ public enum NotificationType
     // handing the flight to somebody else is settled and simply needs to be known. Not coalescable, for the
     // reason the pair above is not: each flight whose crew changed is a discrete thing to check.
     BookingParticipantsChanged = 19,
+
+    // A module's on-demand content source has failed to refresh N times in a row (ADR 0811) — sent to the
+    // tenant's administrators, once per episode, when the threshold is crossed.
+    //
+    // NOT per failure, deliberately: a populate hook runs whenever somebody opens the folder, so one per
+    // failure would be a storm, and the storm would arrive precisely when the provider is already having a
+    // bad day. The threshold is what converts "a fetch failed" — routine, and handled by serving what is
+    // filed — into "this source has been dead since 14:05", which is the only version an administrator can
+    // act on.
+    ModuleContentFailing = 20,
 }
 
 // A per-User in-app notification (ADR "Notifications (in-app, first slice)"). Written by INotificationService
