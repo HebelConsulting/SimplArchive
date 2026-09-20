@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using SimplArchive.DesktopClient.Services;
+using SimplArchive.Presentation;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -16,7 +17,7 @@ public sealed partial class NotificationRowViewModel : ObservableObject
         Body = n.Body;
         DocumentId = n.DocumentId;
         DocumentParentId = n.DocumentParentId;
-        When = n.CreatedAt.LocalDateTime.ToString("g");
+        When = n.CreatedAt.InZone(SessionTimeZone.Current).DateTime.ToString("g");
         _isRead = n.IsRead;
     }
 

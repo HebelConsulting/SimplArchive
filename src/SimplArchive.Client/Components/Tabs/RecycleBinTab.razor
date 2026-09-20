@@ -62,7 +62,7 @@
                     <MudTd Class="wb-touch-only" @onclick:stopPropagation="true"><MudCheckBox T="bool" Value="@_rbChecked.Contains(row.Id)" ValueChanged="@(v => ToggleRbChecked(row.Id, v))" Dense="true" /></MudTd>
                     <MudTd Class="@(_rbChecked.Contains(row.Id) ? "wb-list-row-selected" : "")">@row.Name</MudTd>
                     <MudTd Class="mud-text-secondary">@row.Path</MudTd>
-                    <MudTd>@row.DeletedAt.ToLocalTime().ToString("g")</MudTd>
+                    <MudTd>@row.DeletedAt.InZone(SessionTimeZone.Current).ToString("g")</MudTd>
                     <MudTd>@row.DeletedBy</MudTd>
                     @* What you can do to THIS row lives in its ⋮ menu — the same actions the toolbar offers for
                        the selection, differing only in scope (#521's split). Hard delete stays admin-HIDDEN. *@
@@ -102,7 +102,7 @@
         {
             <div style="padding:8px 12px; border-bottom:1px solid var(--mud-palette-lines-default); max-height:34%; overflow:auto;">
                 <MudText Typo="Typo.subtitle1">@_rbSelected.Name</MudText>
-                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@string.Format(Strings.Get("RbDeletedByLine"), _rbSelected.DeletedAt.ToLocalTime().ToString("g"), _rbSelected.DeletedBy)</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@string.Format(Strings.Get("RbDeletedByLine"), _rbSelected.DeletedAt.InZone(SessionTimeZone.Current).ToString("g"), _rbSelected.DeletedBy)</MudText>
                 <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">@string.Format(Strings.Get("RbMaskLine"), _rbMaskName ?? Strings.Get("RbMaskNone"))</MudText>
                 @if (_rbIndexData is { Count: > 0 })
                 {
@@ -127,7 +127,7 @@
                     @foreach (var c in _rbComments)
                     {
                         <div class="mb-2">
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@c.AuthorName · @c.CreatedAt.ToLocalTime().ToString("g")</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@c.AuthorName · @c.CreatedAt.InZone(SessionTimeZone.Current).ToString("g")</MudText>
                             <MudText Typo="Typo.body2">@c.Body</MudText>
                         </div>
                     }

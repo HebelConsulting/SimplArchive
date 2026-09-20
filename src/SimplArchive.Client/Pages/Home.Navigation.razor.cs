@@ -677,7 +677,7 @@ public partial class Home
         Detail.SysName = string.Empty;
         Detail.SysFileExtension = string.Empty;
         Detail.SysDocumentDate = null;
-        Detail.SysCreated = string.Empty;
+        Detail.SysCreatedAt = null;
         Detail.SysCreatedBy = string.Empty;
         Detail.SysOcrCandidate = false;
         Detail.SysOcrVerdict = null;

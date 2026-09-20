@@ -71,7 +71,7 @@
                 <div class="wb-comment">
                     @if (c.Kind == ChatUserPost)
                     {
-                        <div class="wb-comment-meta">@AuthorMarkup(c) · @c.CreatedAt.ToLocalTime().ToString("g")</div>
+                        <div class="wb-comment-meta">@AuthorMarkup(c) · @c.CreatedAt.InZone(SessionTimeZone.Current).ToString("g")</div>
                         <div class="wb-comment-body">@MentionMarkup(c)</div>
                         <span class="wb-reply-link" @onclick="() => ToggleReplyTo.InvokeAsync(c.Id)">@Strings.Get("ReplyBtn")</span>
                     }
@@ -81,7 +81,7 @@
                            it, so the author isn't repeated in the meta line — only
                            the time is (ADR 0545). No reply affordance: there is no
                            conversation to continue with an event. *@
-                        <div class="wb-comment-meta">@c.CreatedAt.ToLocalTime().ToString("g")</div>
+                        <div class="wb-comment-meta">@c.CreatedAt.InZone(SessionTimeZone.Current).ToString("g")</div>
                         <div class="wb-comment-body wb-system-entry">@SystemSentence(c)</div>
                         @if (c.VersionNumber is { } versionNumber)
                         {
@@ -101,7 +101,7 @@
                 @foreach (var r in Messages.Where(x => x.ParentMessageId == c.Id).OrderBy(x => x.CreatedAt))
                 {
                     <div class="wb-comment wb-comment-reply">
-                        <div class="wb-comment-meta">@AuthorMarkup(r) · @r.CreatedAt.ToLocalTime().ToString("g")</div>
+                        <div class="wb-comment-meta">@AuthorMarkup(r) · @r.CreatedAt.InZone(SessionTimeZone.Current).ToString("g")</div>
                         <div class="wb-comment-body">@MentionMarkup(r)</div>
                     </div>
                 }

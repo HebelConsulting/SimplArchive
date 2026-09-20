@@ -30,7 +30,7 @@
                             <div style="display:flex; align-items:center; gap:8px;">
                                 <div style="flex:1 1 auto;">
                                     <div>@p.Name</div>
-                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Added @p.CreatedAt.LocalDateTime.ToString("yyyy-MM-dd")@(p.LastUsedAt is { } u ? $" · last used {u.LocalDateTime:yyyy-MM-dd}" : "")</MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Added @p.CreatedAt.InZone(SessionTimeZone.Current).DateTime.ToString("yyyy-MM-dd")@(p.LastUsedAt is { } u ? $" · last used {u.InZone(SessionTimeZone.Current).DateTime:yyyy-MM-dd}" : "")</MudText>
                                 </div>
                                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="() => RemoveAsync(p)" />
                             </div>

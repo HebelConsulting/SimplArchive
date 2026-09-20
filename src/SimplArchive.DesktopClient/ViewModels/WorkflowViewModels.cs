@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SimplArchive.DesktopClient.Services;
 using SimplArchive.Localization;
+using SimplArchive.Presentation;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -184,8 +185,8 @@ public sealed class TaskItemViewModel
     public DateTimeOffset? DueAt { get; init; }
 
     public string VersionText => VersionNumber is { } n ? $"v{n}" : "—";
-    public string AssignedText => AssignedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
-    public string DueText => DueAt is { } due ? due.LocalDateTime.ToString("yyyy-MM-dd") : "—";
+    public string AssignedText => AssignedAt.InZone(SessionTimeZone.Current).DateTime.ToString("yyyy-MM-dd HH:mm");
+    public string DueText => DueAt is { } due ? due.InZone(SessionTimeZone.Current).DateTime.ToString("yyyy-MM-dd") : "—";
     public bool IsOverdue => DueAt is { } d && DateTimeOffset.Now > d;
 }
 

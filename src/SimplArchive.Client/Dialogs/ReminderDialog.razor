@@ -18,7 +18,7 @@
                             <div style="display:flex; align-items:center; gap:8px;">
                                 <MudIcon Icon="@Icons.Material.Filled.Alarm" Size="Size.Small" />
                                 <div style="flex:1 1 auto; min-width:0;">
-                                    <div>@r.RemindAt.ToLocalTime().ToString("g")@(r.Recurrence != 0 ? string.Format(Strings.Get("ReminderRepeatsSuffix"), r.RecurrenceName.ToLowerInvariant()) : "")</div>
+                                    <div>@r.RemindAt.InZone(SessionTimeZone.Current).ToString("g")@(r.Recurrence != 0 ? string.Format(Strings.Get("ReminderRepeatsSuffix"), r.RecurrenceName.ToLowerInvariant()) : "")</div>
                                     <div class="mud-text-secondary" style="font-size:.8em;">@string.Format(Strings.Get("ReminderForLine"), r.TargetName, string.IsNullOrEmpty(r.Note) ? "" : " — " + r.Note)</div>
                                 </div>
                                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" aria-label="@Strings.Get("ReminderCancelAria")" OnClick="@(() => CancelAsync(r))" />

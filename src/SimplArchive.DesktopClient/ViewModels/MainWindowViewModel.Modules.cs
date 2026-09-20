@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using SimplArchive.DesktopClient.Services;
 using SimplArchive.Localization;
+using SimplArchive.Presentation;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -92,9 +93,9 @@ public sealed class ModuleRowViewModel(AdminClient.ModuleInfo module)
         { Installed: false } => Strings.Get("ModNotInstalled"),
         { Activated: false } => Strings.Get("ModNotActivated"),
         { Active: true, InGrace: true, DeactivatesAt: { } grace } =>
-            string.Format(Strings.Get("ModInGrace"), grace.LocalDateTime.ToString("yyyy-MM-dd")),
+            string.Format(Strings.Get("ModInGrace"), grace.InZone(SessionTimeZone.Current).DateTime.ToString("yyyy-MM-dd")),
         { Active: true, SupportContractEndDate: { } end } =>
-            string.Format(Strings.Get("ModActiveUntil"), end.LocalDateTime.ToString("yyyy-MM-dd")),
+            string.Format(Strings.Get("ModActiveUntil"), end.InZone(SessionTimeZone.Current).DateTime.ToString("yyyy-MM-dd")),
         _ => Strings.Get("ModDeactivated"),
     };
 
@@ -116,9 +117,9 @@ public sealed class ModuleRowViewModel(AdminClient.ModuleInfo module)
     {
         0 => string.Empty,
         1 => string.Format(Strings.Get("ModContentFailingOne"), 1,
-            Module.ContentFailingSince?.LocalDateTime.ToString("g") ?? string.Empty),
+            Module.ContentFailingSince?.InZone(SessionTimeZone.Current).ToString("g") ?? string.Empty),
         var n => string.Format(Strings.Get("ModContentFailingMany"), n,
-            Module.ContentFailingSince?.LocalDateTime.ToString("g") ?? string.Empty),
+            Module.ContentFailingSince?.InZone(SessionTimeZone.Current).ToString("g") ?? string.Empty),
     };
 
     /// <summary>The last message, as a tooltip — on the line, never in it: a provider's sentence is the wrong

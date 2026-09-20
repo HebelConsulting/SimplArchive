@@ -85,7 +85,7 @@
                         }
                         @if (rt.ChainStartSequence > 0)
                         {
-                            <span class="mud-text-secondary" style="font-size:.8em; margin-left:auto;">@string.Format(Strings.Get("AuditRetainedFrom"), rt.ChainStartSequence)@(rt.LastPurgedAt is { } lp ? string.Format(Strings.Get("AuditLastPurged"), lp.ToLocalTime().ToString("yyyy-MM-dd")) : "")</span>
+                            <span class="mud-text-secondary" style="font-size:.8em; margin-left:auto;">@string.Format(Strings.Get("AuditRetainedFrom"), rt.ChainStartSequence)@(rt.LastPurgedAt is { } lp ? string.Format(Strings.Get("AuditLastPurged"), lp.InZone(SessionTimeZone.Current).ToString("yyyy-MM-dd")) : "")</span>
                         }
                     </div>
                 }
@@ -123,7 +123,7 @@
                                 @foreach (var e in _auditEvents)
                                 {
                                     <tr>
-                                        <td style="white-space:nowrap;">@e.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                        <td style="white-space:nowrap;">@e.Timestamp.InZone(SessionTimeZone.Current).ToString("yyyy-MM-dd HH:mm:ss")</td>
                                         <td>@e.ActorName <span class="mud-text-secondary" style="font-size:.75em;">(@e.ActorType)</span></td>
                                         <td style="white-space:nowrap;">@e.Action</td>
                                         <td>@(string.IsNullOrEmpty(e.TargetName) ? e.TargetType : $"{e.TargetType}: {e.TargetName}")</td>

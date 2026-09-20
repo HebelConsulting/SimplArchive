@@ -1,3 +1,5 @@
+using SimplArchive.Presentation;
+using SimplArchive.DesktopClient.Services;
 namespace SimplArchive.DesktopClient.ViewModels;
 
 // A row in the desktop Audit tab (ADR "Desktop audit viewer") — a single recorded audit event, pre-formatted
@@ -12,7 +14,7 @@ public sealed class AuditEventRowViewModel
     public string? TargetName { get; init; }
     public string? Details { get; init; }
 
-    public string When => Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss");
+    public string When => Timestamp.InZone(SessionTimeZone.Current).DateTime.ToString("yyyy-MM-dd HH:mm:ss");
     public string Actor => $"{ActorName} ({ActorType})";
     public string Target => string.IsNullOrEmpty(TargetName) ? TargetType ?? "" : $"{TargetType}: {TargetName}";
 }

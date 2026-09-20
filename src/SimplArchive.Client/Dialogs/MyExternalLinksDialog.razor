@@ -63,7 +63,7 @@
                             <tr>
                                 <td style="max-width:20rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
                                     title="@link.DocumentName">@link.DocumentName</td>
-                                <td>@link.ExpiresAt.ToLocalTime().ToString("g")</td>
+                                <td>@link.ExpiresAt.InZone(SessionTimeZone.Current).ToString("g")</td>
                                 <td>@link.AccessCount@(link.MaxAccesses is { } max ? $" / {max}" : "")</td>
                                 <td>@link.CreatedByName</td>
                                 <td style="white-space:nowrap; width:1%;">

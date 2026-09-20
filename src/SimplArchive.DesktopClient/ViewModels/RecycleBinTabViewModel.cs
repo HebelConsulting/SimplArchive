@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SimplArchive.DesktopClient.Services;
 using SimplArchive.Localization;
+using SimplArchive.Presentation;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -152,7 +153,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
 
             var fields = await _api.Documents.GetSystemFieldsAsync(Rel("versions"));
             SysName = value.Name;
-            SysCreated = fields is null ? "" : fields.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+            SysCreated = fields is null ? "" : fields.CreatedAt.InZone(SessionTimeZone.Current).ToString("yyyy-MM-dd HH:mm");
             SysCreatedBy = fields?.CreatedByName ?? "";
             SysFileExtension = fields?.FileExtension ?? "";
             // The formatted PAIR in the viewer's zone (ADR 0801), not the raw stored date — a deleted document
@@ -377,7 +378,7 @@ public sealed partial class RecycleBinRowViewModel : ObservableObject
     /// <summary>Whether the caller may hard-delete — set at row construction; gates the row menu's entry (#530).</summary>
     public bool IsTenantAdmin { get; init; }
 
-    public string DeletedAtText => DeletedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+    public string DeletedAtText => DeletedAt.InZone(SessionTimeZone.Current).ToString("yyyy-MM-dd HH:mm");
 }
 
 public sealed partial class RecycleBinTabViewModel

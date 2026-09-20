@@ -30,7 +30,7 @@
                         @foreach (var r in _dashReminders)
                         {
                             <MudListItem T="string" OnClick="() => NavigateToDocumentAsync(r.DocumentId, r.ParentId)" Icon="@(r.Overdue ? Icons.Material.Filled.Warning : Icons.Material.Filled.Alarm)" IconColor="@(r.Overdue ? Color.Error : Color.Default)">
-                                <b>@r.DocumentName</b> — @(r.Overdue ? Strings.Get("MyWorkWasDue") : Strings.Get("MyWorkDue"))@r.RemindAt.LocalDateTime.ToString("g")@(r.Recurrence != 0 ? $" · {r.RecurrenceName.ToLowerInvariant()}" : "")@(string.IsNullOrEmpty(r.Note) ? "" : $" — {r.Note}")
+                                <b>@r.DocumentName</b> — @(r.Overdue ? Strings.Get("MyWorkWasDue") : Strings.Get("MyWorkDue"))@r.RemindAt.InZone(SessionTimeZone.Current).DateTime.ToString("g")@(r.Recurrence != 0 ? $" · {r.RecurrenceName.ToLowerInvariant()}" : "")@(string.IsNullOrEmpty(r.Note) ? "" : $" — {r.Note}")
                             </MudListItem>
                         }
                     </MudList>

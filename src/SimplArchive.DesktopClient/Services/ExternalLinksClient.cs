@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using SimplArchive.Localization;
+using SimplArchive.Presentation;
 
 namespace SimplArchive.DesktopClient.Services;
 
@@ -27,7 +28,7 @@ public sealed class ExternalLinksClient(ApiCore core)
         /// list said 20:40 and its own detail said 21:40 (the bug report this fixes). One property now, used by
         /// both, so they cannot drift again.
         /// </summary>
-        public string ExpiresLocal => ExpiresAt.ToLocalTime().ToString("g");
+        public string ExpiresLocal => ExpiresAt.InZone(SessionTimeZone.Current).ToString("g");
     }
 
     public sealed record ExternalLinkListInfo(IReadOnlyList<ExternalLinkInfo> Links, bool CanCreate, bool CanViewOthers);

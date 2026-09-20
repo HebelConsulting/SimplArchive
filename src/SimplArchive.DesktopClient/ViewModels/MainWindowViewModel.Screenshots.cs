@@ -50,7 +50,7 @@ public partial class MainWindowViewModel
         DetailTitle = "Invoice 2025-001";
         SysName = "Invoice 2025-001";
         SysFileExtension = ".pdf";
-        SysCreated = "2026-07-15 09:12";
+        SysCreatedAt = DateTimeOffset.Parse("2026-07-15 09:12Z", System.Globalization.CultureInfo.InvariantCulture);
         SysCreatedBy = "Demo Admin";
         SysDocumentDate = new DateTime(2026, 6, 28);
         SysOcrCandidate = false;

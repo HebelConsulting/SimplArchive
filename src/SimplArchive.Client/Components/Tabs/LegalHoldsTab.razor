@@ -71,7 +71,7 @@
                                 <MudText Typo="Typo.body2" Class="mb-1">@sel.Reason</MudText>
                             }
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                @string.Format(Strings.Get("LhPlaced"), sel.PlacedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"), sel.IsActive ? Strings.Get("LhActive") : Strings.Get("LhReleasedSuffix"))
+                                @string.Format(Strings.Get("LhPlaced"), sel.PlacedAt.InZone(SessionTimeZone.Current).ToString("yyyy-MM-dd HH:mm"), sel.IsActive ? Strings.Get("LhActive") : Strings.Get("LhReleasedSuffix"))
                             </MudText>
                             @* Release left this header for the toolbar and the row menu (#530 tranche 5). *@
                             <MudText Typo="Typo.subtitle2" Class="mt-3 mb-1">@string.Format(Strings.Get("LhDocuments"), sel.Items.Count)</MudText>

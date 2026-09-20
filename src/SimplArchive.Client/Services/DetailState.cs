@@ -141,7 +141,10 @@ public sealed class DetailState
 
     // The document date's optional UTC time as the wire form "HH:mm", or null when date-only (ADR 0758).
     public string? SysDocumentTime { get; set; }
-    public string SysCreated { get; set; } = string.Empty;
+    // The filing INSTANT, stored raw and formatted at RENDER — the same shape as SysDocumentDate/SysDocumentTime
+    // beside it (#1315). A pre-formatted string cannot re-render when the viewer changes their display zone, so
+    // the document date would move and the filing date would sit there until a reload.
+    public DateTimeOffset? SysCreatedAt { get; set; }
     public string SysCreatedBy { get; set; } = string.Empty;
 
     /// <summary>Whether the current version is a TIFF, which is what offers the searchable-PDF conversion.</summary>

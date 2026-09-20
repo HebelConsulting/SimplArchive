@@ -123,7 +123,7 @@
                                 <div style="max-width:340px; white-space:normal;">
                                     <div style="font-weight:@(n.IsRead ? "400" : "600");">@(n.IsRead ? "" : "● ")@n.Title@n.CountSuffix</div>
                                     <div style="font-size:.8em;" class="mud-text-secondary">@n.Body</div>
-                                    <div style="font-size:.72em;" class="mud-text-secondary">@n.CreatedAt.ToLocalTime().ToString("g")</div>
+                                    <div style="font-size:.72em;" class="mud-text-secondary">@n.CreatedAt.InZone(SessionTimeZone.Current).ToString("g")</div>
                                 </div>
                             </MudMenuItem>
                         }

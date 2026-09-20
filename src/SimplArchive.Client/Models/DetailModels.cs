@@ -1,4 +1,5 @@
 using SimplArchive.Client.Hypermedia;
+using SimplArchive.Client.Services;
 
 namespace SimplArchive.Client.Models;
 
@@ -19,7 +20,7 @@ public record FieldGroup
 
     /// <summary>The values as the pane SHOWS them — type-aware, matching the desktop's rendering (ADR 0511).</summary>
     public string Display => string.Join(", ", Values.Select(v =>
-        DataType == "DateTime" ? SimplArchive.Presentation.IndexInstant.Display(v) : v));
+        DataType == "DateTime" ? SimplArchive.Presentation.IndexInstant.Display(v, SessionTimeZone.Current) : v));
 
     /// <summary>A Url field's values render as LINKS (ADR 0763) — the read row swaps the text for anchors.</summary>
     public bool IsUrl => DataType == "Url";

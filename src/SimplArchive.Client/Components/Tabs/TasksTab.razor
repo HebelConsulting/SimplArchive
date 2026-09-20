@@ -58,17 +58,17 @@
                        (review finding). If the tab ever lists more than reviews, this becomes per-row data. *@
                     <MudTd><MudChip T="string" Size="Size.Small" Color="Color.Warning">@Strings.Get("WfStateInReview")</MudChip></MudTd>
                     <MudTd>@(row.VersionNumber is { } n ? $"v{n}" : "—")</MudTd>
-                    <MudTd>@row.AssignedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</MudTd>
+                    <MudTd>@row.AssignedAt.InZone(SessionTimeZone.Current).DateTime.ToString("yyyy-MM-dd HH:mm")</MudTd>
                     <MudTd>
                         @if (row.DueAt is { } due)
                         {
                             @if (row.IsOverdue)
                             {
-                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Warning">@string.Format(Strings.Get("WorkflowOverdue"), due.LocalDateTime.ToString("yyyy-MM-dd"))</MudChip>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Warning">@string.Format(Strings.Get("WorkflowOverdue"), due.InZone(SessionTimeZone.Current).DateTime.ToString("yyyy-MM-dd"))</MudChip>
                             }
                             else
                             {
-                                <span>@due.LocalDateTime.ToString("yyyy-MM-dd")</span>
+                                <span>@due.InZone(SessionTimeZone.Current).DateTime.ToString("yyyy-MM-dd")</span>
                             }
                         }
                         else

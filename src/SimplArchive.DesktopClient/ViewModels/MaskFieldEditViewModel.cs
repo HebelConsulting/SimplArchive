@@ -132,7 +132,7 @@ public sealed partial class MaskFieldEditViewModel : ObservableObject
         {
             // Readable, not raw: a DateTime shows its local wall clock instead of the ISO wire string.
             field.TextValue = string.Join(", ", values.Select(v =>
-                definition.DataType == "DateTime" ? SimplArchive.Presentation.IndexInstant.Display(v) : v));
+                definition.DataType == "DateTime" ? SimplArchive.Presentation.IndexInstant.Display(v, SessionTimeZone.Current) : v));
             return field;
         }
 
@@ -151,7 +151,7 @@ public sealed partial class MaskFieldEditViewModel : ObservableObject
                     ? d.Date : null;
                 break;
             case "DateTime":
-                var (day, time) = SimplArchive.Presentation.IndexInstant.Split(values.Count > 0 ? values[0] : null);
+                var (day, time) = SimplArchive.Presentation.IndexInstant.Split(values.Count > 0 ? values[0] : null, SessionTimeZone.Current);
                 field.DateValue = day;
                 field.TimeValue = time;
                 break;
@@ -175,7 +175,7 @@ public sealed partial class MaskFieldEditViewModel : ObservableObject
             : DataType switch
             {
                 "Date" => DateValue is { } d ? [d.ToString("yyyy-MM-dd")] : [],
-                "DateTime" => SimplArchive.Presentation.IndexInstant.Compose(DateValue?.Date, TimeValue) is { } instant ? [instant] : [],
+                "DateTime" => SimplArchive.Presentation.IndexInstant.Compose(DateValue?.Date, TimeValue, SessionTimeZone.Current) is { } instant ? [instant] : [],
                 "Boolean" => [BoolValue ? "true" : "false"],
                 _ => string.IsNullOrWhiteSpace(TextValue) ? [] : [TextValue.Trim()],
             };

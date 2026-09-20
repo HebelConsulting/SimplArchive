@@ -1,4 +1,5 @@
 using SimplArchive.Client.Hypermedia;
+using SimplArchive.Client.Services;
 
 namespace SimplArchive.Client.Models;
 
@@ -156,7 +157,7 @@ public sealed class EditField
         {
             // Readable, not raw: a DateTime shows its local wall clock instead of the ISO wire string.
             field.TextValue = string.Join(", ", values.Select(v =>
-                f.DataType == "DateTime" ? SimplArchive.Presentation.IndexInstant.Display(v) : v));
+                f.DataType == "DateTime" ? SimplArchive.Presentation.IndexInstant.Display(v, SessionTimeZone.Current) : v));
             return field;
         }
 
@@ -171,7 +172,7 @@ public sealed class EditField
         switch (f.DataType)
         {
             case "Date": field.DateValue = DateTime.TryParse(values.FirstOrDefault(), out var d) ? d.Date : null; break;
-            case "DateTime": (field.DateValue, field.TimeValue) = SimplArchive.Presentation.IndexInstant.Split(values.FirstOrDefault()); break;
+            case "DateTime": (field.DateValue, field.TimeValue) = SimplArchive.Presentation.IndexInstant.Split(values.FirstOrDefault(), SessionTimeZone.Current); break;
             case "Boolean": field.BoolValue = values.FirstOrDefault() == "true"; break;
             default: field.TextValue = values.FirstOrDefault() ?? ""; break;
         }
@@ -188,7 +189,7 @@ public sealed class EditField
             : DataType switch
             {
                 "Date" => DateValue is { } d ? [d.ToString("yyyy-MM-dd")] : [],
-                "DateTime" => SimplArchive.Presentation.IndexInstant.Compose(DateValue, TimeValue) is { } instant ? [instant] : [],
+                "DateTime" => SimplArchive.Presentation.IndexInstant.Compose(DateValue, TimeValue, SessionTimeZone.Current) is { } instant ? [instant] : [],
                 "Boolean" => [BoolValue ? "true" : "false"],
                 _ => string.IsNullOrWhiteSpace(TextValue) ? [] : [TextValue.Trim()],
             };

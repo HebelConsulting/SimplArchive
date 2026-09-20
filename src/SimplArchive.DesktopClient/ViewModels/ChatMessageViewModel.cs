@@ -103,7 +103,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     // affordance, so what remains here is the time — with the separator only when an author precedes it. A system
     // entry names its author INSIDE the sentence ("Demo Admin filed a new document."), so repeating it in the meta
     // row read as a stutter; the row shows just the time there, matching the web client.
-    public string Timestamp => IsUserPost ? $"· {CreatedAt.ToLocalTime():g}" : $"{CreatedAt.ToLocalTime():g}";
+    public string Timestamp => IsUserPost ? $"· {CreatedAt.InZone(SessionTimeZone.Current):g}" : $"{CreatedAt.InZone(SessionTimeZone.Current):g}";
 
     // The author element belongs to a typed message only, for the same reason.
     public bool ShowAuthorLink => IsUserPost && HasAuthorCard;

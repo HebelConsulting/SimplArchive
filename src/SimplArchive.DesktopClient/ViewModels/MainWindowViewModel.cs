@@ -153,7 +153,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     // DocumentTimeEntry is what the user TYPES in edit mode (keyboard-first), normalized on save.
     [ObservableProperty][NotifyPropertyChangedFor(nameof(SysDocumentDateText))] private string? _sysDocumentTime;
     [ObservableProperty] private string _documentTimeEntry = string.Empty;
-    [ObservableProperty] private string _sysCreated = string.Empty;
     [ObservableProperty] private string _sysCreatedBy = string.Empty;
     [ObservableProperty] private string _sysFileExtension = string.Empty;
     [ObservableProperty][NotifyPropertyChangedFor(nameof(CanEditOcr))] private bool _sysOcrCandidate;
@@ -1533,7 +1532,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         Preview.PreviewConverted = false;
         SysName = string.Empty;
         SysDocumentDate = null;
-        SysCreated = string.Empty;
+        SysCreatedAt = null;
         SysCreatedBy = string.Empty;
         SysWorkflowStatus = null;
         WorkflowTransitions.Clear();

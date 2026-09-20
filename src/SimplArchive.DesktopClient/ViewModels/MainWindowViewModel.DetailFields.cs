@@ -1,4 +1,6 @@
 using SimplArchive.DesktopClient.Services;
+using SimplArchive.Presentation;
+using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -13,6 +15,23 @@ namespace SimplArchive.DesktopClient.ViewModels;
 // the field it stages, because the view hands it a code list and nothing else touches it.
 public sealed partial class MainWindowViewModel
 {
+    // The filing INSTANT, stored raw and rendered derived — the same shape as SysDocumentDate rather than a
+    // pre-formatted string (#1315). A string materialised once at load cannot re-render when the viewer
+    // changes their display zone, so the two rows of this pane would disagree until a reload: the document
+    // date would move and the filing date would sit there, which is exactly how the defect was reported.
+    //
+    // Here rather than beside the other Sys* fields in MainWindowViewModel.cs because that file is on the
+    // 1000-line standing-debt list and may only shrink — and this partial is where the detail fields are
+    // loaded anyway, so the field and its only writer now sit together.
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(SysCreated))] private DateTimeOffset? _sysCreatedAt;
+
+    // With the zone marker, so it reads alike to the document date directly above it in the pane. Without
+    // it a viewer whose device and preference differ cannot tell which clock either row is on, which is what
+    // let the wrong one go unnoticed.
+    public string SysCreated => SysCreatedAt is { } at
+        ? SimplArchive.Presentation.InstantFormat.Display(at, Services.SessionTimeZone.Current)
+        : string.Empty;
+
     // Loads the always-shown system fields for the selected document (ADR "System fields + OCR-language mask
     // field"). OCR languages only apply to a TIFF-sourced document.
     /// <param name="versionsHref">Null for a FOLDER, which advertises no versions (#686) — the system fields
@@ -28,7 +47,7 @@ public sealed partial class MainWindowViewModel
         _detailLinks = null;
         OnPropertyChanged(nameof(CanOpenBookings)); // the affordance must not outlive its subject (ADR 0559)
         SysDocumentDate = null;
-        SysCreated = string.Empty;
+        SysCreatedAt = null;
         SysCreatedBy = string.Empty;
         SysWorkflowStatus = null;
         WorkflowTransitions.Clear();
@@ -96,7 +115,7 @@ public sealed partial class MainWindowViewModel
         _sysCurrentVersionId = fields.CurrentVersionId;
         _sysDocumentDateHref = fields.DocumentDateHref;
         SysCurrentVersion = fields.CurrentVersionNumber.ToString();
-        SysCreated = fields.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+        SysCreatedAt = fields.CreatedAt;
         SysCreatedBy = fields.CreatedByName;
         SysWorkflowStatus = fields.WorkflowStatus;
         // The transitions the detail pane may offer (#691) — skipped for the states that offer nothing.

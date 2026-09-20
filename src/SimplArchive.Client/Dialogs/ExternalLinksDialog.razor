@@ -45,7 +45,7 @@
                                 <div style="display:flex; align-items:center; gap:8px;">
                                     <MudIcon Icon="@Icons.Material.Filled.Link" Size="Size.Small" />
                                     <div style="flex:1 1 auto; min-width:0;">
-                                        <div>@Strings.Get("ExtLinkExpires"): @link.ExpiresAt.ToLocalTime().ToString("g")</div>
+                                        <div>@Strings.Get("ExtLinkExpires"): @link.ExpiresAt.InZone(SessionTimeZone.Current).ToString("g")</div>
                                         <div class="mud-text-secondary" style="font-size:.8em;">
                                             @Strings.Get("ExtLinkAccesses"): @link.AccessCount@(link.MaxAccesses is { } max ? $" / {max}" : "")
                                             · @Strings.Get("ExtLinkCreatedBy"): @link.CreatedByName

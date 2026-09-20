@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SimplArchive.DesktopClient.Services;
 using SimplArchive.Localization;
+using SimplArchive.Presentation;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -206,7 +207,7 @@ public sealed partial class AuditTabViewModel : ObservableObject
             var retention = await _api.Audit.GetAuditRetentionAsync();
             AuditRetentionDays = retention.RetentionDays;
             AuditRetentionNote = retention.ChainStartSequence > 0
-                ? $"Retained from #{retention.ChainStartSequence}" + (retention.LastPurgedAt is { } lp ? $" · last purged {lp.LocalDateTime:yyyy-MM-dd}" : "")
+                ? $"Retained from #{retention.ChainStartSequence}" + (retention.LastPurgedAt is { } lp ? $" · last purged {lp.InZone(SessionTimeZone.Current).DateTime:yyyy-MM-dd}" : "")
                 : "";
         }
         catch (Exception)

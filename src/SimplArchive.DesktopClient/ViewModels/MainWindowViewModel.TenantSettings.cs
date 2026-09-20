@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SimplArchive.DesktopClient.Services;
 using SimplArchive.Localization;
+using SimplArchive.Presentation;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -157,7 +158,7 @@ public sealed partial class MainWindowViewModel
         TenantOcrDisplay = (_ocrLanguages?.Describe(_tenantStagedOcrCodes) ?? "");
         TenantId = s.Id.ToString();
         TenantStatus = s.Status;
-        TenantCreated = s.CreatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
+        TenantCreated = s.CreatedAt.InZone(SessionTimeZone.Current).DateTime.ToString("yyyy-MM-dd HH:mm");
     }
 
     // Bytes → a human "N.N MB" / "N.N GB" for the storage-usage line (ADR "Per-tenant storage quota").
@@ -174,7 +175,7 @@ public sealed partial class MainWindowViewModel
             return "";
         }
 
-        static string When(DateTimeOffset? t) => t is { } v ? v.LocalDateTime.ToString("g") : "";
+        static string When(DateTimeOffset? t) => t is { } v ? v.InZone(SessionTimeZone.Current).DateTime.ToString("g") : "";
 
         if (s.AuditWebhookConsecutiveFailures == 0)
         {

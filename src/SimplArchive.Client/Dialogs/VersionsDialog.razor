@@ -40,7 +40,7 @@
                                     }
                                 </td>
                                 <td>@v.DocumentDate</td>
-                                <td>@v.Filed.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                                <td>@v.Filed.InZone(SessionTimeZone.Current).ToString("yyyy-MM-dd HH:mm")</td>
                                 <td>@v.By</td>
                                 @* The comment WRAPS rather than being clipped to one line (#474). Every other
                                    column is a fact you take in at a glance; this is the only one that answers

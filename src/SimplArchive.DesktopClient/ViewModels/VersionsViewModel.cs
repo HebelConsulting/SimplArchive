@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SimplArchive.DesktopClient.Services;
 using SimplArchive.Localization;
+using SimplArchive.Presentation;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -68,7 +69,7 @@ public sealed partial class VersionsViewModel : ObservableObject
             // DocumentDateText, not the raw stored date: this row and the index-data pane describe the same
             // pair, and a document near midnight would otherwise read as two different days (ADR 0801).
             Versions.Add(new VersionRowViewModel(v.Id, v.VersionNumber ?? 0, v.DocumentDateText,
-                v.CreatedAt == default ? "" : v.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+                v.CreatedAt == default ? "" : v.CreatedAt.InZone(SessionTimeZone.Current).ToString("yyyy-MM-dd HH:mm"),
                 v.CreatedByName, v.DownloadUrl, v.FileExtension, v.IsCurrent, v.Comment, v));
         }
 

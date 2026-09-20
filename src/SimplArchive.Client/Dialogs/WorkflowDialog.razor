@@ -30,11 +30,11 @@
                     {
                         @if (_workflow.IsOverdue)
                         {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Warning">@string.Format(Strings.Get("WorkflowOverdue"), due.LocalDateTime.ToString("yyyy-MM-dd"))</MudChip>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Warning">@string.Format(Strings.Get("WorkflowOverdue"), due.InZone(SessionTimeZone.Current).DateTime.ToString("yyyy-MM-dd"))</MudChip>
                         }
                         else
                         {
-                            <span class="mud-text-secondary" style="font-size:.8em;">@string.Format(Strings.Get("WorkflowDue"), due.LocalDateTime.ToString("yyyy-MM-dd"))</span>
+                            <span class="mud-text-secondary" style="font-size:.8em;">@string.Format(Strings.Get("WorkflowDue"), due.InZone(SessionTimeZone.Current).DateTime.ToString("yyyy-MM-dd"))</span>
                         }
                     }
                 </div>

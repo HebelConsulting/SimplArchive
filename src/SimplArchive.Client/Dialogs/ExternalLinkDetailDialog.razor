@@ -27,7 +27,7 @@
                     </tr>
                     <tr>
                         <td class="mud-text-secondary">@Strings.Get("ExtLinkExpires")</td>
-                        <td>@Link.ExpiresAt.ToLocalTime().ToString("g")</td>
+                        <td>@Link.ExpiresAt.InZone(SessionTimeZone.Current).ToString("g")</td>
                     </tr>
                     <tr>
                         <td class="mud-text-secondary">@Strings.Get("ExtLinkAccesses")</td>

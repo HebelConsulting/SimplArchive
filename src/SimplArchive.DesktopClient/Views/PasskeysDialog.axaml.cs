@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using SimplArchive.DesktopClient.Services;
+using SimplArchive.Presentation;
 
 namespace SimplArchive.DesktopClient.Views;
 
@@ -46,8 +47,8 @@ public partial class PasskeysDialog : Window
             _rows.Clear();
             foreach (var k in keys)
             {
-                var meta = $"Added {k.CreatedAt.LocalDateTime:yyyy-MM-dd}"
-                    + (k.LastUsedAt is { } u ? $" · last used {u.LocalDateTime:yyyy-MM-dd}" : "");
+                var meta = $"Added {k.CreatedAt.InZone(SessionTimeZone.Current).DateTime:yyyy-MM-dd}"
+                    + (k.LastUsedAt is { } u ? $" · last used {u.InZone(SessionTimeZone.Current).DateTime:yyyy-MM-dd}" : "");
                 _rows.Add(new PasskeyRow(k.Id, k.Name, meta, k.RemoveHref));
             }
 

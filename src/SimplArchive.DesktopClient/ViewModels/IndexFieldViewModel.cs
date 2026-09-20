@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.Input;
+using SimplArchive.DesktopClient.Services;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -72,7 +73,7 @@ public sealed partial class IndexFieldViewModel
     {
         FieldName = field.FieldName,
         Values = string.Join(", ", field.Values.Select(v =>
-            field.DataType == "DateTime" ? SimplArchive.Presentation.IndexInstant.Display(v) : v)),
+            field.DataType == "DateTime" ? SimplArchive.Presentation.IndexInstant.Display(v, SessionTimeZone.Current) : v)),
         IsUrl = field.DataType == "Url",
         UrlValues = field.DataType == "Url" ? field.Values : [],
         IsDocumentReference = field.DataType == "DocumentReference",

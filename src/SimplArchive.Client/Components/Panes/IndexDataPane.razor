@@ -154,7 +154,10 @@
                         </tr>
                     }
                 }
-                <tr><td>@Strings.Get("SysCreated")</td><td class="wb-sys-muted">@Detail.SysCreated</td></tr>
+                @* The filing instant in the viewer's zone, with the offset marker — so it reads alike to the document date
+                   above it. Without the marker a viewer whose device and preference differ cannot tell which clock
+                   either row is on, which is how the wrong one went unnoticed (#1315). *@
+                <tr><td>@Strings.Get("SysCreated")</td><td class="wb-sys-muted">@InstantFormat.Display(Detail.SysCreatedAt, SessionTimeZone.Current)</td></tr>
                 <tr><td>@Strings.Get("SysCreatedBy")</td><td class="wb-sys-muted">@Detail.SysCreatedBy</td></tr>
                 }
                 @* The document's current (latest confirmed) version number, directly below Created by

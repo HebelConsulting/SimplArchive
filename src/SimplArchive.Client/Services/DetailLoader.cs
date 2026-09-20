@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using SimplArchive.Client.Hypermedia;
 using SimplArchive.Client.Models;
+using SimplArchive.Presentation;
 
 namespace SimplArchive.Client.Services;
 
@@ -194,7 +195,7 @@ public sealed class DetailLoader(
         detail.SysFileExtension = current.FileExtension ?? "";
         detail.SysDocumentDate = DateTime.TryParse(current.DocumentDate, out var d) ? d.Date : null;
         detail.SysDocumentTime = current.DocumentTime;
-        detail.SysCreated = current.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+        detail.SysCreatedAt = current.CreatedAt;
         detail.SysCreatedBy = current.CreatedByName ?? "";
         detail.SysOcrCandidate = candidate is not null;
         detail.SysOcrVerdict = candidate?.Verdict;

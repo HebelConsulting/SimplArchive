@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SimplArchive.DesktopClient.Services;
 using SimplArchive.Localization;
+using SimplArchive.Presentation;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -635,7 +636,7 @@ public sealed class CheckoutRowViewModel
     // When an idle check-out will be auto-released (ADR "Check-out expiry UX"); null when disabled.
     public DateTimeOffset? ExpiresAt { get; init; }
     public string ExpiresText => ExpiresAt is { } e
-        ? e.LocalDateTime.ToString("g") + ((e - DateTimeOffset.UtcNow).TotalDays <= 1 ? " (soon)" : "")
+        ? e.InZone(SessionTimeZone.Current).DateTime.ToString("g") + ((e - DateTimeOffset.UtcNow).TotalDays <= 1 ? " (soon)" : "")
         : "Never";
 
     public bool CanCheckIn => IsModified;
