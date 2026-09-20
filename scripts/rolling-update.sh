@@ -72,6 +72,42 @@ if [ "$BUILD" -eq 1 ]; then
   $COMPOSE build
 fi
 
+# Module assemblies into the shared volume, BEFORE anything is replaced (#1310).
+#
+# Every `up -d` below carries --no-deps, which is what makes the cutover one-at-a-time instead of letting
+# compose recreate everything at once. The cost is that compose then starts no dependencies either — so the
+# `modules-local` one-shot, which copies the host's module directory into the volume both instances read,
+# never ran. A module updated on the host was therefore NEVER deployed by this script: the instances
+# restarted, re-read the volume, and loaded the previous assembly.
+#
+# That failure was silent in every direction. The file on the host was visibly new, the instances came up
+# healthy, and the module-set check below passed — because both instances agreed, on the stale build. Only
+# the build sha in the startup log said otherwise, and only to someone who thought to look. It is the same
+# shape as #1242: a stale module still loads, seeds its masks and answers requests, so what is missing reads
+# as "never implemented" rather than "not deployed".
+#
+# Safe to run while an instance is serving: the populator stages into a new directory and swaps the directory
+# ENTRY, so a running host keeps the inode it already mapped. Overwriting a mapped assembly in place is what
+# poisons not-yet-JITted IL and surfaces as "Bad IL range" hours later (ADR 0808).
+#
+# A stack with no module override has no such service, so this is a no-op there rather than a special case.
+if $COMPOSE config --services 2>/dev/null | grep -qx modules-local; then
+  say "installing modules into the shared volume"
+  $COMPOSE up -d --force-recreate --no-deps modules-local
+  modules_id=$($COMPOSE ps -q modules-local)
+  if [ -n "$modules_id" ]; then
+    modules_status=$(docker wait "$modules_id")
+    if [ "$modules_status" != "0" ]; then
+      # Refuse rather than roll: replacing the instances now would deploy the OLD module while reporting
+      # success, which is exactly the silence this block exists to end.
+      echo "FAILED: the module installer exited $modules_status. No instance has been touched." >&2
+      echo "$($COMPOSE logs --tail=30 modules-local)" >&2
+      exit 1
+    fi
+  fi
+  say "modules installed"
+fi
+
 # Migrations ONCE, before any instance restarts. Both instances have startup auto-migration off, so nothing
 # else applies them — and two instances racing to migrate is what that setting exists to prevent.
 say "applying migrations (one-shot)"

@@ -169,6 +169,38 @@ public class InstanceParityTests
         Assert.Contains("modules-data:/app/Modules", text, StringComparison.Ordinal);
     }
 
+    // The rolling update must INSTALL the modules before it replaces anything (#1310).
+    //
+    // Every `up -d` in that script carries --no-deps — correct, and what makes the cutover one-at-a-time
+    // rather than letting compose recreate everything at once. The cost is that compose starts no
+    // dependencies either, so the `modules-local` one-shot never ran and a module updated on the host was
+    // never deployed: the instances restarted, re-read the volume, and loaded the PREVIOUS assembly.
+    //
+    // Every signal said success — the host file was visibly new, the instances came up healthy, and the
+    // script's own "instances agree on their module set" passed, because they did agree, on the stale build.
+    // This guard exists because the next person to read those --no-deps flags will be right about why they
+    // are there and wrong about what they cost.
+    [Fact]
+    public void The_rolling_update_installs_modules_before_replacing_an_instance()
+    {
+        const string file = "scripts/rolling-update.sh";
+        var text = Read(file);
+
+        var install = text.IndexOf("--no-deps modules-local", StringComparison.Ordinal);
+        Assert.True(install >= 0,
+            $"{file}: nothing runs the `modules-local` one-shot. Because every other `up -d` here passes "
+            + "--no-deps, compose starts no dependencies, so a module updated on the host is never copied "
+            + "into the volume the instances read — and the update reports success having deployed nothing.");
+
+        // Ordering is the whole property: installing AFTER the instances are replaced deploys the module to
+        // containers that have already read the volume, which is the same silent no-op wearing a fix's clothes.
+        var replace = text.IndexOf("--force-recreate --no-deps \"$svc\"", StringComparison.Ordinal);
+        Assert.True(replace >= 0, $"{file}: the per-instance replace loop was not found — has it been renamed?");
+        Assert.True(install < replace,
+            $"{file}: the module install must come BEFORE the instance replace loop; an instance replaced "
+            + "first has already mapped the old assembly.");
+    }
+
     // One service's block: from its key to the next key at the same indent. Compose keys under `services:` are
     // two-space indented, so a four-space line is inside the block and a two-space line starts the next one.
     private static string ServiceBlock(string text, string name)
