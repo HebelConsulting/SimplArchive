@@ -184,6 +184,11 @@ public sealed class DetailLoader(
         detail.SysCurrentVersionId = current.Id;
         detail.SysDocumentDateHref = Links.Href(current.Links, "document-date");
         detail.SysCurrentVersion = current.VersionNumber;
+        // From the browse ROW, not the version resource: the listing already carries the current version's size
+        // (ADR 0555 — a row's own values cost nothing), and the version DTO does not. Adding it there would
+        // mean widening a 15-member positional record at five construction sites to re-fetch a number already
+        // in hand.
+        detail.SysSizeBytes = item.SizeBytes;
         detail.VersionCount = confirmed.Count;
         detail.SysName = item.Name;
         detail.SysFileExtension = current.FileExtension ?? "";

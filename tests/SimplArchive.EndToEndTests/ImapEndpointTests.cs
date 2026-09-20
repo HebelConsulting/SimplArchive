@@ -121,7 +121,7 @@ public class ImapEndpointTests
             // The .eml keeps its UID across sessions — clients cache by it (RFC 3501).
             Assert.Contains(summaries, s => (int)s.UniqueId.Id == uidBefore && s.Envelope!.Subject == "Quarterly numbers");
 
-            var synthetic = summaries.Single(s => s.Envelope!.Subject == "summary.pdf");
+            var synthetic = summaries.Single(s => s.Envelope!.Subject == "summary");
             var pdfMessage = await repo.GetMessageAsync(synthetic.UniqueId);
             var attachment = Assert.Single(pdfMessage.Attachments);
             Assert.Equal("summary.pdf", attachment.ContentDisposition!.FileName);

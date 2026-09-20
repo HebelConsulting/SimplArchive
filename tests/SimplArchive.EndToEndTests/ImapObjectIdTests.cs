@@ -89,7 +89,7 @@ public class ImapObjectIdTests
             await via.OpenAsync(FolderAccess.ReadOnly);
             var viaSummary = Assert.Single(
                 await via.FetchAsync(0, -1, MessageSummaryItems.UniqueId | MessageSummaryItems.EmailId | MessageSummaryItems.Envelope | MessageSummaryItems.ThreadId),
-                s => s.Envelope!.Subject == "one-document.txt");
+                s => s.Envelope!.Subject == "one-document");
 
             homeMailboxId = home.Id!;
             viaMailboxId = via.Id!;

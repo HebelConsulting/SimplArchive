@@ -491,10 +491,25 @@ internal static class ImapFetch
         using var content = new MemoryStream();
         await stream.CopyToAsync(content);
 
+        // THE ENVELOPE REFLECTS THE DETAIL PANE (#1301), because it is the only part of the message a mail
+        // client shows in its LIST — the columns a reader scans before opening anything. Fixed values there
+        // made every document in the archive appear to be from "SimplArchive" on its filing date, which sorts
+        // and groups by facts the pane does not present and the reader does not care about.
+        //
+        //   From    ← Created by        the person who filed it, as the pane names them
+        //   Date    ← Document date     the record's OWN date, which is what "when is this from?" means
+        //   Subject ← Name              without the extension, which is its own row
+        //
+        // The address half is synthesised (the archive's domain), because a display name is not an address and
+        // the person may have none — the NAME is what a client renders, and that is what carries the meaning.
         var mime = new MimeMessage();
-        mime.From.Add(new MailboxAddress("SimplArchive", "no-reply@simplarchive.local"));
-        mime.Subject = message.Name + message.Extension;
-        mime.Date = message.InternalDate;
+        mime.From.Add(message.Details?.CreatedBy is { Length: > 0 } author
+            ? new MailboxAddress(author, "no-reply@simplarchive.local")
+            : new MailboxAddress("SimplArchive", "no-reply@simplarchive.local"));
+        mime.Subject = message.Name;
+        mime.Date = message.Details is { } details
+            ? new DateTimeOffset(details.DocumentDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero)
+            : message.InternalDate;
         // Stable per document — clients dedupe by Message-ID, and a regenerated synthetic must be the SAME
         // message. Self-identifying (#782): a re-filed export of this wrapper is recognised by SyntheticMessageId
         // and offered as a reference to the original rather than becoming a silent duplicate.
@@ -502,7 +517,7 @@ internal static class ImapFetch
 
         // The same values the body renders, as headers a client can filter on. Header-safe by construction:
         // MimeKit would fold or reject an embedded newline, so every value is flattened to one line.
-        foreach (var (name, value) in DetailHeaders(message.Details))
+        foreach (var (name, value) in DetailHeaders(message))
         {
             mime.Headers.Add(name, value);
         }
@@ -588,12 +603,12 @@ internal static class ImapFetch
     private static string SyntheticText(ImapMessageEntry message)
     {
         var text = new StringBuilder();
-        text.Append(message.Name).Append(message.Extension).Append('\n');
 
         if (message.Details is { } d)
         {
-            text.Append('\n');
-            foreach (var (label, value) in SystemRows(d))
+            // No separate title line any more: Name and File extension are ROWS now, and printing the name
+            // twice was the old list's way of saying what the pane says in its first row (#1301).
+            foreach (var (label, value) in SystemRows(message))
             {
                 text.Append(label.PadRight(16)).Append(value).Append('\n');
             }
@@ -623,52 +638,78 @@ internal static class ImapFetch
 
     // One place both the body rows and the X- headers are derived from, so the two cannot come to disagree
     // about what a document's metadata is.
-    private static List<(string Label, string Value)> SystemRows(ImapMessageDetails d)
+    /// <summary>
+    /// The system rows, in the ONE order both this message and the index-data pane present them
+    /// (<see cref="SimplArchive.Presentation.DocumentDetailRows"/>).
+    /// </summary>
+    /// <remarks>
+    /// <b>Standing principle: IMAP shows exactly the information from the details pane.</b> This used to be its
+    /// own list — it omitted the name, the file extension, the workflow status, the OCR status and the
+    /// retention, ordered what remained differently, and carried a Size row the pane did not have. A reader
+    /// comparing the workbench with a mail client got two overlapping answers to one question, and the mail
+    /// client is exactly where nobody looks often enough to notice.
+    ///
+    /// Labels resolve from the SAME resource keys the pane uses, in the INVARIANT culture: a mail message has
+    /// no reader's language attached to it, and this is the English the message has always shown. A row with no
+    /// value is omitted rather than shown empty, which is what the pane does — it renders no row at all for a
+    /// document with no workflow, no retention, no OCR.
+    /// </remarks>
+    private static List<(string Label, string Value)> SystemRows(ImapMessageEntry message)
     {
-        var rows = new List<(string, string)>
+        var rows = new List<(string, string)>();
+        if (message.Details is not { } d)
         {
-            ("Filed", d.Filed.ToString("dd MMM yyyy HH:mm", CultureInfo.InvariantCulture)),
-            ("Document date", d.DocumentDate.ToString("dd MMM yyyy", CultureInfo.InvariantCulture)),
-        };
-
-        if (d.CreatedBy is { Length: > 0 } author)
-        {
-            rows.Add(("Created by", author));
+            return rows;
         }
 
-        if (d.VersionNumber is { } number)
+        foreach (var row in SimplArchive.Presentation.DocumentDetailRows.InOrder)
         {
-            rows.Add(("Version", d.VersionCount > 0 ? $"{number} of {d.VersionCount}" : number.ToString(CultureInfo.InvariantCulture)));
-        }
-
-        if (d.SizeBytes is { } size)
-        {
-            rows.Add(("Size", HumanSize(size)));
-        }
-
-        if (d.SensitivityLabel is { Length: > 0 } label)
-        {
-            rows.Add(("Sensitivity", label));
-        }
-
-        if (d.OcrLanguages is { Length: > 0 } ocr)
-        {
-            rows.Add(("OCR languages", ocr));
+            if (ValueOf(row, message, d) is { Length: > 0 } value)
+            {
+                rows.Add((Localization.Strings.Get(SimplArchive.Presentation.DocumentDetailRows.LabelKey(row), CultureInfo.InvariantCulture), value));
+            }
         }
 
         return rows;
     }
 
-    private static IEnumerable<(string Name, string Value)> DetailHeaders(ImapMessageDetails? details)
+    /// <summary>One row's value, worded as the pane words it.</summary>
+    private static string? ValueOf(SimplArchive.Presentation.DocumentDetailRow row, ImapMessageEntry m, ImapMessageDetails d) => row switch
     {
-        if (details is not { } d)
+        SimplArchive.Presentation.DocumentDetailRow.Name => m.Name,
+        SimplArchive.Presentation.DocumentDetailRow.FileExtension => m.Extension,
+        SimplArchive.Presentation.DocumentDetailRow.WorkflowStatus => d.WorkflowStatus,
+        SimplArchive.Presentation.DocumentDetailRow.DocumentDate => d.DocumentDate.ToString("dd MMM yyyy", CultureInfo.InvariantCulture),
+        SimplArchive.Presentation.DocumentDetailRow.OcrLanguages => d.OcrLanguages,
+        SimplArchive.Presentation.DocumentDetailRow.OcrStatus => d.OcrStatus,
+        SimplArchive.Presentation.DocumentDetailRow.Created => d.Filed.ToString("dd MMM yyyy HH:mm", CultureInfo.InvariantCulture),
+        SimplArchive.Presentation.DocumentDetailRow.CreatedBy => d.CreatedBy,
+        SimplArchive.Presentation.DocumentDetailRow.CurrentVersion => d.VersionNumber is { } n
+            ? (d.VersionCount > 0 ? $"{n} of {d.VersionCount}" : n.ToString(CultureInfo.InvariantCulture))
+            : null,
+        SimplArchive.Presentation.DocumentDetailRow.Size => d.SizeBytes is { } size
+            ? SimplArchive.Presentation.HumanFileSize.Format(size)
+            : null,
+        SimplArchive.Presentation.DocumentDetailRow.Retention => d.Retention,
+        _ => null,
+    };
+
+    private static IEnumerable<(string Name, string Value)> DetailHeaders(ImapMessageEntry message)
+    {
+        if (message.Details is not { } d)
         {
             yield break;
         }
 
-        foreach (var (label, value) in SystemRows(d))
+        // Header names come from the ROW, not from the label. A label is translated and may contain spaces; a
+        // header name must be neither. Deriving it from the label worked only because the labels happened to
+        // be English, which is precisely the kind of coincidence that breaks the day someone localises.
+        foreach (var row in SimplArchive.Presentation.DocumentDetailRows.InOrder)
         {
-            yield return ($"X-SimplArchive-{label.Replace(" ", string.Empty, StringComparison.Ordinal)}", Flatten(value));
+            if (ValueOf(row, message, d) is { Length: > 0 } value)
+            {
+                yield return (SimplArchive.Presentation.DocumentDetailRows.HeaderName(row), Flatten(value));
+            }
         }
 
         if (d.MaskName is { Length: > 0 } mask)

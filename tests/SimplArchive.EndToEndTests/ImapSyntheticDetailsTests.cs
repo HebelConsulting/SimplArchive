@@ -98,9 +98,15 @@ public class ImapSyntheticDetailsTests
         // passes just as happily on a body whose blank lines are gone and whose blocks have run together, which
         // is precisely how this was nearly signed off. So the shape is pinned first.
         var lines = body.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
-        Assert.Equal("invoice.pdf", lines[0]);
-        Assert.Equal(string.Empty, lines[1]);
-        Assert.StartsWith("Filed", lines[2], StringComparison.Ordinal);
+
+        // THE FIRST ROWS ARE THE DETAIL PANE'S FIRST ROWS (ADR 0809). There is no title line any more: the
+        // name used to be printed above the block AND nowhere in it, while the pane shows Name as its first
+        // row — so the body opened with a heading the pane does not have and omitted a row it does. The list
+        // now starts where the pane's starts.
+        Assert.StartsWith("Name", lines[0], StringComparison.Ordinal);
+        Assert.Contains("invoice", lines[0], StringComparison.Ordinal);
+        Assert.DoesNotContain(".pdf", lines[0], StringComparison.Ordinal);
+        Assert.StartsWith("File extension", lines[1], StringComparison.Ordinal);
 
         // A blank line separates the system rows from the mask block, and the mask block from the signature.
         //
@@ -111,8 +117,8 @@ public class ImapSyntheticDetailsTests
         // and turned that fix into a failure of THIS test, whose subject is the arrangement of the blocks.
         var interior = lines.Reverse().SkipWhile(l => l.Length == 0).Reverse().ToArray();
         var blanks = interior.Select((l, i) => (l, i)).Where(x => x.l.Length == 0).Select(x => x.i).ToList();
-        Assert.Equal(3, blanks.Count);
-        Assert.Equal("Served from the SimplArchive archive:", interior[blanks[2] + 1]);
+        Assert.Equal(2, blanks.Count);
+        Assert.Equal("Served from the SimplArchive archive:", interior[blanks[1] + 1]);
 
         // And the terminator itself, pinned so it cannot be tidied away by someone reading the line above.
         // Against the NORMALISED text: MimeKit decodes a text part's CRLFs to LF, so asserting "\r\n\r\n"
@@ -120,14 +126,21 @@ public class ImapSyntheticDetailsTests
         Assert.EndsWith("\n\n", body.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
 
         // Values line up in a column rather than being jammed against their labels.
-        var filedRow = lines.Single(l => l.StartsWith("Filed", StringComparison.Ordinal));
-        Assert.Matches(@"^Filed {2,}\d", filedRow);
+        // The LABEL FIELD, not a prefix: "Created " also prefixes "Created by", so a StartsWith match finds two
+        // rows and Single throws. Same prefix-ambiguity that CLAUDE.md records for UI locators — it does not
+        // need a browser to bite.
+        var createdRow = lines.Single(l => l.Length > 16 && l[..16].TrimEnd() == "Created");
+        Assert.Matches(@"^Created {2,}\d", createdRow);
 
-        // The system fields the detail pane shows.
-        Assert.Contains("Filed", body, StringComparison.Ordinal);
-        Assert.Contains("Document date", body, StringComparison.Ordinal);
+        // The system fields the detail pane shows — BY THE PANE'S OWN LABELS (ADR 0809). This used to assert
+        // "Filed", which was IMAP's word for a row the pane calls "Created": the same fact under two names was
+        // exactly the drift the shared list now prevents, and the test had been pinning the wrong side of it.
+        foreach (var label in new[] { "Name", "File extension", "Document date", "Created", "Created by", "Current version" })
+        {
+            Assert.Contains(label, body, StringComparison.Ordinal);
+        }
+
         Assert.Contains("Detail Pane User", body, StringComparison.Ordinal);
-        Assert.Contains("Version", body, StringComparison.Ordinal);
 
         // The mask and its index data -- the half a user actually recognises a document by.
         Assert.Contains(maskName, body, StringComparison.Ordinal);

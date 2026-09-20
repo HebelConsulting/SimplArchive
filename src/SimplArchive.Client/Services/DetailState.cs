@@ -128,6 +128,13 @@ public sealed class DetailState
     /// the detail loads — so saving an edited date follows the rel rather than rebuilding the path (ADR 0543).</summary>
     public string? SysDocumentDateHref { get; set; }
     public int? SysCurrentVersion { get; set; }
+
+    /// <summary>
+    /// The current version's byte size, shown as its own row (#1301). It was absent here while IMAP's synthetic
+    /// message carried it — one of the disagreements that made "what does the archive say about this document?"
+    /// have two answers depending on which surface you asked.
+    /// </summary>
+    public long? SysSizeBytes { get; set; }
     public string SysName { get; set; } = string.Empty;
     public string SysFileExtension { get; set; } = string.Empty;
     public DateTime? SysDocumentDate { get; set; }

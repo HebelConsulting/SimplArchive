@@ -163,6 +163,14 @@
                 {
                     <tr><td>@Strings.Get("SysCurrentVersion")</td><td class="wb-current-version wb-sys-muted">@curVer</td></tr>
                 }
+                @* The version's size, directly below the version it belongs to. Added with the IMAP parity
+                   rule (#1301): the synthetic message had carried a Size row the pane did not, and the two
+                   surfaces must present the same list — so the missing side gains it rather than the other
+                   losing it. Same human formatting on both, from SimplArchive.Presentation. *@
+                @if (Detail.SysSizeBytes is { } sizeBytes)
+                {
+                    <tr><td>@Strings.Get("SysSize")</td><td class="wb-sys-muted">@SimplArchive.Presentation.HumanFileSize.Format(sizeBytes)</td></tr>
+                }
                 @if (Detail.Retention is { } ret)
                 {
                     <tr>

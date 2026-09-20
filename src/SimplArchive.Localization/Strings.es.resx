@@ -963,6 +963,9 @@
   <data name="SysCurrentVersion" xml:space="preserve">
     <value>Versión actual</value>
   </data>
+  <data name="SysSize" xml:space="preserve">
+    <value>Tamaño</value>
+  </data>
   <data name="SysRetention" xml:space="preserve">
     <value>Retención</value>
   </data>

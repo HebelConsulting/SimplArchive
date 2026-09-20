@@ -137,8 +137,8 @@ public class ImapAttachmentFetchTests
         await repo.OpenAsync(FolderAccess.ReadOnly);
         var subjects = (await repo.FetchAsync(0, -1, MessageSummaryItems.Envelope)).Select(s => s.Envelope!.Subject).ToList();
 
-        Assert.Contains("referenced-report.txt", subjects);
-        Assert.Contains("own-child.txt", subjects);
+        Assert.Contains("referenced-report", subjects);
+        Assert.Contains("own-child", subjects);
         await client.DisconnectAsync(true);
 
         // …and a user who may see the folder but NOT the reference's target does not get it. A referenced
@@ -164,8 +164,8 @@ public class ImapAttachmentFetchTests
         await otherRepo.OpenAsync(FolderAccess.ReadOnly);
         var otherSubjects = (await otherRepo.FetchAsync(0, -1, MessageSummaryItems.Envelope)).Select(s => s.Envelope!.Subject).ToList();
 
-        Assert.Contains("own-child.txt", otherSubjects);
-        Assert.DoesNotContain("referenced-report.txt", otherSubjects);
+        Assert.Contains("own-child", otherSubjects);
+        Assert.DoesNotContain("referenced-report", otherSubjects);
         await otherClient.DisconnectAsync(true);
     }
 

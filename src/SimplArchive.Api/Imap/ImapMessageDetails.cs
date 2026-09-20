@@ -20,6 +20,12 @@ internal sealed record ImapMessageDetails(
     long? SizeBytes,
     string? SensitivityLabel,
     string? OcrLanguages,
+    // The three rows IMAP used to omit while the detail pane showed them (#1301). Their absence was the bulk
+    // of the disagreement between the two surfaces: a document under a workflow, or under retention, said so
+    // in the workbench and said nothing at all in a mail client.
+    string? WorkflowStatus,
+    string? OcrStatus,
+    string? Retention,
     string? MaskName,
     IReadOnlyList<ImapIndexField> IndexFields);
 
@@ -68,6 +74,34 @@ internal static class ImapMessageDetailsLoader
             .Where(m => maskVersionIds.Contains(m.Id)).ToDictionaryAsync(m => m.Id, m => m.Name);
         var labelNames = await db.SensitivityLabelDefinitions.IgnoreQueryFilters()
             .Where(l => labelIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id, l => l.Name);
+
+        // The workflow status, batched like everything else here. A document with no WorkflowState has never
+        // entered the workflow, which the pane renders as no row rather than as "none".
+        // Keyed on the VERSION, which is where a workflow state lives — and which is also what the detail pane
+        // reads (`current.WorkflowStatus`). Keying on the document would have compiled against nothing and,
+        // worse, invited a per-document answer for a per-version fact.
+        var currentVersionIds = currentVersions.Values.Select(v => v.Id).ToList();
+        var workflowStates = await db.WorkflowStates.IgnoreQueryFilters()
+            .Where(w => currentVersionIds.Contains(w.DocumentVersionId))
+            .ToDictionaryAsync(w => w.DocumentVersionId, w => w.Status);
+
+        // Retention comes from the MASK, not the document: the years live on the mask version, and the
+        // disposition date is derived from the document's anchor. A legal hold suspends it, and saying so is
+        // the whole point of the row — a document that looks disposable and is not.
+        var retentionYears = await db.MaskVersions.IgnoreQueryFilters()
+            .Where(m => maskVersionIds.Contains(m.Id) && m.RetentionYears != null)
+            .ToDictionaryAsync(m => m.Id, m => m.RetentionYears!.Value);
+        // A hold reaches a document through LegalHoldItem, and only an UNRELEASED hold freezes it. Batched
+        // rather than asking ILegalHoldService per document, which would be one round trip per row on the path
+        // a mail client hits every time it opens a folder — the reason this loader exists at all.
+        var heldDocumentIds = retentionYears.Count == 0
+            ? []
+            : await db.LegalHoldItems.IgnoreQueryFilters()
+                .Where(i => documentIds.Contains(i.DocumentId)
+                    && db.LegalHolds.IgnoreQueryFilters().Any(h => h.Id == i.LegalHoldId && h.ReleasedAt == null))
+                .Select(i => i.DocumentId)
+                .Distinct()
+                .ToListAsync();
 
         var versionCounts = await db.DocumentVersions.IgnoreQueryFilters()
             .Where(v => documentIds.Contains(v.DocumentId) && v.Status == DocumentVersionStatus.Confirmed)
@@ -130,10 +164,39 @@ internal static class ImapMessageDetailsLoader
                 SizeBytes: version.SizeBytes,
                 SensitivityLabel: document.SensitivityLabelId is { } lid && labelNames.TryGetValue(lid, out var label) ? label : null,
                 OcrLanguages: version.OcrLanguages,
+                WorkflowStatus: workflowStates.TryGetValue(version.Id, out var status) ? status.ToString() : null,
+                OcrStatus: version.OcrVerdict?.ToString(),
+                Retention: RetentionRow(document, version, retentionYears, heldDocumentIds),
                 MaskName: document.MaskVersionId is { } mvid && maskNames.TryGetValue(mvid, out var mask) ? mask : null,
                 IndexFields: fieldsByDocument.TryGetValue(document.Id, out var fields) ? fields : []);
         }
 
         return details;
+    }
+
+    /// <summary>
+    /// The retention row exactly as the pane words it: the years, the derived disposition date, and whether a
+    /// legal hold has suspended it. Null when the document's mask sets no retention, which is the pane's
+    /// "no row" rather than a row saying none.
+    /// </summary>
+    private static string? RetentionRow(
+        Document document,
+        DocumentVersion version,
+        IReadOnlyDictionary<Guid, int> retentionYears,
+        IReadOnlyList<Guid> heldDocumentIds)
+    {
+        if (document.MaskVersionId == Guid.Empty || !retentionYears.TryGetValue(document.MaskVersionId, out var years))
+        {
+            return null;
+        }
+
+        // The SAME anchor rule the document resource uses (DocumentsController.BuildRetentionInfoAsync): the
+        // current version's document date, falling back to when the document was filed. A second rule here
+        // would make the pane and the message disagree about a disposition date, which is the one number on
+        // this row anybody acts on.
+        var anchor = version.DocumentDate;
+        var disposition = Documents.RetentionSchedule.DispositionDateOf(anchor, years);
+        var suspended = heldDocumentIds.Contains(document.Id) ? " (suspended — legal hold)" : string.Empty;
+        return $"{years} years · disposition {disposition:yyyy-MM-dd}{suspended}";
     }
 }
