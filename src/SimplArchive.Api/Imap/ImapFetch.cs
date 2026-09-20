@@ -507,8 +507,13 @@ internal static class ImapFetch
             ? new MailboxAddress(author, "no-reply@simplarchive.local")
             : new MailboxAddress("SimplArchive", "no-reply@simplarchive.local"));
         mime.Subject = message.Name;
+        // THE DATE IS THE PAIR, not the date alone. Taking only DocumentDate put every message at midnight,
+        // which a mail client sorts and groups by — so the five METARs a weather folder collects in a day all
+        // claimed the same instant and arrived in an arbitrary order. The time is stored UTC, and the header
+        // carries its offset, so this is the document's own instant rather than a rendering of it.
         mime.Date = message.Details is { } details
-            ? new DateTimeOffset(details.DocumentDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero)
+            ? new DateTimeOffset(
+                details.DocumentDate.ToDateTime(details.DocumentTime ?? TimeOnly.MinValue), TimeSpan.Zero)
             : message.InternalDate;
         // Stable per document — clients dedupe by Message-ID, and a regenerated synthetic must be the SAME
         // message. Self-identifying (#782): a re-filed export of this wrapper is recognised by SyntheticMessageId
@@ -679,7 +684,12 @@ internal static class ImapFetch
         SimplArchive.Presentation.DocumentDetailRow.Name => m.Name,
         SimplArchive.Presentation.DocumentDetailRow.FileExtension => m.Extension,
         SimplArchive.Presentation.DocumentDetailRow.WorkflowStatus => d.WorkflowStatus,
-        SimplArchive.Presentation.DocumentDetailRow.DocumentDate => d.DocumentDate.ToString("dd MMM yyyy", CultureInfo.InvariantCulture),
+        // The SAME formatter the pane uses, so the pair renders identically — including the marker that says
+        // which zone the time is in. UTC here because a message has no viewer whose zone we could adopt; the
+        // pane converts to the reader's. That is a rendering difference the principle allows, and the VALUE is
+        // the same instant either way.
+        SimplArchive.Presentation.DocumentDetailRow.DocumentDate =>
+            SimplArchive.Presentation.DocumentDateFormat.Display(d.DocumentDate, d.DocumentTime, TimeZoneInfo.Utc),
         SimplArchive.Presentation.DocumentDetailRow.OcrLanguages => d.OcrLanguages,
         SimplArchive.Presentation.DocumentDetailRow.OcrStatus => d.OcrStatus,
         SimplArchive.Presentation.DocumentDetailRow.Created => d.Filed.ToString("dd MMM yyyy HH:mm", CultureInfo.InvariantCulture),

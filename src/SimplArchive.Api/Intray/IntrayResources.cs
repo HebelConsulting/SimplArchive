@@ -131,6 +131,17 @@ public class IntrayMaskResource : HypermediaResource
 
     public string? DocumentDate { get; set; }
 
+    /// <summary>
+    /// The date's optional UTC time, "HH:mm" (ADR 0758) — the other half of one instant (#1304).
+    /// </summary>
+    /// <remarks>
+    /// Absent until now, which made the intray a door that SILENTLY DROPPED an hour: the draft was built from
+    /// a staged version's <c>DocumentDate</c> alone, so a document that arrived with a time — an e-mail, a
+    /// module-staged briefing, a scan someone had dated — lost it on the way in, and the form offered no way
+    /// to put one back. Nothing reported it, because a date with no time is a perfectly ordinary state.
+    /// </remarks>
+    public string? DocumentTime { get; set; }
+
     public Guid? MaskId { get; set; }
 
     public List<IntrayMaskFieldResource> Fields { get; set; } = [];

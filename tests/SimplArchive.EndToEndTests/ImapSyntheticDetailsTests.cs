@@ -24,6 +24,73 @@ public class ImapSyntheticDetailsTests
     public ImapSyntheticDetailsTests(E2EApiFactory factory) => _factory = factory;
 
     [Fact]
+    public async Task The_document_date_keeps_its_hour_in_the_body_and_the_envelope()
+    {
+        // WHY THIS EXISTS. ADR 0809 aligned IMAP with the detail pane and still lost the TIME: the details
+        // record carried a DateOnly, so a document whose date has an hour — a METAR observed at 05:20, an
+        // appointment, a mail — rendered as the bare day in the body and landed at MIDNIGHT in the envelope.
+        // The envelope half is the one that bites: a mail client SORTS by Date, so five METARs filed on one day
+        // all claimed the same instant and arrived in an arbitrary order. Reported from the live kiosk.
+        var (clientId, secret, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
+        using var owner = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
+
+        var repoName = $"ImapT{Guid.NewGuid():N}"[..12];
+        var repoId = (await TestJson.Post(owner, "/api/repositories", new { name = repoName })).GetProperty("id").GetGuid();
+
+        var email = $"imap-time-{Guid.NewGuid():N}@e2e.local";
+        const string password = "imap-time-1234";
+        await _factory.SeedUserAsync(tenantId, email, password, "Hour Keeper");
+        await _factory.GrantTenantAdminAsync(email);
+        using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, password));
+
+        var docId = (await TestJson.Post(api, $"/api/documents/{repoId}/children", new { name = "metar" })).GetProperty("id").GetGuid();
+        var created = await TestJson.Post(api, $"/api/documents/{docId}/versions", new { fileExtension = ".txt" });
+        var versionId = created.GetProperty("id").GetGuid();
+        using (var storage = new HttpClient())
+        {
+            (await storage.PutAsync(created.GetProperty("uploadUrl").GetString()!,
+                new ByteArrayContent(Encoding.UTF8.GetBytes("LSZH 200520Z 24006KT CAVOK 12/08 Q1018")))).EnsureSuccessStatusCode();
+        }
+
+        await TestJson.Put(api, $"/api/documents/{docId}/versions/{versionId}", new { });
+
+        // 05:20, not a round hour and not midnight — a time that cannot be produced by the bug. Midnight would
+        // have passed a naive assertion, which is how this survived the ADR that was supposed to fix it.
+        (await api.PutAsJsonAsync($"/api/documents/{docId}/versions/{versionId}/document-date",
+            new { documentDate = "2026-09-20", documentTime = "05:20" })).EnsureSuccessStatusCode();
+
+        var imapPassword = (await TestJson.Post(api, "/api/me/imap-access", new { })).GetProperty("password").GetString()!;
+
+        // A .txt is only served when the user asks for ALL documents — without this the mailbox lists nothing
+        // but .eml and the fetch below finds no message at all. (It did, which is how this line got written.)
+        (await api.PutAsJsonAsync("/api/me/imap-access/settings", new { showAllDocuments = true })).EnsureSuccessStatusCode();
+
+        var port = ((ImapServer)_factory.Services.GetService(typeof(ImapServer))!).BoundPort!.Value;
+        using var client = new ImapClient();
+        await client.ConnectAsync("127.0.0.1", port, SecureSocketOptions.None);
+        await client.AuthenticateAsync(email, imapPassword);
+
+        var repo = await client.GetFolderAsync(repoName);
+        await repo.OpenAsync(FolderAccess.ReadOnly);
+        var all = await repo.FetchAsync(0, -1, MessageSummaryItems.UniqueId | MessageSummaryItems.Envelope);
+        Assert.True(all.Count > 0, $"mailbox '{repoName}' has {repo.Count} messages; folders: "
+            + string.Join(", ", (await client.GetFoldersAsync(client.PersonalNamespaces[0])).Select(f => f.FullName)));
+        var summary = all.Single();
+
+        // THE ENVELOPE, which is what a client sorts by.
+        var date = summary.Envelope!.Date;
+        Assert.NotNull(date);
+        Assert.Equal(new DateTimeOffset(2026, 9, 20, 5, 20, 0, TimeSpan.Zero), date!.Value.ToUniversalTime());
+
+        // …and the body row, which is what a reader reads. The pane shows the PAIR, so this must too.
+        var message = await repo.GetMessageAsync(summary.UniqueId);
+        var body = Assert.IsAssignableFrom<MimeKit.TextPart>(message.BodyParts.First()).Text;
+        var dateRow = body.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n')
+            .Single(l => l.Length > 16 && l[..16].TrimEnd() == "Document date");
+        Assert.Contains("05:20", dateRow, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_synthetic_message_carries_the_detail_pane_in_its_body_and_its_headers()
     {
         var (clientId, secret, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);

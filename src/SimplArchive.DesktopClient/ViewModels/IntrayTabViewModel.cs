@@ -377,6 +377,9 @@ public sealed partial class IntrayTabViewModel : ObservableObject
 
     [ObservableProperty] private DateTime? _documentDate;
 
+    /// <summary>The staged date's optional "HH:mm" UTC time (#1304) — typed, not picked (ADR 0758).</summary>
+    [ObservableProperty] private string? _documentTime;
+
     [ObservableProperty] private MaskChoiceViewModel? _selectedMaskChoice;
 
     public ObservableCollection<MaskChoiceViewModel> AvailableMasks { get; } = [];
@@ -446,6 +449,7 @@ public sealed partial class IntrayTabViewModel : ObservableObject
             _draftValues = draft.Fields.ToDictionary(f => f.FieldDefinitionId, f => f.Values);
             Name = string.IsNullOrEmpty(draft.Name) ? Path.GetFileNameWithoutExtension(name) : draft.Name;
             DocumentDate = DateTime.TryParse(draft.DocumentDate, out var d) ? d.Date : null;
+            DocumentTime = draft.DocumentTime;
 
             // OCR languages: only for a scannable item, staged + applied at filing (ADR "Inbox OCR-language
             // staging"). Load the catalog on demand so DescribeOcrLanguages can map codes → names.
@@ -515,9 +519,12 @@ public sealed partial class IntrayTabViewModel : ObservableObject
             var fields = MaskEditFields.Select(f => (f.FieldDefinitionId, f.ToValues())).ToList();
             var stagedName = string.IsNullOrWhiteSpace(Name) ? null : Name.Trim();
             var docDate = DocumentDate?.ToString("yyyy-MM-dd");
+            // Sent even when this form did not touch it: the sidecar PUT replaces the whole draft, so omitting
+            // the time would clear an hour the item arrived with (#1304).
+            var docTime = string.IsNullOrWhiteSpace(DocumentTime) ? null : DocumentTime.Trim();
             var ocr = StgScannable && _stgOcrCodes.Count > 0 ? _stgOcrCodes : null;
-            await _api.Intray.SetIntrayMaskAsync(item.Item!, stagedName, docDate, maskId, fields, ocr);
-            item.HasMask = maskId is not null || fields.Any(f => f.Item2.Count > 0) || stagedName is not null || docDate is not null || ocr is not null;
+            await _api.Intray.SetIntrayMaskAsync(item.Item!, stagedName, docDate, docTime, maskId, fields, ocr);
+            item.HasMask = maskId is not null || fields.Any(f => f.Item2.Count > 0) || stagedName is not null || docDate is not null || docTime is not null || ocr is not null;
             _shell.Report(Strings.Get("StMaskSaved"));
         }
         catch (Exception e)

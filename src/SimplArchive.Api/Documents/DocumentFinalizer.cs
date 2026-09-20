@@ -360,6 +360,12 @@ public class DocumentFinalizer
         if (DateOnly.TryParse(staged.DocumentDate, out var documentDate))
         {
             version.DocumentDate = documentDate;
+
+            // Only WITH a date, never on its own: a time attached to no date is not an instant, and letting one
+            // through would leave a version whose pair cannot be rendered.
+            version.DocumentTime = TimeOnly.TryParse(staged.DocumentTime, CultureInfo.InvariantCulture, DateTimeStyles.None, out var documentTime)
+                ? documentTime
+                : null;
         }
 
         // Staged OCR languages (ADR "Inbox OCR-language staging") — applied to the version before the
@@ -791,6 +797,9 @@ public class DocumentFinalizer
 // (ADR "Consume the staged mask sidecar at filing"). DocumentDate is a "yyyy-MM-dd" string; MaskId null = none.
 public sealed record StagedClassification(
     string? Name, string? DocumentDate, Guid? MaskId,
+    // The date's optional "HH:mm" UTC time (#1304). Staged alongside the date because the two are ONE instant:
+    // consuming only the date is what made the intray discard an hour the item arrived with.
+    string? DocumentTime,
     IReadOnlyList<(Guid FieldDefinitionId, IReadOnlyList<string> Values)> Fields,
     // Staged OCR languages ("+"-joined Tesseract codes) — set on the version before the searchable-PDF
     // conversion is enqueued (ADR "Inbox OCR-language staging"). Null = the tenant default.

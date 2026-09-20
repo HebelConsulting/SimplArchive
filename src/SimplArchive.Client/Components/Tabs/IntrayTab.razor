@@ -212,7 +212,13 @@
                     {
                         <table class="wb-sysfields">
                             <tr><td>@Strings.Get("Name")</td><td><MudTextField @bind-Value="_intrayStgName" Margin="Margin.Dense" Variant="Variant.Outlined" /></td></tr>
-                            <tr><td>@Strings.Get("VerColDocDate")</td><td><MudDatePicker Editable="true" @bind-Date="_intrayStgDate" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" /></td></tr>
+                            <tr><td>@Strings.Get("VerColDocDate")</td><td>
+                                <MudDatePicker Editable="true" @bind-Date="_intrayStgDate" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                                @* Typed, not picked (ADR 0758): the hour is a value the filer already knows.
+                                   Empty clears it. Paired with the date above because the two are one instant. *@
+                                <MudTextField @bind-Value="_intrayStgTime" Placeholder="HH:mm UTC" Clearable="true"
+                                              Margin="Margin.Dense" Variant="Variant.Outlined" Class="mt-1" />
+                            </td></tr>
                             @if (_intrayStgScannable)
                             {
                                 @* OCR languages for a scannable item — staged + applied to the searchable-PDF conversion at filing (ADR "Inbox OCR-language staging"). *@
@@ -614,6 +620,10 @@
     private bool _intrayStgBusy;
     private string _intrayStgName = string.Empty;
     private DateTime? _intrayStgDate;
+
+    // The staged date's optional "HH:mm" (#1304). Held even when the form does not change it, because the
+    // sidecar PUT is a FULL REPLACEMENT: a save that omitted it would clear an hour the item arrived with.
+    private string? _intrayStgTime;
     private Guid? _intrayStgMaskId;
     private readonly List<EditField> _intrayStgFields = [];
     private List<MaskSummary> _intrayStgMasks = [];
@@ -666,6 +676,7 @@
             var draft = await Http.GetFromJsonAsync<IntrayMaskDraft>(item.MaskHref);
             _intrayStgName = string.IsNullOrEmpty(draft?.Name) ? System.IO.Path.GetFileNameWithoutExtension(item.Name) : draft.Name;
             _intrayStgDate = DateTime.TryParse(draft?.DocumentDate, out var d) ? d.Date : null;
+            _intrayStgTime = draft?.DocumentTime;
             _intrayDraftValues = (draft?.Fields ?? []).ToDictionary(f => f.FieldDefinitionId, f => f.Values);
 
             // OCR languages: only offered for a scannable item, staged + consumed at filing (ADR "Inbox
@@ -744,6 +755,7 @@
             {
                 name = string.IsNullOrWhiteSpace(_intrayStgName) ? null : _intrayStgName.Trim(),
                 documentDate = _intrayStgDate?.ToString("yyyy-MM-dd"),
+                documentTime = string.IsNullOrWhiteSpace(_intrayStgTime) ? null : _intrayStgTime.Trim(),
                 maskId = _intrayStgMaskId,
                 fields = _intrayStgFields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.ToValues() }),
                 ocrLanguages = _intrayStgScannable && _intrayStgOcrCodes.Count > 0 ? _intrayStgOcrCodes : null,
@@ -956,7 +968,7 @@
 
     private record IntrayResponse { public List<IntrayItemDto> Items { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
     private record IntrayItemDto { public string Name { get; set; } = string.Empty; public long Size { get; set; } public bool HasMask { get; set; } public bool Signed { get; set; } public Guid? GroupId { get; set; } public string? GroupName { get; set; } public Guid? UserId { get; set; } public string? UserName { get; set; } public List<LinkResponse> Links { get; set; } = []; }
-    private record IntrayMaskDraft { public string? Name { get; set; } public string? DocumentDate { get; set; } public Guid? MaskId { get; set; } public List<IntrayDraftField> Fields { get; set; } = []; public List<string>? OcrLanguages { get; set; } }
+    private record IntrayMaskDraft { public string? Name { get; set; } public string? DocumentDate { get; set; } public string? DocumentTime { get; set; } public Guid? MaskId { get; set; } public List<IntrayDraftField> Fields { get; set; } = []; public List<string>? OcrLanguages { get; set; } }
     private record IntrayPreviewResponse { public string? PreviewUrl { get; set; } public bool PreviewConverted { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record IntrayDraftField { public Guid FieldDefinitionId { get; set; } public List<string> Values { get; set; } = []; }
     private record UploadIntrayResponse { public string Name { get; set; } = string.Empty; public string UploadUrl { get; set; } = string.Empty; }

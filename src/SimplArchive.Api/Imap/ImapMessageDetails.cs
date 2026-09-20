@@ -14,6 +14,11 @@ internal sealed record ImapIndexField(string Name, string Value);
 internal sealed record ImapMessageDetails(
     DateTimeOffset Filed,
     DateOnly DocumentDate,
+    // The date's optional UTC time (ADR 0758). Carried because the pane shows the PAIR — a METAR's row reads
+    // "2026-09-20 05:20 UTC" there — and IMAP showing only the date is the same surface disagreeing about the
+    // same fact (ADR 0809). It is also what the envelope's Date must carry: a mail client sorts by it, and
+    // five METARs filed on one day all landing at midnight sort by nothing at all.
+    TimeOnly? DocumentTime,
     string? CreatedBy,
     int? VersionNumber,
     int VersionCount,
@@ -158,6 +163,7 @@ internal static class ImapMessageDetailsLoader
             details[document.Id] = new ImapMessageDetails(
                 Filed: version.CreatedAt,
                 DocumentDate: version.DocumentDate,
+                DocumentTime: version.DocumentTime,
                 CreatedBy: createdBy,
                 VersionNumber: version.VersionNumber,
                 VersionCount: versionCounts.TryGetValue(document.Id, out var count) ? count : 0,

@@ -340,6 +340,7 @@ public sealed class IntrayApi(ApiCore core)
     {
         var name = json.TryGetProperty("name", out var nm) && nm.ValueKind == JsonValueKind.String ? nm.GetString() : null;
         var docDate = json.TryGetProperty("documentDate", out var dd) && dd.ValueKind == JsonValueKind.String ? dd.GetString() : null;
+        var docTime = json.TryGetProperty("documentTime", out var dt) && dt.ValueKind == JsonValueKind.String ? dt.GetString() : null;
         var maskId = json.TryGetProperty("maskId", out var mid) && mid.ValueKind == JsonValueKind.String ? mid.GetGuid() : (Guid?)null;
         var fields = new List<IntrayMaskFieldValue>();
         if (json.TryGetProperty("fields", out var fieldArray) && fieldArray.ValueKind == JsonValueKind.Array)
@@ -356,15 +357,17 @@ public sealed class IntrayApi(ApiCore core)
         var ocrLanguages = json.TryGetProperty("ocrLanguages", out var oc) && oc.ValueKind == JsonValueKind.Array
             ? oc.EnumerateArray().Select(e => e.GetString() ?? "").Where(s => s.Length > 0).ToList()
             : [];
-        return new IntrayMaskDraft(name, docDate, maskId, fields, ocrLanguages);
+        return new IntrayMaskDraft(name, docDate, docTime, maskId, fields, ocrLanguages);
     }
 
     // Writes (or, when nothing is staged, clears) an intray item's staged mask/index-data draft. Name +
     // documentDate ("yyyy-MM-dd", or null) are the staged system fields.
-    public async Task SetIntrayMaskAsync(IntrayItemInfo item, string? stagedName, string? documentDate, Guid? maskId,
+    public async Task SetIntrayMaskAsync(IntrayItemInfo item, string? stagedName, string? documentDate, string? documentTime, Guid? maskId,
         IEnumerable<(Guid FieldDefinitionId, IReadOnlyList<string> Values)> fields, IReadOnlyList<string>? ocrLanguages = null, CancellationToken cancellationToken = default)
     {
-        var body = new { name = stagedName, documentDate, maskId, fields = fields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.Values }), ocrLanguages = ocrLanguages is { Count: > 0 } o ? o : null };
+        // documentTime rides with the date: the sidecar PUT is a FULL REPLACEMENT, so omitting it would clear
+        // an hour the item arrived with (#1304).
+        var body = new { name = stagedName, documentDate, documentTime, maskId, fields = fields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.Values }), ocrLanguages = ocrLanguages is { Count: > 0 } o ? o : null };
         (await core.Http.PutAsJsonAsync(RequireHref(item, "mask"), body, cancellationToken)).EnsureSuccessStatusCode();
     }
 
@@ -443,7 +446,7 @@ public sealed class IntrayApi(ApiCore core)
 
     // A staged mask/index-data draft for an intray item (the `{name}.mask.json` sidecar content). Name +
     // DocumentDate ("yyyy-MM-dd") are the staged system fields (ADR "Staged Name + Document date on inbox items").
-    public sealed record IntrayMaskDraft(string? Name, string? DocumentDate, Guid? MaskId, IReadOnlyList<IntrayMaskFieldValue> Fields, IReadOnlyList<string> OcrLanguages);
+    public sealed record IntrayMaskDraft(string? Name, string? DocumentDate, string? DocumentTime, Guid? MaskId, IReadOnlyList<IntrayMaskFieldValue> Fields, IReadOnlyList<string> OcrLanguages);
 
     public sealed record IntrayMaskFieldValue(Guid FieldDefinitionId, IReadOnlyList<string> Values);
     // Addressed from the row the LISTING advertised, never composed (ADR 0543/0555).

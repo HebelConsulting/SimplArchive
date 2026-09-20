@@ -222,8 +222,14 @@
                                         </Grid>
                                         <Grid ColumnDefinitions="180,*">
                                             <TextBlock Grid.Column="0" Text="{loc:Tr VerColDocDate}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
-                                            <!-- Free-text date entry with an optional calendar picker (ADR "Intray refinements"). -->
-                                            <CalendarDatePicker Grid.Column="1" SelectedDate="{Binding Intray.DocumentDate}" Watermark="yyyy-MM-dd" HorizontalAlignment="Stretch" />
+                                            <!-- Free-text date entry with an optional calendar picker (ADR "Intray refinements").
+                                                 The TIME beside it is typed, never picked (ADR 0758): an hour is a value the
+                                                 filer already knows. Empty clears it. Added with #1304, where the intray was
+                                                 found to silently discard an hour a staged item arrived with. -->
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Stretch">
+                                                <CalendarDatePicker SelectedDate="{Binding Intray.DocumentDate}" Watermark="yyyy-MM-dd" Width="170" />
+                                                <TextBox Text="{Binding Intray.DocumentTime}" Watermark="HH:mm UTC" Width="110" />
+                                            </StackPanel>
                                         </Grid>
                                         <Grid ColumnDefinitions="180,*">
                                             <TextBlock Grid.Column="0" Text="{loc:Tr MaskLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />

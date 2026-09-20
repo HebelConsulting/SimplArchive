@@ -424,6 +424,9 @@ public class IntrayController : ControllerBase
             MaskId = await _dbContext.MaskVersions.Where(mv => mv.Id == document.MaskVersionId)
                 .Select(mv => (Guid?)mv.MaskId).FirstOrDefaultAsync(cancellationToken),
             DocumentDate = version.DocumentDate.ToString("yyyy-MM-dd"),
+            // The PAIR, not the date alone (#1304): reading only the date discarded an hour the staged version
+            // already carried, and the draft had nowhere to put it back.
+            DocumentTime = version.DocumentTime?.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture),
             Fields = values.Select(v => new IntrayMaskFieldResource { FieldDefinitionId = v.FieldDefinitionId, Values = v.Values }).ToList(),
         };
 
@@ -506,6 +509,7 @@ public class IntrayController : ControllerBase
         {
             Name = request.Name,
             DocumentDate = request.DocumentDate,
+            DocumentTime = request.DocumentTime,
             MaskId = request.MaskId,
             Fields = request.Fields,
             OcrLanguages = request.OcrLanguages,
@@ -583,7 +587,7 @@ public class IntrayController : ControllerBase
         if (!isEmail && await ReadMaskSidecarAsync(prefix, name, cancellationToken) is { } draft)
         {
             staged = new StagedClassification(
-                draft.Name, draft.DocumentDate, draft.MaskId,
+                draft.Name, draft.DocumentDate, draft.MaskId, draft.DocumentTime,
                 draft.Fields.Select(f => (f.FieldDefinitionId, (IReadOnlyList<string>)f.Values)).ToList(),
                 draft.OcrLanguages is { Count: > 0 } langs ? string.Join("+", langs) : null);
         }
