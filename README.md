@@ -113,7 +113,9 @@ desktop builds all cost something to run and publish.
 
 If the project is useful to you, or you enjoyed poking around the architecture, you can support it here:
 
-**[☕ Buy me a coffee](https://buymeacoffee.com/hebel.it)**
+**[☕ Buy me a coffee](https://buymeacoffee.com/hebel.it)** · **[💸 Donate via PayPal](https://www.paypal.com/donate/?business=paypal@simplarchive.dev)**
+
+(PayPal donations go to `paypal@simplarchive.dev`, if you would rather send one directly from your own account.)
 
 Entirely optional, and it buys no influence over the roadmap. Starring the repository or opening a thoughtful
 issue is just as welcome.
