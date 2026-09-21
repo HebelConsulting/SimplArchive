@@ -59,6 +59,10 @@ public sealed class ImapSession
     private readonly int _connection = Interlocked.Increment(ref _nextConnectionId);
 
     private string _email = "anonymous";
+
+    /// <summary>The authenticated user's email — the recipient identity the envelope hook needs
+    /// (SimplArchiveEncryption ADR 0007). "anonymous" before LOGIN, but FETCH is unreachable then.</summary>
+    internal string Email => _email;
     // The peer's address, for the sign-in throttle's per-address spray counter (ADR 0716). Read once at
     // accept: a socket that has been closed no longer has a remote endpoint to ask.
     private string? _address;

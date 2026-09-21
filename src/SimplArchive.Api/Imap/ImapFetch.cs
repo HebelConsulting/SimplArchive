@@ -25,6 +25,7 @@ internal static class ImapFetch
         var set = arguments[..setEnd];
         var items = ParseItems(arguments[(setEnd + 1)..], uidMode);
         var storage = scope.ServiceProvider.GetRequiredService<IObjectStorageClient>();
+        var envelope = scope.ServiceProvider.GetRequiredService<SimplArchive.Api.Encryption.MessageEnvelopeClient>();
         var seen = await ImapMailboxes.SeenSetAsync(scope, selected.Messages);
 
         for (var index = 0; index < selected.Messages.Count; index++)
@@ -44,7 +45,7 @@ internal static class ImapFetch
                 seen.Add(message.DocumentId);
             }
 
-            await WriteMessageAsync(session, storage, message, sequence, items, seen.Contains(message.DocumentId),
+            await WriteMessageAsync(session, storage, envelope, message, sequence, items, seen.Contains(message.DocumentId),
                 selected.DeletedDocumentIds.Contains(message.DocumentId));
         }
 
@@ -131,12 +132,21 @@ internal static class ImapFetch
     // ---- Response ------------------------------------------------------------------------------------
 
     private static async Task WriteMessageAsync(
-        ImapSession session, IObjectStorageClient storage, ImapMessageEntry message, int sequence, List<string> items, bool seen, bool deleted)
+        ImapSession session, IObjectStorageClient storage, SimplArchive.Api.Encryption.MessageEnvelopeClient envelope,
+        ImapMessageEntry message, int sequence, List<string> items, bool seen, bool deleted)
     {
         byte[]? bytes = null;
         MimeMessage? mime = null;
 
-        async Task<byte[]> BytesAsync() => bytes ??= await MessageBytesAsync(storage, message);
+        // The envelope hook lives INSIDE the one funnel every FETCH view derives from — BODY[], the header
+        // slices, BODYSTRUCTURE, the synthetic-size path — so a client can never see an enveloped body under
+        // a plaintext BODYSTRUCTURE or vice versa. A split there is the #1158 family of bug: two views of
+        // one message disagreeing, and only some clients caring. SEARCH deliberately keeps the PLAINTEXT
+        // bytes (see ImapSearch): in milestone 1 the server holds plaintext anyway, and matching against
+        // ciphertext would silently turn every content search into "no results".
+        async Task<byte[]> BytesAsync() => bytes ??=
+            await envelope.TryEnvelopeAsync(session.Email, await MessageBytesAsync(storage, message), CancellationToken.None)
+            ?? bytes ?? await MessageBytesAsync(storage, message);
 
         async Task<MimeMessage> MimeAsync() => mime ??= MimeMessage.Load(new MemoryStream(await BytesAsync()));
 
@@ -160,8 +170,13 @@ internal static class ImapFetch
                     break;
                 case "RFC822.SIZE":
                     // Exact for a stored .eml (the version's byte size); a synthetic message serializes to be
-                    // measured — the honest cost of fabricating it (#562, noted in the ADR).
-                    parts.Add(message.Extension.Equals(".eml", StringComparison.OrdinalIgnoreCase) && message.SizeBytes is { } size
+                    // measured — the honest cost of fabricating it (#562, noted in the ADR). With an encryption
+                    // service configured the stored size describes the PLAINTEXT, so the shortcut would lie
+                    // about every enveloped message — measure the served bytes instead, unconditionally there,
+                    // because whether THIS user's message envelopes depends on a cert lookup the shortcut
+                    // cannot see.
+                    parts.Add(!envelope.Enabled
+                        && message.Extension.Equals(".eml", StringComparison.OrdinalIgnoreCase) && message.SizeBytes is { } size
                         ? $"RFC822.SIZE {size}"
                         : $"RFC822.SIZE {(await BytesAsync()).Length}");
                     break;

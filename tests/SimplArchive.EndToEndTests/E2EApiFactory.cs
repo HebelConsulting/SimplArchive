@@ -9,7 +9,10 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.AspNetCore.Identity;
@@ -120,6 +123,46 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
 
     private string _storageUrl = "";
 
+    // A STUB encryption service for the IMAP envelope hook (SimplArchiveEncryption ADR 0007). Hosted for the
+    // whole collection with 404 as its default answer, which means every existing IMAP test continuously
+    // exercises the no-certificate → plaintext contract as a side effect of merely running. A test opts a
+    // user in via RegisterEncryptionRecipient; the stub then returns a marker message rather than real CMS —
+    // the core treats the bytes as opaque, so this tests the WIRING end to end while the crypto is proven in
+    // the service's own repository (its cross-implementation tests). Faking the crypto here would prove
+    // nothing those tests do not, and would couple this suite to another repo's packages.
+    private WebApplication? _encryptionStub;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _encryptionRecipients = new(StringComparer.OrdinalIgnoreCase);
+
+    public const string EnvelopedMarkerHeader = "X-SimplArchive-Test-Enveloped";
+
+    public void RegisterEncryptionRecipient(string email) => _encryptionRecipients[email] = true;
+
+    private async Task<string> StartEncryptionStubAsync()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Logging.ClearProviders();
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
+        var app = builder.Build();
+        app.MapPost("/api/users/{email}/enveloped", async (string email, HttpRequest request) =>
+        {
+            if (!_encryptionRecipients.ContainsKey(email))
+            {
+                return Results.NotFound();
+            }
+
+            using var body = new MemoryStream();
+            await request.Body.CopyToAsync(body);
+            var enveloped = "Subject: enveloped\r\n"
+                + $"{EnvelopedMarkerHeader}: {body.Length}\r\n"
+                + "Content-Type: application/pkcs7-mime; smime-type=enveloped-data; name=\"smime.p7m\"\r\n"
+                + "\r\nMIAGCSqGSIb3DQEHA6CAMIACAQA=\r\n";
+            return Results.Bytes(System.Text.Encoding.ASCII.GetBytes(enveloped), "message/rfc822");
+        });
+        await app.StartAsync();
+        _encryptionStub = app;
+        return app.Urls.First();
+    }
+
     public async Task InitializeAsync()
     {
         await Task.WhenAll(_postgres.StartAsync(), _storage.StartAsync(), _openSearch.StartAsync(), _tika.StartAsync(), _gotenberg.StartAsync(), _valkey.StartAsync());
@@ -158,6 +201,7 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         Environment.SetEnvironmentVariable("OpenIddict__RefreshTokenReuseLeewaySeconds", "1");
         Environment.SetEnvironmentVariable("ObjectStorage__ServiceUrl", _storageUrl);
         Environment.SetEnvironmentVariable("ObjectStorage__PublicServiceUrl", _storageUrl);
+        Environment.SetEnvironmentVariable("Encryption__ServiceUrl", await StartEncryptionStubAsync());
 
         // Stage the TestModule into a Modules directory so the REAL loader brings it up through the real
         // seams (ADR 0737's activation circle, ModuleControllerTests). Deliberately present for EVERY E2E
@@ -815,6 +859,11 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
 
     async Task IAsyncLifetime.DisposeAsync()
     {
+        if (_encryptionStub is not null)
+        {
+            await _encryptionStub.DisposeAsync();
+        }
+
         await _gotenberg.DisposeAsync();
         await _tika.DisposeAsync();
         await _openSearch.DisposeAsync();

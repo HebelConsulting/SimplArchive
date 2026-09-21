@@ -441,6 +441,11 @@ SimplArchive.Infrastructure.Modules.ModuleReadModelWiring.AddModuleReadModels(bu
 // without the module author writing (or being able to forget) the check. The seam adapters give module
 // code the same caller/rights answers core controllers get.
 SimplArchive.Api.Modules.ModuleApiServices.AddModuleApiSeams(builder.Services);
+
+// The per-installation encryption service's client (SimplArchiveEncryption ADR 0007) — inert until
+// Encryption:ServiceUrl is configured, at which point IMAP FETCH envelopes served messages to the
+// recipient's registered certificate.
+SimplArchive.Api.Encryption.MessageEnvelopeServices.AddMessageEnvelope(builder.Services);
 if (modules.Count > 0)
 {
     var moduleMvc = builder.Services.AddControllers(options =>
