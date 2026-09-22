@@ -84,7 +84,7 @@ public sealed class ProtocolReadRefreshRunner(
             //
             // Shared with the clients' transition POSTs since ADR 0814 (#1309) — the cooldown is a property
             // of the HOOK, not of each caller, so no surface can route around it.
-            if (await StagedContentCooldown.HoldsUnexpiredContentAsync(dbContext, folderId, now, cancellationToken))
+            if (await PopulateCooldown.HoldsUnexpiredContentAsync(dbContext, folderId, now, cancellationToken))
             {
                 return;
             }
@@ -114,11 +114,30 @@ public sealed class ProtocolReadRefreshRunner(
                     continue;
                 }
 
-                foreach (var (transitionName, _) in machine.Transitions.Where(t => IsEligible(t.Value)))
+                foreach (var (transitionName, transition) in machine.Transitions.Where(t => IsEligible(t.Value)))
                 {
+                    // The DURABLE-content clock (ABI 0.28, #1307): a calendar of real entries never expires,
+                    // so the folder-level ExpiresAt cooldown above cannot engage — a transition declaring a
+                    // minimum refresh interval is clocked by its recorded last attempt instead.
+                    if (transition.MinimumRefreshInterval is { } interval
+                        && await PopulateCooldown.AttemptWithinIntervalAsync(
+                            dbContext, machine.MachineId, folderId, interval, now, cancellationToken))
+                    {
+                        continue;
+                    }
+
                     logger.LogDebug(
                         "{Surface} invoking populate hook {MachineId}/{TransitionName} on folder {FolderId}.",
                         surface, machine.MachineId, transitionName, folderId);
+
+                    // Stamped BEFORE the run and outside the engine's transaction: the outbound request is
+                    // the thing being rate-limited, so a failing source is clocked exactly like a healthy
+                    // one, and a rolled-back handler does not un-stamp it.
+                    if (transition.MinimumRefreshInterval is not null && tenantId is { } stampTenant)
+                    {
+                        await PopulateCooldown.RecordAttemptAsync(
+                            dbContext, stampTenant, machine.MachineId, folderId, now, cancellationToken);
+                    }
 
                     // PER TRANSITION, not around the whole method. The outer catch below is a backstop for
                     // faults in THIS class; wrapping the hook in it too would attribute our own defects to the

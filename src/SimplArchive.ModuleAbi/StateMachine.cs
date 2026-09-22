@@ -82,6 +82,24 @@ public interface IStateMachineBuilder
         string name, string label, Func<TransitionContext, Task> handler, ProtocolReadRefresh protocolRead);
 
     /// <summary>
+    /// The same hook, additionally declaring the LEAST TIME between two upstream fetches (ABI 0.28, core
+    /// issue #1307) — the rate limit for a hook whose collection holds DURABLE items.
+    /// </summary>
+    /// <remarks>
+    /// The host's built-in cooldown is the staged content's own <c>ExpiresAt</c> (core ADR 0810): while an
+    /// unexpired child exists, no read runs the hook. A collection of durable items — a calendar of real
+    /// entries, not staged weather — never has one, so without this declaration every poll of a mounted
+    /// calendar would reach the module's upstream source: the unattended-scraper shape core ADR 0756
+    /// rejected. The host records each ATTEMPT (success or failure — the outbound request is the thing
+    /// being limited) and skips the hook, on every surface, until <paramref name="minimumRefreshInterval"/>
+    /// has passed. Declared by the MODULE because only the module knows its source's politeness terms;
+    /// a third overload rather than a parameter, for the same binary-compatibility reason as the second.
+    /// </remarks>
+    IStateMachineBuilder AutoRefreshOnOpen(
+        string name, string label, Func<TransitionContext, Task> handler, ProtocolReadRefresh protocolRead,
+        TimeSpan minimumRefreshInterval);
+
+    /// <summary>
     /// A proposal query (ABI 0.11, ADRs 0736/0769): the machine answers "who/what could fill this field?"
     /// for its subject — the epic's signature feature ("propose instructors who hold a valid Examiner
     /// Certificate"). The handler runs UNDER THE MODULE PRINCIPAL, because a proposal must read what the

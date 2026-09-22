@@ -204,7 +204,8 @@ public sealed class TestModule : IIndustryModule
         services.AddScoped<IModuleProjectionRebuilder, TestLandingRebuilder>();
     }
 
-    public void DefineStateMachines(IStateMachineDefinitions machines) =>
+    public void DefineStateMachines(IStateMachineDefinitions machines)
+    {
         machines.Machine("test-pilot", DossierMaskId)
             .Status("MayAct",
                 StateCondition.ChildField(CertificateMaskId, "Valid to", ConditionTest.DateNotPast, null,
@@ -318,6 +319,28 @@ public sealed class TestModule : IIndustryModule
                         DateTimeOffset.UtcNow.AddHours(1), replaceDocumentId: replaceId);
                 },
                 ProtocolReadRefresh.WhenTenantEnables);
+
+        // The DAV-collection populate hook (ABI 0.28, #1307): its subject IS a DavCollection mask (the Test
+        // Log above), its items are DURABLE (.ics entries with no ExpiresAt — the staged-content cooldown
+        // can never engage), and it declares the minimum refresh interval that is therefore the ONLY brake.
+        // Each run files one more entry, so a test can count exactly how many times the hook really ran.
+        machines.Machine("test-log", LogMaskId)
+            .AutoRefreshOnOpen("refresh-log", "Refresh log", async context =>
+                {
+                    var existing = await context.Archive.GetChildrenAsync(context.SubjectDocumentId, LogItemMaskId);
+                    var n = existing.Count + 1;
+                    var uid = $"test-populated-{n}";
+                    var ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//SimplArchive Test//EN\r\nBEGIN:VEVENT\r\n"
+                        + $"UID:{uid}\r\nDTSTAMP:20260101T000000Z\r\nDTSTART:20260101T100000Z\r\nDTEND:20260101T110000Z\r\n"
+                        + $"SUMMARY:Populated {n}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+                    await context.Archive.CreateContentDocumentAsync(
+                        context.SubjectDocumentId, LogItemMaskId, $"Populated {n}",
+                        System.Text.Encoding.UTF8.GetBytes(ics), "ics",
+                        new Dictionary<string, string> { ["Event UID"] = uid });
+                },
+                ProtocolReadRefresh.WhenTenantEnables,
+                TimeSpan.FromMinutes(30));
+    }
 
     private static async Task IncrementAsync(TransitionContext context, int by)
     {

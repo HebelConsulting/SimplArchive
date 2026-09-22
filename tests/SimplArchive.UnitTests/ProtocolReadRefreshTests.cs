@@ -49,17 +49,22 @@ public class ProtocolReadRefreshTests
     }
 
     [Fact]
-    public void The_builder_kept_its_three_argument_overload()
+    public void The_builder_kept_its_earlier_overloads()
     {
+        // Every growth is a NEW overload, never a parameter on an existing one: a changed signature is a
+        // MissingMethodException at module load (ADR 0789's rule) — 0.27 added the ProtocolRead overload,
+        // 0.28 the minimum-refresh-interval one (ADR 0815), and the older two must survive both.
         var overloads = typeof(IStateMachineBuilder)
             .GetMethods(BindingFlags.Public | BindingFlags.Instance)
             .Where(m => m.Name == nameof(IStateMachineBuilder.AutoRefreshOnOpen))
             .ToList();
 
-        Assert.Equal(2, overloads.Count);
+        Assert.Equal(3, overloads.Count);
         Assert.Contains(overloads, m => m.GetParameters().Length == 3);
         Assert.Contains(overloads, m => m.GetParameters().Length == 4
             && m.GetParameters()[3].ParameterType == typeof(ProtocolReadRefresh));
+        Assert.Contains(overloads, m => m.GetParameters().Length == 5
+            && m.GetParameters()[4].ParameterType == typeof(TimeSpan));
     }
 
     // The setting key IS the stored row's identity, so it may not drift: renaming it strands every tenant's

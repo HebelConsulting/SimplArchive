@@ -30,7 +30,11 @@ public sealed class StateMachineCatalog : IStateMachineDefinitions
         IReadOnlyList<StateCondition> Guard,
         Func<TransitionContext, Task> Handler,
         bool AutoRefreshOnOpen = false,
-        ProtocolReadRefresh ProtocolRead = ProtocolReadRefresh.Never);
+        ProtocolReadRefresh ProtocolRead = ProtocolReadRefresh.Never,
+        // The least time between two upstream fetches (ABI 0.28, #1307) — the rate limit for a hook whose
+        // collection holds DURABLE items, where the staged-content cooldown (ADR 0810) never engages. Null
+        // means the module declared none: ephemeral content, ExpiresAt is the clock.
+        TimeSpan? MinimumRefreshInterval = null);
 
     /// <summary>A declared proposal query (ABI 0.11, ADR 0769): label for the picker affordance, the field
     /// its answers fill, and the module's handler — run under the module principal, read-only.</summary>
@@ -99,6 +103,14 @@ public sealed class StateMachineCatalog : IStateMachineDefinitions
 
         public IStateMachineBuilder AutoRefreshOnOpen(string name, string label, Func<TransitionContext, Task> handler)
             => AutoRefreshOnOpen(name, label, handler, ProtocolReadRefresh.Never);
+
+        public IStateMachineBuilder AutoRefreshOnOpen(string name, string label, Func<TransitionContext, Task> handler, ProtocolReadRefresh protocolRead, TimeSpan minimumRefreshInterval)
+        {
+            definition.Transitions[name] = new TransitionDefinition(
+                label, [], handler, AutoRefreshOnOpen: true, ProtocolRead: protocolRead,
+                MinimumRefreshInterval: minimumRefreshInterval);
+            return this;
+        }
 
         public IStateMachineBuilder AutoRefreshOnOpen(string name, string label, Func<TransitionContext, Task> handler, ProtocolReadRefresh protocolRead)
         {

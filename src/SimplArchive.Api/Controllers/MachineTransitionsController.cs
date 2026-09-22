@@ -118,11 +118,22 @@ public class MachineTransitionsController : ControllerBase
         // SUCCESS deliberately — the hook's contract is "make this folder current", and it already is.
         if (autoRefresh)
         {
-            if (await StagedContentCooldown.HoldsUnexpiredContentAsync(
-                    _dbContext, documentId, DateTimeOffset.UtcNow, cancellationToken))
+            var now = DateTimeOffset.UtcNow;
+            var interval = machine.Transitions[transitionName].MinimumRefreshInterval;
+            if (await PopulateCooldown.HoldsUnexpiredContentAsync(_dbContext, documentId, now, cancellationToken)
+                || (interval is { } declared && await PopulateCooldown.AttemptWithinIntervalAsync(
+                        _dbContext, machineId, documentId, declared, now, cancellationToken)))
             {
                 Response.Headers[PopulateOutcomeHeader] = "current";
                 return NoContent();
+            }
+
+            // The durable-content clock (ABI 0.28, #1307), stamped BEFORE the run for the same reason the
+            // runner stamps it there: the outbound request is the thing being rate-limited.
+            if (interval is not null && _currentTenantAccessor.TenantId is { } stampTenant)
+            {
+                await PopulateCooldown.RecordAttemptAsync(
+                    _dbContext, stampTenant, machineId, documentId, now, cancellationToken);
             }
 
             Response.Headers[PopulateOutcomeHeader] = "ran";

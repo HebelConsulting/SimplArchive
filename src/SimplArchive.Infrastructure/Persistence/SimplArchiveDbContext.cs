@@ -186,6 +186,8 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
     /// broken — absence means healthy.</summary>
     public DbSet<ModuleContentHealth> ModuleContentHealth => Set<ModuleContentHealth>();
 
+    public DbSet<ModulePopulateAttempt> ModulePopulateAttempts => Set<ModulePopulateAttempt>();
+
     // Shares of a document with people who have no account (ADR 0546).
     public DbSet<ExternalLink> ExternalLinks => Set<ExternalLink>();
 

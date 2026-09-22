@@ -238,6 +238,51 @@ public class ProtocolReadRefreshRunnerTests
     }
 
     [Fact]
+    public async Task A_durable_hook_is_braked_by_its_declared_interval_and_runs_again_after_it()
+    {
+        // ABI 0.28 (#1307, ADR 0815): the Test Log's entries are DURABLE — no ExpiresAt, so the staged-content
+        // cooldown above can never engage — and the declared minimum refresh interval is the only brake. The
+        // hook files one more entry per REAL run, so the child count IS the execution count.
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var rig = await RigAsync(connection);
+        await EnableAsync(rig);
+        var logId = await rig.Facade.CreateDocumentAsync(rig.DossierId, SimplArchive.TestModule.TestModule.LogMaskId, "Log");
+
+        await rig.Runner.RefreshAsync(logId, "CalDAV", CancellationToken.None);
+        await rig.Runner.RefreshAsync(logId, "CalDAV", CancellationToken.None);
+
+        Assert.Equal(1, await rig.Context.Documents.CountAsync(d => d.ParentId == logId));
+
+        // Age the attempt clock past the declared interval, the way time would.
+        var attempt = await rig.Context.ModulePopulateAttempts.SingleAsync(a => a.SubjectDocumentId == logId);
+        attempt.LastAttemptAt = DateTimeOffset.UtcNow.AddHours(-2);
+        await rig.Context.SaveChangesAsync();
+
+        await rig.Runner.RefreshAsync(logId, "CalDAV", CancellationToken.None);
+
+        Assert.Equal(2, await rig.Context.Documents.CountAsync(d => d.ParentId == logId));
+    }
+
+    [Fact]
+    public async Task The_attempt_is_stamped_before_the_run_so_a_failing_source_is_limited_too()
+    {
+        // The clock records the ATTEMPT, not the success: the outbound request is the thing being
+        // rate-limited, and a failing source hammered once per poll is exactly as impolite as a healthy one.
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var rig = await RigAsync(connection);
+        await EnableAsync(rig);
+        var logId = await rig.Facade.CreateDocumentAsync(rig.DossierId, SimplArchive.TestModule.TestModule.LogMaskId, "Log");
+
+        await rig.Runner.RefreshAsync(logId, "CalDAV", CancellationToken.None);
+
+        var stamped = await rig.Context.ModulePopulateAttempts.SingleAsync(a => a.SubjectDocumentId == logId);
+        Assert.True(stamped.LastAttemptAt > DateTimeOffset.UtcNow.AddMinutes(-1));
+        Assert.Equal("test-log", stamped.MachineId);
+    }
+
+    [Fact]
     public async Task Expired_content_is_refetched()
     {
         // The other side of the same clock — and the actual reported symptom. The sweep purges what has

@@ -46,6 +46,32 @@ internal static class DavEndpoints
         return context.MultiStatus(request, resources);
     }
 
+
+    /// <summary>
+    /// The populate-on-open hook for a DAV enumeration (ABI 0.28, #1307 — ADR 0810's deferred surface,
+    /// wired). Runs BEFORE the change-log reconcile and the CTag/sync-token computation at every call site:
+    /// populating after the token is computed tells the client "nothing new" about items it has never seen —
+    /// a silent wrong answer. The rate limit for durable items is the hook's own (a declared minimum refresh
+    /// interval, PopulateCooldown), so a polling client cannot become the unattended scraper ADR 0756
+    /// rejected; the runner's other gates (module active, tenant enabled) are unchanged from IMAP/WebDAV.
+    /// </summary>
+    /// <remarks>
+    /// Task feeds are recognised in memory and skipped — synthetic collections, no document to populate. A
+    /// person-schedule id falls through to the runner's single subject lookup (one indexed miss), which only
+    /// happens at all when some module declares an eligible hook: the runner's first gate is in-memory.
+    /// </remarks>
+    private static async Task PopulateOnReadAsync(DavControllerContext context, Guid folderId)
+    {
+        if (context.Protocol == DavProtocol.CalDav && TaskFeeds.KindOf(context.UserId, folderId) is not null)
+        {
+            return;
+        }
+
+        await context.Request.HttpContext.RequestServices
+            .GetRequiredService<SimplArchive.Api.Modules.ProtocolReadRefreshRunner>()
+            .RefreshAsync(folderId, context.Protocol == DavProtocol.CalDav ? "CalDAV" : "CardDAV", context.Cancellation);
+    }
+
     /// <summary>PROPFIND on one collection, and (Depth ≥ 1) its items.</summary>
     internal static async Task<IActionResult> CollectionAsync(DavControllerContext context, Guid folderId)
     {
@@ -54,6 +80,10 @@ internal static class DavEndpoints
         {
             return new NotFoundResult();
         }
+
+        // Before the CTag (SequenceForAsync reconciles the change log): a client that polls by CTag must see
+        // it move when the populate stages something, or it never refetches (#1307).
+        await PopulateOnReadAsync(context, folderId);
 
         var request = PropRequest.Parse(await context.ReadBodyAsync());
         var rights = await RightsForAsync(context, folderId);
@@ -173,6 +203,12 @@ internal static class DavEndpoints
 
         var request = PropRequest.FromProp(body.Element(DavNames.Prop));
 
+        // Populate BEFORE the reconcile below: the reconcile is what synthesizes change-log entries for
+        // items that arrived outside the DAV write path — which is exactly what a populate's facade writes
+        // are — so this ordering is what makes a freshly staged item appear in the very sync response that
+        // triggered it, instead of being invisible until something else happens to touch the log (#1307).
+        await PopulateOnReadAsync(context, folderId);
+
         // Same healing before a sync answer (#806): the incremental branch below reads the log as the truth.
         await DavChangeLog.ReconcileAsync(context.Db, context.Protocol, context.Kinds, context.TenantId, folderId, context.Cancellation);
         var current = await DavChangeLog.CurrentAsync(context.Db, folderId, context.Cancellation);
@@ -290,6 +326,11 @@ internal static class DavEndpoints
 
         var request = PropRequest.FromProp(body?.Element(DavNames.Prop));
         var wanted = body?.Elements(DavNames.Href).Select(h => h.Value.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+
+        // Apple's clients and DAVx⁵ enumerate via REPORT after account setup and may never issue a Depth:1
+        // PROPFIND again — wiring only PROPFIND would populate once at setup and then go quiet forever,
+        // ADR 0810's defect wearing a fix's clothes (#1307's audit).
+        await PopulateOnReadAsync(context, folderId);
 
         var items = await DavTree.ItemsAsync(context.Db, context.Protocol, context.Kinds, context.UserId, folderId, context.Cancellation, Wire(context));
         if (wanted.Count > 0)
