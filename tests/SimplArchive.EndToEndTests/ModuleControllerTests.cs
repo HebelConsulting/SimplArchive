@@ -277,8 +277,13 @@ public class ModuleControllerTests
             // and the gate opens.
             for (var i = 0; i < 3; i++)
             {
-                Assert.Equal(HttpStatusCode.NoContent,
-                    (await rig.Admin.PostAsync($"/api/documents/{dossierId}/machine/test-pilot/transitions/log-entry", null)).StatusCode);
+                var logged = await rig.Admin.PostAsync($"/api/documents/{dossierId}/machine/test-pilot/transitions/log-entry", null);
+                Assert.Equal(HttpStatusCode.NoContent, logged.StatusCode);
+                // A DELIBERATE transition carries no populate-outcome header (ADR 0814): the cooldown and
+                // its signal are the auto-refresh hook's alone — a real act must never be skipped as
+                // "already current", and running the same act three times here is exactly the proof.
+                Assert.False(logged.Headers.Contains(
+                    SimplArchive.Api.Controllers.MachineTransitionsController.PopulateOutcomeHeader));
             }
 
             Assert.Equal(HttpStatusCode.NoContent,
@@ -336,16 +341,25 @@ public class ModuleControllerTests
 
             // Opening the folder (a client following the rel): the handler STAGES a content-bearing document
             // under it — content-bearing creation over the real wire and real object storage, which nothing
-            // in the ABI could do before 0.6.
-            Assert.Equal(HttpStatusCode.NoContent,
-                (await rig.Admin.PostAsync(refresh.GetProperty("href").GetString(), null)).StatusCode);
+            // in the ABI could do before 0.6. The outcome header says the hook RAN (ADR 0814) — the signal a
+            // client reloads the folder on.
+            var first = await rig.Admin.PostAsync(refresh.GetProperty("href").GetString(), null);
+            Assert.Equal(HttpStatusCode.NoContent, first.StatusCode);
+            Assert.Equal("ran", first.Headers.GetValues(
+                SimplArchive.Api.Controllers.MachineTransitionsController.PopulateOutcomeHeader).Single());
             var children = (await TestJson.Get(rig.Admin, $"/api/documents/{dossierId}/children")).GetProperty("children");
             Assert.Equal(1, children.GetArrayLength());
             Assert.Equal("Staged entry", children.EnumerateArray().Single().GetProperty("name").GetString());
 
-            // Opening again REPLACES in place — the folder never accumulates a second entry.
-            Assert.Equal(HttpStatusCode.NoContent,
-                (await rig.Admin.PostAsync(refresh.GetProperty("href").GetString(), null)).StatusCode);
+            // Opening again inside the staged content's own expiry is a NO-OP (ADR 0814, #1309): the hook
+            // owns its cooldown on this path exactly as on the protocol one, so the second POST answers
+            // "current" — success, nothing ran, nothing to reload — rather than issuing a second upstream
+            // fetch. (The handler's replace-in-place behaviour still runs once the content expires;
+            // ProtocolReadRefreshRunnerTests drives that with an expired row.)
+            var second = await rig.Admin.PostAsync(refresh.GetProperty("href").GetString(), null);
+            Assert.Equal(HttpStatusCode.NoContent, second.StatusCode);
+            Assert.Equal("current", second.Headers.GetValues(
+                SimplArchive.Api.Controllers.MachineTransitionsController.PopulateOutcomeHeader).Single());
             Assert.Equal(1, await ChildCountAsync(rig.Admin, dossierId));
 
             // The hook FOLLOWS the content (ADR 0764): the staged CHILD carries its parent's rel too, same

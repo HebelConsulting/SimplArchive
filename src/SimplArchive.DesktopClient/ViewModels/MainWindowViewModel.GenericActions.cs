@@ -142,9 +142,15 @@ public partial class MainWindowViewModel
 
         try
         {
+            var contentChanged = false;
             foreach (var action in autoRefresh)
             {
-                await _api.Documents.ExecuteActionAsync(action);
+                contentChanged |= await _api.Documents.ExecuteActionAsync(action);
+            }
+
+            if (!contentChanged)
+            {
+                return; // "current" throughout — the contents on screen are already the truth (ADR 0814)
             }
 
             await LoadFolderContentsAsync(id, _currentFolderLinks); // same folder → a reload, no re-trigger
@@ -165,14 +171,19 @@ public partial class MainWindowViewModel
 
         try
         {
-            await _api.Documents.ExecuteActionAsync(action);
+            var ran = await _api.Documents.ExecuteActionAsync(action);
             Status = action.Label;
 
             // An auto-refresh action (ADR 0756) staged fresh content under the OPEN FOLDER — reload its
-            // contents so it appears, the same as the on-open path; a manual Refresh must show new data too.
-            if (IsAutoRefresh(action.Rel) && _currentFolderId is { } openFolder)
+            // contents so it appears, the same as the on-open path; when the hook answered "current"
+            // (ADR 0814) nothing was staged and there is nothing to re-read.
+            if (IsAutoRefresh(action.Rel))
             {
-                await LoadFolderContentsAsync(openFolder, _currentFolderLinks);
+                if (ran && _currentFolderId is { } openFolder)
+                {
+                    await LoadFolderContentsAsync(openFolder, _currentFolderLinks);
+                }
+
                 return;
             }
 
@@ -204,15 +215,15 @@ public partial class MainWindowViewModel
             .Select(rel => new DocumentsClient.GenericActionInfo(rel, string.Empty, "POST", _detailLinks!.Href(rel)!))
             .ToList();
 
-    // A per-href cooldown keeps rapid clicking in the weather area from hammering the provider, and doubles
-    // as the recursion brake for the reload after a refresh (ADR 0764).
-    private static readonly Dictionary<string, DateTimeOffset> _autoRefreshedAt = [];
-    private static readonly TimeSpan AutoRefreshCooldown = TimeSpan.FromSeconds(30);
-
     /// <summary>
     /// The populate hook follows every interaction (ADR 0764): SELECTING a subject whose resource carries a
     /// machine-auto-refresh rel — the weather folder, or a leaf carrying its parent's — re-fetches, then
     /// re-reads what is on screen. CanSee is enough (the update is automated; the module principal writes).
+    /// The cooldown lives in the HOOK since ADR 0814 (#1309): the server answers "current" without any
+    /// upstream fetch while the folder holds unexpired staged content, and that answer — surfaced as
+    /// <c>ExecuteActionAsync</c> returning false — is also what stops the reload below from re-triggering
+    /// this hook forever. The 30-second per-href timestamps kept here before were one of two client-side
+    /// copies of a policy that belonged to the hook.
     /// </summary>
     private async Task AutoRefreshSelectionAsync(NodeViewModel document)
     {
@@ -221,20 +232,18 @@ public partial class MainWindowViewModel
             return;
         }
 
-        var due = AutoRefreshActions()
-            .Where(a => _autoRefreshedAt?.GetValueOrDefault(a.Href) is not { } at || DateTimeOffset.UtcNow - at >= AutoRefreshCooldown)
-            .ToList();
-        if (due.Count == 0)
+        var actions = AutoRefreshActions();
+        if (actions.Count == 0)
         {
             return;
         }
 
+        var contentChanged = false;
         try
         {
-            foreach (var action in due)
+            foreach (var action in actions)
             {
-                _autoRefreshedAt[action.Href] = DateTimeOffset.UtcNow;
-                await _api.Documents.ExecuteActionAsync(action);
+                contentChanged |= await _api.Documents.ExecuteActionAsync(action);
             }
         }
         catch (ApiActionException)
@@ -242,13 +251,19 @@ public partial class MainWindowViewModel
             return; // a refused populate is not worth interrupting a selection
         }
 
+        if (!contentChanged)
+        {
+            return; // "current" throughout — nothing was replaced, so there is nothing to re-read (ADR 0814)
+        }
+
         if (_selectedDocumentId != document.Id)
         {
             return; // the user moved on (ADR 0559)
         }
 
-        // The content may have been replaced: re-read what is on screen (the cooldown makes this a plain
-        // read), and the listed children too when the subject IS the open folder.
+        // The content WAS replaced (the server said "ran"): re-read what is on screen — the recursive
+        // load's own hook answers "current" now, so it ends here rather than looping (ADR 0814) — and the
+        // listed children too when the subject IS the open folder.
         if (_currentFolderId is { } open && open == document.Id)
         {
             await LoadFolderContentsAsync(open, _currentFolderLinks);

@@ -56,13 +56,17 @@ public sealed partial class DocumentsClient
     /// the parameterless-transition shape ADR 0743 scopes the surface to. A refusal surfaces the problem
     /// document's detail, which since ADR 0742 carries the explanation a user can act on.
     /// </summary>
-    public async Task ExecuteActionAsync(GenericActionInfo action, CancellationToken cancellationToken = default)
+    /// <returns>Whether the action actually RAN. An auto-refresh transition answers success with
+    /// "current" (the X-Populate-Outcome header, ADR 0814) when the folder already holds unexpired staged
+    /// content — nothing executed, so a caller skips its reload. A response without the header (a
+    /// deliberate action, or an older server) reads as ran: reloading too often is the safe direction.</returns>
+    public async Task<bool> ExecuteActionAsync(GenericActionInfo action, CancellationToken cancellationToken = default)
     {
         using var request = new HttpRequestMessage(new HttpMethod(action.Method), action.Href);
         var response = await _core.Http.SendAsync(request, cancellationToken);
         if (response.IsSuccessStatusCode)
         {
-            return;
+            return !response.Headers.TryGetValues("X-Populate-Outcome", out var values) || !values.Contains("current");
         }
 
         // Parse ONCE, branch from the parse (the read-the-problem-body-once lesson). Mapped through

@@ -233,6 +233,7 @@ public partial class Home
 
         try
         {
+            var contentChanged = false;
             foreach (var href in autoRefresh)
             {
                 using var request = new HttpRequestMessage(HttpMethod.Post, href.TrimStart('/'));
@@ -241,6 +242,13 @@ public partial class Home
                 {
                     return; // a refused populate is not worth interrupting the open; the folder shows what it has
                 }
+
+                contentChanged |= PopulateRan(response);
+            }
+
+            if (!contentChanged)
+            {
+                return; // "current" throughout — the contents on screen are already the truth (ADR 0814)
             }
 
             if (_selectionEpoch != openedAt)
@@ -537,17 +545,23 @@ public partial class Home
 
     // The populate hook follows every interaction (ADR 0764): SELECTING a weather folder — or one of its
     // leaves, which carry the parent's rel — re-fetches, so the report a user reads is the current one with
-    // no button pressed. A per-href cooldown keeps rapid clicking from hammering the provider, and doubles
-    // as the recursion brake for the reload below.
-    private static readonly Dictionary<string, DateTimeOffset> _autoRefreshedAt = [];
-    private static readonly TimeSpan AutoRefreshCooldown = TimeSpan.FromSeconds(30);
+    // no button pressed. The cooldown lives in the HOOK since ADR 0814 (#1309): the server answers
+    // "current" — without any upstream fetch — when the folder already holds unexpired staged content, so
+    // rapid clicking cannot hammer a provider from ANY client. That answer is also the recursion brake for
+    // the reloads below (run → reload → re-trigger → now current → no reload → stop); the 30-second
+    // per-href timestamps this class used to keep were one of two client-side copies of a policy that
+    // belonged to the hook. A missing header (an older server) reads as "ran" — reloading too often is the
+    // safe direction.
+    private const string PopulateOutcomeHeader = "X-Populate-Outcome";
+
+    private static bool PopulateRan(HttpResponseMessage response) =>
+        !response.Headers.TryGetValues(PopulateOutcomeHeader, out var values) || !values.Contains("current");
 
     private async Task AutoRefreshSelectionAsync(BrowseNode item, int token)
     {
         var hrefs = (Detail.Links ?? new Dictionary<string, string>())
             .Where(kv => kv.Key.StartsWith("machine-auto-refresh:", StringComparison.Ordinal))
             .Select(kv => kv.Value)
-            .Where(h => !_autoRefreshedAt.TryGetValue(h, out var at) || DateTimeOffset.UtcNow - at >= AutoRefreshCooldown)
             .ToList();
         if (hrefs.Count == 0)
         {
@@ -556,15 +570,22 @@ public partial class Home
 
         try
         {
+            var contentChanged = false;
             foreach (var href in hrefs)
             {
-                _autoRefreshedAt[href] = DateTimeOffset.UtcNow;
                 using var request = new HttpRequestMessage(HttpMethod.Post, href.TrimStart('/'));
                 var response = await Http.SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
                     return; // a refused populate is not worth interrupting a selection
                 }
+
+                contentChanged |= PopulateRan(response);
+            }
+
+            if (!contentChanged)
+            {
+                return; // "current" throughout — nothing was replaced, so there is nothing to re-read (ADR 0814)
             }
         }
         catch (HttpRequestException)
@@ -577,8 +598,9 @@ public partial class Home
             return; // the user moved on — nothing here is theirs to see any more (#784)
         }
 
-        // The content may have been replaced: re-read what is on screen. The cooldown above makes the
-        // recursive load a plain read. If the selected node IS the open folder, its listed children moved too.
+        // The content WAS replaced (the server said "ran"): re-read what is on screen. The recursive load's
+        // own hook answers "current" now, so it ends here rather than looping (ADR 0814). If the selected
+        // node IS the open folder, its listed children moved too.
         if (_selectedFolder is { } open && open.Id == item.Id)
         {
             _folderContents = (await Browse.LoadContentsAsync(open.Id, open.RepositoryId,

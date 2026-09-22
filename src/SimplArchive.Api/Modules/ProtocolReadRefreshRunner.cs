@@ -82,16 +82,9 @@ public sealed class ProtocolReadRefreshRunner(
             // staged content already present IS the record that a fetch happened recently, so no cooldown table
             // is needed and none can go stale: the content's own ExpiresAt is the clock.
             //
-            // The null-check is the SQL predicate and the COMPARISON is in memory, exactly as the sweep worker
-            // that purges the same rows does it: SQLite cannot compare a DateTimeOffset in SQL, and the model
-            // runs on both providers (ADR 0002's parity rule). Written as one predicate it throws at QUERY
-            // time — which this runner's own catch would then have reported as "the module's source failed",
-            // a false cause for a defect that is entirely ours.
-            var expiries = await dbContext.Documents
-                .Where(d => d.ParentId == folderId && d.ExpiresAt != null)
-                .Select(d => d.ExpiresAt)
-                .ToListAsync(cancellationToken);
-            if (expiries.Any(e => e > now))
+            // Shared with the clients' transition POSTs since ADR 0814 (#1309) — the cooldown is a property
+            // of the HOOK, not of each caller, so no surface can route around it.
+            if (await StagedContentCooldown.HoldsUnexpiredContentAsync(dbContext, folderId, now, cancellationToken))
             {
                 return;
             }

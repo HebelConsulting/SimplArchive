@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Documents;
 using SimplArchive.Api.Errors.Exceptions.Modules;
+using SimplArchive.Api.Modules;
 using SimplArchive.Infrastructure.Modules;
 using SimplArchive.Infrastructure.Persistence;
 using SimplArchive.Application.Abstractions;
@@ -33,12 +34,20 @@ namespace SimplArchive.Api.Controllers;
 [Authorize]
 public class MachineTransitionsController : ControllerBase
 {
+    /// <summary>
+    /// Rides on every auto-refresh response (ADR 0814): <c>ran</c> = the hook executed and the folder's
+    /// contents may have changed; <c>current</c> = unexpired staged content already present, nothing ran.
+    /// Clients reload the folder only on <c>ran</c> — both spellings are SUCCESS, and a client that ignores
+    /// the header (or an old server that never sends it) safely degrades to reloading every time.
+    /// </summary>
+    public const string PopulateOutcomeHeader = "X-Populate-Outcome";
+
     private readonly SimplArchiveDbContext _dbContext;
     private readonly DocumentAccessService _access;
     private readonly StateMachineCatalog _catalog;
     private readonly StateMachineEngine _engine;
     private readonly IAuditRecorder _audit;
-    private readonly SimplArchive.Api.Modules.ModuleContentHealthRecorder _health;
+    private readonly ModuleContentHealthRecorder _health;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
 
     public MachineTransitionsController(
@@ -89,18 +98,40 @@ public class MachineTransitionsController : ControllerBase
         // principal does the writing under its own consent grants, so being allowed to SEE the subject is the
         // whole ask. (CanSee is already established: an invisible document returned NotFound above via the
         // rights walk in GetCallerRightsAsync — all-false rights read as not-found-shaped Forbid below.)
+        var autoRefresh = machine.Transitions[transitionName].AutoRefreshOnOpen;
         var rights = await _access.GetCallerRightsAsync(documentId, cancellationToken);
-        var required = machine.Transitions[transitionName].AutoRefreshOnOpen ? rights.CanSee : rights.CanEditContent;
+        var required = autoRefresh ? rights.CanSee : rights.CanEditContent;
         if (!required)
         {
             return Forbid();
+        }
+
+        // The populate hook's cooldown, on THIS path too (ADR 0814, #1309): a folder that already holds
+        // unexpired staged content is current, so opening it ten times in a minute must not issue ten
+        // upstream fetches — the hook owns its cooldown, and no caller can route around it by picking a
+        // different surface. ADR 0810 built the same gate for the protocol path; this is the one other door.
+        // Deliberate transitions are untouched — this branch exists only for the auto-invoked hook.
+        //
+        // The outcome header is load-bearing, not telemetry: it is what lets a client reload the folder only
+        // when content actually changed, and it is the loop brake that replaced the clients' own 30-second
+        // timestamps (run → reload → re-trigger → now current → no reload → stop). "current" answers as
+        // SUCCESS deliberately — the hook's contract is "make this folder current", and it already is.
+        if (autoRefresh)
+        {
+            if (await StagedContentCooldown.HoldsUnexpiredContentAsync(
+                    _dbContext, documentId, DateTimeOffset.UtcNow, cancellationToken))
+            {
+                Response.Headers[PopulateOutcomeHeader] = "current";
+                return NoContent();
+            }
+
+            Response.Headers[PopulateOutcomeHeader] = "ran";
         }
 
         // The populate hook's outcome is also a HEALTH fact when it is an auto-refresh (ADR 0811), and this
         // path counts alongside the protocol one: "failing since 14:05" has to mean every attempt, or it is
         // not a duration. A failure here still surfaces to THIS caller as a 500, which is why the recording is
         // the addition rather than the reporting — the caller learns, the tenant's administrators did not.
-        var autoRefresh = machine.Transitions[transitionName].AutoRefreshOnOpen;
         var healthTenant = autoRefresh && machine.ModuleId is not null ? _currentTenantAccessor.TenantId : null;
 
         SimplArchive.ModuleAbi.StatusResult verdict;
