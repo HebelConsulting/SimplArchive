@@ -733,6 +733,11 @@ using (var scope = app.Services.CreateScope())
     // config instead of being minted per stack: a secret is shown once and stored hashed, so recreating the
     // volumes used to invalidate the tooling's saved credentials and every run died at `invalid_client`.
     await InteropTenantSeeder.SeedIfConfiguredAsync(services, app.Configuration);
+
+    // Env-driven idempotent seed of the ENCRYPTED demo tenant (ADR 0813) — the tenant the kiosk lists in
+    // Encryption:Tenants so the encryption service can be exercised on a live stack beside an untouched
+    // public demo. No-op unless the CryptoDemo:* config is present and the tenant doesn't already exist.
+    await CryptoDemoSeeder.SeedIfConfiguredAsync(services, app.Configuration);
 }
 
 // Configure the HTTP request pipeline.

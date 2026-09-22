@@ -145,7 +145,7 @@ internal static class ImapFetch
         // bytes (see ImapSearch): in milestone 1 the server holds plaintext anyway, and matching against
         // ciphertext would silently turn every content search into "no results".
         async Task<byte[]> BytesAsync() => bytes ??=
-            await envelope.TryEnvelopeAsync(session.Email, await MessageBytesAsync(storage, message), CancellationToken.None)
+            await envelope.TryEnvelopeAsync(session.TenantName, session.Email, await MessageBytesAsync(storage, message), CancellationToken.None)
             ?? bytes ?? await MessageBytesAsync(storage, message);
 
         async Task<MimeMessage> MimeAsync() => mime ??= MimeMessage.Load(new MemoryStream(await BytesAsync()));
@@ -175,7 +175,7 @@ internal static class ImapFetch
                     // about every enveloped message — measure the served bytes instead, unconditionally there,
                     // because whether THIS user's message envelopes depends on a cert lookup the shortcut
                     // cannot see.
-                    parts.Add(!envelope.Enabled
+                    parts.Add(!envelope.EnabledFor(session.TenantName)
                         && message.Extension.Equals(".eml", StringComparison.OrdinalIgnoreCase) && message.SizeBytes is { } size
                         ? $"RFC822.SIZE {size}"
                         : $"RFC822.SIZE {(await BytesAsync()).Length}");

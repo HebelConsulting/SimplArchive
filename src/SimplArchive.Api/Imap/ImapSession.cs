@@ -63,6 +63,12 @@ public sealed class ImapSession
     /// <summary>The authenticated user's email — the recipient identity the envelope hook needs
     /// (SimplArchiveEncryption ADR 0007). "anonymous" before LOGIN, but FETCH is unreachable then.</summary>
     internal string Email => _email;
+
+    private string _tenantName = string.Empty;
+
+    /// <summary>The authenticated user's tenant NAME — the key the per-tenant encryption gate matches
+    /// against <c>Encryption:Tenants</c> (ADR 0813). Empty before LOGIN, but FETCH is unreachable then.</summary>
+    internal string TenantName => _tenantName;
     // The peer's address, for the sign-in throttle's per-address spray counter (ADR 0716). Read once at
     // accept: a socket that has been closed no longer has a remote endpoint to ask.
     private string? _address;
@@ -536,11 +542,17 @@ public sealed class ImapSession
         var user = await db.Users.IgnoreQueryFilters(["TenantFilter"])
             .FirstOrDefaultAsync(u => u.NormalizedEmail == normalized && u.IsActive);
 
-        var tenantActive = user is not null
-            && await db.Tenants.AnyAsync(t => t.Id == user.TenantId && t.Status == TenantStatus.Active);
+        // The NAME rides along with the Active check because the per-tenant encryption gate matches tenant
+        // names (ADR 0813) — one query answers both, and FETCH must not pay a lookup per message.
+        var tenantName = user is null
+            ? null
+            : await db.Tenants
+                .Where(t => t.Id == user.TenantId && t.Status == TenantStatus.Active)
+                .Select(t => t.Name)
+                .FirstOrDefaultAsync();
 
         if (user?.ImapPasswordHash is null
-            || !tenantActive
+            || tenantName is null
             || _passwordHasher.VerifyHashedPassword(user, user.ImapPasswordHash, password) == PasswordVerificationResult.Failed)
         {
             // One failure message for every cause — a prober learns nothing about which accounts exist or
@@ -564,6 +576,7 @@ public sealed class ImapSession
 
         _userId = user.Id;
         _tenantId = user.TenantId;
+        _tenantName = tenantName;
         _authenticated = true;
         _email = user.Email;
         ShowAllDocuments = user.ImapShowAllDocuments;

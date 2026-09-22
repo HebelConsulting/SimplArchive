@@ -12,6 +12,13 @@ namespace SimplArchive.Api.Encryption;
 /// existed. The whole integration must stay invisible to an installation that has not opted in.
 /// </para>
 /// <para>
+/// <b>The switch has a per-tenant half (ADR 0813).</b> <c>Encryption:Tenants</c> lists the tenant NAMES the
+/// service applies to; absent or empty means every tenant, so an installation that only sets the URL keeps
+/// the original per-installation behaviour. With the list present, an unlisted tenant answers null without
+/// a call, exactly like an unconfigured installation — which is what lets one stack (the kiosk) run an
+/// encrypted demo tenant beside an untouched public one.
+/// </para>
+/// <para>
 /// <b>404 is a contract, not a failure</b>: the user has no registered certificate, and the POC serves
 /// plaintext then (SimplArchiveEncryption ADR 0007's stated boundary — production turns that into a policy
 /// decision). It is logged at Debug precisely because it is the expected state for most users.
@@ -30,15 +37,17 @@ public sealed class MessageEnvelopeClient(
 {
     internal const string HttpClientName = "encryption-service";
 
-    /// <summary>Whether an encryption service is configured at all — callers may use this to skip work
-    /// (a stored-size shortcut, say) that would be wrong for an enveloped message.</summary>
-    public bool Enabled => !string.IsNullOrEmpty(configuration["Encryption:ServiceUrl"]);
+    /// <summary>Whether an encryption service applies to <paramref name="tenantName"/> — callers may use
+    /// this to skip work (a stored-size shortcut, say) that would be wrong for an enveloped message.</summary>
+    public bool EnabledFor(string tenantName) =>
+        !string.IsNullOrEmpty(configuration["Encryption:ServiceUrl"]) && TenantListed(tenantName);
 
-    /// <summary>The enveloped message, or null — meaning "serve what you built": not configured, no
-    /// certificate for this user, or (milestone 1 only) the service was unreachable.</summary>
-    public async Task<byte[]?> TryEnvelopeAsync(string email, byte[] rfc822, CancellationToken cancellationToken)
+    /// <summary>The enveloped message, or null — meaning "serve what you built": not configured, tenant not
+    /// listed, no certificate for this user, or (milestone 1 only) the service was unreachable.</summary>
+    public async Task<byte[]?> TryEnvelopeAsync(
+        string tenantName, string email, byte[] rfc822, CancellationToken cancellationToken)
     {
-        if (configuration["Encryption:ServiceUrl"] is not { Length: > 0 } serviceUrl)
+        if (configuration["Encryption:ServiceUrl"] is not { Length: > 0 } serviceUrl || !TenantListed(tenantName))
         {
             return null;
         }
@@ -67,6 +76,20 @@ public sealed class MessageEnvelopeClient(
                 + "Trace carries the exchange.", email);
             return null;
         }
+    }
+
+    // The per-tenant half of the switch (ADR 0813). Read per call like ServiceUrl, so a config reload takes
+    // effect without a restart. Whitespace-only entries are skipped: the compose passthrough
+    // (`Encryption__Tenants__0: ${ENCRYPTION_TENANT:-}`) yields an empty element when the variable is unset,
+    // and an empty element must mean "no list", not "a tenant named nothing".
+    private bool TenantListed(string tenantName)
+    {
+        var listed = configuration.GetSection("Encryption:Tenants").GetChildren()
+            .Select(child => child.Value)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .ToList();
+
+        return listed.Count == 0 || listed.Contains(tenantName, StringComparer.OrdinalIgnoreCase);
     }
 }
 

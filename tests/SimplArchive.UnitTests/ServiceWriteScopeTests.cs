@@ -60,6 +60,7 @@ public partial class ServiceWriteScopeTests
     {
         ["DemoDataSeeder.cs"] = Provisioning,
         ["DemoArtistsSeeder.cs"] = Provisioning,
+        ["CryptoDemoSeeder.cs"] = Provisioning,
         ["TenantProvisioningService.cs"] = Provisioning,
         ["WellKnownMaskSeeder.cs"] = Provisioning,
         ["PersonalRepositoryProvisioner.cs"] = Provisioning,

@@ -135,6 +135,12 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
 
     public const string EnvelopedMarkerHeader = "X-SimplArchive-Test-Enveloped";
 
+    // The seeded ENCRYPTED demo tenant (ADR 0813) — the one name Encryption__Tenants lists, so tests reach
+    // the per-tenant gate's positive path through it and every per-test tenant exercises the negative one.
+    public const string CryptoTenantName = "Crypto";
+    public const string CryptoAdminEmail = "crypt@crypto.e2e.local";
+    public const string CryptoPassword = "CryptoDemo-1234!";
+
     public void RegisterEncryptionRecipient(string email) => _encryptionRecipients[email] = true;
 
     private async Task<string> StartEncryptionStubAsync()
@@ -202,6 +208,15 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         Environment.SetEnvironmentVariable("ObjectStorage__ServiceUrl", _storageUrl);
         Environment.SetEnvironmentVariable("ObjectStorage__PublicServiceUrl", _storageUrl);
         Environment.SetEnvironmentVariable("Encryption__ServiceUrl", await StartEncryptionStubAsync());
+
+        // The per-tenant half of the switch (ADR 0813), in the kiosk's exact shape: the CryptoDemo tenant
+        // seeded at startup is the ONLY listed tenant, so every per-test tenant is UNLISTED — which makes
+        // the existing envelope tests the gate's negative case (a registered recipient in an unlisted
+        // tenant still gets plaintext) while the seeded tenant carries the positive one.
+        Environment.SetEnvironmentVariable("Encryption__Tenants__0", CryptoTenantName);
+        Environment.SetEnvironmentVariable("CryptoDemo__Tenant__Name", CryptoTenantName);
+        Environment.SetEnvironmentVariable("CryptoDemo__Administrator__Email", CryptoAdminEmail);
+        Environment.SetEnvironmentVariable("CryptoDemo__Password", CryptoPassword);
 
         // Stage the TestModule into a Modules directory so the REAL loader brings it up through the real
         // seams (ADR 0737's activation circle, ModuleControllerTests). Deliberately present for EVERY E2E

@@ -88,6 +88,11 @@ x-api-env: &api-env
   # purpose: an encryption setting present on one instance and not the other would envelope half a user's
   # fetches at random, the hardest bug this two-instance stack can produce (ADR 0808's settings rule).
   Encryption__ServiceUrl: ${ENCRYPTION_SERVICE_URL:-}
+  # The per-TENANT half of the switch (ADR 0813) — EMPTY by default, and empty means every tenant (the
+  # original per-installation behaviour). Set to a tenant NAME to envelope only that tenant, e.g.
+  # ENCRYPTION_TENANT=Crypto beside the CryptoDemo:* seed — the kiosk's arrangement, so an encrypted demo
+  # tenant runs beside an untouched public one. Same shared-anchor reasoning as the URL above.
+  Encryption__Tenants__0: ${ENCRYPTION_TENANT:-}
   # SET EXPLICITLY BECAUSE THERE ARE TWO INSTANCES (#1245). The pool ceiling is PER PROCESS, so the database
   # sees it multiplied by the instance count — and the application default is 40, which two instances turn
   # into 80 against a stock `max_connections` of 100 (97 usable after the superuser reserve). That leaves

@@ -517,7 +517,7 @@ public static class DemoDataSeeder
         }
     }
 
-    private static async Task EnableDavAndImapAsync(
+    internal static async Task EnableDavAndImapAsync(
         SimplArchiveDbContext dbContext, PasswordHasher<User> hasher, string demoPassword, Guid[] userIds)
     {
         foreach (var user in await dbContext.Users.Where(u => userIds.Contains(u.Id)).ToListAsync())
@@ -591,7 +591,7 @@ public static class DemoDataSeeder
 
     // ── helpers ────────────────────────────────────────────────────────────────────────────────────────────────
 
-    private static async Task<Document> AddFolderAsync(
+    internal static async Task<Document> AddFolderAsync(
         SimplArchiveDbContext dbContext, Guid tenantId, Guid parentId, string name, Guid adminId, DateTimeOffset at, Guid? folderMaskVersionId, string slug)
     {
         var folder = new Document
@@ -611,7 +611,7 @@ public static class DemoDataSeeder
         return folder;
     }
 
-    private static async Task<Document> AddDocumentAsync(
+    internal static async Task<Document> AddDocumentAsync(
         SimplArchiveDbContext dbContext, IObjectStorageClient storage, Assembly assembly,
         Guid tenantId, Guid parentId, string name, Guid adminId, DateTimeOffset at, Guid? maskVersionId,
         string resourceName, string ext, string contentType, DateOnly documentDate,
@@ -640,7 +640,7 @@ public static class DemoDataSeeder
         return document;
     }
 
-    private static async Task<DocumentVersion> AddVersionAsync(
+    internal static async Task<DocumentVersion> AddVersionAsync(
         SimplArchiveDbContext dbContext, IObjectStorageClient storage, Assembly assembly,
         Document document, Guid adminId, DateTimeOffset at, Guid storageFolderId,
         string resourceName, string ext, string contentType, DateOnly documentDate,
@@ -810,7 +810,7 @@ public static class DemoDataSeeder
         }
     }
 
-    private static async Task<byte[]> ReadResourceAsync(Assembly assembly, string logicalName)
+    internal static async Task<byte[]> ReadResourceAsync(Assembly assembly, string logicalName)
     {
         await using var resource = assembly.GetManifestResourceStream(logicalName)
             ?? throw new InvalidOperationException($"Embedded resource {logicalName} was not found.");
