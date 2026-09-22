@@ -18,6 +18,7 @@ public class LmtpDelivery
 {
     private readonly SimplArchiveDbContext _dbContext;
     private readonly ICurrentTenantAccessor _tenantAccessor;
+    private readonly ICurrentUserAccessor _userAccessor;
     private readonly IObjectStorageClient _storage;
     private readonly DocumentFinalizer _finalizer;
     private readonly PersonalMailboxProvisioner _mailbox;
@@ -26,6 +27,7 @@ public class LmtpDelivery
     public LmtpDelivery(
         SimplArchiveDbContext dbContext,
         ICurrentTenantAccessor tenantAccessor,
+        ICurrentUserAccessor userAccessor,
         IObjectStorageClient storage,
         DocumentFinalizer finalizer,
         PersonalMailboxProvisioner mailbox,
@@ -33,6 +35,7 @@ public class LmtpDelivery
     {
         _dbContext = dbContext;
         _tenantAccessor = tenantAccessor;
+        _userAccessor = userAccessor;
         _storage = storage;
         _finalizer = finalizer;
         _mailbox = mailbox;
@@ -199,6 +202,15 @@ public class LmtpDelivery
                 // The DbContext reads the tenant from this accessor, and there is no request to have set it — the
                 // MTA is the caller. Setting it here is what puts every query below inside the right tenant.
                 ((CurrentTenantAccessor)_tenantAccessor).TenantId = tenantId;
+
+                // The RECIPIENT is this delivery's actor (#1312): the finalizer and the classifier record
+                // audit events on this chain (a refused attachment, a classified contact), and with no
+                // resolvable actor those appends were silently dropped — inbound mail left no audit trace.
+                // Attributing to the mailbox owner matches how WebDAV attributes the same user's inbound
+                // flow (the implicit checkout). A DEPARTMENT mailbox has no owner, so its userId is null,
+                // those events still drop, and the recorder now WARNS about each — the follow-up issue for
+                // a proper system actor there is filed rather than pretended away.
+                ((SimplArchive.Infrastructure.Persistence.CurrentUserAccessor)_userAccessor).UserId = userId;
 
                 // Lazily rather than eagerly, and shared with the credential trigger: the mailbox exists exactly
                 // when it has something to hold, and whichever of the two demands arrives first creates it (#562).

@@ -8,9 +8,12 @@ using SimplArchive.Infrastructure.Persistence;
 namespace SimplArchive.Infrastructure.Audit;
 
 // See ADR "Audit trail (first slice)". Resolves the current actor + a name snapshot and appends an
-// AuditEvent. Registered scoped in AddInfrastructure. If no actor or tenant can be resolved (shouldn't
-// happen on an authorized mutation path), the call is a no-op rather than throwing — auditing must never
-// break the action it records.
+// AuditEvent. Registered scoped in AddInfrastructure. If no actor or tenant can be resolved, the call
+// does not throw — auditing must never break the action it records — but since #1312 it is a WARNING,
+// not a silent no-op: a background worker, a startup seed or a pre-sign-in protocol edge that calls
+// RecordAsync here loses its event (use RecordForActorAsync there), and an append-only hash-chained log
+// discarding an append quietly is how the EmailAbandoned events were never written in production while
+// the code read as though they were.
 public class AuditRecorder : IAuditRecorder
 {
     private const int MaxAppendAttempts = 8;
@@ -58,6 +61,14 @@ public class AuditRecorder : IAuditRecorder
 
         if (actorId is not { } resolvedActorId || (tenantId ?? _currentTenantAccessor.TenantId) is not { } effectiveTenant)
         {
+            // Loud, not silent (#1312): the guard has TWO clauses, and the EmailAbandoned drop survived two
+            // ADRs precisely because a caller that reasoned about the tenant half never learned the actor
+            // half also gated. Name the discarded action and the failing half, and name the fix.
+            _logger.LogWarning(
+                "Audit event {Action} on {TargetType} {TargetId} was DROPPED: {Reason}. A caller with no "
+                + "ambient principal (a background worker, a startup seed, a protocol edge before sign-in) "
+                + "must use RecordForActorAsync instead.",
+                action, targetType, targetId, actorId is null ? "no actor resolvable" : "no tenant resolvable");
             return;
         }
 

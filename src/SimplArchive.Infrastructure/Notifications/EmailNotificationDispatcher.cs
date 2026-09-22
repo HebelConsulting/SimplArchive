@@ -113,12 +113,17 @@ public sealed class EmailNotificationDispatcher : IEmailNotificationDispatcher
                         item.Notification.Id, item.Email, item.Notification.EmailAttempts,
                         permanent ? "permanently rejected" : "retry budget exhausted");
 
-                    // …and in the product, not only in a log nobody may be reading. The tenant is passed
-                    // explicitly: this sweep spans tenants and has no ambient one.
-                    await _audit.RecordAsync(EmailAbandonedAction, "Notification", item.Notification.Id,
+                    // …and in the product, not only in a log nobody may be reading. The ACTOR is passed
+                    // explicitly too (#1312): this sweep has no ambient principal any more than it has an
+                    // ambient tenant, and RecordAsync drops the event when it cannot resolve one — which
+                    // is exactly what it silently did here for as long as this call existed. The System
+                    // actor with a descriptive subsystem name is the RetentionService idiom.
+                    await _audit.RecordForActorAsync(
+                        SimplArchive.Domain.Audit.AuditActorType.System, Guid.Empty, "Notification email",
+                        item.Notification.TenantId, EmailAbandonedAction, "Notification", item.Notification.Id,
                         item.Notification.Title,
                         $"{(permanent ? "Permanently rejected" : "Retry budget exhausted")} after {item.Notification.EmailAttempts} attempt(s): {e.Message}",
-                        item.Notification.TenantId, cancellationToken);
+                        cancellationToken);
                 }
                 else
                 {

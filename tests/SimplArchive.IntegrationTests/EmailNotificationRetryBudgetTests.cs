@@ -40,20 +40,62 @@ public class EmailNotificationRetryBudgetTests
         }
     }
 
+    [Fact]
+    public async Task Giving_up_writes_the_audit_row_through_the_REAL_recorder_with_no_ambient_principal()
+    {
+        // The #1312 regression test the issue itself demands: the fake above proves the dispatcher CALLS the
+        // recorder; only the real one can prove the event survives a scope with no principal accessors — the
+        // exact condition under which the old RecordAsync call silently dropped it in production while three
+        // fakes stayed green.
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var (tenantId, badUser, _) = await SeedAsync(connection);
+
+        var doomed = Pending(tenantId, badUser, "Review requested");
+        using (var seed = CreateContext(connection)) { seed.Notifications.Add(doomed); await seed.SaveChangesAsync(); }
+
+        var sender = new FailingSender(["gone@nowhere.invalid"], permanently: true);
+        using (var act = CreateContext(connection))
+        {
+            // Bare accessors throughout — exactly what EmailNotificationWorker's CreateScope() yields.
+            var recorder = new SimplArchive.Infrastructure.Audit.AuditRecorder(
+                act, new CurrentUserAccessor(), new CurrentServiceAccountAccessor(),
+                new CurrentPlatformAdministratorAccessor(), new CurrentTenantAccessor(),
+                new CurrentImpersonationAccessor(), TimeProvider.System,
+                NullLogger<SimplArchive.Infrastructure.Audit.AuditRecorder>.Instance);
+            await new EmailNotificationDispatcher(act, sender, NullLogger<EmailNotificationDispatcher>.Instance, recorder)
+                .DispatchPendingAsync();
+        }
+
+        using var read = CreateContext(connection);
+        var row = Assert.Single(await read.AuditEvents.IgnoreQueryFilters().ToListAsync());
+        Assert.Equal("Notification.EmailAbandoned", row.Action);
+        Assert.Equal(SimplArchive.Domain.Audit.AuditActorType.System, row.ActorType);
+        Assert.Equal("Notification email", row.ActorName);
+        Assert.Equal(tenantId, row.TenantId);
+    }
+
     private sealed class CountingAudit : IAuditRecorder
     {
-        public List<(string Action, string? Target)> Events { get; } = [];
+        public List<(string Action, string? Target, string? Actor)> Events { get; } = [];
 
+        // BOTH channels record (#1312). The first version stubbed RecordForActorAsync to nothing, which is
+        // precisely how the real drop stayed green: the dispatcher "called the recorder" — the wrong method,
+        // whose production implementation discarded the event — and this fake could not tell the difference.
         public Task RecordAsync(string action, string? targetType = null, Guid? targetId = null, string? targetName = null,
             string? details = null, Guid? tenantId = null, CancellationToken cancellationToken = default)
         {
-            Events.Add((action, targetName));
+            Events.Add((action, targetName, null));
             return Task.CompletedTask;
         }
 
         public Task RecordForActorAsync(SimplArchive.Domain.Audit.AuditActorType actorType, Guid actorId, string actorName,
             Guid tenantId, string action, string? targetType = null, Guid? targetId = null, string? targetName = null,
-            string? details = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
+            string? details = null, CancellationToken cancellationToken = default)
+        {
+            Events.Add((action, targetName, $"{actorType}:{actorName}"));
+            return Task.CompletedTask;
+        }
     }
 
     private static Notification Pending(Guid tenantId, Guid recipientId, string title) => new()
@@ -111,10 +153,13 @@ public class EmailNotificationRetryBudgetTests
         Assert.NotNull(row.EmailFailedAt);
         Assert.Null(row.EmailedAt); // the mail never went; the in-app notification is untouched
 
-        // And an administrator can see it happened without reading a log.
+        // And an administrator can see it happened without reading a log — recorded with an EXPLICIT
+        // System actor (#1312): this sweep has no ambient principal, so the ambient-resolving RecordAsync
+        // would have warned and dropped exactly this event.
         var abandoned = Assert.Single(audit.Events);
         Assert.Equal("Notification.EmailAbandoned", abandoned.Action);
         Assert.Equal("Review requested", abandoned.Target);
+        Assert.Equal("System:Notification email", abandoned.Actor);
     }
 
     [Fact]

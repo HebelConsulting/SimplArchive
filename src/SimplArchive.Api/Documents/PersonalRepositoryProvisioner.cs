@@ -165,7 +165,18 @@ public sealed class PersonalRepositoryProvisioner
         }
 
         // Audit only the actual creation (ADR "Audit tenant-settings, inbox filing + personal-repository creation").
-        await _audit.RecordAsync(AuditActions.RepositoryCreated, "Document", document.Id, document.Name, "Personal repository created", cancellationToken: cancellationToken);
+        //
+        // The OWNER is the actor, explicitly, on every path (#1312). This used to be RecordAsync, which
+        // resolves the ambient principal — present on the HTTP paths, absent in the startup seeders, so a
+        // seeded tenant's personal-space creations were silently never recorded. Owner-actor is also the
+        // more truthful row on the admin-creates-a-user path: the space is provisioned FOR its owner, and
+        // whose it is outlives who clicked.
+        var ownerName = await _dbContext.Users.Where(u => u.Id == userId)
+            .Select(u => u.DisplayName).FirstOrDefaultAsync(cancellationToken) ?? "Personal-space owner";
+        await _audit.RecordForActorAsync(
+            SimplArchive.Domain.Audit.AuditActorType.User, userId, ownerName, tenantId,
+            AuditActions.RepositoryCreated, "Document", document.Id, document.Name,
+            "Personal repository created", cancellationToken);
         return document;
     }
 

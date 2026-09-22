@@ -25,9 +25,11 @@ public interface IAuditRecorder
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Records an event with the actor supplied explicitly, for paths where the current-principal accessors
-    /// aren't set yet — chiefly the anonymous login POST, which knows the authenticating User but runs before
-    /// <c>CurrentPrincipalMiddleware</c> populates the accessors.
+    /// Records an event with the actor supplied explicitly — REQUIRED on every path with no ambient
+    /// principal: background workers and sweeps (System + a descriptive subsystem name, the
+    /// RetentionService idiom), startup seeding, and pre-sign-in edges like the login POST.
+    /// <see cref="RecordAsync"/> cannot write there — it warns and drops the event (#1312), which is how
+    /// the EmailAbandoned events were silently never written in production.
     /// </summary>
     Task RecordForActorAsync(
         AuditActorType actorType,

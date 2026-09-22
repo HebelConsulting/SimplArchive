@@ -5,13 +5,17 @@ using SimplArchive.Domain.Tenants;
 using SimplArchive.Domain.Users;
 using SimplArchive.Infrastructure.Audit;
 using SimplArchive.Infrastructure.Persistence;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace SimplArchive.IntegrationTests;
 
 // Verifies the audit recorder (ADR "Audit trail (first slice)"): it resolves the current actor + a name
 // snapshot and appends a tenant-scoped AuditEvent; RecordForActorAsync records with an explicit actor (the
-// anonymous-login path); and it no-ops when no actor is resolvable.
+// login POST, the background sweeps, the startup seeds); and when no actor is resolvable it WARNS and
+// drops — not silently (#1312): the quiet no-op is how the EmailAbandoned events were never written in
+// production while an explanatory comment said they were. Still a drop rather than a throw, because
+// auditing must never break the action it records — the warning names the discarded action and the fix.
 public class AuditRecorderTests
 {
     private static SimplArchiveDbContext CreateContext(SqliteConnection connection, CurrentTenantAccessor tenantAccessor) =>
@@ -105,14 +109,35 @@ public class AuditRecorderTests
         }
 
         tenantAccessor.TenantId = tenant.Id; // tenant set, but no actor
+        var log = new ListLogger();
         using (var recordContext = CreateContext(connection, tenantAccessor))
         {
-            var recorder = CreateRecorder(recordContext, tenantAccessor, userAccessor, serviceAccountAccessor, platformAdministratorAccessor);
+            var recorder = new AuditRecorder(recordContext, userAccessor, serviceAccountAccessor,
+                platformAdministratorAccessor, tenantAccessor, new CurrentImpersonationAccessor(),
+                TimeProvider.System, log);
             await recorder.RecordAsync("Auth.LoggedIn");
         }
 
         using var readContext = CreateContext(connection, tenantAccessor);
         Assert.Empty(await readContext.AuditEvents.IgnoreQueryFilters().ToListAsync());
+
+        // …and the drop is LOUD (#1312): a Warning names the discarded action and points at
+        // RecordForActorAsync, so the next principal-less caller learns on the first event, not in an audit.
+        var warning = Assert.Single(log.Entries, e => e.Level == LogLevel.Warning);
+        Assert.Contains("Auth.LoggedIn", warning.Message, StringComparison.Ordinal);
+        Assert.Contains("RecordForActorAsync", warning.Message, StringComparison.Ordinal);
+    }
+
+    private sealed class ListLogger : Microsoft.Extensions.Logging.ILogger<AuditRecorder>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter) => Entries.Add((logLevel, formatter(state, exception)));
     }
 
     [Fact]
