@@ -45,6 +45,13 @@ public class User : ITenantScoped, IConcurrencyTracked
     // as an attachment. Self-service (set from the IMAP dialog), deliberately not an admin-granted right.
     public bool ImapShowAllDocuments { get; set; }
 
+    // The user's S/MIME certificate — the PUBLIC half only, PEM (#1332): when set, IMAP fetches are
+    // enveloped to it in-process, no encryption sidecar involved. Null = plaintext IMAP, exactly the
+    // pre-existing behaviour. Single certificate by design — the per-device multi-certificate future is
+    // the encryption service's track (its ADR 0009), provisioned from outside rather than through the
+    // self-service dialog that writes this column.
+    public string? SmimeCertificatePem { get; set; }
+
     public bool IsActive { get; set; } = true;
 
     // Bypasses the repository ACL layer entirely — see ADR "Tenant admin ACL bypass". Not a Role

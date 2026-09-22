@@ -173,6 +173,9 @@ public partial class ConcurrencyContractRatchetTests
             "Reads only: projects the booker's DisplayName — the user half of the line above.",
         ["CheckoutsController.cs:User"] =
             "Reads only: projects the holder's DisplayName onto a check-out row.",
+        ["SmimeCertificateController.cs:Tenant"] =
+            "Reads only: projects the tenant's Name to ask the per-tenant encryption gate (ADR 0813) "
+            + "whether self-service applies. Every write it makes is a User column, through UserVerbs.",
         ["DocumentExternalLinksController.cs:User"] =
             "Reads only: projects the creator's DisplayName onto each link row.",
         ["IntrayController.cs:Group"] =

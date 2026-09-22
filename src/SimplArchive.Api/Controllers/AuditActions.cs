@@ -225,6 +225,10 @@ public static class AuditActions
     // login and every MFA policy attached to it, which is precisely the kind of act a SIEM is watching for.
     public const string WebDavPasswordIssued = "Access.WebDavPasswordIssued";
     public const string ImapPasswordIssued = "Access.ImapPasswordIssued";
+    // The self-service S/MIME certificate (#1332): setting one turns the user's IMAP stream into
+    // ciphertext, deleting one turns it back — both facts an auditor reconstructing "who could read
+    // this in transit" needs. Detail says which act: Uploaded / Generated / Deleted.
+    public const string SmimeCertificateChanged = "Access.SmimeCertificateChanged";
 
     public const string LoggedIn = "Auth.LoggedIn";
     // Impersonation token issued (ADR "User impersonation") — actor = the impersonating admin, target = the user.

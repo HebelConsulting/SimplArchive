@@ -5001,4 +5001,55 @@
   <data name="ModuleActionDone" xml:space="preserve">
     <value>{0} — hecho.</value>
   </data>
+  <data name="AccountSmime" xml:space="preserve">
+    <value>Correo cifrado (S/MIME)…</value>
+  </data>
+  <data name="SmimeTitle" xml:space="preserve">
+    <value>Correo cifrado (S/MIME)</value>
+  </data>
+  <data name="SmimeBody" xml:space="preserve">
+    <value>Con un certificado configurado, los mensajes descargados por IMAP se cifran para que solo sus dispositivos puedan leerlos. Suba su certificado o genere una identidad completa para sus dispositivos.</value>
+  </data>
+  <data name="SmimeProvisioned" xml:space="preserve">
+    <value>En esta instalación los certificados se proporcionan de forma centralizada — aquí no hay nada que configurar.</value>
+  </data>
+  <data name="SmimeNone" xml:space="preserve">
+    <value>No hay certificado configurado — el correo se sirve sin cifrar.</value>
+  </data>
+  <data name="SmimeSubject" xml:space="preserve">
+    <value>Certificado</value>
+  </data>
+  <data name="SmimeExpires" xml:space="preserve">
+    <value>Válido hasta</value>
+  </data>
+  <data name="SmimeUpload" xml:space="preserve">
+    <value>Subir certificado (.pem, .crt)</value>
+  </data>
+  <data name="SmimeP12Password" xml:space="preserve">
+    <value>Contraseña para el archivo .p12</value>
+  </data>
+  <data name="SmimeGenerate" xml:space="preserve">
+    <value>Generar identidad</value>
+  </data>
+  <data name="SmimeGeneratedKeep" xml:space="preserve">
+    <value>Descargue ambos archivos ahora — no se guardan en el servidor.</value>
+  </data>
+  <data name="SmimeDownloadP12" xml:space="preserve">
+    <value>Descargar .p12</value>
+  </data>
+  <data name="SmimeDownloadProfile" xml:space="preserve">
+    <value>Descargar .mobileconfig</value>
+  </data>
+  <data name="SmimeDelete" xml:space="preserve">
+    <value>Eliminar certificado</value>
+  </data>
+  <data name="SmimeUploadError" xml:space="preserve">
+    <value>No se pudo subir el certificado.</value>
+  </data>
+  <data name="SmimeGenerateError" xml:space="preserve">
+    <value>No se pudo generar la identidad.</value>
+  </data>
+  <data name="SmimeDeleteError" xml:space="preserve">
+    <value>No se pudo eliminar el certificado.</value>
+  </data>
 </root>

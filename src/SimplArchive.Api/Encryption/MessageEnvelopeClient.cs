@@ -103,6 +103,8 @@ public static class MessageEnvelopeServices
         services.AddHttpClient(MessageEnvelopeClient.HttpClientName,
             client => client.Timeout = TimeSpan.FromSeconds(10));
         services.AddSingleton<MessageEnvelopeClient>();
+        // The in-process sibling (#1332): envelopes to the user's own stored certificate, no sidecar.
+        services.AddSingleton<SmimeMessageEnveloper>();
         return services;
     }
 }

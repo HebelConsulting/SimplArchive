@@ -399,6 +399,18 @@ attached to open straight from the mail client.
   to the *recycle bin* — never a hard delete. Read/unread marks are remembered per person.
 ]
 
+*Encrypting what your mail program receives.*#idx("Encryption (S/MIME)") If you want the messages your mail
+client fetches to be readable *only on your own devices*, open *Encrypted mail (S/MIME)…* in the account
+menu. Either *upload* your certificate (a `.pem` or `.crt` file — just the certificate, never a private
+key), or type a password and *generate* a complete identity: you get a `.p12` to import on any device and a
+`.mobileconfig` that installs it on an iPhone or iPad in one tap. Download both right away — they are not
+stored on the server, and the password you typed is what the device asks for at import. From the next mail
+connection on, every message arrives encrypted to that certificate; your mail program decrypts it
+automatically once the identity is installed, and devices without it see only an encrypted attachment.
+While a certificate is set, upload and generate stay greyed out — *Delete certificate* switches your mail
+back to plain, and the two options come back. On installations where certificates are managed centrally,
+the dialog says so and there is nothing to set up.
+
 *Notes, too.*#idx("Notes") Point a notes app that syncs over IMAP at the same account and it finds the
 *Notes* mailbox — your personal *Notes* folder in disguise. Every note becomes a proper archive document with
 the *Note* document type, and editing a note on your phone adds a *new version* in the archive rather than a

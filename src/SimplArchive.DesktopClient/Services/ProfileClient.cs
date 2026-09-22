@@ -235,6 +235,53 @@ public sealed class ProfileClient(ApiCore core)
         SimplArchiveApiClient.StrOrNull(json, "password"),
         ApiCore.ParseLinks(json));
 
+    // ---- Self-service S/MIME certificate (#1332, ADR 0816) ------------------------------------------
+
+    // One rel, the method says which action (ADR 0719): GET reads, PUT uploads, POST generates, DELETE
+    // clears. The artifacts (p12/mobileConfig) ride the POST response ONCE — never stored server-side.
+    public sealed record SmimeInfo(bool SelfService, bool Enabled, string? Subject, DateTimeOffset? NotAfter,
+        string? Pkcs12, string? MobileConfig, string? FileNameStem, LinkMap? Links = null)
+    {
+        public string? Href(string rel) => Links?.Href(rel);
+    }
+
+    public async Task<SmimeInfo> GetSmimeAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _core.Http.GetFromJsonAsync<JsonElement>(await MeHrefAsync("smimeCertificate", cancellationToken), cancellationToken);
+        return ParseSmime(json);
+    }
+
+    public async Task<SmimeInfo> UploadSmimeCertificateAsync(SmimeInfo status, byte[] certificate, CancellationToken cancellationToken = default)
+    {
+        using var content = new ByteArrayContent(certificate);
+        using var response = await _core.Http.PutAsync(SelfHref(status), content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return ParseSmime(await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken));
+    }
+
+    public async Task<SmimeInfo> GenerateSmimeIdentityAsync(SmimeInfo status, string p12Password, CancellationToken cancellationToken = default)
+    {
+        using var response = await _core.Http.PostAsJsonAsync(SelfHref(status), new { p12Password }, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return ParseSmime(await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken));
+    }
+
+    public async Task DeleteSmimeCertificateAsync(SmimeInfo status, CancellationToken cancellationToken = default) =>
+        (await _core.Http.DeleteAsync(SelfHref(status), cancellationToken)).EnsureSuccessStatusCode();
+
+    private static string SelfHref(SmimeInfo status) => status.Href("self")
+        ?? throw new InvalidOperationException("The S/MIME certificate resource advertised no 'self' rel (ADR 0543).");
+
+    private static SmimeInfo ParseSmime(JsonElement json) => new(
+        json.TryGetProperty("selfService", out var ss) && ss.ValueKind == JsonValueKind.True,
+        json.TryGetProperty("enabled", out var en) && en.ValueKind == JsonValueKind.True,
+        SimplArchiveApiClient.StrOrNull(json, "subject"),
+        json.TryGetProperty("notAfter", out var na) && na.ValueKind == JsonValueKind.String ? na.GetDateTimeOffset() : null,
+        SimplArchiveApiClient.StrOrNull(json, "pkcs12"),
+        SimplArchiveApiClient.StrOrNull(json, "mobileConfig"),
+        SimplArchiveApiClient.StrOrNull(json, "fileNameStem"),
+        ApiCore.ParseLinks(json));
+
     // ---- Two-factor authentication (ADR "MFA (interactive login, TOTP)") ----------------------------
 
     public sealed record MfaEnrollInfo(string Secret, string OtpauthUri, string QrDataUrl);

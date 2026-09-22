@@ -1,0 +1,54 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.SmimeDialog"
+        Title="{loc:Tr SmimeTitle}" Width="500" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="10">
+        <TextBlock TextWrapping="Wrap" Text="{loc:Tr SmimeBody}" />
+
+        <!-- Provisioned-elsewhere installations (ADR 0813's gate): say so instead of offering dead buttons. -->
+        <TextBlock x:Name="ProvisionedText" IsVisible="False" TextWrapping="Wrap" Text="{loc:Tr SmimeProvisioned}" />
+
+        <!-- The set state: what is set, until when. -->
+        <StackPanel x:Name="EnabledPanel" IsVisible="False" Spacing="6">
+            <TextBlock Text="{loc:Tr SmimeSubject}" FontWeight="SemiBold" FontSize="12" />
+            <TextBox x:Name="SubjectBox" IsReadOnly="True" />
+            <TextBlock Text="{loc:Tr SmimeExpires}" FontWeight="SemiBold" FontSize="12" />
+            <TextBox x:Name="NotAfterBox" IsReadOnly="True" />
+        </StackPanel>
+
+        <!-- The just-generated artifacts, offered ONCE (they are not stored server-side). -->
+        <Border x:Name="GeneratedPanel" IsVisible="False" Background="#2e7d32" CornerRadius="3" Padding="8">
+            <StackPanel Spacing="6">
+                <TextBlock Foreground="White" FontSize="12" TextWrapping="Wrap" Text="{loc:Tr SmimeGeneratedKeep}" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button x:Name="SaveP12Button" Content="{loc:Tr SmimeDownloadP12}" Click="OnSaveP12" />
+                    <Button x:Name="SaveProfileButton" Content="{loc:Tr SmimeDownloadProfile}" Click="OnSaveProfile" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <TextBlock x:Name="NoneText" IsVisible="False" Foreground="{DynamicResource WbMuted}" FontSize="12"
+                   TextWrapping="Wrap" Text="{loc:Tr SmimeNone}" />
+
+        <!-- Both entrances render always and DISABLE while a certificate is set (#1332's state machine) —
+             visible-but-disabled says "delete first", which hiding would not. -->
+        <StackPanel x:Name="SelfServicePanel" Spacing="8">
+            <Button x:Name="UploadButton" Content="{loc:Tr SmimeUpload}" Click="OnUpload" />
+            <TextBlock Text="{loc:Tr SmimeP12Password}" FontWeight="SemiBold" FontSize="12" />
+            <DockPanel LastChildFill="True">
+                <Button x:Name="GenerateButton" DockPanel.Dock="Right" Margin="6,0,0,0"
+                        Content="{loc:Tr SmimeGenerate}" Click="OnGenerate" />
+                <TextBox x:Name="P12PasswordBox" PasswordChar="•" TextChanged="OnPasswordChanged" />
+            </DockPanel>
+        </StackPanel>
+
+        <TextBlock x:Name="StatusText" Foreground="{DynamicResource WbMuted}" FontSize="12" TextWrapping="Wrap" />
+
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button x:Name="DeleteButton" Content="{loc:Tr SmimeDelete}" IsVisible="False" Click="OnDelete" />
+            <Button Content="{loc:Tr Close}" Click="OnClose" IsCancel="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

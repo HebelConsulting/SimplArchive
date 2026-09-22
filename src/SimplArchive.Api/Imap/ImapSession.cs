@@ -69,6 +69,12 @@ public sealed class ImapSession
     /// <summary>The authenticated user's tenant NAME — the key the per-tenant encryption gate matches
     /// against <c>Encryption:Tenants</c> (ADR 0813). Empty before LOGIN, but FETCH is unreachable then.</summary>
     internal string TenantName => _tenantName;
+
+    /// <summary>The user's self-service S/MIME certificate (#1332), cached at LOGIN like the view choice:
+    /// when set, FETCH envelopes in-process and RFC822.SIZE must measure served bytes. A certificate set
+    /// or deleted mid-session takes effect on the next connection — the same freshness every other
+    /// login-cached fact here has, and mail clients reconnect constantly.</summary>
+    internal string? SmimeCertificatePem { get; private set; }
     // The peer's address, for the sign-in throttle's per-address spray counter (ADR 0716). Read once at
     // accept: a socket that has been closed no longer has a remote endpoint to ask.
     private string? _address;
@@ -580,6 +586,7 @@ public sealed class ImapSession
         _authenticated = true;
         _email = user.Email;
         ShowAllDocuments = user.ImapShowAllDocuments;
+        SmimeCertificatePem = user.SmimeCertificatePem;
 
         // A sign-in is a security-relevant SUCCESS, which is Information by the logging convention — the
         // counterpart of the Warning a failure already emits, so a SIEM sees both sides. ShowAllDocuments

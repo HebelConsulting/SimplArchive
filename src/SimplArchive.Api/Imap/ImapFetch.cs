@@ -26,6 +26,7 @@ internal static class ImapFetch
         var items = ParseItems(arguments[(setEnd + 1)..], uidMode);
         var storage = scope.ServiceProvider.GetRequiredService<IObjectStorageClient>();
         var envelope = scope.ServiceProvider.GetRequiredService<SimplArchive.Api.Encryption.MessageEnvelopeClient>();
+        var selfEnveloper = scope.ServiceProvider.GetRequiredService<SimplArchive.Api.Encryption.SmimeMessageEnveloper>();
         var seen = await ImapMailboxes.SeenSetAsync(scope, selected.Messages);
 
         for (var index = 0; index < selected.Messages.Count; index++)
@@ -45,8 +46,8 @@ internal static class ImapFetch
                 seen.Add(message.DocumentId);
             }
 
-            await WriteMessageAsync(session, storage, envelope, message, sequence, items, seen.Contains(message.DocumentId),
-                selected.DeletedDocumentIds.Contains(message.DocumentId));
+            await WriteMessageAsync(session, storage, envelope, selfEnveloper, message, sequence, items,
+                seen.Contains(message.DocumentId), selected.DeletedDocumentIds.Contains(message.DocumentId));
         }
 
         await session.OkAsync(tag, uidMode ? "UID FETCH" : "FETCH");
@@ -133,6 +134,7 @@ internal static class ImapFetch
 
     private static async Task WriteMessageAsync(
         ImapSession session, IObjectStorageClient storage, SimplArchive.Api.Encryption.MessageEnvelopeClient envelope,
+        SimplArchive.Api.Encryption.SmimeMessageEnveloper selfEnveloper,
         ImapMessageEntry message, int sequence, List<string> items, bool seen, bool deleted)
     {
         byte[]? bytes = null;
@@ -142,10 +144,16 @@ internal static class ImapFetch
         // slices, BODYSTRUCTURE, the synthetic-size path — so a client can never see an enveloped body under
         // a plaintext BODYSTRUCTURE or vice versa. A split there is the #1158 family of bug: two views of
         // one message disagreeing, and only some clients caring. SEARCH deliberately keeps the PLAINTEXT
-        // bytes (see ImapSearch): in milestone 1 the server holds plaintext anyway, and matching against
-        // ciphertext would silently turn every content search into "no results".
+        // bytes (see ImapSearch): the server holds plaintext anyway, and matching against ciphertext would
+        // silently turn every content search into "no results".
+        //
+        // Precedence (#1332): the user's own stored certificate envelopes IN-PROCESS and wins over the
+        // sidecar hook — where both exist, the self-service certificate is the more specific claim about
+        // what this user's devices can open. Both fail open to plaintext, each with its own Warning.
         async Task<byte[]> BytesAsync() => bytes ??=
-            await envelope.TryEnvelopeAsync(session.TenantName, session.Email, await MessageBytesAsync(storage, message), CancellationToken.None)
+            (session.SmimeCertificatePem is { } pem
+                ? selfEnveloper.TryEnvelope(await MessageBytesAsync(storage, message), pem, session.Email)
+                : await envelope.TryEnvelopeAsync(session.TenantName, session.Email, await MessageBytesAsync(storage, message), CancellationToken.None))
             ?? bytes ?? await MessageBytesAsync(storage, message);
 
         async Task<MimeMessage> MimeAsync() => mime ??= MimeMessage.Load(new MemoryStream(await BytesAsync()));
@@ -175,7 +183,7 @@ internal static class ImapFetch
                     // about every enveloped message — measure the served bytes instead, unconditionally there,
                     // because whether THIS user's message envelopes depends on a cert lookup the shortcut
                     // cannot see.
-                    parts.Add(!envelope.EnabledFor(session.TenantName)
+                    parts.Add(!envelope.EnabledFor(session.TenantName) && session.SmimeCertificatePem is null
                         && message.Extension.Equals(".eml", StringComparison.OrdinalIgnoreCase) && message.SizeBytes is { } size
                         ? $"RFC822.SIZE {size}"
                         : $"RFC822.SIZE {(await BytesAsync()).Length}");

@@ -469,6 +469,15 @@ public partial class MainWindow
         }
     });
 
+    // The self-service S/MIME certificate dialog (#1332, ADR 0816) — upload/generate/delete.
+    internal void OnManageSmime(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel { Api: { } api })
+        {
+            await new SmimeDialog(api).ShowDialog(this);
+        }
+    });
+
     // The Intray / Check-out tabs' single WebDAV button (ADR "One WebDAV button per tab, deep-linked"). It does
     // the same next-useful-thing the ribbon button does — set up credentials, else mount, else open what is
     // already mounted — with one difference that is the whole point of it being on a tab: when the volume is

@@ -14,8 +14,8 @@ namespace SimplArchive.Api.Provisioning;
 // stack WITHOUT touching the public demo tenant: same shape as DemoDataSeeder (ADR 0214) and
 // InteropTenantSeeder (ADR 0585), a no-op unless the CryptoDemo:* config is present.
 //
-// It seeds the tenant with crypt (the tenant administrator) plus two plain users, florian and thomas — the
-// people whose phones carry the S/MIME identities in the proof of concept — all three IMAP/WebDAV-enabled
+// It seeds the tenant with crypt (the tenant administrator) plus three plain users, florian, thomas and
+// alex — the people whose phones carry the S/MIME identities in the proof of concept — all IMAP/WebDAV-enabled
 // with the one configured password, and a couple of documents in the root repository so a mail client has
 // something to fetch right after every nightly reset. Ids are deterministic (DemoId, #781) for the same
 // reason the demo tenant's are: the kiosk reseeds from scratch nightly, and fresh GUIDs each morning would
@@ -84,8 +84,10 @@ public static class CryptoDemoSeeder
 
         var florian = MakeUser("florian", "Florian");
         var thomas = MakeUser("thomas", "Thomas");
+        var alex = MakeUser("alex", "Alex");
         dbContext.Users.Add(florian);
         dbContext.Users.Add(thomas);
+        dbContext.Users.Add(alex);
 
         // The admin reads over IMAP too — and a phone signs in with the same password, so the IMAP/WebDAV
         // credentials are seeded for all three rather than minted per stack (the Interop lesson: a secret
@@ -93,11 +95,11 @@ public static class CryptoDemoSeeder
         var admin = await dbContext.Users.SingleAsync(u => u.Id == provisioned.AdministratorId);
         admin.ImapShowAllDocuments = true;
         await dbContext.SaveChangesAsync();
-        await DemoDataSeeder.EnableDavAndImapAsync(dbContext, hasher, password, [admin.Id, florian.Id, thomas.Id]);
+        await DemoDataSeeder.EnableDavAndImapAsync(dbContext, hasher, password, [admin.Id, florian.Id, thomas.Id, alex.Id]);
 
         // Working rights on the root repository for both plain users — enough to see, read and file, so the
         // phones' IMAP trees show the repository and its documents.
-        foreach (var (slug, user) in new[] { ("florian", florian), ("thomas", thomas) })
+        foreach (var (slug, user) in new[] { ("florian", florian), ("thomas", thomas), ("alex", alex) })
         {
             dbContext.AclEntries.Add(new AclEntry
             {

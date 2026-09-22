@@ -148,6 +148,7 @@ public class MeController : ControllerBase
                 new Link("passkeyRegister", "/api/users/me/passkeys/register", "POST"),
                 new Link("webdavPassword", "/api/me/webdav-password", "GET"),
                 new Link("imapAccess", "/api/me/imap-access", "GET"),
+                new Link("smimeCertificate", "/api/me/smime-certificate", "GET"),
                 new Link("personalRepository", "/api/me/personal-repository", "POST"),
                 // The display-zone preference (#1254). Advertised so a client can FOLLOW it rather than
                 // compose the address — an endpoint no resource links to is unreachable by a conforming

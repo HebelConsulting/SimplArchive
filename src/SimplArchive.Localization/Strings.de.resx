@@ -5001,4 +5001,55 @@
   <data name="ModuleActionDone" xml:space="preserve">
     <value>{0} — erledigt.</value>
   </data>
+  <data name="AccountSmime" xml:space="preserve">
+    <value>Verschlüsselte E-Mail (S/MIME)…</value>
+  </data>
+  <data name="SmimeTitle" xml:space="preserve">
+    <value>Verschlüsselte E-Mail (S/MIME)</value>
+  </data>
+  <data name="SmimeBody" xml:space="preserve">
+    <value>Mit hinterlegtem Zertifikat werden über IMAP abgerufene Nachrichten verschlüsselt, sodass nur Ihre Geräte sie lesen können. Laden Sie Ihr Zertifikat hoch oder erzeugen Sie eine vollständige Identität für Ihre Geräte.</value>
+  </data>
+  <data name="SmimeProvisioned" xml:space="preserve">
+    <value>Zertifikate werden auf dieser Installation zentral bereitgestellt — hier ist nichts einzurichten.</value>
+  </data>
+  <data name="SmimeNone" xml:space="preserve">
+    <value>Kein Zertifikat hinterlegt — E-Mail wird unverschlüsselt ausgeliefert.</value>
+  </data>
+  <data name="SmimeSubject" xml:space="preserve">
+    <value>Zertifikat</value>
+  </data>
+  <data name="SmimeExpires" xml:space="preserve">
+    <value>Gültig bis</value>
+  </data>
+  <data name="SmimeUpload" xml:space="preserve">
+    <value>Zertifikat hochladen (.pem, .crt)</value>
+  </data>
+  <data name="SmimeP12Password" xml:space="preserve">
+    <value>Passwort für die .p12-Datei</value>
+  </data>
+  <data name="SmimeGenerate" xml:space="preserve">
+    <value>Identität erzeugen</value>
+  </data>
+  <data name="SmimeGeneratedKeep" xml:space="preserve">
+    <value>Laden Sie beide Dateien jetzt herunter — sie werden nicht auf dem Server gespeichert.</value>
+  </data>
+  <data name="SmimeDownloadP12" xml:space="preserve">
+    <value>.p12 herunterladen</value>
+  </data>
+  <data name="SmimeDownloadProfile" xml:space="preserve">
+    <value>.mobileconfig herunterladen</value>
+  </data>
+  <data name="SmimeDelete" xml:space="preserve">
+    <value>Zertifikat löschen</value>
+  </data>
+  <data name="SmimeUploadError" xml:space="preserve">
+    <value>Das Zertifikat konnte nicht hochgeladen werden.</value>
+  </data>
+  <data name="SmimeGenerateError" xml:space="preserve">
+    <value>Die Identität konnte nicht erzeugt werden.</value>
+  </data>
+  <data name="SmimeDeleteError" xml:space="preserve">
+    <value>Das Zertifikat konnte nicht gelöscht werden.</value>
+  </data>
 </root>

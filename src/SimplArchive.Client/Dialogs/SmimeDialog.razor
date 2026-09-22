@@ -1,0 +1,200 @@
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
+
+@* The self-service S/MIME certificate (#1332, ADR 0816): upload the public half or generate a complete
+   identity; once one is set both entrances disable until Delete — the server enforces the same machine.
+   Desktop is canonical (ADR 0511); this mirrors its SmimeDialog. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 460px;">
+            <MudText Typo="Typo.body2" Class="mb-3">@Strings.Get("SmimeBody")</MudText>
+
+            @if (!_selfService)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true">@Strings.Get("SmimeProvisioned")</MudAlert>
+            }
+            else if (_enabled)
+            {
+                <MudTextField T="string" Label="@Strings.Get("SmimeSubject")" Value="@_subject" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                <MudTextField T="string" Label="@Strings.Get("SmimeExpires")" Value="@_notAfter" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2" />
+                @if (_generatedP12 is not null)
+                {
+                    <MudAlert Severity="Severity.Success" Dense="true" Class="mt-3">@Strings.Get("SmimeGeneratedKeep")</MudAlert>
+                    <div class="d-flex gap-2 mt-2">
+                        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Download" OnClick="DownloadP12Async">@Strings.Get("SmimeDownloadP12")</MudButton>
+                        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.PhoneIphone" OnClick="DownloadProfileAsync">@Strings.Get("SmimeDownloadProfile")</MudButton>
+                    </div>
+                }
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@Strings.Get("SmimeNone")</MudText>
+            }
+
+            @if (_selfService)
+            {
+                @* Both entrances render always and DISABLE while a certificate is set (#1332's state
+                   machine) — the visible-but-disabled pair says "delete first", which hiding would not. *@
+                <MudDivider Class="my-3" />
+                <MudFileUpload T="IBrowserFile" FilesChanged="UploadAsync" Accept=".pem,.crt,.cer,.der" Class="d-inline-flex">
+                    <CustomContent Context="upload">
+                        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.UploadFile"
+                                   Disabled="@(_enabled || _busy)" OnClick="@(() => upload.OpenFilePickerAsync())">
+                            @Strings.Get("SmimeUpload")
+                        </MudButton>
+                    </CustomContent>
+                </MudFileUpload>
+
+                <div class="d-flex gap-2 align-center mt-3">
+                    @* Immediate: the Generate gate should follow the typing — the default commit-on-blur
+                       leaves the button dead until the user happens to click elsewhere. *@
+                    <MudTextField T="string" @bind-Value="_p12Password" Immediate="true" Label="@Strings.Get("SmimeP12Password")" InputType="InputType.Password"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(_enabled || _busy)" />
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="GenerateAsync"
+                               Disabled="@(_enabled || _busy || string.IsNullOrWhiteSpace(_p12Password))">
+                        @Strings.Get("SmimeGenerate")
+                    </MudButton>
+                </div>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        @if (_selfService && _enabled)
+        {
+            <MudButton Color="Color.Error" OnClick="DeleteAsync" Disabled="_busy">@Strings.Get("SmimeDelete")</MudButton>
+        }
+        <MudButton OnClick="Close">@Strings.Get("Close")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    private bool _selfService = true;
+    private bool _enabled;
+    private string _subject = string.Empty;
+    private string _notAfter = string.Empty;
+    private string _p12Password = string.Empty;
+    private string? _generatedP12;
+    private string? _generatedProfile;
+    private string _fileNameStem = "identity";
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            Apply(await Http.GetFromJsonAsync<StatusDto>(await ApiRoot.RequireMeAsync("smimeCertificate")));
+        }
+        catch (Exception) { /* leave defaults */ }
+    }
+
+    private void Apply(StatusDto? status)
+    {
+        _selfService = status?.SelfService ?? true;
+        _enabled = status?.Enabled ?? false;
+        _subject = status?.Subject ?? string.Empty;
+        _notAfter = status?.NotAfter?.ToString("yyyy-MM-dd") ?? string.Empty;
+    }
+
+    private async Task UploadAsync(IBrowserFile? file)
+    {
+        if (file is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            using var buffer = new MemoryStream();
+            await file.OpenReadStream(maxAllowedSize: 128 * 1024).CopyToAsync(buffer);
+            var response = await Http.PutAsync(await ApiRoot.RequireMeAsync("smimeCertificate"),
+                new ByteArrayContent(buffer.ToArray()));
+            response.EnsureSuccessStatusCode();
+            Apply(await response.Content.ReadFromJsonAsync<StatusDto>());
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("SmimeUploadError"), Severity.Error);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task GenerateAsync()
+    {
+        _busy = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync(await ApiRoot.RequireMeAsync("smimeCertificate"),
+                new { p12Password = _p12Password });
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<GeneratedDto>();
+            Apply(result);
+            _generatedP12 = result?.Pkcs12;
+            _generatedProfile = result?.MobileConfig;
+            _fileNameStem = result?.FileNameStem is { Length: > 0 } stem ? stem : _fileNameStem;
+            _p12Password = string.Empty;
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("SmimeGenerateError"), Severity.Error);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task DeleteAsync()
+    {
+        _busy = true;
+        try
+        {
+            (await Http.DeleteAsync(await ApiRoot.RequireMeAsync("smimeCertificate"))).EnsureSuccessStatusCode();
+            _enabled = false;
+            _generatedP12 = null;
+            _generatedProfile = null;
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("SmimeDeleteError"), Severity.Error);
+        }
+        finally { _busy = false; }
+    }
+
+    private Task DownloadP12Async() => DownloadAsync($"{_fileNameStem}.p12", _generatedP12);
+
+    private Task DownloadProfileAsync() => DownloadAsync($"{_fileNameStem}.mobileconfig", _generatedProfile);
+
+    private async Task DownloadAsync(string fileName, string? base64)
+    {
+        if (base64 is null)
+        {
+            return;
+        }
+
+        // The artifacts arrived over the authenticated client and live in memory — a plain <a href> would
+        // carry no bearer token anyway, so the stream download is the only correct shape here.
+        using var stream = new MemoryStream(Convert.FromBase64String(base64));
+        using var streamRef = new DotNetStreamReference(stream);
+        await JS.InvokeVoidAsync("downloadFileFromStream", fileName, streamRef);
+    }
+
+    private void Close() => Dialog.Close();
+
+    private record StatusDto
+    {
+        public bool SelfService { get; set; }
+        public bool Enabled { get; set; }
+        public string? Subject { get; set; }
+        public DateTimeOffset? NotAfter { get; set; }
+    }
+
+    private record GeneratedDto : StatusDto
+    {
+        public string Pkcs12 { get; set; } = string.Empty;
+        public string MobileConfig { get; set; } = string.Empty;
+        public string FileNameStem { get; set; } = string.Empty;
+    }
+}
