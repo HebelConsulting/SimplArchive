@@ -59,9 +59,18 @@ for key in $SA_MODULES; do
     nupkg="/tmp/$lower.$version.nupkg"
 
     echo "modules-init: fetching $package $version"
-    wget -q --header="Authorization: Bearer $SA_MODULE_TOKEN" -O "$nupkg" "$url" \
+    # curl, NOT busybox wget, and this was found by the FIRST real download (#1246): GitHub Packages answers
+    # with a redirect to a PRESIGNED blob URL, busybox wget forwards the Authorization header across that
+    # cross-host redirect, and the blob store rejects the request with a 403 that reads as a signature
+    # problem. curl strips Authorization on a cross-host redirect BY DESIGN, which is exactly the behaviour
+    # a presigned URL needs. Installed here rather than baked into an image: this script's contract is
+    # "plain alpine", and the init already cannot do its job without the network this one apk call uses.
+    command -v curl >/dev/null 2>&1 || apk add --no-cache curl >/dev/null \
+        || die "curl is unavailable and could not be installed — the feed's presigned-blob redirect cannot
+  be followed with busybox wget (it forwards the Authorization header, which the blob store refuses)."
+    curl -fsSL -H "Authorization: Bearer $SA_MODULE_TOKEN" -o "$nupkg" "$url" \
         || die "could not download $package $version from $FEED.
-  wget's own line above says which of the two this is, and they need different fixes: a 404 means the version
+  curl's own line above says which of the two this is, and they need different fixes: a 404 means the version
   is not published (or the token cannot see it), a refused connection means the feed is unreachable."
 
     actual="$(busybox sha512sum "$nupkg" | busybox cut -d' ' -f1 | busybox xxd -r -p | busybox base64 | tr -d '\n')"

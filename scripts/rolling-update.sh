@@ -90,23 +90,32 @@ fi
 # ENTRY, so a running host keeps the inode it already mapped. Overwriting a mapped assembly in place is what
 # poisons not-yet-JITted IL and surfaces as "Bad IL range" hours later (ADR 0808).
 #
-# A stack with no module override has no such service, so this is a no-op there rather than a special case.
-if $COMPOSE config --services 2>/dev/null | grep -qx modules-local; then
-  say "installing modules into the shared volume"
-  $COMPOSE up -d --force-recreate --no-deps modules-local
-  modules_id=$($COMPOSE ps -q modules-local)
-  if [ -n "$modules_id" ]; then
-    modules_status=$(docker wait "$modules_id")
-    if [ "$modules_status" != "0" ]; then
-      # Refuse rather than roll: replacing the instances now would deploy the OLD module while reporting
-      # success, which is exactly the silence this block exists to end.
-      echo "FAILED: the module installer exited $modules_status. No instance has been touched." >&2
-      echo "$($COMPOSE logs --tail=30 modules-local)" >&2
-      exit 1
+# A stack without a given one-shot has no such service, so each is a no-op there rather than a special case.
+# TWO installers since #1246: `modules-init` resolves the PINNED packages (version + digest, ADR 0799) and
+# `modules-local` overlays any genuinely local build an override supplies — pinned first, so a local overlay
+# deliberately wins over the pin it is testing a replacement for.
+install_oneshot() {
+  service="$1"
+  if $COMPOSE config --services 2>/dev/null | grep -qx "$service"; then
+    say "installing modules into the shared volume ($service)"
+    $COMPOSE up -d --force-recreate --no-deps "$service"
+    oneshot_id=$($COMPOSE ps -q "$service")
+    if [ -n "$oneshot_id" ]; then
+      oneshot_status=$(docker wait "$oneshot_id")
+      if [ "$oneshot_status" != "0" ]; then
+        # Refuse rather than roll: replacing the instances now would deploy the OLD module while reporting
+        # success, which is exactly the silence this block exists to end.
+        echo "FAILED: $service exited $oneshot_status. No instance has been touched." >&2
+        echo "$($COMPOSE logs --tail=30 "$service")" >&2
+        exit 1
+      fi
     fi
+    say "$service done"
   fi
-  say "modules installed"
-fi
+}
+
+install_oneshot modules-init
+install_oneshot modules-local
 
 # Migrations ONCE, before any instance restarts. Both instances have startup auto-migration off, so nothing
 # else applies them — and two instances racing to migrate is what that setting exists to prevent.

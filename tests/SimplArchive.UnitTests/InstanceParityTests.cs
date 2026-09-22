@@ -186,19 +186,29 @@ public class InstanceParityTests
         const string file = "scripts/rolling-update.sh";
         var text = Read(file);
 
-        var install = text.IndexOf("--no-deps modules-local", StringComparison.Ordinal);
-        Assert.True(install >= 0,
-            $"{file}: nothing runs the `modules-local` one-shot. Because every other `up -d` here passes "
-            + "--no-deps, compose starts no dependencies, so a module updated on the host is never copied "
-            + "into the volume the instances read — and the update reports success having deployed nothing.");
+        // BOTH installers since #1246: modules-init resolves the pinned packages (ADR 0799), modules-local
+        // overlays a genuinely local build. Each must run, and run before any instance is replaced.
+        foreach (var oneshot in new[] { "install_oneshot modules-init", "install_oneshot modules-local" })
+        {
+            var install = text.IndexOf($"\n{oneshot}", StringComparison.Ordinal);
+            Assert.True(install >= 0,
+                $"{file}: `{oneshot}` is not invoked. Because every other `up -d` here passes --no-deps, "
+                + "compose starts no dependencies, so a module updated on the host (or a moved pin) is never "
+                + "installed into the volume the instances read — and the update reports success having "
+                + "deployed nothing.");
 
-        // Ordering is the whole property: installing AFTER the instances are replaced deploys the module to
-        // containers that have already read the volume, which is the same silent no-op wearing a fix's clothes.
-        var replace = text.IndexOf("--force-recreate --no-deps \"$svc\"", StringComparison.Ordinal);
-        Assert.True(replace >= 0, $"{file}: the per-instance replace loop was not found — has it been renamed?");
-        Assert.True(install < replace,
-            $"{file}: the module install must come BEFORE the instance replace loop; an instance replaced "
-            + "first has already mapped the old assembly.");
+            // Ordering is the whole property: installing AFTER the instances are replaced deploys the module
+            // to containers that have already read the volume — the same silent no-op wearing a fix's clothes.
+            var replace = text.IndexOf("--force-recreate --no-deps \"$svc\"", StringComparison.Ordinal);
+            Assert.True(replace >= 0, $"{file}: the per-instance replace loop was not found — has it been renamed?");
+            Assert.True(install < replace,
+                $"{file}: `{oneshot}` must come BEFORE the instance replace loop; an instance replaced "
+                + "first has already mapped the old assembly.");
+        }
+
+        // And the helper itself must still recreate with --no-deps — the invocation lines above prove the
+        // CALLS exist, this proves they do the work.
+        Assert.Contains("--force-recreate --no-deps \"$service\"", text, StringComparison.Ordinal);
     }
 
     // One service's block: from its key to the next key at the same indent. Compose keys under `services:` are

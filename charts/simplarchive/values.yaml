@@ -402,8 +402,8 @@ modules:
   pins:
     FLIGHT_SCHOOL:
       package: SimplArchive.FlightSchool
-      version: 0.0.0
-      sha512: ""
+      version: 0.1.0
+      sha512: "lGAi9xuRaaMlOVag/9ggOEMFtlvGTRSOCnR0X0YbG54xZE1/dfbqONV6qp0kd3OShc0TnJzum7v3MyqG/qXaXw=="
 
   # Plain alpine: a .nupkg is a zip, so the installer needs no NuGet tooling and no SDK image.
   image:
