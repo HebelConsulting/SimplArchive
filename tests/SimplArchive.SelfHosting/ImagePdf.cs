@@ -59,6 +59,106 @@ public static class ImagePdf
         ]);
     }
 
+    /// <summary>
+    /// A one-page born-digital PDF whose text block is drawn ROTATED by <paramref name="degrees"/> around
+    /// the page centre — several lines, so the raster has the dominant baseline Tesseract's OSD and
+    /// Leptonica's deskew both need (#1232). Right angles make a sideways page whose <c>/Rotate</c> is 0
+    /// (exactly what the sidecar must detect and fix); a few degrees make a "skewed scan" once rasterised.
+    /// Vector text on purpose: the sidecar rasterises internally (Ghostscript / OCRmyPDF), so the raster
+    /// carries real glyphs without this repo shipping a bitmap font or a found document — the fixture stays
+    /// generated and Apache-2.0 clean, per the issue's licensing note.
+    /// </summary>
+    public static byte[] RotatedText(double degrees)
+    {
+        string[] lines =
+        [
+            "The quick brown fox jumps over the lazy dog.",
+            "Pack my box with five dozen liquor jugs today.",
+            "How vexingly quick daft zebras jump over fences.",
+            "Sphinx of black quartz judge my vow this morning.",
+            "The five boxing wizards jump quickly at dawn now.",
+            "Bright vixens jump while the dozy fowl quack on.",
+            "Quick zephyrs blow vexing daft Jim over the hill.",
+            "Two driven jocks help fax my big quiz on Sunday.",
+        ];
+
+        const double centreX = 297.5, centreY = 421;
+        var radians = degrees * Math.PI / 180;
+        var cos = Math.Cos(radians);
+        var sin = Math.Sin(radians);
+        // The block is ~400 wide and ~8 lines of 26pt leading tall; start it up-left of centre IN TEXT
+        // SPACE so the rotated block stays centred on the page at every angle this repo uses (±15, 90,
+        // 180, 270). Tm maps text space through the rotation; T* then advances along the rotated baseline
+        // for free, which is what makes every line share one dominant angle.
+        const double offsetX = -200, offsetY = 96;
+        var startX = centreX + cos * offsetX - sin * offsetY;
+        var startY = centreY + sin * offsetX + cos * offsetY;
+
+        var content = new StringBuilder();
+        content.Append("BT /F1 16 Tf 26 TL ");
+        content.Append(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"{cos:0.####} {sin:0.####} {-sin:0.####} {cos:0.####} {startX:0.##} {startY:0.##} Tm "));
+        foreach (var line in lines)
+        {
+            content.Append($"({line}) Tj T* ");
+        }
+
+        content.Append("ET");
+
+        var contents = StreamObject("<<", Latin1(content.ToString()));
+        return Assemble(
+        [
+            Latin1("<< /Type /Catalog /Pages 2 0 R >>"),
+            Latin1("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+            Latin1("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>"),
+            Latin1("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
+            contents,
+        ]);
+    }
+
+    /// <summary>
+    /// A DENSE, page-like variant for the deskew tests (#1232): thirty lines, because Leptonica's skew
+    /// detection needs a real text page — measured in the sidecar's own container (2026-09-22): a 3°
+    /// fixture reads "Deskew angle: 0.000" at one and even eight lines, and "-2.985" at thirty. Each line
+    /// carries unique start/end anchor words (start07 … end07), which is what lets a test measure per-line
+    /// slope on the OCR text layer without any line-grouping heuristics.
+    /// </summary>
+    public static byte[] DenseRotatedText(double degrees)
+    {
+        var lines = Enumerable.Range(1, 30)
+            .Select(i => $"start{i:00} the quick brown fox jumps over one lazy dog by the river end{i:00}")
+            .ToArray();
+
+        const double centreX = 297.5, centreY = 421;
+        var radians = degrees * Math.PI / 180;
+        var cos = Math.Cos(radians);
+        var sin = Math.Sin(radians);
+        const double offsetX = -230, offsetY = 232;
+        var startX = centreX + cos * offsetX - sin * offsetY;
+        var startY = centreY + sin * offsetX + cos * offsetY;
+
+        var content = new StringBuilder();
+        content.Append("BT /F1 11 Tf 16 TL ");
+        content.Append(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"{cos:0.####} {sin:0.####} {-sin:0.####} {cos:0.####} {startX:0.##} {startY:0.##} Tm "));
+        foreach (var line in lines)
+        {
+            content.Append($"({line}) Tj T* ");
+        }
+
+        content.Append("ET");
+
+        var contents = StreamObject("<<", Latin1(content.ToString()));
+        return Assemble(
+        [
+            Latin1("<< /Type /Catalog /Pages 2 0 R >>"),
+            Latin1("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+            Latin1("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>"),
+            Latin1("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
+            contents,
+        ]);
+    }
+
     private static byte[] Latin1(string s) => Encoding.Latin1.GetBytes(s);
 
     private static byte[] StreamObject(string dictPrefix, byte[] streamBytes, bool dictOnlyPrefix = false)

@@ -100,7 +100,13 @@ def _rotate_pdf_pages(src: str, work: str) -> None:
             continue
 
         osd = subprocess.run(["tesseract", "-l", "osd", "--psm", "0", png, "stdout"], capture_output=True).stdout
-        angle = re.search(rb"Orientation in degrees: (\d+)", osd)
+        # "Rotate:", NOT "Orientation in degrees:" (#1232, found by the first real test of this path). OSD
+        # emits BOTH: Orientation is where the text currently points, Rotate is the clockwise correction —
+        # and they are complements (Orientation 270 pairs with Rotate 90). qpdf's --rotate=+N is clockwise,
+        # so it needs the CORRECTION. Feeding it Orientation over-rotated every 90/270 page by 180 degrees,
+        # turning sideways pages upside down while reporting success; only 180-degree pages — where the two
+        # lines happen to agree — ever came out right, which is why the by-hand checks never caught it.
+        angle = re.search(rb"Rotate: (\d+)", osd)
         confidence = re.search(rb"Orientation confidence: ([\d.]+)", osd)
         if angle and confidence and int(angle.group(1)) % 360 != 0 and float(confidence.group(1)) >= ROTATE_CONFIDENCE:
             corrections.append((page, int(angle.group(1)) % 360))
