@@ -275,7 +275,7 @@ services:
   # persisted volume so create-bucket (which is the only time object lock can be enabled) runs only on a fresh
   # one; put-bucket-cors is applied every run.
   storage-init:
-    image: amazon/aws-cli:${AWSCLI_TAG:-2.36.45}
+    image: amazon/aws-cli:${AWSCLI_TAG:-2.36.50}
     depends_on:
       - seaweedfs
     environment:
@@ -388,7 +388,7 @@ services:
   # shows them in a web inbox on :8025 — so the demo's workflow/escalation emails are visible in a browser
   # (http://localhost:8025) without a real mail server. Dev-only; captures mail, never delivers it.
   mailpit:
-    image: axllent/mailpit:${MAILPIT_TAG:-v1.31.1}
+    image: axllent/mailpit:${MAILPIT_TAG:-v1.31.2}
     restart: unless-stopped
     ports:
       - "8025:8025"  # web inbox
@@ -410,7 +410,7 @@ services:
   # to pgAdmin's own /entrypoint.sh. Dev-only convenience baking in throwaway creds (the stack is "Not for
   # production"); browse http://localhost:5050 and the tree is already connected.
   pgadmin:
-    image: dpage/pgadmin4:${PGADMIN_TAG:-9.17}
+    image: dpage/pgadmin4:${PGADMIN_TAG:-9.18.0}
     restart: unless-stopped
     depends_on:
       db:
