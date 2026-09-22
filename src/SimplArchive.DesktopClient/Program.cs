@@ -463,16 +463,40 @@ internal static class Program
             var window = new Avalonia.Controls.Window { Width = 420, Height = 300, Content = pane };
             window.Show();
 
-            // "LSPG" near the top and far down — finding the second must scroll.
+            // "LSPG" near the top and far down — finding the second must scroll. The first hundred lines
+            // are LONG so that with wrap ON (the #1317 default) each occupies several visual lines: the
+            // retired proportional scroll math ("line-of-offset over total lines") would then land far
+            // ABOVE the match, so asserting the measured offset exceeds the proportional prediction is what
+            // pins the TextLayout-walking replacement.
             vm.PreviewText = string.Join('\n', Enumerable.Range(0, 300)
-                .Select(i => i is 5 or 250 ? $"line {i} LSPG Kaegiswil" : $"line {i}"));
+                .Select(i => i switch
+                {
+                    5 => "line 5 LSPG Kaegiswil",
+                    250 => "line 250 LSPG Kaegiswil",
+                    < 100 => $"line {i} " + string.Concat(Enumerable.Repeat("wrap me around please ", 12)),
+                    _ => $"line {i}",
+                }));
             vm.CanFindInDocument = true;
-            vm.FindQuery = "lspg";
             window.UpdateLayout();
             Dispatcher.UIThread.RunJobs();
 
             var block = pane.GetVisualDescendants().OfType<Avalonia.Controls.SelectableTextBlock>().First(b => b.Name == "TextPreview");
             var scroll = pane.GetVisualDescendants().OfType<Avalonia.Controls.ScrollViewer>().First(v => v.Name == "TextScroll");
+            var gutter = pane.GetVisualDescendants().OfType<Avalonia.Controls.Canvas>().First(c => c.Name == "TextGutter");
+
+            // #1317: wrap defaults ON (nothing sideways-clipped for a user who never finds the toggle), and
+            // the always-on gutter numbers the visible lines from the block's own layout. Read BEFORE the
+            // query below auto-scrolls to its first match — the gutter draws only the visible slice, so at
+            // the top of the document its first number must be 1 and nothing else qualifies.
+            var wrapDefaultsOn = vm.PreviewWrap && block.TextWrapping == Avalonia.Media.TextWrapping.Wrap
+                && scroll.Extent.Width <= scroll.Viewport.Width + 0.5;
+            var gutterNumbers = gutter.Children.OfType<Avalonia.Controls.TextBlock>().Select(t => t.Text).ToList();
+            var gutterStartsAtOne = gutterNumbers.FirstOrDefault() == "1" && gutterNumbers.Count > 1;
+
+            vm.FindQuery = "lspg";
+            window.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+
             var runs = block.Inlines!.OfType<Avalonia.Controls.Documents.Run>().ToList();
             var hits = runs.Count(r => r.Background is not null);
             var actives = runs.Count(r => r.Background is Avalonia.Media.SolidColorBrush { Color.R: 0xf6 });
@@ -483,11 +507,30 @@ internal static class Program
             window.UpdateLayout();
             Dispatcher.UIThread.RunJobs();
             var scrolledDown = scroll.Offset.Y > offsetBefore;
+            // The proportional prediction for logical line 250 of 300 — the retired arithmetic. With the
+            // first hundred lines wrapped several visual lines deep, the real Y sits far below it.
+            var proportional = scroll.Extent.Height * 250 / 300 - scroll.Viewport.Height / 2;
+            var measuredBeatsProportional = scroll.Offset.Y > proportional + scroll.Viewport.Height;
             var secondActive = vm.ActiveTextMatchOffset > 0 && vm.FindPosition == "2 / 2";
 
+            // The toggle: wrap off must open horizontal overflow (the scrollbar follows from the state,
+            // ADR 0550's no-second-control rule) and stay the SAME preview — then a new text resets to on.
+            vm.TogglePreviewWrapCommand.Execute(null);
+            window.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+            var unwrappedOverflows = block.TextWrapping == Avalonia.Media.TextWrapping.NoWrap
+                && scroll.Extent.Width > scroll.Viewport.Width;
+            vm.PreviewText = "fresh";
+            var wrapResetsPerDocument = vm.PreviewWrap;
+
             Console.WriteLine($"hits={hits} actives={actives} positionReads={positionReads} "
-                + $"scrolledDown={scrolledDown} (offset {offsetBefore:0.#} -> {scroll.Offset.Y:0.#}) secondActive={secondActive}");
-            Console.WriteLine(hits == 2 && actives == 1 && positionReads && scrolledDown && secondActive ? "OK" : "FAILED");
+                + $"scrolledDown={scrolledDown} (offset {offsetBefore:0.#} -> {scroll.Offset.Y:0.#}) secondActive={secondActive} "
+                + $"wrapDefaultsOn={wrapDefaultsOn} gutterStartsAtOne={gutterStartsAtOne} "
+                + $"measuredBeatsProportional={measuredBeatsProportional} (proportional {proportional:0.#}) "
+                + $"unwrappedOverflows={unwrappedOverflows} wrapResetsPerDocument={wrapResetsPerDocument}");
+            Console.WriteLine(hits == 2 && actives == 1 && positionReads && scrolledDown && secondActive
+                && wrapDefaultsOn && gutterStartsAtOne && measuredBeatsProportional && unwrappedOverflows
+                && wrapResetsPerDocument ? "OK" : "FAILED");
             return;
         }
 

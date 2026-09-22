@@ -98,6 +98,14 @@
                             ToolTip.Tip="{loc:Tr PvZoomIn}" Height="26" Padding="6,0">
                         <i:Icon Value="mdi-plus" />
                     </Button>
+                    <!-- Wrap toggle (#1317), text path only: one button, the icon carries the state (the
+                         fullscreen button's pattern), and the horizontal scrollbar FOLLOWS from it rather
+                         than being a second control. -->
+                    <Button Command="{Binding TogglePreviewWrapCommand}"
+                            IsVisible="{Binding PreviewText, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                            ToolTip.Tip="{loc:Tr PvWrap}" Height="26" Padding="6,0">
+                        <i:Icon Value="{Binding PreviewWrapIcon}" />
+                    </Button>
                     <Button Command="{Binding TogglePreviewFullscreenCommand}"
                             ToolTip.Tip="{Binding PreviewFullscreenTip}" Height="26" Padding="6,0">
                         <i:Icon Value="{Binding PreviewFullscreenIcon}" />
@@ -153,10 +161,23 @@
                 </ItemsControl>
             </ScrollViewer>
             <!-- Text content is rendered by the code-behind (find highlights need styled runs, which no
-                 binding can express); it stays a SelectableTextBlock so copy-out keeps working. -->
-            <ScrollViewer x:Name="TextScroll" IsVisible="{Binding PreviewText, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
-                <SelectableTextBlock x:Name="TextPreview" FontFamily="Menlo,Consolas,monospace" FontSize="12" Padding="10" />
-            </ScrollViewer>
+                 binding can express); it stays a SelectableTextBlock so copy-out keeps working.
+
+                 The LINE-NUMBER GUTTER (#1317) is a sibling COLUMN, not inline prefixes: a .log is read to
+                 be copied out of, and numbers inside the text would ride along with every selection. It sits
+                 OUTSIDE the ScrollViewer so it cannot ride away under horizontal scroll (wrap off), and the
+                 code-behind draws only the visible slice, positioned from the text block's OWN TextLayout —
+                 measured, not assumed, so the numbers stay aligned when wrapping makes a logical line
+                 occupy several visual ones. -->
+            <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding PreviewText, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
+                <Border Grid.Column="0" ClipToBounds="True" Background="{DynamicResource WbChrome}"
+                        BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,1,0">
+                    <Canvas x:Name="TextGutter" Width="44" />
+                </Border>
+                <ScrollViewer Grid.Column="1" x:Name="TextScroll">
+                    <SelectableTextBlock x:Name="TextPreview" FontFamily="Menlo,Consolas,monospace" FontSize="12" Padding="10" TextWrapping="Wrap" />
+                </ScrollViewer>
+            </Grid>
             <SelectableTextBlock Text="{Binding PreviewPlaceholder}" Foreground="{DynamicResource WbFaint}" TextWrapping="Wrap" MaxWidth="280"
                        HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
                        IsVisible="{Binding PreviewPlaceholder, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />

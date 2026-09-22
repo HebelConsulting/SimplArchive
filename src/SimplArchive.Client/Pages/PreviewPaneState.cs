@@ -57,6 +57,43 @@ public sealed class PreviewPaneState
     public IEnumerable<(string Segment, bool IsHit, bool IsActive)> TextSegments() =>
         TextFind.Segments(Text, TextMatches, FindQuery.Length, Index);
 
+    /// <summary>
+    /// The text as render ROWS — one per logical line, each the line's segments (#1317). This is what lets
+    /// the pane draw a line-number gutter that stays aligned under wrapping: the number and its line share a
+    /// row, so a wrapped line pushes the NEXT number down rather than shearing the whole column. HitOrdinal
+    /// numbers hits 1.. across the whole text (the find's scroll anchors); a hit that a newline splits keeps
+    /// its ordinal on the first fragment only, so anchors stay unique.
+    /// </summary>
+    public IEnumerable<IReadOnlyList<(string Segment, bool IsHit, bool IsActive, int HitOrdinal)>> TextLineRows()
+    {
+        var row = new List<(string, bool, bool, int)>();
+        var hit = 0;
+        foreach (var (segment, isHit, isActive) in TextSegments())
+        {
+            if (isHit)
+            {
+                hit++;
+            }
+
+            var pieces = segment.Split('\n');
+            for (var i = 0; i < pieces.Length; i++)
+            {
+                if (i > 0)
+                {
+                    yield return row;
+                    row = [];
+                }
+
+                if (pieces[i].Length > 0)
+                {
+                    row.Add((pieces[i], isHit, isActive, isHit && i == 0 ? hit : 0));
+                }
+            }
+        }
+
+        yield return row;
+    }
+
     // True when the preview is a server-generated rendition (drives the "Converted preview" badge).
     public bool Converted { get; set; }
 

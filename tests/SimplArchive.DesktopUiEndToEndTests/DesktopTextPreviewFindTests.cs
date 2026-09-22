@@ -73,4 +73,38 @@ public class DesktopTextPreviewFindTests
         Assert.Equal("LSZH", vm.FindQuery);
         Assert.Equal(-1, vm.ActiveTextMatchOffset);
     }
+
+    [Fact]
+    public void Wrap_defaults_on_toggles_and_resets_per_document()
+    {
+        // #1317: ON by default (nothing is silently clipped for a user who never finds the toggle), and
+        // EPHEMERAL — a new document resets it, the fullscreen toggle's lifetime (ADRs 0295/0297).
+        var vm = TextPreview("one\ntwo");
+        Assert.True(vm.PreviewWrap);
+        Assert.Equal("mdi-wrap", vm.PreviewWrapIcon);
+
+        vm.TogglePreviewWrapCommand.Execute(null);
+        Assert.False(vm.PreviewWrap);
+        Assert.Equal("mdi-wrap-disabled", vm.PreviewWrapIcon);
+
+        vm.PreviewText = "another document";
+        Assert.True(vm.PreviewWrap);
+    }
+
+    [Fact]
+    public void A_shorter_text_never_meets_the_previous_texts_matches()
+    {
+        // Regression (#1317, found live by the wrap hook): the matches belonged to the PREVIOUS text, the
+        // view renders on the PreviewText change, and a stale offset cut out of a shorter text is a
+        // Substring crash. The recompute must happen before the view can observe the new text.
+        var vm = TextPreview(string.Join('\n', Enumerable.Range(0, 50).Select(i => $"line {i} LSPG")));
+        vm.FindQuery = "lspg";
+        Assert.Equal(50, vm.FindCount);
+
+        vm.PreviewText = "short";
+
+        Assert.Equal(0, vm.FindCount);
+        Assert.Equal(-1, vm.ActiveTextMatchOffset);
+        Assert.All(vm.TextFindSegments(), s => Assert.False(s.IsHit)); // enumerating must not throw
+    }
 }

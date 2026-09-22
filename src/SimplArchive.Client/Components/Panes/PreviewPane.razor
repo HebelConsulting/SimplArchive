@@ -54,6 +54,15 @@
             }
             @Toolbar
             <span class="wb-pv-rightgrp">
+                @if (State.Kind == "text")
+                {
+                    @* Wrap toggle (#1317): one button; the horizontal scrollbar FOLLOWS from it rather than
+                       being a second control — wrap on means nothing overflows sideways, wrap off means it
+                       can and the scrollbar appears. State semantics per ADR 0581: the accent GLYPH is the
+                       toggles' on-state channel, same as the annotation tools. *@
+                    <MudIconButton Class="@("wb-pv-wrap-btn" + (_textWrap ? " mud-primary-text" : ""))" Icon="@Icons.Material.Filled.WrapText"
+                                   Size="Size.Small" OnClick="@(() => _textWrap = !_textWrap)" title="@Strings.Get("PvWrap")" />
+                }
                 @if (State.HasPages)
                 {
                     @* Preview zoom (#357): fit ↔ 4×; pinch + ⌘/Ctrl-wheel also zoom (preview.js). *@
@@ -78,19 +87,41 @@
             @if (State.Kind == "text")
             {
                 @* Inline mark styles, deliberately: index.html does not link the scoped-CSS bundle, and a
-                   class with no ruleset is the invisible-control trap — a find that "works" but shows nothing. *@
-                <div style="flex:1 1 auto; min-height:0; overflow:auto; padding:12px;"><pre style="white-space:pre-wrap; margin:0; font-family:Menlo,Consolas,monospace; font-size:.82em;">@{ var hit = 0; }@foreach (var (segment, isHit, isActive) in State.TextSegments())
+                   class with no ruleset is the invisible-control trap — a find that "works" but shows nothing.
+
+                   ONE ROW PER LOGICAL LINE (#1317), which is what keeps the always-on line numbers aligned
+                   when wrapping is on: a wrapped line grows its own row and pushes the next number down,
+                   instead of shearing a separately-rendered number column. The gutter is sticky (it must not
+                   ride away under horizontal scroll with wrap off) and unselectable — a .log is read to be
+                   COPIED out of, and numbers inside the selection would come along with every paste. *@
+                <div class="wb-pv-text" style="flex:1 1 auto; min-height:0; overflow:auto; padding:12px 0; font-family:Menlo,Consolas,monospace; font-size:.82em; line-height:1.45;">
+                    @{ var lineNo = 0; }
+                    @foreach (var row in State.TextLineRows())
+                    {
+                        lineNo++;
+                        @* width:max-content only when NOT wrapping — max-content measures the UNWRAPPED
+                           intrinsic width, so with wrap on it would widen every row right back past the
+                           pane and re-create the sideways overflow the wrap exists to prevent. *@
+                        <div style="display:flex; align-items:flex-start; min-width:100%; @(_textWrap ? "" : "width:max-content;")">
+                            <span class="wb-pv-linenum" style="position:sticky; left:0; flex:0 0 auto; user-select:none; -webkit-user-select:none; text-align:right; min-width:3.5em; padding:0 10px 0 12px; color:var(--mud-palette-text-secondary); background:var(--mud-palette-surface); opacity:.95;">@lineNo</span>
+                            <pre style="white-space:@(_textWrap ? "pre-wrap" : "pre"); overflow-wrap:@(_textWrap ? "anywhere" : "normal"); margin:0; padding-right:12px; font:inherit; min-height:1.45em; flex:@(_textWrap ? "1 1 0" : "0 0 auto"); min-width:0;">@foreach (var (segment, isHit, isActive, hitOrdinal) in row)
 {
-    if (isHit)
+    if (isHit && hitOrdinal > 0)
     {
-        hit++;
-        <mark id="@($"wb-pv-thit-{hit}")" style="@(isActive ? "background:#f6a821; color:#000;" : "background:#ffe58a; color:#000;")">@segment</mark>
+        <mark id="@($"wb-pv-thit-{hitOrdinal}")" style="@(isActive ? "background:#f6a821; color:#000;" : "background:#ffe58a; color:#000;")">@segment</mark>
+    }
+    else if (isHit)
+    {
+        <mark style="@(isActive ? "background:#f6a821; color:#000;" : "background:#ffe58a; color:#000;")">@segment</mark>
     }
     else
     {
         @segment
     }
-}</pre></div>
+}</pre>
+                        </div>
+                    }
+                </div>
             }
             else
             {
@@ -168,6 +199,7 @@
     private IJSObjectReference? _module;
     private DotNetObjectReference<PreviewPane>? _selfRef;
     private bool _fullscreen;                  // in-app maximize of the preview pane (ADR 0295)
+    private bool _textWrap = true;             // text-path line wrapping (#1317); ephemeral, reset per document
 
     private record PvResult { public string Kind { get; set; } = string.Empty; public string Text { get; set; } = string.Empty; }
 
@@ -183,6 +215,9 @@
         State.Count = 0;
         State.Index = 0;
         State.FindQuery = seedQuery ?? "";
+        // Wrap is EPHEMERAL, per document (#1317) — same lifetime as the fullscreen toggle (ADRs 0295/0297),
+        // and ON by default so nothing is ever silently clipped for a user who never finds the toggle.
+        _textWrap = true;
 
         // Set here rather than by the caller: both drive the converted-rendition badge this component renders,
         // and a caller that assigned them around the render call could leave a stale badge on the next document.

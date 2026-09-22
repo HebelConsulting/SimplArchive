@@ -4086,6 +4086,9 @@
   <data name="CoAutoByTip" xml:space="preserve">
     <value>Automatisch ausgecheckt, als Sie es vom eingebundenen Laufwerk gespeichert haben ({0}). Checken Sie ein, wenn Sie fertig sind.</value>
   </data>
+  <data name="PvWrap" xml:space="preserve">
+    <value>Lange Zeilen umbrechen</value>
+  </data>
   <data name="PvFitPage" xml:space="preserve">
     <value>Ganze Seite einpassen</value>
   </data>

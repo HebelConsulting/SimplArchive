@@ -32,6 +32,29 @@ public sealed partial class PreviewViewModel : ObservableObject
     [ObservableProperty] private string? _previewPlaceholder = "Select a document.";
     [ObservableProperty] private bool _previewConverted;
 
+    // Text-path line wrapping (#1317). ON by default — that is what fixes the silent clipping this pane had
+    // (no wrap, no horizontal scrollbar: a long line was simply unreachable) — and EPHEMERAL per document,
+    // the fullscreen toggle's lifetime (ADRs 0295/0297), reset by OnPreviewTextChanged below. The horizontal
+    // scrollbar FOLLOWS from it in the view rather than being a second control.
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(PreviewWrapIcon))] private bool _previewWrap = true;
+
+    public string PreviewWrapIcon => PreviewWrap ? "mdi-wrap" : "mdi-wrap-disabled";
+
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void TogglePreviewWrap() => PreviewWrap = !PreviewWrap;
+
+    partial void OnPreviewTextChanged(string? value)
+    {
+        PreviewWrap = true;
+
+        // The matches belong to the PREVIOUS text; runs before the PropertyChanged the view renders on, so
+        // a stale offset can never be cut out of the new (possibly shorter) text — which is a Substring
+        // crash, found live by the wrap hook (#1317): set a text, search it, set a shorter text.
+        _textMatches = Presentation.TextFind.Matches(value, FindQuery);
+        FindCount = _textMatches.Count;
+        FindIndex = FindCount > 0 ? 0 : -1;
+    }
+
     // Sensitivity watermark (ADR "Document watermarking") — the "<LABEL> · <viewer>" text, empty when the document
     // isn't Confidential/Restricted. The overlay tiles it diagonally over the preview (client-side only).
     [ObservableProperty][NotifyPropertyChangedFor(nameof(HasWatermark))][NotifyPropertyChangedFor(nameof(WatermarkTiles))] private string _watermarkText = string.Empty;
