@@ -52,6 +52,11 @@ public static class ModuleMaskBackfill
             try
             {
                 await seeder.SeedAsync(module, activation.TenantId, cancellationToken);
+
+                // Per activation, for the reason #1340 measured on its sibling loop: one context across
+                // every tenant makes each SaveChanges re-scan everything the previous tenants left
+                // tracked, and our SaveChanges override sweeps the tracker ~10 times per call.
+                dbContext.ChangeTracker.Clear();
             }
             catch (Exception ex)
             {

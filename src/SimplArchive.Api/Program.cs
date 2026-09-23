@@ -527,10 +527,11 @@ using (var scope = app.Services.CreateScope())
     {
         var dbContext = services.GetRequiredService<SimplArchiveDbContext>();
         var maskSeeder = services.GetRequiredService<IWellKnownMaskSeeder>();
-        foreach (var tenantId in await dbContext.Tenants.Select(t => t.Id).ToListAsync())
-        {
-            await maskSeeder.EnsureWellKnownMasksAsync(tenantId);
-        }
+
+        // In TenantBackfill, not inline, because the loop needs to CLEAR the change tracker per tenant —
+        // sharing one context across every tenant made this quadratic and burned an hour of CPU on a
+        // few hundred tenants (#1340). Extracted so that behaviour is testable rather than incidental.
+        await SimplArchive.Api.Startup.TenantBackfill.SeedWellKnownMasksAsync(dbContext, maskSeeder);
 
         // …and the same stranded-data shape one entity over (#795): a personal space provisioned before
         // ADR 0671 is still named "Personal" — invisible on the nightly-reset kiosk, permanent on an upgraded

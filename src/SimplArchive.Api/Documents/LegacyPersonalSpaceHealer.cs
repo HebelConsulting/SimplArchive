@@ -65,6 +65,10 @@ public static class LegacyPersonalSpaceHealer
             {
                 await db.SaveChangesAsync(cancellationToken);
                 healed++;
+
+                // Per space, same reason as its sibling loops (#1340): the shared startup context would
+                // otherwise carry every previously healed space into the next one's change detection.
+                db.ChangeTracker.Clear();
             }
             catch (InvalidOperationException e)
             {
