@@ -45,9 +45,13 @@ dotnet run --project tests/SimplArchive.ManualCapture --no-build -- $mode --out 
 python3 scripts/keep-unchanged-screenshots.py manual/screenshots
 
 echo "==> Compiling the Typst manual → $pdf_out"
-# Reproducible build (ADR 0510): pin the compile timestamp so the PDF's internal CreationDate/ModDate and the
-# `datetime.today()` copyright year are byte-stable, not the wall clock. Matches the fixed demo/screenshot clock
-# (2026-06-01T09:00:00Z) the screenshots were captured under.
-SOURCE_DATE_EPOCH=1780304400 typst compile manual/manual.typ "$pdf_out" --root .
+# SOURCE_DATE_EPOCH still pins the PDF's internal CreationDate/ModDate and the copyright year (ADR 0510's
+# metadata half). The VISIBLE stamp below is the release version (the private repo carries the v* tags at
+# the mirrored commits — see docs/deploy/release.md) plus the generation DATE only (ADR 0817, corrected):
+# date-only means same-day regenerations stay byte-identical, so unchanged content commits at most once a
+# day, and the version changes only at releases.
+VERSION="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+STAMP="${VERSION:+$VERSION · }generated $(date -u +%F)"
+SOURCE_DATE_EPOCH=1780304400 typst compile manual/manual.typ "$pdf_out" --root . --input generated="$STAMP"
 
 echo "==> Done. Served at /download/manual/ (browse /download or open $pdf_out)."

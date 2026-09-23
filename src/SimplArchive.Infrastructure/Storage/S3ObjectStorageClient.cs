@@ -279,6 +279,33 @@ public class S3ObjectStorageClient : IObjectStorageClient
         return response.ResponseStream;
     }
 
+    public async Task<StoredObject> GetObjectWithMetadataAsync(string objectKey, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Getting object {ObjectKey} with metadata from storage.", objectKey);
+        var response = await _internalClient.GetObjectAsync(BucketFor(objectKey), objectKey, cancellationToken);
+        return new StoredObject(response.ResponseStream, response.ContentLength, UserMetadata(response.Metadata));
+    }
+
+    public async Task<StoredObjectInfo> GetObjectInfoAsync(string objectKey, CancellationToken cancellationToken = default)
+    {
+        var response = await _internalClient.GetObjectMetadataAsync(BucketFor(objectKey), objectKey, cancellationToken);
+        return new StoredObjectInfo(response.ContentLength, UserMetadata(response.Metadata));
+    }
+
+    // The SDK's MetadataCollection reports keys WITH the x-amz-meta- wire prefix; strip it so callers
+    // (the at-rest decorator above all) read the same names they wrote.
+    private static Dictionary<string, string> UserMetadata(Amazon.S3.Model.MetadataCollection metadata)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var key in metadata.Keys)
+        {
+            result[key.StartsWith("x-amz-meta-", StringComparison.OrdinalIgnoreCase) ? key["x-amz-meta-".Length..] : key]
+                = metadata[key];
+        }
+
+        return result;
+    }
+
     public async Task<Stream> GetObjectRangeAsync(string objectKey, long from, long to, CancellationToken cancellationToken = default)
     {
         var request = new GetObjectRequest
@@ -310,19 +337,27 @@ public class S3ObjectStorageClient : IObjectStorageClient
         return metadata.ContentLength;
     }
 
-    public async Task PutObjectAsync(string objectKey, Stream content, string contentType, CancellationToken cancellationToken = default)
+    public Task PutObjectAsync(string objectKey, Stream content, string contentType, CancellationToken cancellationToken = default) =>
+        PutObjectAsync(objectKey, content, contentType, metadata: new Dictionary<string, string>(), cancellationToken);
+
+    public async Task PutObjectAsync(string objectKey, Stream content, string contentType,
+        IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Putting object {ObjectKey} ({ContentType}) to storage.", objectKey, contentType);
-        await _internalClient.PutObjectAsync(
-            new PutObjectRequest
-            {
-                BucketName = BucketFor(objectKey),
-                Key = objectKey,
-                InputStream = content,
-                ContentType = contentType,
-                AutoCloseStream = false,
-            },
-            cancellationToken);
+        var request = new PutObjectRequest
+        {
+            BucketName = BucketFor(objectKey),
+            Key = objectKey,
+            InputStream = content,
+            ContentType = contentType,
+            AutoCloseStream = false,
+        };
+        foreach (var (key, value) in metadata)
+        {
+            request.Metadata[key] = value; // the SDK adds the x-amz-meta- wire prefix itself
+        }
+
+        await _internalClient.PutObjectAsync(request, cancellationToken);
     }
 
     public async Task<IReadOnlyList<StorageObject>> ListObjectsAsync(string prefix, CancellationToken cancellationToken = default)

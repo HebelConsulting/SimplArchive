@@ -143,6 +143,13 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
 
     public void RegisterEncryptionRecipient(string email) => _encryptionRecipients[email] = true;
 
+    /// <summary>Raw storage access for tests that must see what the BUCKET holds — the at-rest tests'
+    /// whole point is that stored bytes differ from served bytes (ADR 0818), which no API-level read can
+    /// show (the decorator decrypts every server-side path).</summary>
+    public AmazonS3Client CreateRawStorageClient() => new(
+        new BasicAWSCredentials(StorageUser, StoragePassword),
+        new AmazonS3Config { ServiceURL = _storageUrl, ForcePathStyle = true, UseHttp = true, AuthenticationRegion = "us-east-1" });
+
     private async Task<string> StartEncryptionStubAsync()
     {
         var builder = WebApplication.CreateBuilder();
@@ -164,6 +171,28 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
                 + "\r\nMIAGCSqGSIb3DQEHA6CAMIACAQA=\r\n";
             return Results.Bytes(System.Text.Encoding.ASCII.GetBytes(enveloped), "message/rfc822");
         });
+
+        // The at-rest half (ADR 0818): unlike the envelope leg, these two answer with REAL crypto — an
+        // in-memory RSA keypair standing in for the HSM. The decorator's whole write path runs through
+        // kek/current at the CryptoDemo SEED, so a 404 here would fail every E2E boot; and the unwrap must
+        // actually invert the wrap or every gated read dies. The crypto is trivial on purpose (RSA-OAEP +
+        // the shared blob format); what this proves is the CORE's seam, not the service's HSM.
+        var kekKey = System.Security.Cryptography.RSA.Create(2048);
+        app.MapGet("/api/kek/current", () => Results.Ok(new
+        {
+            generation = "kek-v1",
+            publicKeyPem = kekKey.ExportSubjectPublicKeyInfoPem(),
+            oaepHash = "SHA256",
+        }));
+        app.MapPost("/api/unwrapped-dek", async (HttpRequest request) =>
+        {
+            var body = await System.Text.Json.JsonSerializer.DeserializeAsync<System.Text.Json.JsonElement>(request.Body);
+            var wrapped = Convert.FromBase64String(body.GetProperty("wrappedDek").GetString()!);
+            return Results.Bytes(
+                kekKey.Decrypt(wrapped, System.Security.Cryptography.RSAEncryptionPadding.OaepSHA256),
+                "application/octet-stream");
+        });
+
         await app.StartAsync();
         _encryptionStub = app;
         return app.Urls.First();

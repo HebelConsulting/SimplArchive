@@ -9,6 +9,13 @@ namespace SimplArchive.Application.Abstractions;
 /// </param>
 public sealed record StorageObject(string Key, long Size, DateTimeOffset LastModified, string? ETag = null);
 
+/// <summary>An object's bytes together with its user metadata (one GET) — the decrypting read's shape
+/// (ADR 0818). Length is the STORED length (-1 when the default adapter couldn't know it).</summary>
+public sealed record StoredObject(Stream Content, long Length, IReadOnlyDictionary<string, string> Metadata);
+
+/// <summary>An object's size and user metadata (one HEAD) — the decorator's cheap probe (ADR 0818).</summary>
+public sealed record StoredObjectInfo(long Size, IReadOnlyDictionary<string, string> Metadata);
+
 // The S3 Object Lock state of an object (ADR "WORM / immutable document versions"): a retain-until date (null
 // = no retention lock) and whether an object legal hold is on. An object is immutable while RetainUntil is in
 // the future OR LegalHold is on.
@@ -54,6 +61,20 @@ public interface IObjectStorageClient
     // the stream promptly.
     Task<Stream> GetObjectAsync(string objectKey, CancellationToken cancellationToken = default);
 
+    // The object's bytes TOGETHER with its user metadata — one GET, both facts. The at-rest encryption
+    // decorator (ADR 0818) rides on this: the wrapped DEK travels as object metadata, so a decrypting read
+    // must see both in one call. Default: the plain stream with no metadata, so fakes needn't implement it.
+    async Task<StoredObject> GetObjectWithMetadataAsync(string objectKey, CancellationToken cancellationToken = default)
+    {
+        var content = await GetObjectAsync(objectKey, cancellationToken);
+        return new StoredObject(content, -1, new Dictionary<string, string>());
+    }
+
+    // The object's size and user metadata in one HEAD — the decorator's gate for size arithmetic and the
+    // cheap "is this encrypted?" probe. Default: size with no metadata.
+    async Task<StoredObjectInfo> GetObjectInfoAsync(string objectKey, CancellationToken cancellationToken = default) =>
+        new(await GetObjectSizeAsync(objectKey, cancellationToken), new Dictionary<string, string>());
+
     // Reads an inclusive byte range [from, to] of an object (server-side range request) — backs WebDAV Range
     // GET / 206 Partial Content (ADR "WebDAV hardening"). Default: read the whole object and slice; the S3
     // client overrides this with a real range request. (A default method so test fakes needn't implement it.)
@@ -78,6 +99,15 @@ public interface IObjectStorageClient
     // store a generated preview rendition. See ADR "Server-side preview renditions for non-browser-viewable
     // images".
     Task PutObjectAsync(string objectKey, Stream content, string contentType, CancellationToken cancellationToken = default);
+
+    // The metadata-carrying write: user metadata stored on the object — the at-rest decorator's wrapped-DEK
+    // carrier (ADR 0818); S3's server-side COPY carries it through every re-keying flow for free. A separate
+    // overload rather than a widened signature so the sixty positional callers of the plain form stay
+    // untouched. Default: drops the metadata — the S3 client and the decorator both override, and a fake
+    // that reaches this default is a fake no encryption test should be running against.
+    Task PutObjectAsync(string objectKey, Stream content, string contentType,
+        IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default) =>
+        PutObjectAsync(objectKey, content, contentType, cancellationToken);
 
     // Lists every object under a key prefix — the S3-backed intray (`{tenantId}/users/{userId}/inbox/`) enumerates
     // itself this way. See ADR "S3-backed inbox".

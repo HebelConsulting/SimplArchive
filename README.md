@@ -97,13 +97,13 @@ Production deploys via the **Helm chart** in [`charts/simplarchive`](charts/simp
 - **Multi-tenant by construction** — global tenant query filters, per-tenant object-storage buckets, and per-tenant tamper-evident (hash-chained, WORM-sealed) audit trails.
 - **Hypermedia REST API** — RFC 7807 problem details, ETag/`If-Match` optimistic concurrency, media-type API versioning, and independent JSON/XML content negotiation.
 - **Documents** — a unified tree where a repository, a folder, and a leaf are all one `Document` type; immutable versioned metadata "masks"; EAV index fields; document-scoped ACLs with inheritance + override.
-- **Search & preview** — OpenSearch full-text over content (Apache Tika, incl. OCR), faceted navigation, search hit-overlays, and on-demand previews/renditions (images, Office → PDF via Gotenberg, email, Markdown, …).
+- **Search & preview** — OpenSearch full-text over content (Apache Tika; scans become searchable PDFs via an **OCRmyPDF/Tesseract** sidecar), faceted navigation, search hit-overlays, and on-demand previews/renditions (images, Office → PDF via Gotenberg, email, Markdown, …).
 - **Enterprise features** — approval workflow, notifications (in-app + email + real-time), legal hold & retention with WORM immutability, check-out/check-in, a WebDAV gateway, MFA (TOTP + passkeys), and OpenBao-backed secrets.
 - **Two clients** — a Blazor WebAssembly web workbench and a native Avalonia desktop client, both driving the same API.
 
 ## Tech stack
 
-.NET 10 · ASP.NET Core · Blazor WebAssembly · Avalonia · EF Core (PostgreSQL) · OpenIddict · OpenSearch + Apache Tika · Gotenberg · S3-compatible object storage · OpenBao · Serilog · Docker/Kubernetes.
+.NET 10 · ASP.NET Core · Blazor WebAssembly · Avalonia · EF Core (PostgreSQL) · OpenIddict · OpenSearch + Apache Tika · OCRmyPDF/Tesseract · Gotenberg · S3-compatible object storage · OpenBao · Serilog · Docker/Kubernetes.
 
 ## Support the project
 

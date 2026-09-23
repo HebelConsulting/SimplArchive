@@ -319,7 +319,24 @@ public static class DependencyInjection
         services.AddOptions<ObjectStorageOptions>()
             .Bind(configuration.GetSection("ObjectStorage"))
             .ValidateOnStart();
-        services.AddSingleton<IObjectStorageClient, S3ObjectStorageClient>();
+        services.AddSingleton<S3ObjectStorageClient>();
+        if (!string.IsNullOrWhiteSpace(configuration["Encryption:ServiceUrl"]))
+        {
+            // At-rest encryption (ADR 0818): the ONE seam every server-side storage call crosses gets the
+            // encrypting decorator — gated per tenant inside it (same Encryption:Tenants list as the
+            // envelope hook, ADR 0813). Without the config the plain client serves, fully inert.
+            services.AddHttpClient(AtRestKeyService.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(10));
+            services.AddSingleton<AtRestKeyService>();
+            services.AddSingleton<IObjectStorageClient>(provider => new EncryptingObjectStorageClient(
+                provider.GetRequiredService<S3ObjectStorageClient>(),
+                provider.GetRequiredService<AtRestKeyService>(),
+                provider.GetService<IEncryptedContentUrlIssuer>(),
+                provider.GetRequiredService<ILogger<EncryptingObjectStorageClient>>()));
+        }
+        else
+        {
+            services.AddSingleton<IObjectStorageClient>(provider => provider.GetRequiredService<S3ObjectStorageClient>());
+        }
         services.AddScoped<IDocumentPreviewService, RenditionService>();
 
         // Inline unified text diff between two document versions (ADR "Document version comparison") — reuses the

@@ -23,6 +23,9 @@
   #place(bottom + center)[
     #set text(size: 8.5pt, fill: gray)
     #align(center)[
+      // The stamp (ADR 0817): release version + generation date, passed by the harness; a bare
+      // `typst compile` without --input still builds, marked as such.
+      #sys.inputs.at("generated", default: "generated from source") \
       © #datetime.today().year() \
       Hebel Consulting GmbH \
       Schweighofplatz 7 \
