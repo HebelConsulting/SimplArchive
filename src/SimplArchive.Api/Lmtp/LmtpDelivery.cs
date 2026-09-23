@@ -19,6 +19,7 @@ public class LmtpDelivery
     private readonly SimplArchiveDbContext _dbContext;
     private readonly ICurrentTenantAccessor _tenantAccessor;
     private readonly ICurrentUserAccessor _userAccessor;
+    private readonly SimplArchive.Infrastructure.Audit.CurrentSystemActorAccessor _systemActor;
     private readonly IObjectStorageClient _storage;
     private readonly DocumentFinalizer _finalizer;
     private readonly PersonalMailboxProvisioner _mailbox;
@@ -28,6 +29,7 @@ public class LmtpDelivery
         SimplArchiveDbContext dbContext,
         ICurrentTenantAccessor tenantAccessor,
         ICurrentUserAccessor userAccessor,
+        SimplArchive.Infrastructure.Audit.CurrentSystemActorAccessor systemActor,
         IObjectStorageClient storage,
         DocumentFinalizer finalizer,
         PersonalMailboxProvisioner mailbox,
@@ -36,6 +38,7 @@ public class LmtpDelivery
         _dbContext = dbContext;
         _tenantAccessor = tenantAccessor;
         _userAccessor = userAccessor;
+        _systemActor = systemActor;
         _storage = storage;
         _finalizer = finalizer;
         _mailbox = mailbox;
@@ -207,10 +210,16 @@ public class LmtpDelivery
                 // audit events on this chain (a refused attachment, a classified contact), and with no
                 // resolvable actor those appends were silently dropped — inbound mail left no audit trace.
                 // Attributing to the mailbox owner matches how WebDAV attributes the same user's inbound
-                // flow (the implicit checkout). A DEPARTMENT mailbox has no owner, so its userId is null,
-                // those events still drop, and the recorder now WARNS about each — the follow-up issue for
-                // a proper system actor there is filed rather than pretended away.
-                ((SimplArchive.Infrastructure.Persistence.CurrentUserAccessor)_userAccessor).UserId = userId;
+                // flow (the implicit checkout). A DEPARTMENT target (mailboxId set) is different (#1329):
+                // its userId is the mailbox's CREATOR — attribution for provisioning, not for this mail —
+                // and blaming the creator for every future delivery would be a misattribution, while a
+                // service-account-created box has no userId at all and its events were warn-dropped. So a
+                // department delivery's scope names itself the "Inbound mail" SYSTEM actor and clears the
+                // user; the fallback is checked LAST in resolution, so a personal delivery's recipient
+                // still wins. Both set per TARGET, because one message can fan out to both kinds.
+                var isDepartment = mailboxId is not null;
+                ((SimplArchive.Infrastructure.Persistence.CurrentUserAccessor)_userAccessor).UserId = isDepartment ? null : userId;
+                _systemActor.Name = isDepartment ? "Inbound mail" : null;
 
                 // Lazily rather than eagerly, and shared with the credential trigger: the mailbox exists exactly
                 // when it has something to hold, and whichever of the two demands arrives first creates it (#562).

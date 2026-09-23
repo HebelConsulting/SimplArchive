@@ -126,6 +126,9 @@ public static class DependencyInjection
         services.AddScoped<ICurrentPlatformAdministratorAccessor>(sp => sp.GetRequiredService<CurrentPlatformAdministratorAccessor>());
         services.AddScoped<CurrentUserAccessor>();
         services.AddScoped<ICurrentUserAccessor>(sp => sp.GetRequiredService<CurrentUserAccessor>());
+        // The scope's system-actor fallback for audit resolution (#1329) — null unless a principal-less
+        // processing scope (a department-mailbox delivery) names itself.
+        services.AddScoped<Audit.CurrentSystemActorAccessor>();
 
         services.AddScoped<CurrentImpersonationAccessor>();
         services.AddScoped<ICurrentImpersonationAccessor>(sp => sp.GetRequiredService<CurrentImpersonationAccessor>());

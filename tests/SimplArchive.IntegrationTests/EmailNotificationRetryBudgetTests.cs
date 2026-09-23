@@ -6,6 +6,7 @@ using SimplArchive.Domain.Notifications;
 using SimplArchive.Domain.Tenants;
 using SimplArchive.Domain.Users;
 using SimplArchive.Infrastructure.Notifications;
+using SimplArchive.Infrastructure.Audit;
 using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.IntegrationTests;
@@ -61,7 +62,7 @@ public class EmailNotificationRetryBudgetTests
             var recorder = new SimplArchive.Infrastructure.Audit.AuditRecorder(
                 act, new CurrentUserAccessor(), new CurrentServiceAccountAccessor(),
                 new CurrentPlatformAdministratorAccessor(), new CurrentTenantAccessor(),
-                new CurrentImpersonationAccessor(), TimeProvider.System,
+                new CurrentImpersonationAccessor(), new CurrentSystemActorAccessor(), TimeProvider.System,
                 NullLogger<SimplArchive.Infrastructure.Audit.AuditRecorder>.Instance);
             await new EmailNotificationDispatcher(act, sender, NullLogger<EmailNotificationDispatcher>.Instance, recorder)
                 .DispatchPendingAsync();

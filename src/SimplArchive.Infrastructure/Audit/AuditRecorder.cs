@@ -25,6 +25,7 @@ public class AuditRecorder : IAuditRecorder
     private readonly ICurrentPlatformAdministratorAccessor _currentPlatformAdministratorAccessor;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly ICurrentImpersonationAccessor _currentImpersonationAccessor;
+    private readonly CurrentSystemActorAccessor _systemActorAccessor;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<AuditRecorder> _logger;
 
@@ -35,10 +36,12 @@ public class AuditRecorder : IAuditRecorder
         ICurrentPlatformAdministratorAccessor currentPlatformAdministratorAccessor,
         ICurrentTenantAccessor currentTenantAccessor,
         ICurrentImpersonationAccessor currentImpersonationAccessor,
+        CurrentSystemActorAccessor systemActorAccessor,
         [FromKeyedServices("demo-clock")] TimeProvider timeProvider,
         ILogger<AuditRecorder> logger)
     {
         _logger = logger;
+        _systemActorAccessor = systemActorAccessor;
         _dbContext = dbContext;
         _currentUserAccessor = currentUserAccessor;
         _currentServiceAccountAccessor = currentServiceAccountAccessor;
@@ -207,6 +210,15 @@ public class AuditRecorder : IAuditRecorder
             var name = await _dbContext.PlatformAdministrators
                 .Where(p => p.Id == platformAdministratorId).Select(p => p.Name).SingleOrDefaultAsync(cancellationToken);
             return (AuditActorType.PlatformAdministrator, platformAdministratorId, name);
+        }
+
+        // A scope acting for no principal may have declared itself a NAMED system actor (#1329 — the
+        // department-mailbox delivery is the founding case): its downstream RecordAsync calls then attribute
+        // to System/Guid.Empty with that name instead of warn-dropping. Checked LAST, so any real principal
+        // in the scope always wins.
+        if (_systemActorAccessor.Name is { Length: > 0 } systemName)
+        {
+            return (AuditActorType.System, Guid.Empty, systemName);
         }
 
         return (AuditActorType.User, null, null);

@@ -27,7 +27,7 @@ public class AuditRecorderTests
         CurrentUserAccessor userAccessor,
         CurrentServiceAccountAccessor serviceAccountAccessor,
         CurrentPlatformAdministratorAccessor platformAdministratorAccessor) =>
-        new(dbContext, userAccessor, serviceAccountAccessor, platformAdministratorAccessor, tenantAccessor, new CurrentImpersonationAccessor(), TimeProvider.System, NullLogger<AuditRecorder>.Instance);
+        new(dbContext, userAccessor, serviceAccountAccessor, platformAdministratorAccessor, tenantAccessor, new CurrentImpersonationAccessor(), new CurrentSystemActorAccessor(), TimeProvider.System, NullLogger<AuditRecorder>.Instance);
 
     [Fact]
     public async Task RecordAsync_appends_event_with_actor_name_snapshot_scoped_to_the_current_tenant()
@@ -114,7 +114,7 @@ public class AuditRecorderTests
         {
             var recorder = new AuditRecorder(recordContext, userAccessor, serviceAccountAccessor,
                 platformAdministratorAccessor, tenantAccessor, new CurrentImpersonationAccessor(),
-                TimeProvider.System, log);
+                new CurrentSystemActorAccessor(), TimeProvider.System, log);
             await recorder.RecordAsync("Auth.LoggedIn");
         }
 
@@ -182,5 +182,38 @@ public class AuditRecorderTests
         Assert.Equal("Bob User", evt.ActorName);
         Assert.Equal("Auth.LoggedIn", evt.Action);
         Assert.Null(evt.TargetType);
+    }
+
+    /// <summary>
+    /// #1329: a scope acting for no principal can name itself a SYSTEM actor, and RecordAsync then
+    /// attributes to System/Guid.Empty with that name instead of warn-dropping — the department-mailbox
+    /// delivery's contract, proven against the real recorder.
+    /// </summary>
+    [Fact]
+    public async Task RecordAsync_falls_back_to_the_named_system_actor_when_no_principal_resolves()
+    {
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+
+        var tenantAccessor = new CurrentTenantAccessor();
+        using var dbContext = CreateContext(connection, tenantAccessor);
+        await dbContext.Database.EnsureCreatedAsync();
+
+        var tenantId = Guid.NewGuid();
+        dbContext.Tenants.Add(new Tenant { Id = tenantId, Name = "T", CreatedAt = DateTimeOffset.UtcNow });
+        await dbContext.SaveChangesAsync();
+        tenantAccessor.TenantId = tenantId;
+
+        var systemActor = new CurrentSystemActorAccessor { Name = "Inbound mail" };
+        var recorder = new AuditRecorder(dbContext, new CurrentUserAccessor(), new CurrentServiceAccountAccessor(),
+            new CurrentPlatformAdministratorAccessor(), tenantAccessor, new CurrentImpersonationAccessor(),
+            systemActor, TimeProvider.System, NullLogger<AuditRecorder>.Instance);
+
+        await recorder.RecordAsync("Document.AttachmentRefused", "Document", Guid.NewGuid(), "tool.bin");
+
+        var recorded = await dbContext.AuditEvents.IgnoreQueryFilters().SingleAsync();
+        Assert.Equal(AuditActorType.System, recorded.ActorType);
+        Assert.Equal(Guid.Empty, recorded.ActorId);
+        Assert.Equal("Inbound mail", recorded.ActorName);
     }
 }

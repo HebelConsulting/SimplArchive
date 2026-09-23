@@ -311,6 +311,85 @@ public class LmtpClaimDeliveryTests
         Assert.True(SimplArchive.Application.Abstractions.ObjectKeyBuilder.IsEphemeralMailKey(version.ObjectKey));
     }
 
+    /// <summary>
+    /// #1329: a DEPARTMENT delivery has no owner to attribute to, so its scope names itself the
+    /// "Inbound mail" system actor — and the downstream audit events that used to be warn-dropped
+    /// (the refused attachment is the founding case) are now RECORDED, against the real recorder on the
+    /// real chain, because a fake reproduces the green rather than the bug. The personal path in the
+    /// same run proves precedence: a recipient user still wins over the system fallback.
+    /// </summary>
+    [Fact]
+    public async Task A_department_deliverys_refused_attachment_is_audited_as_the_inbound_mail_system_actor()
+    {
+        var (tenantId, domain, userId, userAddress) = await TenantWithUserAsync();
+
+        // The department shape, exactly as the lifecycle test builds it: shared repo → Mailbox via admits.
+        var adminEmail = $"depaudit-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, adminEmail, "adm-1234", "Dept Audit Admin",
+            canManageRepositories: true, canManageMailRouting: true);
+        using var admin = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(adminEmail, "adm-1234"));
+        var repoId = (await TestJson.Post(admin, "/api/repositories", new { name = $"DeptA {Guid.NewGuid():N}"[..14] })).GetProperty("id").GetGuid();
+        var deskId = (await TestJson.Post(admin, $"/api/documents/{repoId}/children", new { name = "Desk" })).GetProperty("id").GetGuid();
+        var deskRow = (await TestJson.Get(admin, $"/api/documents/{repoId}/children")).GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("id").GetGuid() == deskId);
+        var admits = deskRow.GetProperty("admits").EnumerateArray()
+            .Single(a => a.GetProperty("name").GetString() == "Mailbox");
+        var mailboxId = (await TestJson.Post(admin, admits.GetProperty("href").GetString()!,
+            new { name = "Mailbox", maskId = admits.GetProperty("maskId").GetGuid() })).GetProperty("id").GetGuid();
+        var maskId = (await TestJson.Get(admin, $"/api/documents/{mailboxId}/mask")).GetProperty("maskId").GetGuid();
+        var fieldId = (await TestJson.Get(admin, $"/api/masks/{maskId}")).GetProperty("fields").EnumerateArray()
+            .Single(f => f.GetProperty("name").GetString() == "eMail Addresses").GetProperty("id").GetGuid();
+        await TestJson.Put(admin, $"/api/documents/{mailboxId}/index-data",
+            new { fields = new[] { new { fieldDefinitionId = fieldId, values = new[] { $"audit@{domain}" } } }, confirmDuplicateClaims = false });
+
+        // One message with an executable attachment to EACH kind of recipient. The MZ magic is what
+        // UploadContentPolicy refuses; the refusal is the downstream audit event this issue is about.
+        var departmentSubject = await DeliverWithExecutableAsync($"audit@{domain}");
+        var personalSubject = await DeliverWithExecutableAsync(userAddress);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+
+        var departmentDoc = await db.Documents.IgnoreQueryFilters().SingleAsync(d => d.Name == departmentSubject);
+        var departmentEvent = await db.AuditEvents.IgnoreQueryFilters().SingleAsync(e =>
+            e.Action == SimplArchive.Api.Controllers.AuditActions.DocumentAttachmentRefused
+            && e.TargetId == departmentDoc.Id);
+        Assert.Equal(SimplArchive.Domain.Audit.AuditActorType.System, departmentEvent.ActorType);
+        Assert.Equal(Guid.Empty, departmentEvent.ActorId);
+        Assert.Equal("Inbound mail", departmentEvent.ActorName);
+
+        // Precedence: the personal delivery in the same process still attributes to its RECIPIENT.
+        var personalDoc = await db.Documents.IgnoreQueryFilters().SingleAsync(d => d.Name == personalSubject);
+        var personalEvent = await db.AuditEvents.IgnoreQueryFilters().SingleAsync(e =>
+            e.Action == SimplArchive.Api.Controllers.AuditActions.DocumentAttachmentRefused
+            && e.TargetId == personalDoc.Id);
+        Assert.Equal(SimplArchive.Domain.Audit.AuditActorType.User, personalEvent.ActorType);
+        Assert.Equal(userId, personalEvent.ActorId);
+    }
+
+    private async Task<string> DeliverWithExecutableAsync(string address)
+    {
+        using var lmtp = new Lmtp(Port);
+        await lmtp.ReadAsync();
+        await lmtp.ExchangeAsync("LHLO mta.test");
+        await lmtp.ExchangeAsync("MAIL FROM:<sender@example.test>");
+        Assert.StartsWith("250", await lmtp.ExchangeAsync($"RCPT TO:<{address}>"));
+        await lmtp.ExchangeAsync("DATA");
+
+        var subject = $"Refuse {Guid.NewGuid():N}"[..18];
+        await lmtp.SendAsync(
+            $"From: sender@example.test\r\nTo: {address}\r\nSubject: {subject}\r\n"
+            + "MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"b1\"\r\n\r\n"
+            + "--b1\r\nContent-Type: text/plain\r\n\r\nSee attachment.\r\n"
+            + "--b1\r\nContent-Type: application/octet-stream; name=\"tool.bin\"\r\n"
+            + "Content-Disposition: attachment; filename=\"tool.bin\"\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+            + Convert.ToBase64String([0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00]) + "\r\n"
+            + "--b1--");
+        Assert.StartsWith("250", await lmtp.ExchangeAsync("."));
+        await lmtp.ExchangeAsync("QUIT");
+        return subject;
+    }
+
     /// <summary>ADR 0679's delete/restore gate, on the mailbox kind that made its success arm reachable.</summary>
     [Fact]
     public async Task Deleting_and_restoring_a_department_mailbox_needs_the_routing_right_and_works_with_it()

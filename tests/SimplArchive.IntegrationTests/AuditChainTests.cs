@@ -19,7 +19,7 @@ public class AuditChainTests
         new(new DbContextOptionsBuilder<SimplArchiveDbContext>().UseSqlite(connection).Options, tenantAccessor);
 
     private static AuditRecorder CreateRecorder(SimplArchiveDbContext db, CurrentTenantAccessor tenant, CurrentUserAccessor user) =>
-        new(db, user, new CurrentServiceAccountAccessor(), new CurrentPlatformAdministratorAccessor(), tenant, new CurrentImpersonationAccessor(), TimeProvider.System, NullLogger<AuditRecorder>.Instance);
+        new(db, user, new CurrentServiceAccountAccessor(), new CurrentPlatformAdministratorAccessor(), tenant, new CurrentImpersonationAccessor(), new CurrentSystemActorAccessor(), TimeProvider.System, NullLogger<AuditRecorder>.Instance);
 
     [Fact]
     public async Task Recorded_chain_verifies_and_tampering_is_detected()
