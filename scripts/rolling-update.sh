@@ -14,6 +14,7 @@
 #   scripts/rolling-update.sh                 # dev stack: build, migrate, roll both instances
 #   scripts/rolling-update.sh --no-build      # roll what is already built (a config-only change)
 #   SA_COMPOSE="docker compose -f a.yml -f b.yml" scripts/rolling-update.sh     # the kiosk's file set
+#   SA_SIDECARS="encryption" scripts/rolling-update.sh                          # narrow the sidecar set
 #
 # Written for bash 3.2 (the macOS default): no `mapfile`, no `declare -A`, no `timeout`.
 set -euo pipefail
@@ -32,6 +33,23 @@ for arg in "$@"; do
 done
 
 say() { printf '==> %s\n' "$*"; }
+
+# The project's services, resolved ONCE, and matched below with `case` rather than a pipeline.
+#
+# `$COMPOSE config --services | grep -qx "$svc"` looks obviously correct and is not. `grep -q` exits at its
+# FIRST match, which SIGPIPEs the compose process upstream, and under `set -o pipefail` the pipeline then
+# reports that signal instead of grep's success — so a service that IS in the project reads as absent, at
+# random. Measured on the kiosk over 20 attempts each: encryption 5/20, ocr 16/20, postfix 6/20 wrongly
+# reported absent. Every one of those skips was SILENT, so a rollout could decline to roll a sidecar, or
+# skip the module install entirely, and still report success. `case` uses no pipe and cannot do this.
+PROJECT_SERVICES=" $($COMPOSE config --services 2>/dev/null | tr '\n' ' ' || true) "
+
+in_project() {
+  case "$PROJECT_SERVICES" in
+    *" $1 "*) return 0 ;;
+    *)        return 1 ;;
+  esac
+}
 
 # Poll ONE instance's own /health/ready from inside its container. It publishes no host port — the proxy owns
 # the entry point — so there is no outside address to curl, and asking through the proxy would be worthless
@@ -96,26 +114,113 @@ fi
 # deliberately wins over the pin it is testing a replacement for.
 install_oneshot() {
   service="$1"
-  if $COMPOSE config --services 2>/dev/null | grep -qx "$service"; then
-    say "installing modules into the shared volume ($service)"
-    $COMPOSE up -d --force-recreate --no-deps "$service"
-    oneshot_id=$($COMPOSE ps -q "$service")
-    if [ -n "$oneshot_id" ]; then
-      oneshot_status=$(docker wait "$oneshot_id")
-      if [ "$oneshot_status" != "0" ]; then
-        # Refuse rather than roll: replacing the instances now would deploy the OLD module while reporting
-        # success, which is exactly the silence this block exists to end.
-        echo "FAILED: $service exited $oneshot_status. No instance has been touched." >&2
-        echo "$($COMPOSE logs --tail=30 "$service")" >&2
-        exit 1
-      fi
-    fi
-    say "$service done"
+  if ! in_project "$service"; then
+    say "$service is not in this project; nothing to install"
+    return 0
   fi
+
+  say "installing modules into the shared volume ($service)"
+  $COMPOSE up -d --force-recreate --no-deps "$service"
+  oneshot_id=$($COMPOSE ps -q "$service")
+  if [ -n "$oneshot_id" ]; then
+    oneshot_status=$(docker wait "$oneshot_id")
+    if [ "$oneshot_status" != "0" ]; then
+      # Refuse rather than roll: replacing the instances now would deploy the OLD module while reporting
+      # success, which is exactly the silence this block exists to end.
+      echo "FAILED: $service exited $oneshot_status. No instance has been touched." >&2
+      echo "$($COMPOSE logs --tail=30 "$service")" >&2
+      exit 1
+    fi
+  fi
+  say "$service done"
 }
 
 install_oneshot modules-init
 install_oneshot modules-local
+
+# --- the sidecars we publish ourselves ----------------------------------------------------------------
+# api and api-b are not the whole stack. The sidecars built from OUR OWN sibling repositories carry
+# `:latest` and therefore drift, and until this existed a release updated the app and left them running
+# whatever they already had. That produces a version claim which is true of the app and false of the
+# stack: after one rollout the encryption sidecar was still on a pre-rotation image, so endpoints the core
+# had just learned to call did not exist — while `docker compose ps` looked entirely healthy. The image tag
+# was the only place the drift showed, which is the worst possible place for it to be.
+#
+# Third-party images (Postgres, OpenSearch, Tika, Gotenberg, Valkey, SeaweedFS, OpenBao, Caddy, Mailpit)
+# are deliberately NOT rolled here. They are version-pinned, so they move only when somebody bumps a tag on
+# purpose, and recreating the stateful ones would interrupt the demo — the one thing this script promises
+# not to do. Bump those deliberately; a release is not the moment to restart a database.
+#
+# This runs BEFORE the migrations and before any instance is replaced, so a sidecar that comes back broken
+# aborts while the stack is still serving exactly what it was serving.
+SIDECARS=${SA_SIDECARS:-"encryption ocr postfix"}
+
+# Gate on the container's own HEALTHCHECK where the image declares one. Where none does, the honest
+# substitute is "still running a few seconds later" — that catches the crash-loop, which is the failure
+# worth catching, without inventing a probe the image never offered and reporting its silence as success.
+wait_sidecar() {
+  svc=$1
+  cid=$2
+  waited=0
+  probed=$(docker inspect -f '{{if .State.Health}}health{{end}}' "$cid" 2>/dev/null || true)
+  while [ "$waited" -lt "$READY_TIMEOUT" ]; do
+    if [ -n "$probed" ]; then
+      state=$(docker inspect -f '{{.State.Health.Status}}' "$cid" 2>/dev/null || echo unknown)
+      case "$state" in
+        healthy)   say "$svc is healthy (${waited}s)"; return 0 ;;
+        unhealthy) echo "FAILED: $svc came back UNHEALTHY." >&2; return 1 ;;
+      esac
+    else
+      if [ "$(docker inspect -f '{{.State.Running}}' "$cid" 2>/dev/null || echo false)" != "true" ]; then
+        echo "FAILED: $svc is not running after being replaced." >&2
+        return 1
+      fi
+      if [ "$waited" -ge 10 ]; then
+        say "$svc declares no healthcheck; running and stable after ${waited}s"
+        return 0
+      fi
+    fi
+    sleep 2
+    waited=$((waited + 2))
+  done
+  echo "FAILED: $svc did not become healthy within ${READY_TIMEOUT}s." >&2
+  return 1
+}
+
+for svc in $SIDECARS; do
+  # An add-on that is not installed on this host simply is not in the project — said out loud, because a
+  # silent skip here is indistinguishable from "rolled it, nothing to do", which is the whole failure this
+  # phase exists to end.
+  if ! in_project "$svc"; then
+    say "$svc is not installed on this host; skipping"
+    continue
+  fi
+
+  cid=$($COMPOSE ps -q "$svc" 2>/dev/null | head -1 || true)
+  if [ -z "$cid" ]; then
+    say "$svc is in the project but not running; starting it"
+    $COMPOSE up -d --no-deps "$svc"
+    cid=$($COMPOSE ps -q "$svc" | head -1)
+    wait_sidecar "$svc" "$cid" || { $COMPOSE logs --tail=30 "$svc" >&2; exit 1; }
+    continue
+  fi
+
+  # Recreate only on actual drift: compare the image the container is RUNNING with the image its tag now
+  # resolves to after the pull. Restarting a sidecar that did not change buys nothing and costs a blip.
+  running_image=$(docker inspect -f '{{.Image}}' "$cid" 2>/dev/null || true)
+  tag=$(docker inspect -f '{{.Config.Image}}' "$cid" 2>/dev/null || true)
+  desired_image=$(docker image inspect -f '{{.Id}}' "$tag" 2>/dev/null || true)
+
+  if [ -z "$desired_image" ] || [ "$running_image" = "$desired_image" ]; then
+    say "$svc unchanged ($tag)"
+    continue
+  fi
+
+  say "replacing $svc — its image moved ($tag)"
+  $COMPOSE up -d --force-recreate --no-deps "$svc"
+  cid=$($COMPOSE ps -q "$svc" | head -1)
+  wait_sidecar "$svc" "$cid" || { $COMPOSE logs --tail=30 "$svc" >&2; exit 1; }
+done
 
 # Migrations ONCE, before any instance restarts. Both instances have startup auto-migration off, so nothing
 # else applies them — and two instances racing to migrate is what that setting exists to prevent.
