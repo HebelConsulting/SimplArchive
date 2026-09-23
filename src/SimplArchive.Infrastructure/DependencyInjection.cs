@@ -320,13 +320,15 @@ public static class DependencyInjection
             .Bind(configuration.GetSection("ObjectStorage"))
             .ValidateOnStart();
         services.AddSingleton<S3ObjectStorageClient>();
+        // Registered unconditionally so controllers can inject it and ask (Enabled/GatedAsync answer
+        // honestly either way); only the DECORATOR below is conditional.
+        services.AddHttpClient(AtRestKeyService.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(10));
+        services.AddSingleton<AtRestKeyService>();
         if (!string.IsNullOrWhiteSpace(configuration["Encryption:ServiceUrl"]))
         {
             // At-rest encryption (ADR 0818): the ONE seam every server-side storage call crosses gets the
             // encrypting decorator — gated per tenant inside it (same Encryption:Tenants list as the
             // envelope hook, ADR 0813). Without the config the plain client serves, fully inert.
-            services.AddHttpClient(AtRestKeyService.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(10));
-            services.AddSingleton<AtRestKeyService>();
             services.AddSingleton<IObjectStorageClient>(provider => new EncryptingObjectStorageClient(
                 provider.GetRequiredService<S3ObjectStorageClient>(),
                 provider.GetRequiredService<AtRestKeyService>(),

@@ -133,6 +133,68 @@ public class AtRestEncryptionTests
     }
 
     [Fact]
+    public async Task A_client_side_encrypted_upload_round_trips_like_every_client_will()
+    {
+        // The B2 contract, driven exactly as the web/desktop uploaders do: initiate carries the encryption
+        // instruction on a gated tenant, the client encrypts and wraps, PUTs ciphertext to the presigned
+        // URL, and finalize attaches the wrapped DEK — after which every door serves plaintext.
+        using var api = _factory.CreateAuthedClient(
+            await _factory.GetUserTokenAsync(E2EApiFactory.CryptoAdminEmail, E2EApiFactory.CryptoPassword));
+
+        var repositories = await TestJson.Get(api, "/api/repositories");
+        var crypto = repositories.GetProperty("repositories").EnumerateArray()
+            .First(r => r.GetProperty("name").GetString() == E2EApiFactory.CryptoTenantName);
+        var childrenHref = crypto.GetProperty("links").EnumerateArray()
+            .First(l => l.GetProperty("rel").GetString() == "children").GetProperty("href").GetString()!;
+
+        var name = $"b2-{Guid.NewGuid():N}";
+        var created = await TestJson.Post(api, childrenHref, new { name });
+        var versionsHref = created.GetProperty("links").EnumerateArray()
+            .First(l => l.GetProperty("rel").GetString() == "versions").GetProperty("href").GetString()!;
+        var version = await TestJson.Post(api, versionsHref, new { fileExtension = ".txt" });
+
+        // The instruction is present, and names the stub's KEK.
+        var encryption = version.GetProperty("encryption");
+        Assert.Equal("kek-v1", encryption.GetProperty("kekGeneration").GetString());
+        Assert.Equal("SHA256", encryption.GetProperty("oaepHash").GetString());
+
+        // Encrypt like a client: fresh DEK, nonce‖ct‖tag, DEK wrapped against the published KEK.
+        var plaintext = Encoding.ASCII.GetBytes($"{Marker} client-side\n");
+        var dek = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
+        var blob = new byte[12 + plaintext.Length + 16];
+        System.Security.Cryptography.RandomNumberGenerator.Fill(blob.AsSpan(0, 12));
+        using (var aes = new System.Security.Cryptography.AesGcm(dek, 16))
+        {
+            aes.Encrypt(blob.AsSpan(0, 12), plaintext, blob.AsSpan(12, plaintext.Length), blob.AsSpan(^16..));
+        }
+
+        using var kek = System.Security.Cryptography.RSA.Create();
+        kek.ImportFromPem(encryption.GetProperty("publicKeyPem").GetString()!);
+        var wrappedDek = Convert.ToBase64String(
+            kek.Encrypt(dek, System.Security.Cryptography.RSAEncryptionPadding.OaepSHA256));
+
+        using var anonymous = new HttpClient();
+        var put = await anonymous.PutAsync(version.GetProperty("uploadUrl").GetString()!, new ByteArrayContent(blob));
+        Assert.True(put.IsSuccessStatusCode, $"presigned PUT answered {(int)put.StatusCode}");
+
+        var finalizeHref = version.GetProperty("links").EnumerateArray()
+            .First(l => l.GetProperty("rel").GetString() == "self").GetProperty("href").GetString()!;
+        await TestJson.Put(api, finalizeHref, new { wrappedDek, kekGeneration = "kek-v1" });
+
+        // The document serves plaintext through the swapped download door...
+        var finalized = await TestJson.Get(api, finalizeHref);
+        var downloadHref = finalized.GetProperty("links").EnumerateArray()
+            .First(l => l.GetProperty("rel").GetString() == "download").GetProperty("href").GetString()!;
+        Assert.StartsWith("/api/encrypted-content", downloadHref, StringComparison.Ordinal);
+        using var bare = _factory.CreateClient();
+        Assert.Contains(Marker, await bare.GetStringAsync(downloadHref), StringComparison.Ordinal);
+
+        // ...and the finalizer's server-side facts describe the PLAINTEXT (hash/size through the decorator).
+        Assert.Equal(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(plaintext)),
+            finalized.GetProperty("sha256Hash").GetString(), ignoreCase: true);
+    }
+
+    [Fact]
     public async Task An_unlisted_tenants_write_stays_plaintext_with_no_metadata()
     {
         var (clientId, secret, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);

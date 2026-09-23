@@ -289,7 +289,7 @@ public class S3ObjectStorageClient : IObjectStorageClient
     public async Task<StoredObjectInfo> GetObjectInfoAsync(string objectKey, CancellationToken cancellationToken = default)
     {
         var response = await _internalClient.GetObjectMetadataAsync(BucketFor(objectKey), objectKey, cancellationToken);
-        return new StoredObjectInfo(response.ContentLength, UserMetadata(response.Metadata));
+        return new StoredObjectInfo(response.ContentLength, response.Headers.ContentType, UserMetadata(response.Metadata));
     }
 
     // The SDK's MetadataCollection reports keys WITH the x-amz-meta- wire prefix; strip it so callers
@@ -358,6 +358,29 @@ public class S3ObjectStorageClient : IObjectStorageClient
         }
 
         await _internalClient.PutObjectAsync(request, cancellationToken);
+    }
+
+    public async Task SetObjectMetadataAsync(string objectKey, IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
+    {
+        // A self-COPY with REPLACE is S3's way to change metadata in place; the Content-Type must be
+        // restated or the REPLACE resets it.
+        var bucket = BucketFor(objectKey);
+        var current = await _internalClient.GetObjectMetadataAsync(bucket, objectKey, cancellationToken);
+        var request = new CopyObjectRequest
+        {
+            SourceBucket = bucket,
+            SourceKey = objectKey,
+            DestinationBucket = bucket,
+            DestinationKey = objectKey,
+            MetadataDirective = S3MetadataDirective.REPLACE,
+            ContentType = current.Headers.ContentType,
+        };
+        foreach (var (key, value) in metadata)
+        {
+            request.Metadata[key] = value;
+        }
+
+        await _internalClient.CopyObjectAsync(request, cancellationToken);
     }
 
     public async Task<IReadOnlyList<StorageObject>> ListObjectsAsync(string prefix, CancellationToken cancellationToken = default)

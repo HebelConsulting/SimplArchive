@@ -13,8 +13,9 @@ public sealed record StorageObject(string Key, long Size, DateTimeOffset LastMod
 /// (ADR 0818). Length is the STORED length (-1 when the default adapter couldn't know it).</summary>
 public sealed record StoredObject(Stream Content, long Length, IReadOnlyDictionary<string, string> Metadata);
 
-/// <summary>An object's size and user metadata (one HEAD) — the decorator's cheap probe (ADR 0818).</summary>
-public sealed record StoredObjectInfo(long Size, IReadOnlyDictionary<string, string> Metadata);
+/// <summary>An object's size, content type and user metadata (one HEAD) — the decorator's cheap probe
+/// (ADR 0818); the content type rides along so a re-encrypting copy can restate it.</summary>
+public sealed record StoredObjectInfo(long Size, string? ContentType, IReadOnlyDictionary<string, string> Metadata);
 
 // The S3 Object Lock state of an object (ADR "WORM / immutable document versions"): a retain-until date (null
 // = no retention lock) and whether an object legal hold is on. An object is immutable while RetainUntil is in
@@ -73,7 +74,7 @@ public interface IObjectStorageClient
     // The object's size and user metadata in one HEAD — the decorator's gate for size arithmetic and the
     // cheap "is this encrypted?" probe. Default: size with no metadata.
     async Task<StoredObjectInfo> GetObjectInfoAsync(string objectKey, CancellationToken cancellationToken = default) =>
-        new(await GetObjectSizeAsync(objectKey, cancellationToken), new Dictionary<string, string>());
+        new(await GetObjectSizeAsync(objectKey, cancellationToken), null, new Dictionary<string, string>());
 
     // Reads an inclusive byte range [from, to] of an object (server-side range request) — backs WebDAV Range
     // GET / 206 Partial Content (ADR "WebDAV hardening"). Default: read the whole object and slice; the S3
@@ -116,6 +117,14 @@ public interface IObjectStorageClient
     // Server-side copy within the bucket (no bytes leave storage) — filing an intray item moves its object to
     // a document key with a copy + delete. See ADR "S3-backed inbox".
     Task CopyObjectAsync(string sourceKey, string destinationKey, CancellationToken cancellationToken = default);
+
+    // Replaces the object's user metadata in place (a self-COPY with metadata REPLACE, content untouched) —
+    // how a client-encrypted upload gets its wrapped DEK attached at finalize (ADR 0818): a presigned PUT
+    // cannot carry metadata the client only mints after receiving the URL. Content-Type is preserved.
+    // Default: drops the metadata, so the test fakes needn't implement it — same rationale as the
+    // metadata-carrying PutObjectAsync overload above.
+    Task SetObjectMetadataAsync(string objectKey, IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
 
     Task DeleteObjectAsync(string objectKey, CancellationToken cancellationToken = default);
 

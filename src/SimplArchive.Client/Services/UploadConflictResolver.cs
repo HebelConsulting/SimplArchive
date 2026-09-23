@@ -94,7 +94,7 @@ public sealed class UploadConflictResolver
         }
 
         var version = await response.Content.ReadFromJsonAsync<CreateVersionResponse>();
-        return new ResolvedUpload(existing.Id, version!.Id, version.UploadUrl, comment, Links.Href(version.Links, "self"));
+        return new ResolvedUpload(existing.Id, version!.Id, version.UploadUrl, comment, Links.Href(version.Links, "self"), version.Encryption);
     }
 
     private async Task<ResolvedUpload?> AsNewDocumentAsync(string childrenHref, string fileName, string extension, Dialogs.NameConflictDialog.NameConflictChoice choice)
@@ -128,7 +128,7 @@ public sealed class UploadConflictResolver
         }
 
         var body = await version.Content.ReadFromJsonAsync<CreateVersionResponse>();
-        return new ResolvedUpload(document!.Id, body!.Id, body.UploadUrl, choice.Comment, Links.Href(body.Links, "self"));
+        return new ResolvedUpload(document!.Id, body!.Id, body.UploadUrl, choice.Comment, Links.Href(body.Links, "self"), body.Encryption);
     }
 
     // The create-version response: id + the presigned PUT the caller uploads to. Its own copy rather than a
@@ -138,6 +138,8 @@ public sealed class UploadConflictResolver
         public Guid Id { get; set; }
 
         public string UploadUrl { get; set; } = string.Empty;
+
+        public UploadEncryptionInfo? Encryption { get; set; }
 
         public List<LinkResponse> Links { get; set; } = [];
     }
@@ -161,4 +163,4 @@ public sealed class UploadConflictResolver
 
 /// <summary>Where the bytes should go, the filing comment to set once they are there, and the created
 /// version's own advertised address — the finalize PUT's target (ADR 0543).</summary>
-public sealed record ResolvedUpload(Guid DocumentId, Guid VersionId, string UploadUrl, string? Comment, string? FinalizeHref = null);
+public sealed record ResolvedUpload(Guid DocumentId, Guid VersionId, string UploadUrl, string? Comment, string? FinalizeHref = null, UploadEncryptionInfo? Encryption = null);

@@ -110,9 +110,10 @@ public sealed class EncryptingObjectStorageClient(
     // ---- Presigned URLs -------------------------------------------------------------------------------
 
     public Task<Uri> GetPresignedUploadUrlAsync(string objectKey, TimeSpan expiry, CancellationToken cancellationToken = default) =>
-        // Uploads stay presigned even on gated tenants: the app clients encrypt CLIENT-side (slice B2);
-        // until then their objects land plaintext-without-metadata, which reads fine by the mixed-state
-        // contract. Server-side writers are already covered above.
+        // Uploads stay presigned even on gated tenants: the app clients encrypt CLIENT-side (B2 — the
+        // initiate response carries the KEK instruction, finalize attaches the wrapped DEK); a client
+        // that doesn't (an older or third-party API caller) lands plaintext-without-metadata, which
+        // reads fine by the mixed-state contract. Server-side writers are already covered above.
         inner.GetPresignedUploadUrlAsync(objectKey, expiry, cancellationToken);
 
     public async Task<Uri> GetPresignedDownloadUrlAsync(string objectKey, TimeSpan expiry, string? downloadFileName = null, CancellationToken cancellationToken = default) =>
@@ -166,11 +167,33 @@ public sealed class EncryptingObjectStorageClient(
         // ADR 0818 as the accepted 28-byte skew there.
         inner.ListObjectsAsync(prefix, cancellationToken);
 
-    public Task CopyObjectAsync(string sourceKey, string destinationKey, CancellationToken cancellationToken = default) =>
+    public async Task CopyObjectAsync(string sourceKey, string destinationKey, CancellationToken cancellationToken = default)
+    {
         // S3 COPY carries the metadata — the wrapped DEK travels with the bytes through every re-keying
         // flow (mail→archive, intray→document, stash→version), which is the whole reason the DEK lives
-        // ON the object (ADR 0818).
-        inner.CopyObjectAsync(sourceKey, destinationKey, cancellationToken);
+        // ON the object (ADR 0818). The one copy that must NOT stay a plain copy: a PLAINTEXT source
+        // (a client's presigned staging upload) filed into a gated destination — that is the moment the
+        // object becomes archive content, so it gets encrypted on the way (read, encrypt, put) rather
+        // than copied plaintext into the claim's blind spot.
+        if (await keys.GatedAsync(destinationKey, cancellationToken))
+        {
+            var info = await inner.GetObjectInfoAsync(sourceKey, cancellationToken);
+            if (!info.Metadata.ContainsKey(WrappedDekKey))
+            {
+                await using var plaintext = await inner.GetObjectAsync(sourceKey, cancellationToken);
+                await PutObjectAsync(destinationKey, plaintext,
+                    info.ContentType ?? "application/octet-stream", cancellationToken);
+                return;
+            }
+        }
+
+        await inner.CopyObjectAsync(sourceKey, destinationKey, cancellationToken);
+    }
+
+    public Task SetObjectMetadataAsync(string objectKey, IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default) =>
+        // The attach path for client-encrypted uploads — the payload IS encryption metadata, so it must
+        // reach the store verbatim, never pass through the encrypting write.
+        inner.SetObjectMetadataAsync(objectKey, metadata, cancellationToken);
 
     public Task DeleteObjectAsync(string objectKey, CancellationToken cancellationToken = default) =>
         inner.DeleteObjectAsync(objectKey, cancellationToken);

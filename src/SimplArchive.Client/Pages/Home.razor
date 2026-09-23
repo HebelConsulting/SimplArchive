@@ -1718,7 +1718,7 @@
 
     private record ArchiveEntriesResponse { public List<ArchiveEntryDto> Entries { get; set; } = []; }
     private record ArchiveEntryDto { public string Name { get; set; } = string.Empty; public string Path { get; set; } = string.Empty; public long Size { get; set; } public List<LinkResponse> Links { get; set; } = []; }
-    private record CreateVersionResponse { public Guid Id { get; set; } public string UploadUrl { get; set; } = string.Empty; public List<LinkResponse> Links { get; set; } = []; }
+    private record CreateVersionResponse { public Guid Id { get; set; } public string UploadUrl { get; set; } = string.Empty; public Services.UploadEncryptionInfo? Encryption { get; set; } public List<LinkResponse> Links { get; set; } = []; }
 
 
 

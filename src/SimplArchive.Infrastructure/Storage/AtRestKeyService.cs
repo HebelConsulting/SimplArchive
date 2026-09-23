@@ -24,7 +24,12 @@ public sealed class AtRestKeyService(
 {
     public const string HttpClientName = "at-rest-keys";
 
-    private sealed record Kek(string Generation, RSA PublicKey, RSAEncryptionPadding Padding, DateTimeOffset FetchedAt);
+    private sealed record Kek(string Generation, RSA PublicKey, string PublicKeyPem, string OaepHash,
+        RSAEncryptionPadding Padding, DateTimeOffset FetchedAt);
+
+    /// <summary>What an encrypting CLIENT needs to wrap against (ADR 0818/B2): generation, SPKI PEM, and
+    /// the OAEP hash both sides must use — the initiate-upload response carries this on gated tenants.</summary>
+    public sealed record ClientKek(string KekGeneration, string PublicKeyPem, string OaepHash);
 
     private readonly ConcurrentDictionary<Guid, (string Name, DateTimeOffset FetchedAt)> _tenantNames = new();
     private readonly ConcurrentDictionary<string, (byte[] Dek, DateTimeOffset FetchedAt)> _deks = new();
@@ -59,6 +64,13 @@ public sealed class AtRestKeyService(
 
         var name = await TenantNameAsync(tenantId, cancellationToken);
         return name is not null && listed.Contains(name, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The current KEK in the client-facing shape — for the initiate-upload response.</summary>
+    public async Task<ClientKek> ClientKekAsync(CancellationToken cancellationToken)
+    {
+        var kek = await CurrentKekAsync(cancellationToken);
+        return new ClientKek(kek.Generation, kek.PublicKeyPem, kek.OaepHash);
     }
 
     /// <summary>Mints and wraps a fresh DEK against the cached current KEK.</summary>
@@ -119,10 +131,12 @@ public sealed class AtRestKeyService(
             var padding = json.GetProperty("oaepHash").GetString() == "SHA1"
                 ? RSAEncryptionPadding.OaepSHA1
                 : RSAEncryptionPadding.OaepSHA256;
-            var loaded = new Kek(json.GetProperty("generation").GetString()!, publicKey, padding, DateTimeOffset.UtcNow);
+            var loaded = new Kek(json.GetProperty("generation").GetString()!, publicKey,
+                json.GetProperty("publicKeyPem").GetString()!, json.GetProperty("oaepHash").GetString()!,
+                padding, DateTimeOffset.UtcNow);
             _kek = loaded;
             logger.LogInformation("At-rest KEK loaded: generation {Generation}, OAEP {Hash}.",
-                loaded.Generation, json.GetProperty("oaepHash").GetString());
+                loaded.Generation, loaded.OaepHash);
             return loaded;
         }
         finally

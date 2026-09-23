@@ -302,7 +302,7 @@ async function uploadFiles(dotNetRef, folderId, files) {
                 continue;
             }
 
-            const response = await fetch(target.uploadUrl, { method: 'PUT', body: file });
+            const response = await putUpload(target, file);
             if (!response.ok) {
                 await dotNetRef.invokeMethodAsync('ReportUploadFailureAsync', file.name, `storage upload failed (${response.status})`);
                 continue;
@@ -310,7 +310,8 @@ async function uploadFiles(dotNetRef, folderId, files) {
 
             // .NET finalizes (server-side hash), sets index data, and assigns the default mask — at the
             // address the create response advertised, which rode through on the target (ADR 0543, #416).
-            await dotNetRef.invokeMethodAsync('FinalizeUploadAsync', target.finalizeHref, file.name, target.comment ?? null);
+            await dotNetRef.invokeMethodAsync('FinalizeUploadAsync', target.finalizeHref, file.name, target.comment ?? null,
+                target.wrappedDek ?? null, target.encryption?.kekGeneration ?? null);
         } catch (err) {
             await dotNetRef.invokeMethodAsync('ReportUploadFailureAsync', file.name, String(err));
         }
@@ -341,12 +342,13 @@ async function uploadFilesToDocument(dotNetRef, docId, files) {
                 if (!target) {
                     continue;
                 }
-                const response = await fetch(target.uploadUrl, { method: 'PUT', body: file });
+                const response = await putUpload(target, file);
                 if (!response.ok) {
                     await dotNetRef.invokeMethodAsync('ReportUploadFailureAsync', file.name, `storage upload failed (${response.status})`);
                     continue;
                 }
-                await dotNetRef.invokeMethodAsync('FinalizeVersionAsync', target.finalizeHref, file.name, decision.comment);
+                await dotNetRef.invokeMethodAsync('FinalizeVersionAsync', target.finalizeHref, file.name, decision.comment,
+                    target.wrappedDek ?? null, target.encryption?.kekGeneration ?? null);
             } catch (err) {
                 await dotNetRef.invokeMethodAsync('ReportUploadFailureAsync', file.name, String(err));
             }
@@ -368,12 +370,13 @@ async function uploadFilesToDocument(dotNetRef, docId, files) {
             if (!target) {
                 continue;
             }
-            const response = await fetch(target.uploadUrl, { method: 'PUT', body: file });
+            const response = await putUpload(target, file);
             if (!response.ok) {
                 await dotNetRef.invokeMethodAsync('ReportUploadFailureAsync', file.name, `storage upload failed (${response.status})`);
                 continue;
             }
-            await dotNetRef.invokeMethodAsync('FinalizeUploadAsync', target.finalizeHref, file.name, decision.comment);
+            await dotNetRef.invokeMethodAsync('FinalizeUploadAsync', target.finalizeHref, file.name, decision.comment,
+                target.wrappedDek ?? null, target.encryption?.kekGeneration ?? null);
         } catch (err) {
             await dotNetRef.invokeMethodAsync('ReportUploadFailureAsync', file.name, String(err));
         }
@@ -382,6 +385,42 @@ async function uploadFilesToDocument(dotNetRef, docId, files) {
 }
 
 // Hex-encoded SHA-256 of a File's content — matches the server-side hash so a duplicate is detected before upload.
+// ---- Client-side at-rest encryption (ADR 0818/B2) ---------------------------------------------------
+// The create-version response carries `encryption` ONLY on encryption-gated tenants; its presence is the
+// instruction. Format: nonce(12) ‖ ciphertext ‖ tag(16) (WebCrypto emits ct‖tag, the nonce is prepended),
+// DEK wrapped RSA-OAEP against the published KEK with the published hash — the exact shapes the server's
+// AtRestBlobCipher and the encryption service share. Exposed on window for the cross-implementation UI
+// test: what THIS code produces, the server's .NET side must open.
+window.saUploadCrypto = {
+    async encrypt(plainBuffer, encryption) {
+        const dek = crypto.getRandomValues(new Uint8Array(32));
+        const key = await crypto.subtle.importKey('raw', dek, 'AES-GCM', false, ['encrypt']);
+        const nonce = crypto.getRandomValues(new Uint8Array(12));
+        const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce }, key, plainBuffer));
+        const blob = new Uint8Array(12 + cipher.length);
+        blob.set(nonce);
+        blob.set(cipher, 12);
+
+        const der = Uint8Array.from(atob(encryption.publicKeyPem.replace(/-----[^-]+-----|\s/g, '')), c => c.charCodeAt(0));
+        const kek = await crypto.subtle.importKey('spki', der,
+            { name: 'RSA-OAEP', hash: encryption.oaepHash === 'SHA1' ? 'SHA-1' : 'SHA-256' }, false, ['encrypt']);
+        const wrapped = new Uint8Array(await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, kek, dek));
+        return { blob, wrappedDek: btoa(String.fromCharCode(...wrapped)) };
+    },
+};
+
+// PUTs the file to the target's presigned URL, encrypting first when the target says so. Returns the fetch
+// response; on an encrypting upload the wrapped DEK is left on the target for the finalize call to carry.
+async function putUpload(target, file) {
+    let body = file;
+    if (target.encryption) {
+        const enc = await window.saUploadCrypto.encrypt(await file.arrayBuffer(), target.encryption);
+        body = enc.blob;
+        target.wrappedDek = enc.wrappedDek;
+    }
+    return await fetch(target.uploadUrl, { method: 'PUT', body });
+}
+
 async function sha256Hex(file) {
     const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
     return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');

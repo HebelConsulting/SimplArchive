@@ -615,13 +615,18 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         var version = await versionResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
         var uploadUrl = version.GetProperty("uploadUrl").GetString()!;
 
-        using var uploadContent = new ByteArrayContent(bytes);
+        // Encryption-gated tenants instruct the client to encrypt before the presigned PUT (ADR 0818/B2).
+        var encrypted = UploadEncryption.EncryptIfInstructed(version, bytes);
+        using var uploadContent = new ByteArrayContent(encrypted?.Blob ?? bytes);
         uploadContent.Headers.ContentType = new MediaTypeHeaderValue(GuessContentType(fileName));
         using var uploadResponse = await ApiCore.Anonymous.PutAsync(uploadUrl, uploadContent, cancellationToken);
         uploadResponse.EnsureSuccessStatusCode();
 
         // Finalize is a PUT to the version's OWN address, which the create response just advertised as `self`.
-        using var finalizeResponse = await _core.Http.PutAsync(ApiCore.RequireRel(version, "self", "The pending version"), null, cancellationToken);
+        // An encrypted upload declares its wrapped DEK here so the server attaches it before anything reads.
+        using var finalizeResponse = await _core.Http.PutAsJsonAsync(
+            ApiCore.RequireRel(version, "self", "The pending version"),
+            new { wrappedDek = encrypted?.WrappedDek, kekGeneration = encrypted?.KekGeneration }, cancellationToken);
         finalizeResponse.EnsureSuccessStatusCode();
 
         // The server assigns the mask at finalize (eMail for .eml/.msg, else Basic Entry) — ADR "Email
@@ -902,12 +907,16 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         var version = await versionResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
         var uploadUrl = version.GetProperty("uploadUrl").GetString()!;
 
-        using var uploadContent = new ByteArrayContent(bytes);
+        // Same encryption instruction handling as UploadFileAsync (ADR 0818/B2).
+        var encrypted = UploadEncryption.EncryptIfInstructed(version, bytes);
+        using var uploadContent = new ByteArrayContent(encrypted?.Blob ?? bytes);
         uploadContent.Headers.ContentType = new MediaTypeHeaderValue(GuessContentType($"x{fileExtension}"));
         using var uploadResponse = await ApiCore.Anonymous.PutAsync(uploadUrl, uploadContent, cancellationToken);
         uploadResponse.EnsureSuccessStatusCode();
 
-        using var finalizeResponse = await _core.Http.PutAsync(ApiCore.RequireRel(version, "self", "The pending version"), null, cancellationToken);
+        using var finalizeResponse = await _core.Http.PutAsJsonAsync(
+            ApiCore.RequireRel(version, "self", "The pending version"),
+            new { wrappedDek = encrypted?.WrappedDek, kekGeneration = encrypted?.KekGeneration }, cancellationToken);
         finalizeResponse.EnsureSuccessStatusCode();
     }
 

@@ -42,6 +42,7 @@ public class DocumentVersionsController : ControllerBase
     private readonly SimplArchiveDbContext _dbContext;
     private readonly Concurrency.DocumentVerbs _documents;
     private readonly IObjectStorageClient _objectStorageClient;
+    private readonly SimplArchive.Infrastructure.Storage.AtRestKeyService _atRestKeys;
     private readonly IDocumentPreviewService _documentPreviewService;
     private readonly IDocumentTextLayoutService _textLayoutService;
     private readonly ICurrentUserAccessor _currentUserAccessor;
@@ -60,6 +61,7 @@ public class DocumentVersionsController : ControllerBase
         IAuditRecorder audit,
         IDocumentVersionComparer comparer,
         Documents.DocumentAccessService access,
+        SimplArchive.Infrastructure.Storage.AtRestKeyService atRestKeys,
         Concurrency.DocumentVerbs documents,
         Documents.DocumentVersionResourceBuilder versionResources)
     {
@@ -67,6 +69,7 @@ public class DocumentVersionsController : ControllerBase
         _documents = documents;
         _versionResources = versionResources;
         _objectStorageClient = objectStorageClient;
+        _atRestKeys = atRestKeys;
         _documentPreviewService = documentPreviewService;
         _textLayoutService = textLayoutService;
         _currentUserAccessor = currentUserAccessor;
@@ -112,6 +115,20 @@ public class DocumentVersionsController : ControllerBase
         public string ObjectKey { get; set; } = string.Empty;
 
         public Uri UploadUrl { get; set; } = null!;
+
+        // Present ONLY on encryption-gated tenants (ADR 0818/B2): what the client must wrap a fresh DEK
+        // against before PUTting ciphertext (nonce‖ct‖tag) to the presigned URL. Absent = upload plaintext,
+        // exactly as before — the field's presence IS the "encrypt" instruction.
+        public UploadEncryption? Encryption { get; set; }
+    }
+
+    public class UploadEncryption
+    {
+        public string KekGeneration { get; set; } = string.Empty;
+
+        public string PublicKeyPem { get; set; } = string.Empty;
+
+        public string OaepHash { get; set; } = string.Empty;
     }
 
     // Optional body. DocumentDate is the issuing date ("yyyy-MM-dd") — omitted, it defaults to the version's
@@ -187,6 +204,15 @@ public class DocumentVersionsController : ControllerBase
         var objectKey = ObjectKeyBuilder.Build(document.TenantId, filedAt, document.StorageFolderId, versionId, fileExtension);
         var uploadUrl = await _objectStorageClient.GetPresignedUploadUrlAsync(objectKey, PresignedUrlExpiry, cancellationToken);
 
+        // Client-side at-rest encryption (ADR 0818/B2): on a gated tenant the response tells the client to
+        // encrypt before the presigned PUT and hands it the current KEK. The gate answers per object key,
+        // so this is exactly the population whose SERVER-side writes the decorator already encrypts.
+        SimplArchive.Infrastructure.Storage.AtRestKeyService.ClientKek? clientKek = null;
+        if (_atRestKeys.Enabled && await _atRestKeys.GatedAsync(objectKey, cancellationToken))
+        {
+            clientKek = await _atRestKeys.ClientKekAsync(cancellationToken);
+        }
+
         var (createdByUserId, createdByServiceAccountId) = GetCallerIdentity();
         var createdAt = filedAt;
 
@@ -223,6 +249,12 @@ public class DocumentVersionsController : ControllerBase
             Id = version.Id,
             ObjectKey = version.ObjectKey,
             UploadUrl = uploadUrl,
+            Encryption = clientKek is null ? null : new UploadEncryption
+            {
+                KekGeneration = clientKek.KekGeneration,
+                PublicKeyPem = clientKek.PublicKeyPem,
+                OaepHash = clientKek.OaepHash,
+            },
             Links = [new Link("self", $"/api/documents/{documentId}/versions/{version.Id}", "GET")],
         });
     }
@@ -605,6 +637,13 @@ public class DocumentVersionsController : ControllerBase
     public class FinalizeVersionRequest
     {
         public string? Comment { get; set; }
+
+        // Client-side encryption's other half (ADR 0818/B2): the DEK the client wrapped against the KEK the
+        // initiate response published. Attached to the object as metadata BEFORE anything reads it, so the
+        // finalizer's hash/size/classification all see plaintext through the decorator.
+        public string? WrappedDek { get; set; }
+
+        public string? KekGeneration { get; set; }
     }
 
     [HttpPut("{versionId:guid}")]
@@ -620,6 +659,33 @@ public class DocumentVersionsController : ControllerBase
         if (!await _access.CanEditContentAsync(documentId, cancellationToken))
         {
             return Forbid();
+        }
+
+        // A client-encrypted upload declares its wrapped DEK here; the attach must precede EVERY read of
+        // the object (quota size, the finalizer's hash) so those reads decrypt through the decorator and
+        // keep describing the PLAINTEXT (ADR 0818). Only on the first finalize — a re-finalize of a
+        // Confirmed version is a no-op and must not touch the object.
+        if (!string.IsNullOrWhiteSpace(request?.WrappedDek) && version.Status == DocumentVersionStatus.Pending)
+        {
+            if (string.IsNullOrWhiteSpace(request.KekGeneration))
+            {
+                throw new Errors.Exceptions.Encryption.EncryptedUploadRejectedException(
+                    "a wrapped DEK needs its KEK generation.");
+            }
+
+            if (!_atRestKeys.Enabled || !await _atRestKeys.GatedAsync(version.ObjectKey, cancellationToken))
+            {
+                // Storing ciphertext with no decorator to ever decrypt it would archive an unreadable blob
+                // that LOOKS filed — refuse loudly instead.
+                throw new Errors.Exceptions.Encryption.EncryptedUploadRejectedException(
+                    "this tenant is not encryption-gated; upload plaintext.");
+            }
+
+            await _objectStorageClient.SetObjectMetadataAsync(version.ObjectKey, new Dictionary<string, string>
+            {
+                [SimplArchive.Infrastructure.Storage.EncryptingObjectStorageClient.WrappedDekKey] = request.WrappedDek,
+                [SimplArchive.Infrastructure.Storage.EncryptingObjectStorageClient.KekGenerationKey] = request.KekGeneration,
+            }, cancellationToken);
         }
 
         // Set the version comment from the finalize body when it wasn't given at create (don't overwrite one).

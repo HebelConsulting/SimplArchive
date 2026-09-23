@@ -35,7 +35,10 @@ public partial class Home
     // FinalizeHref is the created version's own advertised address — where the finalize PUT goes. It rides
     // through JS untouched (dropUpload.js hands the whole target back), so the finalize step follows the rel
     // the create response stated rather than rebuilding the path from two ids (ADR 0543, #416).
-    public record UploadTarget(string DocumentId, string VersionId, string UploadUrl, string? Comment = null, string? FinalizeHref = null);
+    // Encryption: the gated-tenant instruction from the create response (ADR 0818/B2) — dropUpload.js
+    // encrypts before the PUT when it is present, and threads the wrapped DEK back into the finalize.
+    public record UploadTarget(string DocumentId, string VersionId, string UploadUrl, string? Comment = null,
+        string? FinalizeHref = null, Services.UploadEncryptionInfo? Encryption = null);
 
     [JSInvokable]
     public Task OnUploadsStartingAsync(int count)
@@ -132,7 +135,7 @@ public partial class Home
                 // Taken: ask what was meant rather than warning and dropping the file, which made a drag-and-drop
                 // look like it had done nothing (UploadConflictResolver owns the decision — ADR 0558).
                 return await UploadConflicts.ResolveAsync(childrenHref, fileName, stem, extension) is { } r
-                    ? new UploadTarget(r.DocumentId.ToString(), r.VersionId.ToString(), r.UploadUrl, r.Comment, r.FinalizeHref)
+                    ? new UploadTarget(r.DocumentId.ToString(), r.VersionId.ToString(), r.UploadUrl, r.Comment, r.FinalizeHref, r.Encryption)
                     : null;
             }
             if (create.StatusCode == HttpStatusCode.Forbidden)
@@ -151,7 +154,7 @@ public partial class Home
             versionResponse.EnsureSuccessStatusCode();
             var version = await versionResponse.Content.ReadFromJsonAsync<CreateVersionResponse>();
 
-            return new UploadTarget(created.Id.ToString(), version!.Id.ToString(), version.UploadUrl, FinalizeHref: Links.Href(version.Links, "self"));
+            return new UploadTarget(created.Id.ToString(), version!.Id.ToString(), version.UploadUrl, FinalizeHref: Links.Href(version.Links, "self"), Encryption: version.Encryption);
         }
         catch (Exception)
         {
@@ -161,15 +164,18 @@ public partial class Home
     }
 
     [JSInvokable]
-    public async Task FinalizeUploadAsync(string finalizeHref, string fileName, string? comment)
+    public async Task FinalizeUploadAsync(string finalizeHref, string fileName, string? comment,
+        string? wrappedDek = null, string? kekGeneration = null)
     {
         try
         {
             // The filing comment is the version's "why this revision" note (ADR 0528) — set on the version at
             // finalize (the drop-upload created it first), not posted to the chat feed as it used to be. The
             // address is the one the create response advertised, carried through JS on the upload target.
+            // wrappedDek/kekGeneration: the client-side encryption's other half (ADR 0818/B2), present only
+            // when the create response instructed the uploader to encrypt.
             var versionComment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
-            (await Http.PutAsJsonAsync(finalizeHref, new { comment = versionComment })).EnsureSuccessStatusCode();
+            (await Http.PutAsJsonAsync(finalizeHref, new { comment = versionComment, wrappedDek, kekGeneration })).EnsureSuccessStatusCode();
 
             // The server assigns the mask at finalize (eMail for .eml/.msg, else Basic Entry) — see ADR
             // "Email auto-classification"; the client no longer classifies.
@@ -362,7 +368,7 @@ public partial class Home
             }
             versionResponse.EnsureSuccessStatusCode();
             var version = await versionResponse.Content.ReadFromJsonAsync<CreateVersionResponse>();
-            return new UploadTarget(documentId, version!.Id.ToString(), version.UploadUrl, FinalizeHref: Links.Href(version.Links, "self"));
+            return new UploadTarget(documentId, version!.Id.ToString(), version.UploadUrl, FinalizeHref: Links.Href(version.Links, "self"), Encryption: version.Encryption);
         }
         catch (Exception)
         {
@@ -372,14 +378,15 @@ public partial class Home
     }
 
     [JSInvokable]
-    public async Task FinalizeVersionAsync(string finalizeHref, string fileName, string? comment)
+    public async Task FinalizeVersionAsync(string finalizeHref, string fileName, string? comment,
+        string? wrappedDek = null, string? kekGeneration = null)
     {
         try
         {
             // The check-in comment is the new version's "why this revision" note (ADR 0528) — set on the version
-            // at finalize, not posted to the chat feed. Address as in FinalizeUploadAsync above.
+            // at finalize, not posted to the chat feed. Address + encryption fields as in FinalizeUploadAsync.
             var versionComment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
-            (await Http.PutAsJsonAsync(finalizeHref, new { comment = versionComment })).EnsureSuccessStatusCode();
+            (await Http.PutAsJsonAsync(finalizeHref, new { comment = versionComment, wrappedDek, kekGeneration })).EnsureSuccessStatusCode();
 
             Snackbar.Add(string.Format(Strings.Get("StFiledVersion"), fileName), Severity.Success);
         }
