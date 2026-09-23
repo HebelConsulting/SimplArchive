@@ -360,6 +360,58 @@ public class S3ObjectStorageClient : IObjectStorageClient
         await _internalClient.PutObjectAsync(request, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<StoredObjectVersion>> ListObjectVersionsAsync(string prefix, CancellationToken cancellationToken = default)
+    {
+        var bucket = BucketFor(prefix);
+        var versions = new List<StoredObjectVersion>();
+        string? keyMarker = null;
+        string? versionIdMarker = null;
+        do
+        {
+            var response = await _internalClient.ListVersionsAsync(new ListVersionsRequest
+            {
+                BucketName = bucket,
+                Prefix = prefix,
+                KeyMarker = keyMarker,
+                VersionIdMarker = versionIdMarker,
+            }, cancellationToken);
+
+            foreach (var version in response.Versions ?? [])
+            {
+                if (version.IsDeleteMarker == true)
+                {
+                    continue;
+                }
+
+                // A version's user metadata only comes from a HEAD of that VERSION — the listing carries
+                // none. Costly per version, which is why only the retirement check walks versions.
+                var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                try
+                {
+                    var head = await _internalClient.GetObjectMetadataAsync(new GetObjectMetadataRequest
+                    {
+                        BucketName = bucket,
+                        Key = version.Key,
+                        VersionId = version.VersionId,
+                    }, cancellationToken);
+                    metadata = UserMetadata(head.Metadata);
+                }
+                catch (AmazonS3Exception e) when (e.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    continue; // vanished between listing and HEAD — not ours to worry about
+                }
+
+                versions.Add(new StoredObjectVersion(version.Key, version.VersionId, version.IsLatest ?? false, metadata));
+            }
+
+            keyMarker = response.IsTruncated == true ? response.NextKeyMarker : null;
+            versionIdMarker = response.IsTruncated == true ? response.NextVersionIdMarker : null;
+        }
+        while (keyMarker is not null);
+
+        return versions;
+    }
+
     public async Task SetObjectMetadataAsync(string objectKey, IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
     {
         // A self-COPY with REPLACE is S3's way to change metadata in place; the Content-Type must be

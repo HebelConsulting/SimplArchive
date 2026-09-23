@@ -86,7 +86,11 @@ public class AtRestEncryptionTests
         var storedText = Encoding.ASCII.GetString(buffer.ToArray());
         Assert.DoesNotContain(Marker, storedText, StringComparison.Ordinal);
         Assert.NotNull(raw.Metadata["x-amz-meta-sa-wrapped-dek"]);
-        Assert.Equal("kek-v1", raw.Metadata["x-amz-meta-sa-kek-generation"]);
+        // The generation is whatever the service currently publishes, not a literal: KekRotationTests
+        // rotates the shared stub, and rotation is one-way. Pinning "kek-v1" here made a sibling test's
+        // legitimate act look like this one's failure — the mutating-shared-state rule, from the reading
+        // side. What matters is that a generation was recorded at all.
+        Assert.False(string.IsNullOrEmpty(raw.Metadata["x-amz-meta-sa-kek-generation"]));
 
         // The WebDAV door serves plaintext — the decorator decrypts on the way out...
         var davPassword = (await TestJson.Post(api, "/api/me/webdav-password", new { })).GetProperty("password").GetString()!;
@@ -155,7 +159,8 @@ public class AtRestEncryptionTests
 
         // The instruction is present, and names the stub's KEK.
         var encryption = version.GetProperty("encryption");
-        Assert.Equal("kek-v1", encryption.GetProperty("kekGeneration").GetString());
+        var kekGeneration = encryption.GetProperty("kekGeneration").GetString()!;
+        Assert.False(string.IsNullOrEmpty(kekGeneration));
         Assert.Equal("SHA256", encryption.GetProperty("oaepHash").GetString());
 
         // Encrypt like a client: fresh DEK, nonce‖ct‖tag, DEK wrapped against the published KEK.
@@ -179,7 +184,7 @@ public class AtRestEncryptionTests
 
         var finalizeHref = version.GetProperty("links").EnumerateArray()
             .First(l => l.GetProperty("rel").GetString() == "self").GetProperty("href").GetString()!;
-        await TestJson.Put(api, finalizeHref, new { wrappedDek, kekGeneration = "kek-v1" });
+        await TestJson.Put(api, finalizeHref, new { wrappedDek, kekGeneration });
 
         // The document serves plaintext through the swapped download door...
         var finalized = await TestJson.Get(api, finalizeHref);

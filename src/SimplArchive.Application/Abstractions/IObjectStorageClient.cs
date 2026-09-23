@@ -17,6 +17,12 @@ public sealed record StoredObject(Stream Content, long Length, IReadOnlyDictiona
 /// (ADR 0818); the content type rides along so a re-encrypting copy can restate it.</summary>
 public sealed record StoredObjectInfo(long Size, string? ContentType, IReadOnlyDictionary<string, string> Metadata);
 
+/// <summary>One VERSION of an object with its own user metadata (ADR 0014). A historical version carries
+/// the wrapped DEK it was written with, which is why a KEK retirement check must look past the current
+/// version: an immutable WORM version can never be re-wrapped, so its generation must outlive it.</summary>
+public sealed record StoredObjectVersion(
+    string Key, string? VersionId, bool IsLatest, IReadOnlyDictionary<string, string> Metadata);
+
 // The S3 Object Lock state of an object (ADR "WORM / immutable document versions"): a retain-until date (null
 // = no retention lock) and whether an object legal hold is on. An object is immutable while RetainUntil is in
 // the future OR LegalHold is on.
@@ -113,6 +119,23 @@ public interface IObjectStorageClient
     // Lists every object under a key prefix — the S3-backed intray (`{tenantId}/users/{userId}/inbox/`) enumerates
     // itself this way. See ADR "S3-backed inbox".
     Task<IReadOnlyList<StorageObject>> ListObjectsAsync(string prefix, CancellationToken cancellationToken = default);
+
+    // Every VERSION under a prefix, current and historical, with each version's user metadata — what a KEK
+    // retirement check must consult (ADR 0014). ListObjectsAsync answers only about CURRENT versions, and a
+    // WORM-locked historical version keeps its own wrapped DEK forever: retiring a generation those
+    // versions still reference would destroy exactly the records Object Lock exists to guarantee.
+    // Default: the current versions, so a fake without version support still gives a truthful subset.
+    async Task<IReadOnlyList<StoredObjectVersion>> ListObjectVersionsAsync(string prefix, CancellationToken cancellationToken = default)
+    {
+        var current = new List<StoredObjectVersion>();
+        foreach (var stored in await ListObjectsAsync(prefix, cancellationToken))
+        {
+            var info = await GetObjectInfoAsync(stored.Key, cancellationToken);
+            current.Add(new StoredObjectVersion(stored.Key, null, true, info.Metadata));
+        }
+
+        return current;
+    }
 
     // Server-side copy within the bucket (no bytes leave storage) — filing an intray item moves its object to
     // a document key with a copy + delete. See ADR "S3-backed inbox".

@@ -230,6 +230,12 @@ public static class AuditActions
     // this in transit" needs. Detail says which act: Uploaded / Generated / Deleted.
     public const string SmimeCertificateChanged = "Access.SmimeCertificateChanged";
 
+    // At-rest key lifecycle (ADR 0014). Rotation is benign; RETIREMENT destroys a keypair and is the one
+    // act that can make archived documents permanently unreadable — an auditor must be able to place it
+    // in time against any later "we cannot open this" report.
+    public const string EncryptionKeyRotated = "Encryption.KeyRotated";
+    public const string EncryptionKeyRetired = "Encryption.KeyRetired";
+
     public const string LoggedIn = "Auth.LoggedIn";
     // Impersonation token issued (ADR "User impersonation") — actor = the impersonating admin, target = the user.
     public const string ImpersonationStarted = "Auth.ImpersonationStarted";

@@ -82,6 +82,55 @@ public sealed class AtRestKeyService(
         return (dek, Convert.ToBase64String(wrapped), kek.Generation);
     }
 
+    /// <summary>The rotation surface (ADR 0014): the generations the token holds and which is current.</summary>
+    public async Task<(string Current, IReadOnlyList<string> All)> GenerationsAsync(CancellationToken cancellationToken)
+    {
+        var client = httpClientFactory.CreateClient(HttpClientName);
+        var json = await client.GetFromJsonAsync<JsonElement>(
+            $"{ServiceUrl}/api/kek/generations", cancellationToken);
+        return (json.GetProperty("current").GetString()!,
+            [.. json.GetProperty("generations").EnumerateArray().Select(g => g.GetString()!)]);
+    }
+
+    /// <summary>Mints the next generation and makes it current; the sweep then re-wraps into it.</summary>
+    public async Task<string> RotateAsync(CancellationToken cancellationToken)
+    {
+        var client = httpClientFactory.CreateClient(HttpClientName);
+        using var response = await client.PostAsync($"{ServiceUrl}/api/kek/rotate", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+
+        // The cached KEK is now stale by construction — drop it so the very next write wraps against the
+        // new generation rather than the one we just rotated away from.
+        _kek = null;
+        return json.GetProperty("generation").GetString()!;
+    }
+
+    /// <summary>
+    /// Re-wraps one DEK into the current generation (ADR 0014). The DEK is unchanged, so the caller
+    /// rewrites METADATA only — no blob is ever read or rewritten by a rotation.
+    /// </summary>
+    public async Task<(string WrappedDek, string Generation)> RewrapDekAsync(
+        string wrappedDekBase64, string fromGeneration, CancellationToken cancellationToken)
+    {
+        var client = httpClientFactory.CreateClient(HttpClientName);
+        using var response = await client.PostAsJsonAsync($"{ServiceUrl}/api/rewrapped-dek",
+            new { wrappedDek = wrappedDekBase64, fromGeneration }, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return (json.GetProperty("wrappedDek").GetString()!, json.GetProperty("kekGeneration").GetString()!);
+    }
+
+    /// <summary>Retires a generation — IRREVERSIBLE. Only call once the sweep reports zero references.</summary>
+    public async Task RetireAsync(string generation, CancellationToken cancellationToken)
+    {
+        var client = httpClientFactory.CreateClient(HttpClientName);
+        using var response = await client.DeleteAsync($"{ServiceUrl}/api/kek/{generation}", cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    private string ServiceUrl => configuration["Encryption:ServiceUrl"]!.TrimEnd('/');
+
     /// <summary>Unwraps through the HSM oracle, cached — one HTTP+HSM round trip per cold object.</summary>
     public async Task<byte[]> UnwrapDekAsync(string wrappedDekBase64, string generation, CancellationToken cancellationToken)
     {
@@ -92,7 +141,7 @@ public sealed class AtRestKeyService(
 
         var client = httpClientFactory.CreateClient(HttpClientName);
         using var response = await client.PostAsJsonAsync(
-            $"{configuration["Encryption:ServiceUrl"]!.TrimEnd('/')}/api/unwrapped-dek",
+            $"{ServiceUrl}/api/unwrapped-dek",
             new { wrappedDek = wrappedDekBase64, kekGeneration = generation }, cancellationToken);
         response.EnsureSuccessStatusCode();
         var dek = await response.Content.ReadAsByteArrayAsync(cancellationToken);
@@ -123,7 +172,7 @@ public sealed class AtRestKeyService(
 
             var client = httpClientFactory.CreateClient(HttpClientName);
             var json = await client.GetFromJsonAsync<JsonElement>(
-                $"{configuration["Encryption:ServiceUrl"]!.TrimEnd('/')}/api/kek/current", cancellationToken);
+                $"{ServiceUrl}/api/kek/current", cancellationToken);
             var publicKey = RSA.Create();
             publicKey.ImportFromPem(json.GetProperty("publicKeyPem").GetString()!);
             // The service publishes the OAEP hash BOTH sides must use (SimplArchiveEncryption ADR 0011):

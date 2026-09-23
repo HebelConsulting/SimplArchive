@@ -327,6 +327,8 @@ public static class DependencyInjection
         // honestly either way); only the DECORATOR below is conditional.
         services.AddHttpClient(AtRestKeyService.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(10));
         services.AddSingleton<AtRestKeyService>();
+        // Singleton: it owns the one-sweep-at-a-time gate and the progress counters a status read reports.
+        services.AddSingleton<KekRotationSweep>();
         if (!string.IsNullOrWhiteSpace(configuration["Encryption:ServiceUrl"]))
         {
             // At-rest encryption (ADR 0818): the ONE seam every server-side storage call crosses gets the

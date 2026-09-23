@@ -173,6 +173,10 @@ public partial class ConcurrencyContractRatchetTests
             "Reads only: projects the booker's DisplayName — the user half of the line above.",
         ["CheckoutsController.cs:User"] =
             "Reads only: projects the holder's DisplayName onto a check-out row.",
+        ["EncryptionKeysController.cs:Tenant"] =
+            "Reads only: enumerates tenant ids to find the encryption-gated ones, so a KEK rotation or "
+            + "retirement is audited in each of their logs (ADR 0821). It writes no tenant row — the only "
+            + "state it changes lives on the HSM token and in object metadata.",
         ["SmimeCertificateController.cs:Tenant"] =
             "Reads only: projects the tenant's Name to ask the per-tenant encryption gate (ADR 0813) "
             + "whether self-service applies. Every write it makes is a User column, through UserVerbs.",

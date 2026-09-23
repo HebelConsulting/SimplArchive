@@ -190,6 +190,10 @@ public sealed class EncryptingObjectStorageClient(
         await inner.CopyObjectAsync(sourceKey, destinationKey, cancellationToken);
     }
 
+    public Task<IReadOnlyList<StoredObjectVersion>> ListObjectVersionsAsync(string prefix, CancellationToken cancellationToken = default) =>
+        // Metadata, not content — nothing to decrypt, and the wrapped DEK is exactly what the caller wants.
+        inner.ListObjectVersionsAsync(prefix, cancellationToken);
+
     public Task SetObjectMetadataAsync(string objectKey, IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default) =>
         // The attach path for client-encrypted uploads — the payload IS encryption metadata, so it must
         // reach the store verbatim, never pass through the encrypting write.

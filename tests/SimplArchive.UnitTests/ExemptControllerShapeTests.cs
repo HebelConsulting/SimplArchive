@@ -54,6 +54,7 @@ public partial class ExemptControllerShapeTests
         ["DocumentReferencesController.cs"] = 2,
         ["DocumentRemindersController.cs"] = 2,
         ["DocumentSearchableController.cs"] = 1,
+        ["EncryptionKeysController.cs"] = 3,
         ["SmimeCertificateController.cs"] = 3,
         ["DocumentSubscriptionsController.cs"] = 2,
         ["DocumentTransferController.cs"] = 1,

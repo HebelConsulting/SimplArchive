@@ -177,20 +177,77 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         // kek/current at the CryptoDemo SEED, so a 404 here would fail every E2E boot; and the unwrap must
         // actually invert the wrap or every gated read dies. The crypto is trivial on purpose (RSA-OAEP +
         // the shared blob format); what this proves is the CORE's seam, not the service's HSM.
-        var kekKey = System.Security.Cryptography.RSA.Create(2048);
+        // Generations are REAL keypairs here, one per generation, because the rotation tests assert
+        // cryptographic facts (a re-wrap must yield the same DEK under a different wrapping) — a stub that
+        // faked the wrapping would green exactly the mistakes those tests exist to catch.
+        var keks = new System.Collections.Concurrent.ConcurrentDictionary<string, System.Security.Cryptography.RSA>();
+        keks["kek-v1"] = System.Security.Cryptography.RSA.Create(2048);
+        var currentGeneration = "kek-v1";
+
         app.MapGet("/api/kek/current", () => Results.Ok(new
         {
-            generation = "kek-v1",
-            publicKeyPem = kekKey.ExportSubjectPublicKeyInfoPem(),
+            generation = currentGeneration,
+            publicKeyPem = keks[currentGeneration].ExportSubjectPublicKeyInfoPem(),
             oaepHash = "SHA256",
         }));
+        app.MapGet("/api/kek/generations", () => Results.Ok(new
+        {
+            current = currentGeneration,
+            generations = keks.Keys.OrderBy(k => int.Parse(k["kek-v".Length..])).ToArray(),
+        }));
+        app.MapPost("/api/kek/rotate", () =>
+        {
+            var next = $"kek-v{keks.Keys.Max(k => int.Parse(k["kek-v".Length..])) + 1}";
+            keks[next] = System.Security.Cryptography.RSA.Create(2048);
+            currentGeneration = next;
+            return Results.Ok(new
+            {
+                generation = next,
+                publicKeyPem = keks[next].ExportSubjectPublicKeyInfoPem(),
+                oaepHash = "SHA256",
+            });
+        });
         app.MapPost("/api/unwrapped-dek", async (HttpRequest request) =>
         {
             var body = await System.Text.Json.JsonSerializer.DeserializeAsync<System.Text.Json.JsonElement>(request.Body);
+            var generation = body.GetProperty("kekGeneration").GetString()!;
+            if (!keks.TryGetValue(generation, out var kek))
+            {
+                return Results.Problem(statusCode: 400, title: "Unknown generation.");
+            }
+
             var wrapped = Convert.FromBase64String(body.GetProperty("wrappedDek").GetString()!);
             return Results.Bytes(
-                kekKey.Decrypt(wrapped, System.Security.Cryptography.RSAEncryptionPadding.OaepSHA256),
+                kek.Decrypt(wrapped, System.Security.Cryptography.RSAEncryptionPadding.OaepSHA256),
                 "application/octet-stream");
+        });
+        app.MapPost("/api/rewrapped-dek", async (HttpRequest request) =>
+        {
+            var body = await System.Text.Json.JsonSerializer.DeserializeAsync<System.Text.Json.JsonElement>(request.Body);
+            var from = body.GetProperty("fromGeneration").GetString()!;
+            if (!keks.TryGetValue(from, out var old))
+            {
+                return Results.Problem(statusCode: 400, title: "Unknown generation.");
+            }
+
+            var dek = old.Decrypt(Convert.FromBase64String(body.GetProperty("wrappedDek").GetString()!),
+                System.Security.Cryptography.RSAEncryptionPadding.OaepSHA256);
+            return Results.Ok(new
+            {
+                wrappedDek = Convert.ToBase64String(keks[currentGeneration].Encrypt(dek,
+                    System.Security.Cryptography.RSAEncryptionPadding.OaepSHA256)),
+                kekGeneration = currentGeneration,
+            });
+        });
+        app.MapDelete("/api/kek/{generation}", (string generation) =>
+        {
+            if (generation == currentGeneration)
+            {
+                return Results.Problem(statusCode: 409, title: "Cannot retire the current generation.");
+            }
+
+            keks.TryRemove(generation, out _);
+            return Results.NoContent();
         });
 
         await app.StartAsync();
