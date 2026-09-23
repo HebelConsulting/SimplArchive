@@ -20,6 +20,7 @@ public class LmtpDelivery
     private readonly ICurrentTenantAccessor _tenantAccessor;
     private readonly ICurrentUserAccessor _userAccessor;
     private readonly SimplArchive.Infrastructure.Audit.CurrentSystemActorAccessor _systemActor;
+    private readonly Encryption.TenantIngestKeyService _ingestKeys;
     private readonly IObjectStorageClient _storage;
     private readonly DocumentFinalizer _finalizer;
     private readonly PersonalMailboxProvisioner _mailbox;
@@ -30,6 +31,7 @@ public class LmtpDelivery
         ICurrentTenantAccessor tenantAccessor,
         ICurrentUserAccessor userAccessor,
         SimplArchive.Infrastructure.Audit.CurrentSystemActorAccessor systemActor,
+        Encryption.TenantIngestKeyService ingestKeys,
         IObjectStorageClient storage,
         DocumentFinalizer finalizer,
         PersonalMailboxProvisioner mailbox,
@@ -39,6 +41,7 @@ public class LmtpDelivery
         _tenantAccessor = tenantAccessor;
         _userAccessor = userAccessor;
         _systemActor = systemActor;
+        _ingestKeys = ingestKeys;
         _storage = storage;
         _finalizer = finalizer;
         _mailbox = mailbox;
@@ -189,6 +192,15 @@ public class LmtpDelivery
             return "550 no such recipient here";
         }
 
+        // Mail-in ingest decryption (#1335, ADR 0820): a message the sender enveloped to the tenant's
+        // ingest certificate is decrypted HERE, at the boundary, so what files is a first-class plaintext
+        // document (indexable, previewable) protected by at-rest encryption from there on — the archive
+        // deliberately decrypts at ingest; senders needing the archive to never see plaintext are outside
+        // this feature's claim. All resolved targets of one recipient share a tenant, so one decrypt
+        // serves the fan-out. Undecryptable ciphertext files AS-IS with a Warning naming the situation —
+        // refusing would bounce mail a human meant to archive.
+        payload = await TryDecryptIngestAsync(targets[0].TenantId, payload, cancellationToken);
+
         // One RCPT, one copy into each resolved mailbox, ONE reply (#703 PR 3). Fan-out only exists where an
         // admin explicitly confirmed a duplicate claim, so several targets is a decision being honoured, not
         // an accident being amplified. The per-recipient reply discipline concerns multiple RCPTs — several
@@ -297,6 +309,54 @@ public class LmtpDelivery
 
         // Only now. Every copy above is durable.
         return "250 delivered";
+    }
+
+    /// <summary>Decrypts an S/MIME-enveloped inbound message with the tenant's ingest key (#1335).
+    /// Returns the payload untouched when it is not enveloped, the tenant has no ingest key, or the
+    /// decrypt fails — each miss logged at its honest level, never a refusal.</summary>
+    private async Task<byte[]> TryDecryptIngestAsync(Guid tenantId, byte[] payload, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var message = MimeKit.MimeMessage.Load(new MemoryStream(payload));
+            if (message.Body is not MimeKit.Cryptography.ApplicationPkcs7Mime { SecureMimeType: MimeKit.Cryptography.SecureMimeType.EnvelopedData } enveloped)
+            {
+                return payload;
+            }
+
+            using var identity = await _ingestKeys.ForDecryptAsync(tenantId, cancellationToken);
+            if (identity is null)
+            {
+                _logger.LogWarning(
+                    "LMTP: an enveloped message arrived for tenant {TenantId}, which has no ingest key — "
+                    + "filing the ciphertext as-is. Trace carries the exchange.", tenantId);
+                return payload;
+            }
+
+            using var context = new MimeKit.Cryptography.TemporarySecureMimeContext();
+            using (var pkcs12 = new MemoryStream(identity.Export(
+                System.Security.Cryptography.X509Certificates.X509ContentType.Pkcs12, string.Empty)))
+            {
+                await context.ImportAsync(pkcs12, string.Empty, cancellationToken);
+            }
+
+            message.Body = enveloped.Decrypt(context, cancellationToken);
+            using var rebuilt = new MemoryStream();
+            await message.WriteToAsync(rebuilt, cancellationToken);
+            _logger.LogDebug("LMTP: decrypted an enveloped inbound message for tenant {TenantId}.", tenantId);
+            return rebuilt.ToArray();
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // Enveloped to a key we do not hold (an old rotation, someone else's certificate), not
+            // parseable, or the crypto stack refusing in its own vocabulary (MimeKit surfaces
+            // BouncyCastle CMS exceptions here, not the BCL's) — the boundary's contract is the same for
+            // all of them: file what arrived; a reader sees smime.p7m and knows, which beats a bounce.
+            _logger.LogWarning(exception,
+                "LMTP: an enveloped message for tenant {TenantId} did not decrypt with the ingest key — "
+                + "filing the ciphertext as-is.", tenantId);
+            return payload;
+        }
     }
 
     /// <summary>The message's Subject, or a stand-in — the document's name, as an appended message gets.</summary>

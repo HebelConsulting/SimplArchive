@@ -100,6 +100,8 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
     // lookup here needs IgnoreQueryFilters(["TenantFilter"]).
     public DbSet<TenantMailDomain> TenantMailDomains => Set<TenantMailDomain>();
 
+    public DbSet<TenantIngestKey> TenantIngestKeys => Set<TenantIngestKey>();
+
     public DbSet<User> Users => Set<User>();
 
     public DbSet<UserProfilePhoto> UserProfilePhotos => Set<UserProfilePhoto>();

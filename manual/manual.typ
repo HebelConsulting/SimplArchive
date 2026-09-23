@@ -412,7 +412,10 @@ connection on, every message arrives encrypted to that certificate; your mail pr
 automatically once the identity is installed, and devices without it see only an encrypted attachment.
 While a certificate is set, upload and generate stay greyed out — *Delete certificate* switches your mail
 back to plain, and the two options come back. On installations where certificates are managed centrally,
-the dialog says so and there is nothing to set up.
+the dialog says so and there is nothing to set up. The profile also installs the *archive's own mail-in
+certificate*: composing an encrypted message *to* the archive's ingest address (`archive@` your
+installation's mail domain) then works out of the box — the archive decrypts it on arrival and files a
+normal, searchable document.
 
 *Notes, too.*#idx("Notes") Point a notes app that syncs over IMAP at the same account and it finds the
 *Notes* mailbox — your personal *Notes* folder in disguise. Every note becomes a proper archive document with

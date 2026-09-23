@@ -390,6 +390,111 @@ public class LmtpClaimDeliveryTests
         return subject;
     }
 
+    /// <summary>
+    /// Mail-in ingest encryption (#1335, ADR 0820), the full circle: generating an identity mints the
+    /// tenant's ingest key and rides its certificate in the profile as a second payload; a message
+    /// ENVELOPED to that certificate is decrypted at the LMTP boundary and files as first-class
+    /// plaintext; one enveloped to a key the archive does not hold files as-is (ciphertext), never a
+    /// bounce.
+    /// </summary>
+    [Fact]
+    public async Task An_enveloped_delivery_to_the_ingest_certificate_files_as_plaintext()
+    {
+        var (tenantId, domain, _, userAddress) = await TenantWithUserAsync();
+        using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(userAddress, "lmtp-1234"));
+
+        // Generating an identity mints the ingest key and embeds its certificate as a SECOND payload.
+        var generated = await TestJson.Post(api, "/api/me/smime-certificate", new { p12Password = "ingest-circle" });
+        var mobileConfig = Encoding.UTF8.GetString(Convert.FromBase64String(generated.GetProperty("mobileConfig").GetString()!));
+        Assert.Contains("SimplArchive mail-in certificate", mobileConfig, StringComparison.Ordinal);
+
+        string ingestPem;
+        string ingestAddress;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+            var key = await db.TenantIngestKeys.IgnoreQueryFilters().SingleAsync(k => k.TenantId == tenantId);
+            ingestPem = key.CertificatePem;
+            ingestAddress = key.IngestAddress;
+            Assert.Equal($"archive@{domain}", ingestAddress);
+        }
+
+        // Envelope a message TO the ingest certificate, exactly as a sender's client would.
+        var marker = $"INGEST-PLAINTEXT-{Guid.NewGuid():N}";
+        var subject = $"Ingest {Guid.NewGuid():N}"[..16];
+        var enveloped = EnvelopeTo(ingestPem, userAddress, subject, $"{marker} body");
+        await DeliverRawAsync(userAddress, enveloped);
+
+        // ...and a message enveloped to a certificate the archive does NOT hold — filed as-is, no bounce.
+        using var strangerKey = System.Security.Cryptography.RSA.Create(2048);
+        var strangerRequest = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+            "CN=stranger@e2e.local", strangerKey, System.Security.Cryptography.HashAlgorithmName.SHA256,
+            System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+        using var stranger = strangerRequest.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(1));
+        var strangerSubject = $"Stranger {Guid.NewGuid():N}"[..16];
+        await DeliverRawAsync(userAddress,
+            EnvelopeTo(stranger.ExportCertificatePem(), userAddress, strangerSubject, "unreadable"));
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+            using var s3 = _factory.CreateRawStorageClient();
+
+            // The ingest-enveloped one decrypted at the boundary: the STORED bytes are plaintext MIME.
+            var filed = await db.Documents.IgnoreQueryFilters().SingleAsync(d => d.Name == subject);
+            var version = await db.DocumentVersions.IgnoreQueryFilters().SingleAsync(v => v.DocumentId == filed.Id);
+            var stored = await ReadRawAsync(s3, tenantId, version.ObjectKey);
+            Assert.Contains(marker, stored, StringComparison.Ordinal);
+            Assert.DoesNotContain("pkcs7-mime", stored, StringComparison.Ordinal);
+
+            // The stranger-enveloped one filed AS-IS: ciphertext, honestly visible as such.
+            var strangerDoc = await db.Documents.IgnoreQueryFilters().SingleAsync(d => d.Name == strangerSubject);
+            var strangerVersion = await db.DocumentVersions.IgnoreQueryFilters().SingleAsync(v => v.DocumentId == strangerDoc.Id);
+            var strangerStored = await ReadRawAsync(s3, tenantId, strangerVersion.ObjectKey);
+            Assert.Contains("pkcs7-mime", strangerStored, StringComparison.Ordinal);
+            Assert.DoesNotContain("unreadable", strangerStored, StringComparison.Ordinal);
+        }
+    }
+
+    private static byte[] EnvelopeTo(string certificatePem, string to, string subject, string body)
+    {
+        var message = new MimeKit.MimeMessage();
+        message.From.Add(MimeKit.MailboxAddress.Parse("sender@example.test"));
+        message.To.Add(MimeKit.MailboxAddress.Parse(to));
+        message.Subject = subject;
+        message.Body = new MimeKit.TextPart("plain") { Text = body };
+        using var certificate = System.Security.Cryptography.X509Certificates.X509Certificate2.CreateFromPem(certificatePem);
+        using var context = new MimeKit.Cryptography.TemporarySecureMimeContext();
+        message.Body = MimeKit.Cryptography.ApplicationPkcs7Mime.Encrypt(context,
+            new MimeKit.Cryptography.CmsRecipientCollection { new MimeKit.Cryptography.CmsRecipient(certificate) },
+            message.Body);
+        using var raw = new MemoryStream();
+        message.WriteTo(raw);
+        return raw.ToArray();
+    }
+
+    private async Task DeliverRawAsync(string address, byte[] rfc822)
+    {
+        using var lmtp = new Lmtp(Port);
+        await lmtp.ReadAsync();
+        await lmtp.ExchangeAsync("LHLO mta.test");
+        await lmtp.ExchangeAsync("MAIL FROM:<sender@example.test>");
+        Assert.StartsWith("250", await lmtp.ExchangeAsync($"RCPT TO:<{address}>"));
+        await lmtp.ExchangeAsync("DATA");
+        // Dot-stuffing is the wire's job; the fixture bytes carry no bare leading dots.
+        await lmtp.SendAsync(Encoding.ASCII.GetString(rfc822).TrimEnd('\r', '\n'));
+        Assert.StartsWith("250", await lmtp.ExchangeAsync("."));
+        await lmtp.ExchangeAsync("QUIT");
+    }
+
+    private static async Task<string> ReadRawAsync(Amazon.S3.AmazonS3Client s3, Guid tenantId, string objectKey)
+    {
+        using var response = await s3.GetObjectAsync($"simplarchive-{tenantId:D}", objectKey);
+        using var buffer = new MemoryStream();
+        await response.ResponseStream.CopyToAsync(buffer);
+        return Encoding.ASCII.GetString(buffer.ToArray());
+    }
+
     /// <summary>ADR 0679's delete/restore gate, on the mailbox kind that made its success arm reachable.</summary>
     [Fact]
     public async Task Deleting_and_restoring_a_department_mailbox_needs_the_routing_right_and_works_with_it()

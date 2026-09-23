@@ -205,6 +205,7 @@ public class TenantMailDomainsTests
             scope.ServiceProvider.GetRequiredService<SimplArchive.Application.Abstractions.ICurrentTenantAccessor>(),
             scope.ServiceProvider.GetRequiredService<SimplArchive.Application.Abstractions.ICurrentUserAccessor>(),
             scope.ServiceProvider.GetRequiredService<SimplArchive.Infrastructure.Audit.CurrentSystemActorAccessor>(),
+            scope.ServiceProvider.GetRequiredService<SimplArchive.Api.Encryption.TenantIngestKeyService>(),
             scope.ServiceProvider.GetRequiredService<SimplArchive.Application.Abstractions.IObjectStorageClient>(),
             scope.ServiceProvider.GetRequiredService<SimplArchive.Api.Documents.DocumentFinalizer>(),
             scope.ServiceProvider.GetRequiredService<SimplArchive.Api.Documents.PersonalMailboxProvisioner>(),

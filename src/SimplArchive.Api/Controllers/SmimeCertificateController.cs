@@ -35,6 +35,7 @@ public class SmimeCertificateController : ControllerBase
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly MessageEnvelopeClient _envelopeClient;
+    private readonly Encryption.TenantIngestKeyService _ingestKeys;
     private readonly IAuditRecorder _audit;
 
     public SmimeCertificateController(
@@ -43,6 +44,7 @@ public class SmimeCertificateController : ControllerBase
         ICurrentUserAccessor currentUserAccessor,
         ICurrentTenantAccessor currentTenantAccessor,
         MessageEnvelopeClient envelopeClient,
+        Encryption.TenantIngestKeyService ingestKeys,
         IAuditRecorder audit)
     {
         _dbContext = dbContext;
@@ -50,6 +52,7 @@ public class SmimeCertificateController : ControllerBase
         _currentUserAccessor = currentUserAccessor;
         _currentTenantAccessor = currentTenantAccessor;
         _envelopeClient = envelopeClient;
+        _ingestKeys = ingestKeys;
         _audit = audit;
     }
 
@@ -134,7 +137,10 @@ public class SmimeCertificateController : ControllerBase
             throw new SmimeCertificateInvalidException("the PKCS#12 password must not be empty.");
         }
 
-        var identity = SmimeIdentity.Generate(user.Email, request.P12Password, GeneratedLifetime);
+        // The tenant's mail-ingest certificate rides the profile as a second payload (#1335) — minted
+        // lazily here if this is the first need; null (no verified mail domain) simply omits the payload.
+        var ingest = await _ingestKeys.EnsureAsync(user.TenantId, cancellationToken);
+        var identity = SmimeIdentity.Generate(user.Email, request.P12Password, GeneratedLifetime, ingest?.CertificatePem);
         user.SmimeCertificatePem = identity.CertificatePem;
         await _users.MutateAsync(Request, user, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
 

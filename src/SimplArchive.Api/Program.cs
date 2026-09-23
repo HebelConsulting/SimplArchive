@@ -192,6 +192,9 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<SimplArchive.Api.I
 // must not open a listener that accepts mail without authentication.
 builder.Services.Configure<SimplArchive.Api.Lmtp.LmtpOptions>(builder.Configuration.GetSection("Lmtp"));
 builder.Services.AddScoped<SimplArchive.Api.Lmtp.LmtpDelivery>();
+// The tenant mail-ingest keypair (#1335, ADR 0820) — minted lazily, decrypts enveloped inbound mail at
+// the LMTP boundary, rides generated profiles as an extra payload.
+builder.Services.AddScoped<SimplArchive.Api.Encryption.TenantIngestKeyService>();
 
 // The lossless vCard merge behind the contact editor (#564, ported from SimplCalCon's ADR 0082).
 builder.Services.AddSingleton<SimplArchive.Api.Documents.IContactCardComposer, SimplArchive.Api.Documents.ContactCardComposer>();
