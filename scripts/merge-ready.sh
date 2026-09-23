@@ -176,10 +176,12 @@ if [ "$e2e_pass" -lt "$expected" ] && [ "$e2e_fail" -eq 0 ] && [ "$e2e_pending" 
     Only $e2e_pass of $expected E2E legs passed — $e2e_skip skipped.
     A skipped check is not a passing check, however green the PR page looks.
 
-    To verify it, BOTH of these, in this order:
-      1. gh pr edit $pr --add-label e2e
-      2. push a commit — 'labeled' only affects runs triggered afterwards,
-         so labelling an already-finished run does nothing to that run.
+    To verify it, label the PR — that alone fires a run that carries the label,
+    because 'labeled' is among ci.yml's pull_request types:
+      gh pr edit $pr --add-label e2e
+
+    No push is needed. What a label never does is reach back into a run that has
+    already finished, so re-check with this script once the new run completes.
 EOF
     ready=1
 fi
