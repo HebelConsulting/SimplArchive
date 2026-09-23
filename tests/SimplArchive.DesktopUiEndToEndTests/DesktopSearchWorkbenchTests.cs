@@ -30,9 +30,19 @@ public class DesktopSearchWorkbenchTests
         var repo = (await api.Documents.GetRepositoriesAsync()).First(r => r.Name == $"{word}-repo");
         var docId = await UploadAsync(api, repo, $"doc-{suffix}", word);
 
-        await PollAsync(async () => (await api.Search.SearchAsync(word)).Any(r => r.Id == docId), "the document is indexed");
-
-        var results = await api.Search.SearchAsync(word);
+        // Wait for BOTH rows, and assert against the response that satisfied the wait. Polling only for the
+        // DOCUMENT and then asserting on the FOLDER is a race: the two are indexed by separate operations,
+        // so on a fast machine they land together and on a loaded CI runner they do not — which is exactly
+        // how this passed locally for months and went red on a 2-core runner (2026-09-23), with the folder
+        // simply absent from `results` at line "Single(r => r.Id == repo.Id)".
+        List<SearchClient.SearchResult> results = [];
+        await PollAsync(
+            async () =>
+            {
+                results = await api.Search.SearchAsync(word);
+                return results.Any(r => r.Id == docId) && results.Any(r => r.Id == repo.Id);
+            },
+            "the document AND the folder are both indexed");
 
         var doc = results.Single(r => r.Id == docId);
         Assert.False(doc.IsFolder);
