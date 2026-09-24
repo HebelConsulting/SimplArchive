@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Encryption;
+using SimplArchive.Infrastructure.Encryption;
 using SimplArchive.Api.Errors.Exceptions.Encryption;
 using SimplArchive.Api.Hypermedia;
 using SimplArchive.Application.Abstractions;

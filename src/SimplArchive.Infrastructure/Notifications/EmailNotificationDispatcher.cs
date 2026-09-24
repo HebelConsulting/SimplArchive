@@ -26,11 +26,14 @@ public sealed class EmailNotificationDispatcher : IEmailNotificationDispatcher
 
     private readonly SimplArchiveDbContext _dbContext;
     private readonly IEmailSender _emailSender;
+    private readonly Encryption.MessageEnvelopeClient _envelopeClient;
     private readonly ILogger<EmailNotificationDispatcher> _logger;
     private readonly IAuditRecorder _audit;
 
-    public EmailNotificationDispatcher(SimplArchiveDbContext dbContext, IEmailSender emailSender, ILogger<EmailNotificationDispatcher> logger, IAuditRecorder audit)
+    public EmailNotificationDispatcher(SimplArchiveDbContext dbContext, IEmailSender emailSender,
+        Encryption.MessageEnvelopeClient envelopeClient, ILogger<EmailNotificationDispatcher> logger, IAuditRecorder audit)
     {
+        _envelopeClient = envelopeClient;
         _dbContext = dbContext;
         _emailSender = emailSender;
         _logger = logger;
@@ -55,8 +58,9 @@ public sealed class EmailNotificationDispatcher : IEmailNotificationDispatcher
             from n in _dbContext.Notifications.IgnoreQueryFilters(TenantFilterOnly)
             where n.EmailedAt == null && n.EmailFailedAt == null
             join u in _dbContext.Users.IgnoreQueryFilters(TenantFilterOnly) on n.RecipientUserId equals u.Id
+            join t in _dbContext.Tenants.IgnoreQueryFilters(TenantFilterOnly) on n.TenantId equals t.Id
             orderby n.Id
-            select new { Notification = n, u.Email, u.DisplayName })
+            select new { Notification = n, u.Email, u.DisplayName, u.SmimeCertificatePem, TenantName = t.Name })
             .Take(BatchSize)
             .ToListAsync(cancellationToken);
 
@@ -83,7 +87,17 @@ public sealed class EmailNotificationDispatcher : IEmailNotificationDispatcher
 
             try
             {
-                await _emailSender.SendAsync(item.Email, item.DisplayName, item.Notification.Title, item.Notification.Body, cancellationToken);
+                // S/MIME enveloping (#1334): the recipient's own certificate wins (the #1332 column), the
+                // sidecar's registry answers for gated tenants (ADR 0813) — the same precedence as the
+                // IMAP funnel, fetched as a PUBLIC certificate so ONE in-process enveloping path serves
+                // both sources. With a certificate the subject goes GENERIC (headers cannot encrypt) and
+                // the title moves into the encrypted body; without one, exactly yesterday's plaintext.
+                var certificatePem = item.SmimeCertificatePem
+                    ?? await _envelopeClient.TryGetCertificatePemAsync(item.TenantName, item.Email, cancellationToken);
+                var (subject, body) = certificatePem is null
+                    ? (item.Notification.Title, item.Notification.Body)
+                    : ("SimplArchive — new notification", $"{item.Notification.Title}\n\n{item.Notification.Body}");
+                await _emailSender.SendAsync(item.Email, item.DisplayName, subject, body, certificatePem, cancellationToken);
                 item.Notification.EmailedAt = DateTimeOffset.UtcNow;
                 await _dbContext.SaveChangesAsync(cancellationToken);
                 sent++;

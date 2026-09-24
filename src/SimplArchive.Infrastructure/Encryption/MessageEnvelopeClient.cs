@@ -1,4 +1,8 @@
-namespace SimplArchive.Api.Encryption;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+
+namespace SimplArchive.Infrastructure.Encryption;
 
 /// <summary>
 /// The core's client for the per-installation encryption service's download leg (SimplArchiveEncryption
@@ -82,6 +86,38 @@ public sealed class MessageEnvelopeClient(
     // effect without a restart. Whitespace-only entries are skipped: the compose passthrough
     // (`Encryption__Tenants__0: ${ENCRYPTION_TENANT:-}`) yields an empty element when the variable is unset,
     // and an empty element must mean "no list", not "a tenant named nothing".
+    /// <summary>
+    /// The recipient's certificate from the service's registry, as PEM — or null (no certificate, or the
+    /// tenant is not gated, or the service is unreachable: every miss means "treat as certificate-less",
+    /// the same fail-open family as the envelope call). What the notification dispatcher envelopes against
+    /// (#1334): fetching the PUBLIC half and enveloping in-process keeps one enveloping path for both
+    /// certificate sources, instead of a second bytes-through-the-sidecar seam.
+    /// </summary>
+    public async Task<string?> TryGetCertificatePemAsync(string tenantName, string email, CancellationToken cancellationToken)
+    {
+        if (configuration["Encryption:ServiceUrl"] is not { Length: > 0 } serviceUrl || !TenantListed(tenantName))
+        {
+            return null;
+        }
+
+        try
+        {
+            var client = httpClientFactory.CreateClient(HttpClientName);
+            using var response = await client.GetAsync(
+                $"{serviceUrl.TrimEnd('/')}/api/users/{Uri.EscapeDataString(email)}/certificate", cancellationToken);
+            return response.IsSuccessStatusCode
+                ? await response.Content.ReadAsStringAsync(cancellationToken)
+                : null;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        {
+            logger.LogWarning(exception,
+                "Certificate lookup for {Email} against the encryption service failed — treating as certificate-less.",
+                email);
+            return null;
+        }
+    }
+
     private bool TenantListed(string tenantName)
     {
         var listed = configuration.GetSection("Encryption:Tenants").GetChildren()

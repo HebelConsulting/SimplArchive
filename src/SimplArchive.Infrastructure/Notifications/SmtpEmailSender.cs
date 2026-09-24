@@ -25,7 +25,11 @@ public sealed class SmtpEmailSender : IEmailSender
     // what the dispatcher's retry budget is for.
     private static bool IsPermanent(SmtpStatusCode status) => (int)status >= 500;
 
-    public async Task SendAsync(string toAddress, string toName, string subject, string body, CancellationToken cancellationToken = default)
+    public Task SendAsync(string toAddress, string toName, string subject, string body, CancellationToken cancellationToken = default) =>
+        SendAsync(toAddress, toName, subject, body, envelopeCertificatePem: null, cancellationToken);
+
+    public async Task SendAsync(string toAddress, string toName, string subject, string body,
+        string? envelopeCertificatePem, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Sending mail to {Recipient}.", toAddress);
         var message = new MimeMessage();
@@ -33,6 +37,16 @@ public sealed class SmtpEmailSender : IEmailSender
         message.To.Add(new MailboxAddress(toName, toAddress));
         message.Subject = subject;
         message.Body = new TextPart("plain") { Text = body };
+
+        // S/MIME enveloping (#1334): the BODY becomes CMS EnvelopedData to the recipient's certificate —
+        // the same body swap the IMAP funnel does, standard S/MIME (headers stay readable, which is why
+        // the CALLER already genericized the subject). Fails OPEN to plaintext with a Warning naming the
+        // fix — a stored certificate that stopped parsing must not stop the notification, and the caller
+        // has already moved the details into the body, which is correct either way.
+        if (envelopeCertificatePem is { Length: > 0 })
+        {
+            TryEnvelopeBody(message, envelopeCertificatePem, _logger);
+        }
 
         // Registered only when Smtp:Host is configured (see AddInfrastructure), so Host is non-null here.
         var host = _options.Host ?? throw new InvalidOperationException("SMTP host is not configured.");
@@ -61,5 +75,36 @@ public sealed class SmtpEmailSender : IEmailSender
 
         await client.DisconnectAsync(quit: true, cancellationToken);
         _logger.LogDebug("Sent mail to {Recipient}.", toAddress);
+    }
+
+    /// <summary>The envelope step, its own seam so the crypto is testable without an SMTP server: the BODY
+    /// becomes CMS EnvelopedData to the certificate (headers stay readable — the caller genericized the
+    /// subject first). Fails OPEN to plaintext with a Warning naming the fix: a stored certificate that
+    /// stopped parsing must not stop the notification, and the details already moved into the body.</summary>
+    public static void TryEnvelopeBody(MimeMessage message, string certificatePem, ILogger logger)
+    {
+        if (message.Body is not { } body)
+        {
+            return; // a bodyless message has nothing to envelope — the enveloper family's shared refusal
+        }
+
+        try
+        {
+            using var certificate = System.Security.Cryptography.X509Certificates.X509Certificate2
+                .CreateFromPem(certificatePem);
+            using var context = new MimeKit.Cryptography.TemporarySecureMimeContext();
+            message.Body = MimeKit.Cryptography.ApplicationPkcs7Mime.Encrypt(
+                context, new MimeKit.Cryptography.CmsRecipientCollection
+                {
+                    new MimeKit.Cryptography.CmsRecipient(certificate),
+                }, message.Body);
+        }
+        catch (Exception exception) when (exception is System.Security.Cryptography.CryptographicException or ArgumentException)
+        {
+            logger.LogWarning(exception,
+                "The S/MIME certificate for {Recipient} could not envelope a notification — sending "
+                + "plaintext. Re-upload or delete the certificate in the profile dialog.",
+                message.To.ToString());
+        }
     }
 }

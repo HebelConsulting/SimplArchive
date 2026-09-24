@@ -18,7 +18,7 @@ public class EmailNotificationDispatcherTests
     private static SimplArchiveDbContext CreateContext(SqliteConnection connection) =>
         new(new DbContextOptionsBuilder<SimplArchiveDbContext>().UseSqlite(connection).Options, new CurrentTenantAccessor());
 
-    private sealed record SentEmail(string Address, string Subject);
+    private sealed record SentEmail(string Address, string Subject, string? Body = null, string? CertificatePem = null);
 
     private sealed class RecordingEmailSender : IEmailSender
     {
@@ -26,14 +26,21 @@ public class EmailNotificationDispatcherTests
         // Addresses in this set throw on send (simulating a failing recipient).
         public HashSet<string> FailFor { get; } = [];
 
-        public Task SendAsync(string toAddress, string toName, string subject, string body, CancellationToken cancellationToken = default)
+        public Task SendAsync(string toAddress, string toName, string subject, string body, CancellationToken cancellationToken = default) =>
+            SendAsync(toAddress, toName, subject, body, envelopeCertificatePem: null, cancellationToken);
+
+        // The enveloping overload (#1334) is implemented, not left to the interface default — the default
+        // DROPS the certificate, and a fake that silently swallowed it would green the very tests that
+        // exist to see it.
+        public Task SendAsync(string toAddress, string toName, string subject, string body,
+            string? envelopeCertificatePem, CancellationToken cancellationToken = default)
         {
             if (FailFor.Contains(toAddress))
             {
                 throw new InvalidOperationException($"simulated send failure for {toAddress}");
             }
 
-            Sent.Add(new SentEmail(toAddress, subject));
+            Sent.Add(new SentEmail(toAddress, subject, body, envelopeCertificatePem));
             return Task.CompletedTask;
         }
     }
@@ -67,7 +74,7 @@ public class EmailNotificationDispatcherTests
         int sent;
         using (var act = CreateContext(connection))
         {
-            var dispatcher = new EmailNotificationDispatcher(act, sender, NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
+            var dispatcher = new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
             sent = await dispatcher.DispatchPendingAsync();
         }
 
@@ -85,7 +92,7 @@ public class EmailNotificationDispatcherTests
         // A second pass sends nothing (the first is now stamped, the other was already emailed).
         using (var again = CreateContext(connection))
         {
-            var dispatcher = new EmailNotificationDispatcher(again, sender, NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
+            var dispatcher = new EmailNotificationDispatcher(again, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
             Assert.Equal(0, await dispatcher.DispatchPendingAsync());
         }
 
@@ -116,7 +123,7 @@ public class EmailNotificationDispatcherTests
         var sender = new RecordingEmailSender();
         using (var act = CreateContext(connection))
         {
-            var dispatcher = new EmailNotificationDispatcher(act, sender, NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
+            var dispatcher = new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
             Assert.Equal(1, await dispatcher.DispatchPendingAsync()); // only the non-muted one counts as sent
         }
 
@@ -148,7 +155,7 @@ public class EmailNotificationDispatcherTests
         var sender = new RecordingEmailSender();
         using (var act = CreateContext(connection))
         {
-            var dispatcher = new EmailNotificationDispatcher(act, sender, NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
+            var dispatcher = new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
             Assert.Equal(2, await dispatcher.DispatchPendingAsync());
         }
 
@@ -174,7 +181,7 @@ public class EmailNotificationDispatcherTests
         sender.FailFor.Add("bad@acme.test");
         using (var act = CreateContext(connection))
         {
-            var dispatcher = new EmailNotificationDispatcher(act, sender, NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
+            var dispatcher = new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
             Assert.Equal(1, await dispatcher.DispatchPendingAsync()); // only the good one counts as sent
         }
 
@@ -184,5 +191,82 @@ public class EmailNotificationDispatcherTests
             Assert.NotNull((await read.Notifications.IgnoreQueryFilters().SingleAsync(n => n.Id == goodNote.Id)).EmailedAt); // stamped
             Assert.Null((await read.Notifications.IgnoreQueryFilters().SingleAsync(n => n.Id == badNote.Id)).EmailedAt);       // retryable
         }
+    }
+
+    /// <summary>
+    /// #1334: a recipient with a stored S/MIME certificate gets a GENERIC subject (headers cannot
+    /// encrypt) with the title moved into the body, and the certificate rides to the sender; a
+    /// certificate-less recipient in the same sweep keeps yesterday's descriptive plaintext exactly.
+    /// </summary>
+    [Fact]
+    public async Task A_certified_recipient_gets_a_generic_subject_and_the_certificate_rides_to_the_sender()
+    {
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        using (var setup = CreateContext(connection)) await setup.Database.EnsureCreatedAsync();
+
+        using var key = System.Security.Cryptography.RSA.Create(2048);
+        var request = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+            "CN=certified@acme.test", key, System.Security.Cryptography.HashAlgorithmName.SHA256,
+            System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+        using var certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(1));
+        var pem = certificate.ExportCertificatePem();
+
+        var tenant = new Tenant { Id = Guid.NewGuid(), Name = "Acme", CreatedAt = DateTimeOffset.UtcNow };
+        var certified = new User
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant.Id,
+            Email = "certified@acme.test",
+            DisplayName = "C",
+            CreatedAt = DateTimeOffset.UtcNow,
+            SmimeCertificatePem = pem
+        };
+        var plain = new User
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant.Id,
+            Email = "plain@acme.test",
+            DisplayName = "P",
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        using (var seed = CreateContext(connection))
+        {
+            seed.Tenants.Add(tenant);
+            seed.Users.AddRange(certified, plain);
+            seed.Notifications.AddRange(
+                Pending(tenant.Id, certified.Id, "Approve Salary review 2026"),
+                Pending(tenant.Id, plain.Id, "Approve Salary review 2026"));
+            await seed.SaveChangesAsync();
+        }
+
+        var sender = new RecordingEmailSender();
+        using (var act = CreateContext(connection))
+        {
+            var dispatcher = new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(),
+                NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
+            await dispatcher.DispatchPendingAsync();
+        }
+
+        var toCertified = Assert.Single(sender.Sent, s => s.Address == "certified@acme.test");
+        Assert.Equal("SimplArchive — new notification", toCertified.Subject);
+        Assert.Contains("Approve Salary review 2026", toCertified.Body, StringComparison.Ordinal);
+        Assert.Equal(pem, toCertified.CertificatePem);
+
+        var toPlain = Assert.Single(sender.Sent, s => s.Address == "plain@acme.test");
+        Assert.Equal("Approve Salary review 2026", toPlain.Subject);
+        Assert.Null(toPlain.CertificatePem);
+    }
+
+    // An INERT envelope client for these tests: no Encryption:ServiceUrl configured, so EnabledFor is false
+    // and the certificate lookup answers null without touching the network — plaintext dispatch, the
+    // pre-#1334 behaviour these tests pin.
+    private static SimplArchive.Infrastructure.Encryption.MessageEnvelopeClient InertEnvelopeClient() =>
+        new(new InertHttpClientFactory(), new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
+            NullLogger<SimplArchive.Infrastructure.Encryption.MessageEnvelopeClient>.Instance);
+
+    private sealed class InertHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new();
     }
 }

@@ -1,7 +1,7 @@
 using System.Net;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using SimplArchive.Api.Encryption;
+using SimplArchive.Infrastructure.Encryption;
 
 namespace SimplArchive.UnitTests;
 
@@ -149,5 +149,41 @@ public class MessageEnvelopeClientTests
         // The trailing slash on the configured URL must not double, and the address must be escaped — a raw
         // '+' in a route decodes to a space on the service side and misses the registry silently.
         Assert.Equal("http://encryption:8080/api/users/anna%2Btest%40ex.test/enveloped", requested);
+    }
+
+    /// <summary>
+    /// The certificate fetch (#1334) hits the registry GET with the same escaping rules, returns the PEM
+    /// on 200, and answers null on 404 and on an unlisted tenant — every miss meaning "certificate-less",
+    /// the notification dispatcher's plaintext contract.
+    /// </summary>
+    [Fact]
+    public async Task The_certificate_fetch_uses_the_registry_route_and_misses_answer_null()
+    {
+        string? requested = null;
+        var handler = new StubHandler(request =>
+        {
+            requested = request.RequestUri!.ToString();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("-----BEGIN CERTIFICATE-----\nX\n-----END CERTIFICATE-----"),
+            };
+        });
+
+        var pem = await Client("http://encryption:8080/", handler)
+            .TryGetCertificatePemAsync("Acme", "anna+test@ex.test", CancellationToken.None);
+
+        Assert.Equal("http://encryption:8080/api/users/anna%2Btest%40ex.test/certificate", requested);
+        Assert.Contains("BEGIN CERTIFICATE", pem, StringComparison.Ordinal);
+
+        var missing = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
+        Assert.Null(await Client("http://encryption:8080", missing)
+            .TryGetCertificatePemAsync("Acme", "anna@ex.test", CancellationToken.None));
+
+        // Unlisted tenant: no request at all — the gate answers before the network does.
+        string? unlistedRequest = null;
+        var unlisted = new StubHandler(request => { unlistedRequest = request.RequestUri!.ToString(); return new HttpResponseMessage(HttpStatusCode.OK); });
+        Assert.Null(await Client("http://encryption:8080", unlisted, "Other")
+            .TryGetCertificatePemAsync("Acme", "anna@ex.test", CancellationToken.None));
+        Assert.Null(unlistedRequest);
     }
 }

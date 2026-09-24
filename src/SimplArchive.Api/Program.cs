@@ -448,7 +448,7 @@ SimplArchive.Api.Modules.ModuleApiServices.AddModuleApiSeams(builder.Services);
 // The per-installation encryption service's client (SimplArchiveEncryption ADR 0007) — inert until
 // Encryption:ServiceUrl is configured, at which point IMAP FETCH envelopes served messages to the
 // recipient's registered certificate.
-SimplArchive.Api.Encryption.MessageEnvelopeServices.AddMessageEnvelope(builder.Services);
+SimplArchive.Infrastructure.Encryption.MessageEnvelopeServices.AddMessageEnvelope(builder.Services);
 // The at-rest decorator's proxy-URL issuer (ADR 0818) — registered HERE because the Api owns routes and
 // the token protector; the Infrastructure decorator takes it through the Application seam, optionally.
 builder.Services.AddSingleton<SimplArchive.Application.Abstractions.IEncryptedContentUrlIssuer,

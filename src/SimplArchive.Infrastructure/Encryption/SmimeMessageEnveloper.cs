@@ -1,8 +1,9 @@
 using System.Security.Cryptography.X509Certificates;
+using Microsoft.Extensions.Logging;
 using MimeKit;
 using MimeKit.Cryptography;
 
-namespace SimplArchive.Api.Encryption;
+namespace SimplArchive.Infrastructure.Encryption;
 
 /// <summary>
 /// Envelopes a built MIME message's body to the user's own stored certificate (#1332) — the in-process

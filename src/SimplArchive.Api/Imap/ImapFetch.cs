@@ -25,8 +25,8 @@ internal static class ImapFetch
         var set = arguments[..setEnd];
         var items = ParseItems(arguments[(setEnd + 1)..], uidMode);
         var storage = scope.ServiceProvider.GetRequiredService<IObjectStorageClient>();
-        var envelope = scope.ServiceProvider.GetRequiredService<SimplArchive.Api.Encryption.MessageEnvelopeClient>();
-        var selfEnveloper = scope.ServiceProvider.GetRequiredService<SimplArchive.Api.Encryption.SmimeMessageEnveloper>();
+        var envelope = scope.ServiceProvider.GetRequiredService<SimplArchive.Infrastructure.Encryption.MessageEnvelopeClient>();
+        var selfEnveloper = scope.ServiceProvider.GetRequiredService<SimplArchive.Infrastructure.Encryption.SmimeMessageEnveloper>();
         var seen = await ImapMailboxes.SeenSetAsync(scope, selected.Messages);
 
         for (var index = 0; index < selected.Messages.Count; index++)
@@ -133,8 +133,8 @@ internal static class ImapFetch
     // ---- Response ------------------------------------------------------------------------------------
 
     private static async Task WriteMessageAsync(
-        ImapSession session, IObjectStorageClient storage, SimplArchive.Api.Encryption.MessageEnvelopeClient envelope,
-        SimplArchive.Api.Encryption.SmimeMessageEnveloper selfEnveloper,
+        ImapSession session, IObjectStorageClient storage, SimplArchive.Infrastructure.Encryption.MessageEnvelopeClient envelope,
+        SimplArchive.Infrastructure.Encryption.SmimeMessageEnveloper selfEnveloper,
         ImapMessageEntry message, int sequence, List<string> items, bool seen, bool deleted)
     {
         byte[]? bytes = null;
