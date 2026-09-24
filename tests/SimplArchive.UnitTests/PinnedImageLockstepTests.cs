@@ -168,4 +168,66 @@ public partial class PinnedImageLockstepTests
             + "\n\n(The kiosk is not checked here: it lags at rollout on purpose, and"
             + "\nscripts/check-pinned-images.sh reports its drift per file.)");
     }
+
+    // The kiosk's OWN files must at least agree with EACH OTHER. This is not the lockstep above — the kiosk
+    // lags the dev stack on purpose, and folding it in would keep this file permanently red for a decision.
+    // It is the weaker, always-true claim: one deployment should not run two versions of one service.
+    //
+    // It drifted, and the shape of the drift is why the check has to read SHELL as well as YAML.
+    // `tools/kiosk/docker-compose.yml` pinned Postgres `16.15-alpine` while `mail-override.sh` — which
+    // GENERATES a compose overlay by echoing lines — pinned `16.14-alpine` inside a shell string. No YAML
+    // scanner could see it, including the one above. The host then carried two Postgres images and pulled the
+    // spare on every update, and because that container is only ever a `psql` CLIENT the cost was an image
+    // rather than a failure. Nothing was going to notice.
+    [Fact]
+    public void The_kiosk_bundle_does_not_pin_one_image_at_two_versions()
+    {
+        var kiosk = Path.Combine(RepoPaths.Root(), "tools", "kiosk");
+        Assert.True(Directory.Exists(kiosk), $"The kiosk bundle is missing at {kiosk}.");
+
+        // repo -> tag -> the files asking for it.
+        var seen = new Dictionary<string, Dictionary<string, List<string>>>(StringComparer.Ordinal);
+
+        var files = Directory.EnumerateFiles(kiosk, "*.*", SearchOption.AllDirectories)
+            .Where(f => Path.GetExtension(f) is ".yml" or ".yaml" or ".sh")
+            .OrderBy(f => f, StringComparer.Ordinal)
+            .ToList();
+
+        foreach (var file in files)
+        {
+            foreach (Match match in YamlImage().Matches(File.ReadAllText(file)))
+            {
+                var repo = match.Groups[1].Value;
+                if (IsOurs(repo))
+                {
+                    continue; // our own images ride :latest on the kiosk by design
+                }
+
+                var tag = match.Groups[2].Success ? match.Groups[2].Value
+                    : match.Groups[3].Success ? match.Groups[3].Value
+                    : match.Groups[4].Value;
+
+                var name = Path.GetRelativePath(kiosk, file).Replace(Path.DirectorySeparatorChar, '/');
+                var tags = seen.TryGetValue(repo, out var t) ? t : seen[repo] = new(StringComparer.Ordinal);
+                (tags.TryGetValue(tag, out var where) ? where : tags[tag] = []).Add(name);
+            }
+        }
+
+        // The regex matches `image:` in a YAML line and in `echo "    image: postgres:16.15-alpine"` alike,
+        // which is the whole point — so this must actually be finding the generated ones, not just the plain
+        // YAML. Without this the check would pass by seeing nothing the day somebody changes the echo style.
+        Assert.Contains(seen, kv => kv.Value.Values.Any(w => w.Any(f => f.EndsWith(".sh", StringComparison.Ordinal))));
+
+        var split = seen.Where(kv => kv.Value.Count > 1)
+            .Select(kv => $"  {kv.Key}\n" + string.Join("\n",
+                kv.Value.OrderBy(t => t.Key, StringComparer.Ordinal)
+                    .Select(t => $"    {t.Key}  ← {string.Join(", ", t.Value)}")))
+            .ToList();
+
+        Assert.True(split.Count == 0,
+            "The kiosk bundle pins the same image at two different versions. One deployment then carries both, "
+            + "pulling the spare on every update — and where the extra container is only a client (the psql "
+            + "one-shot), it works, so nothing reports it:\n"
+            + string.Join("\n", split));
+    }
 }
