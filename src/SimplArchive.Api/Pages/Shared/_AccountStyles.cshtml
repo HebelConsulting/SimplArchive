@@ -1,0 +1,161 @@
+@* The chrome shared by every server-rendered account page — the sign-in page (ADR 0515) and the device-grant
+   approval page (ADR 0823). It lives here rather than in each page because the two are ONE surface to a reader:
+   an administrator approving a device code has just come from the sign-in form, and a second copy of these
+   rules is how the two would come to disagree about what a card or a button looks like. Pages that need it
+   render it inside <head>. *@
+    <style>
+        /* These pages keep their own variable names — their rules are written against them — but every VALUE now
+           comes from the design tokens above (ADR 0578), so a custom identity reaches these pages
+           without this file knowing anything about it. Light/dark is handled by the tokens themselves via
+           prefers-color-scheme, which is why only the shadow is restated below. */
+        :root {
+            --primary: var(--sa-accent, #0F766E);
+            --primary-hover: var(--sa-accent-hover, #115E59);
+            --error: var(--sa-danger, #B91C1C);
+            --page-bg: var(--sa-canvas, #FAFAFC);
+            --surface: var(--sa-surface, #FFFFFF);
+            --text: var(--sa-text, #14161C);
+            --text-secondary: var(--sa-text-secondary, #5A5F6E);
+            --border: var(--sa-hairline, #E6E7EC);
+            --shadow: 0 3px 5px -1px rgba(0,0,0,.2), 0 6px 10px 0 rgba(0,0,0,.14), 0 1px 18px 0 rgba(0,0,0,.12);
+        }
+
+        @@media (prefers-color-scheme: dark) {
+            :root {
+                --shadow: 0 3px 5px -1px rgba(0,0,0,.4), 0 6px 10px 0 rgba(0,0,0,.28), 0 1px 18px 0 rgba(0,0,0,.24);
+            }
+        }
+
+        * { box-sizing: border-box; }
+        html, body { height: 100%; }
+
+        body {
+            margin: 0;
+            font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--page-bg);
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-card {
+            background: var(--surface);
+            width: 100%;
+            max-width: 400px;
+            margin: 24px;
+            padding: 32px;
+            border-radius: 4px;
+            box-shadow: var(--shadow);
+        }
+
+        .brand {
+            font-size: 1.5rem;
+            font-weight: 500;
+            color: var(--primary);
+            margin-bottom: 4px;
+        }
+
+        .title {
+            font-size: 1.25rem;
+            font-weight: 400;
+            margin: 0 0 24px;
+        }
+
+        .error {
+            background: rgba(244, 67, 54, 0.12);
+            color: var(--error);
+            padding: 12px 16px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-size: 0.875rem;
+        }
+
+        .hint {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin: 0 0 20px;
+        }
+
+        .field { margin-bottom: 20px; }
+
+        .field label {
+            display: block;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .field input {
+            width: 100%;
+            padding: 12px 14px;
+            font-size: 1rem;
+            font-family: inherit;
+            color: var(--text);
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            outline: none;
+            transition: border-color .15s, box-shadow .15s;
+        }
+
+        .field input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 1px var(--primary);
+        }
+
+        .btn-primary {
+            width: 100%;
+            padding: 12px;
+            margin-top: 8px;
+            font-size: 0.9375rem;
+            font-weight: 500;
+            font-family: inherit;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #fff;
+            background: var(--primary);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            box-shadow: 0 3px 1px -2px rgba(0,0,0,.2), 0 2px 2px 0 rgba(0,0,0,.14), 0 1px 5px 0 rgba(0,0,0,.12);
+            transition: background .15s;
+        }
+
+        .recovery-codes {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            font-family: 'Roboto Mono', ui-monospace, monospace;
+            font-size: 0.95rem;
+            background: rgba(89, 74, 226, 0.06);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+
+        code { font-family: 'Roboto Mono', ui-monospace, monospace; }
+
+        .or-divider {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.8125rem;
+            margin: 16px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .btn-primary:hover { background: var(--primary-hover); }
+        .btn-primary:active { box-shadow: 0 5px 5px -3px rgba(0,0,0,.2), 0 8px 10px 1px rgba(0,0,0,.14), 0 3px 14px 2px rgba(0,0,0,.12); }
+
+        /* Language selector (ADR 0515) — fixed top-right so it shows on every login state. */
+        .lang-bar { position: fixed; top: 12px; right: 16px; display: flex; gap: 4px; z-index: 10; }
+        .lang-link {
+            display: inline-block; padding: 4px 9px; border-radius: 6px;
+            font-size: 0.8125rem; font-weight: 500; line-height: 1.2;
+            color: var(--text-secondary); text-decoration: none;
+        }
+        .lang-link:hover { background: rgba(127,127,127,0.14); color: var(--text); }
+        .lang-link.active { background: var(--primary); color: #fff; }
+    </style>

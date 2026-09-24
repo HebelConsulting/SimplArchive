@@ -6,6 +6,11 @@
 # minutes even on public), so it is an OPT-IN job: enable it by setting the repo Actions variable
 # BUILD_MACOS_DMG = true. Uploads use the built-in gh CLI (no third-party action); the first job to run creates
 # the release, the others upload to it.
+#
+# Because that job is opt-in, the .dmg is a MANUAL step on a Mac, and the `verify` job below is what stops it
+# being silently forgotten: v0.30.0, v0.31.0 and v0.32.0 all shipped with Windows and Linux only, and nothing
+# said so. The release runbook already listed the step as a checklist item, so the fix is not a better
+# reminder — it is making the omission fail rather than pass quietly.
 name: Desktop packages
 
 on:
@@ -58,3 +63,55 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes \
             || gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+
+  # Every release must carry all four packages. The macOS pair is built by hand (see above), so without this
+  # the release page simply shows fewer assets and looks finished — which is exactly how three releases went
+  # out with no .dmg at all. A skipped job reports success, so absence has to be asserted somewhere that a
+  # person will see.
+  #
+  # EXPECT THIS JOB TO BE RED WHEN THE TAG IS PUSHED, and read that as "the release is not finished yet"
+  # rather than as a broken build: the .dmg cannot exist until somebody has run the Mac step. Re-run the job
+  # once they have, and it goes green. That is the whole point — a release stays visibly incomplete until it
+  # actually is complete, instead of looking done the moment the cheap half succeeds.
+  verify:
+    timeout-minutes: 10
+    if: ${{ github.repository == 'HebelConsulting/SimplArchive' }}
+    needs: [win-linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Every expected package is attached
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          attached=$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name')
+
+          missing=""
+          for asset in \
+            "SimplArchive-$version-win-x64.zip" \
+            "SimplArchive-$version-linux-x64.tar.gz" \
+            "SimplArchive-$version-arm64.dmg" \
+            "SimplArchive-$version-x64.dmg"
+          do
+            # Two traps in one line, both met here. `grep -qxF` rather than `grep -q`: without -x the x64 .dmg
+            # is satisfied by the arm64 one, because one name contains the other. And a HERE-STRING rather
+            # than a pipe: `printf ... | grep -q` under `pipefail` reports the pipeline as FAILED when grep
+            # exits early on a match and printf takes SIGPIPE — so a found asset would intermittently be
+            # reported missing (measured at 16/20 elsewhere in this repo, #1347).
+            if ! grep -qxF "$asset" <<<"$attached"; then
+              missing="$missing  $asset"$'\n'
+            fi
+          done
+
+          if [ -n "$missing" ]; then
+            echo "::error::$GITHUB_REF_NAME is missing release assets:"
+            printf '%s' "$missing"
+            echo "The macOS .dmg job is opt-in (BUILD_MACOS_DMG), so build them on a Mac and attach them:"
+            echo "  scripts/package-macos-dmg.sh $version --upload"
+            exit 1
+          fi
+
+          echo "All four packages are attached to $GITHUB_REF_NAME."

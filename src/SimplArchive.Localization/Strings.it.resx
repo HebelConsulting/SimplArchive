@@ -5052,4 +5052,58 @@
   <data name="SmimeDeleteError" xml:space="preserve">
     <value>Impossibile eliminare il certificato.</value>
   </data>
+  <data name="DeviceTitle" xml:space="preserve">
+    <value>Approva un accesso</value>
+  </data>
+  <data name="DeviceApproveTitle" xml:space="preserve">
+    <value>Approva un accesso</value>
+  </data>
+  <data name="DeviceCodeLabel" xml:space="preserve">
+    <value>Codice</value>
+  </data>
+  <data name="DeviceRequestedBy" xml:space="preserve">
+    <value>Richiesto da</value>
+  </data>
+  <data name="DeviceSignsInAs" xml:space="preserve">
+    <value>Accede come</value>
+  </data>
+  <data name="DeviceCompareHint" xml:space="preserve">
+    <value>Verifica che sia il codice mostrato dal tuo terminale. In caso contrario, rifiuta.</value>
+  </data>
+  <data name="DeviceApprove" xml:space="preserve">
+    <value>Approva</value>
+  </data>
+  <data name="DeviceRefuse" xml:space="preserve">
+    <value>Rifiuta</value>
+  </data>
+  <data name="DeviceEnterCodeTitle" xml:space="preserve">
+    <value>Inserisci il codice</value>
+  </data>
+  <data name="DeviceEnterCodeHint" xml:space="preserve">
+    <value>Digita il codice mostrato dal tuo terminale.</value>
+  </data>
+  <data name="DeviceContinue" xml:space="preserve">
+    <value>Continua</value>
+  </data>
+  <data name="DeviceUnusableTitle" xml:space="preserve">
+    <value>Questo codice non può essere utilizzato</value>
+  </data>
+  <data name="DeviceUnusableHint" xml:space="preserve">
+    <value>Ricomincia dal terminale e inserisci il nuovo codice.</value>
+  </data>
+  <data name="DeviceTryAgain" xml:space="preserve">
+    <value>Riprova</value>
+  </data>
+  <data name="DeviceApprovedTitle" xml:space="preserve">
+    <value>Approvato</value>
+  </data>
+  <data name="DeviceApprovedHint" xml:space="preserve">
+    <value>Torna al tuo terminale — puoi chiudere questa scheda.</value>
+  </data>
+  <data name="DeviceRefusedTitle" xml:space="preserve">
+    <value>Rifiutato</value>
+  </data>
+  <data name="DeviceRefusedHint" xml:space="preserve">
+    <value>Non è stato concesso nulla. Puoi chiudere questa scheda.</value>
+  </data>
 </root>

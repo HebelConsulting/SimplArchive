@@ -102,7 +102,12 @@ public class LocalizationKeyTests
 
     private static IEnumerable<string> SourceFiles(string root)
     {
-        foreach (var project in new[] { "src/SimplArchive.Client", "src/SimplArchive.DesktopClient" })
+        // The Api is in this list because it SERVES localized HTML: the sign-in page and the device-grant
+        // approval page are Razor Pages calling Strings.Get, and until they were scanned a typo there was
+        // invisible to everything — the compiler cannot see a key, and the two clients this guard did watch
+        // do not contain these files. That is the same blind spot the regex widening above was written for,
+        // one directory out.
+        foreach (var project in new[] { "src/SimplArchive.Client", "src/SimplArchive.DesktopClient", "src/SimplArchive.Api" })
         {
             var dir = Path.Combine(root, project.Replace('/', Path.DirectorySeparatorChar));
             if (!Directory.Exists(dir))
@@ -118,7 +123,7 @@ public class LocalizationKeyTests
                     continue;
                 }
 
-                if (Path.GetExtension(file) is ".cs" or ".razor" or ".axaml")
+                if (Path.GetExtension(file) is ".cs" or ".razor" or ".axaml" or ".cshtml")
                 {
                     yield return file;
                 }

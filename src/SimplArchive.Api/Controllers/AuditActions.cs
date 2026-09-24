@@ -237,6 +237,13 @@ public static class AuditActions
     public const string EncryptionKeyRetired = "Encryption.KeyRetired";
 
     public const string LoggedIn = "Auth.LoggedIn";
+    // A device authorization grant was answered by a person (RFC 8628, ADR 0823). Approving hands a token —
+    // renewable, where offline_access was asked for — to a machine the approver may not be sitting at, which
+    // is the same class of act as issuing a protocol password above. The REFUSAL is recorded too: a grant
+    // somebody said no to is exactly what a SIEM correlating "who tried" needs, and recording only the
+    // approvals would make silence mean two different things.
+    public const string DeviceGrantApproved = "Auth.DeviceGrantApproved";
+    public const string DeviceGrantRefused = "Auth.DeviceGrantRefused";
     // Impersonation token issued (ADR "User impersonation") — actor = the impersonating admin, target = the user.
     public const string ImpersonationStarted = "Auth.ImpersonationStarted";
 }

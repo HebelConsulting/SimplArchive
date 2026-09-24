@@ -5052,4 +5052,58 @@
   <data name="SmimeDeleteError" xml:space="preserve">
     <value>The certificate could not be deleted.</value>
   </data>
+  <data name="DeviceTitle" xml:space="preserve">
+    <value>Approve a sign-in</value>
+  </data>
+  <data name="DeviceApproveTitle" xml:space="preserve">
+    <value>Approve a sign-in</value>
+  </data>
+  <data name="DeviceCodeLabel" xml:space="preserve">
+    <value>Code</value>
+  </data>
+  <data name="DeviceRequestedBy" xml:space="preserve">
+    <value>Requested by</value>
+  </data>
+  <data name="DeviceSignsInAs" xml:space="preserve">
+    <value>Signs in as</value>
+  </data>
+  <data name="DeviceCompareHint" xml:space="preserve">
+    <value>Check that this is the code your terminal printed. If it is not, refuse.</value>
+  </data>
+  <data name="DeviceApprove" xml:space="preserve">
+    <value>Approve</value>
+  </data>
+  <data name="DeviceRefuse" xml:space="preserve">
+    <value>Refuse</value>
+  </data>
+  <data name="DeviceEnterCodeTitle" xml:space="preserve">
+    <value>Enter your code</value>
+  </data>
+  <data name="DeviceEnterCodeHint" xml:space="preserve">
+    <value>Type the code your terminal printed.</value>
+  </data>
+  <data name="DeviceContinue" xml:space="preserve">
+    <value>Continue</value>
+  </data>
+  <data name="DeviceUnusableTitle" xml:space="preserve">
+    <value>That code can't be used</value>
+  </data>
+  <data name="DeviceUnusableHint" xml:space="preserve">
+    <value>Start again in your terminal and enter the new code.</value>
+  </data>
+  <data name="DeviceTryAgain" xml:space="preserve">
+    <value>Try again</value>
+  </data>
+  <data name="DeviceApprovedTitle" xml:space="preserve">
+    <value>Approved</value>
+  </data>
+  <data name="DeviceApprovedHint" xml:space="preserve">
+    <value>Return to your terminal — you can close this tab.</value>
+  </data>
+  <data name="DeviceRefusedTitle" xml:space="preserve">
+    <value>Refused</value>
+  </data>
+  <data name="DeviceRefusedHint" xml:space="preserve">
+    <value>Nothing was granted. You can close this tab.</value>
+  </data>
 </root>

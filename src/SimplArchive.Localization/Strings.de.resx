@@ -5052,4 +5052,58 @@
   <data name="SmimeDeleteError" xml:space="preserve">
     <value>Das Zertifikat konnte nicht gelöscht werden.</value>
   </data>
+  <data name="DeviceTitle" xml:space="preserve">
+    <value>Anmeldung bestätigen</value>
+  </data>
+  <data name="DeviceApproveTitle" xml:space="preserve">
+    <value>Anmeldung bestätigen</value>
+  </data>
+  <data name="DeviceCodeLabel" xml:space="preserve">
+    <value>Code</value>
+  </data>
+  <data name="DeviceRequestedBy" xml:space="preserve">
+    <value>Angefordert von</value>
+  </data>
+  <data name="DeviceSignsInAs" xml:space="preserve">
+    <value>Anmeldung als</value>
+  </data>
+  <data name="DeviceCompareHint" xml:space="preserve">
+    <value>Prüfen Sie, ob dies der Code ist, den Ihr Terminal angezeigt hat. Wenn nicht, lehnen Sie ab.</value>
+  </data>
+  <data name="DeviceApprove" xml:space="preserve">
+    <value>Bestätigen</value>
+  </data>
+  <data name="DeviceRefuse" xml:space="preserve">
+    <value>Ablehnen</value>
+  </data>
+  <data name="DeviceEnterCodeTitle" xml:space="preserve">
+    <value>Code eingeben</value>
+  </data>
+  <data name="DeviceEnterCodeHint" xml:space="preserve">
+    <value>Geben Sie den Code ein, den Ihr Terminal angezeigt hat.</value>
+  </data>
+  <data name="DeviceContinue" xml:space="preserve">
+    <value>Weiter</value>
+  </data>
+  <data name="DeviceUnusableTitle" xml:space="preserve">
+    <value>Dieser Code kann nicht verwendet werden</value>
+  </data>
+  <data name="DeviceUnusableHint" xml:space="preserve">
+    <value>Starten Sie im Terminal neu und geben Sie den neuen Code ein.</value>
+  </data>
+  <data name="DeviceTryAgain" xml:space="preserve">
+    <value>Erneut versuchen</value>
+  </data>
+  <data name="DeviceApprovedTitle" xml:space="preserve">
+    <value>Bestätigt</value>
+  </data>
+  <data name="DeviceApprovedHint" xml:space="preserve">
+    <value>Kehren Sie zu Ihrem Terminal zurück — Sie können diesen Tab schließen.</value>
+  </data>
+  <data name="DeviceRefusedTitle" xml:space="preserve">
+    <value>Abgelehnt</value>
+  </data>
+  <data name="DeviceRefusedHint" xml:space="preserve">
+    <value>Es wurde nichts gewährt. Sie können diesen Tab schließen.</value>
+  </data>
 </root>

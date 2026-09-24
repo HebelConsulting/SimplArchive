@@ -1,0 +1,158 @@
+@page "/connect/verify"
+@model SimplArchive.Api.Pages.Account.DeviceModel
+@using SimplArchive.Localization
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@Strings.Get("DeviceTitle")</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
+    @* The installation's own colours, exactly as the sign-in page this administrator has just come from
+       (ADR 0578) — the two pages are one journey and must not look like two products. *@
+    <link rel="stylesheet" href="/api/theme.css" />
+    <partial name="_AccountStyles" />
+    @* No language bar here, and that is not an omission: reaching this page always goes through the sign-in
+       page, where the language IS chosen, and the culture cookie set there is what renders this one. *@
+    <style>
+        .code {
+            font-family: 'Roboto Mono', ui-monospace, monospace;
+            font-size: 1.5rem;
+            letter-spacing: 0.12em;
+            color: var(--text);
+        }
+
+        .facts { margin: 0 0 24px; }
+
+        .facts div {
+            display: flex;
+            gap: 16px;
+            align-items: baseline;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .facts div:last-child { border-bottom: none; }
+
+        .facts dt {
+            flex: 0 0 34%;
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+        }
+
+        .facts dd {
+            flex: 1 1 auto;
+            margin: 0;
+            font-size: 0.9375rem;
+            overflow-wrap: anywhere;
+        }
+
+        .actions { display: flex; gap: 12px; }
+        .actions form { flex: 1 1 0; margin: 0; }
+
+        .btn-secondary {
+            width: 100%;
+            padding: 12px;
+            margin-top: 8px;
+            font-size: 0.9375rem;
+            font-weight: 500;
+            font-family: inherit;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text);
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background .15s, border-color .15s;
+        }
+
+        .btn-secondary:hover { background: rgba(127,127,127,0.10); border-color: var(--text-secondary); }
+    </style>
+</head>
+<body>
+    <main>
+        @if (Model.State == SimplArchive.Api.Pages.Account.DeviceModel.Step.Approve)
+        {
+            <div class="login-card">
+                <div class="brand">SimplArchive</div>
+                <h1 class="title">@Strings.Get("DeviceApproveTitle")</h1>
+
+                <dl class="facts">
+                    <div>
+                        <dt>@Strings.Get("DeviceCodeLabel")</dt>
+                        <dd class="code">@Model.UserCode</dd>
+                    </div>
+                    <div>
+                        <dt>@Strings.Get("DeviceRequestedBy")</dt>
+                        <dd>@Model.ClientName</dd>
+                    </div>
+                    <div>
+                        <dt>@Strings.Get("DeviceSignsInAs")</dt>
+                        <dd>@Model.Account</dd>
+                    </div>
+                </dl>
+
+                @* The code is echoed and the comparison asked for explicitly: it is what distinguishes the
+                   administrator's own request from one somebody sent them a link to (RFC 8628 §5.4). *@
+                <p class="hint">@Strings.Get("DeviceCompareHint")</p>
+
+                <div class="actions">
+                    @* Both forms carry the sign-out marker as well as the code: the POST re-checks that the
+                       person answering has just authenticated, and dropping it here would lose the click. *@
+                    <form method="post" asp-page-handler="Approve">
+                        <input type="hidden" name="user_code" value="@Model.UserCode" />
+                        <input type="hidden" name="c" value="@Model.Marker" />
+                        <button type="submit" class="btn-primary">@Strings.Get("DeviceApprove")</button>
+                    </form>
+                    <form method="post" asp-page-handler="Refuse">
+                        <input type="hidden" name="user_code" value="@Model.UserCode" />
+                        <input type="hidden" name="c" value="@Model.Marker" />
+                        <button type="submit" class="btn-secondary">@Strings.Get("DeviceRefuse")</button>
+                    </form>
+                </div>
+            </div>
+        }
+        else if (Model.State == SimplArchive.Api.Pages.Account.DeviceModel.Step.Unusable)
+        {
+            @* One message for expired, redeemed, unknown and mistyped alike. The remedy is the same in every
+               case, and naming which it was would tell a guesser which codes are real. *@
+            <div class="login-card">
+                <div class="brand">SimplArchive</div>
+                <h1 class="title">@Strings.Get("DeviceUnusableTitle")</h1>
+                <p class="hint">@Strings.Get("DeviceUnusableHint")</p>
+                <form method="post" asp-page-handler="Code">
+                    <input type="hidden" name="c" value="@Model.Marker" />
+                    <div class="field">
+                        <label for="userCode">@Strings.Get("DeviceCodeLabel")</label>
+                        <input id="userCode" name="userCode" autocomplete="off" autocapitalize="characters"
+                               spellcheck="false" autofocus />
+                    </div>
+                    <button type="submit" class="btn-primary">@Strings.Get("DeviceTryAgain")</button>
+                </form>
+            </div>
+        }
+        else
+        {
+            <div class="login-card">
+                <div class="brand">SimplArchive</div>
+                <h1 class="title">@Strings.Get("DeviceEnterCodeTitle")</h1>
+                <p class="hint">@Strings.Get("DeviceEnterCodeHint")</p>
+                <form method="post" asp-page-handler="Code">
+                    <input type="hidden" name="c" value="@Model.Marker" />
+                    <div class="field">
+                        <label for="userCode">@Strings.Get("DeviceCodeLabel")</label>
+                        <input id="userCode" name="userCode" autocomplete="off" autocapitalize="characters"
+                               spellcheck="false" autofocus />
+                    </div>
+                    <button type="submit" class="btn-primary">@Strings.Get("DeviceContinue")</button>
+                </form>
+            </div>
+        }
+    </main>
+</body>
+</html>

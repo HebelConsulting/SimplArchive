@@ -91,6 +91,17 @@ public class TokenController : ControllerBase
             return SignIn(result.Principal!, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }
 
+        // The device grant (ADR 0823). Nothing is decided here: by the time a device code is redeemable, a
+        // PERSON has approved it on the verification page, and OpenIddict has attached the principal that
+        // approval produced. Redeeming before that answers authorization_pending, which is the tool's cue to
+        // keep polling — so this branch is deliberately as thin as the authorization-code one above.
+        if (request.IsDeviceCodeGrantType())
+        {
+            var approved = await HttpContext.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+
+            return SignIn(approved.Principal!, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+        }
+
         if (request.IsRefreshTokenGrantType())
         {
             return await HandleRefreshAsync();

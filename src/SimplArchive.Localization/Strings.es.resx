@@ -5052,4 +5052,58 @@
   <data name="SmimeDeleteError" xml:space="preserve">
     <value>No se pudo eliminar el certificado.</value>
   </data>
+  <data name="DeviceTitle" xml:space="preserve">
+    <value>Aprobar un inicio de sesión</value>
+  </data>
+  <data name="DeviceApproveTitle" xml:space="preserve">
+    <value>Aprobar un inicio de sesión</value>
+  </data>
+  <data name="DeviceCodeLabel" xml:space="preserve">
+    <value>Código</value>
+  </data>
+  <data name="DeviceRequestedBy" xml:space="preserve">
+    <value>Solicitado por</value>
+  </data>
+  <data name="DeviceSignsInAs" xml:space="preserve">
+    <value>Inicia sesión como</value>
+  </data>
+  <data name="DeviceCompareHint" xml:space="preserve">
+    <value>Comprueba que sea el código que muestra tu terminal. Si no lo es, recházalo.</value>
+  </data>
+  <data name="DeviceApprove" xml:space="preserve">
+    <value>Aprobar</value>
+  </data>
+  <data name="DeviceRefuse" xml:space="preserve">
+    <value>Rechazar</value>
+  </data>
+  <data name="DeviceEnterCodeTitle" xml:space="preserve">
+    <value>Introduce tu código</value>
+  </data>
+  <data name="DeviceEnterCodeHint" xml:space="preserve">
+    <value>Escribe el código que muestra tu terminal.</value>
+  </data>
+  <data name="DeviceContinue" xml:space="preserve">
+    <value>Continuar</value>
+  </data>
+  <data name="DeviceUnusableTitle" xml:space="preserve">
+    <value>Ese código no se puede usar</value>
+  </data>
+  <data name="DeviceUnusableHint" xml:space="preserve">
+    <value>Vuelve a empezar en tu terminal e introduce el nuevo código.</value>
+  </data>
+  <data name="DeviceTryAgain" xml:space="preserve">
+    <value>Intentar de nuevo</value>
+  </data>
+  <data name="DeviceApprovedTitle" xml:space="preserve">
+    <value>Aprobado</value>
+  </data>
+  <data name="DeviceApprovedHint" xml:space="preserve">
+    <value>Vuelve a tu terminal: puedes cerrar esta pestaña.</value>
+  </data>
+  <data name="DeviceRefusedTitle" xml:space="preserve">
+    <value>Rechazado</value>
+  </data>
+  <data name="DeviceRefusedHint" xml:space="preserve">
+    <value>No se concedió nada. Puedes cerrar esta pestaña.</value>
+  </data>
 </root>

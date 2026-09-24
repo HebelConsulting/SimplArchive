@@ -656,6 +656,8 @@ using (var scope = app.Services.CreateScope())
         }
     }
 
+    await SimplArchive.Api.Provisioning.SaConsoleClientSeeder.SeedAsync(applicationManager);
+
     if (desktopApp is null)
     {
         await applicationManager.CreateAsync(new OpenIddictApplicationDescriptor
