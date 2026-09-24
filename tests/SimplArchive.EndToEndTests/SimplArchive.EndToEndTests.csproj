@@ -48,6 +48,9 @@
          serves its controller; referencing it also lands the dll in this test bin to stage FROM. -->
     <ProjectReference Include="..\SimplArchive.TestModule\SimplArchive.TestModule.csproj" />
     <ProjectReference Include="..\..\src\SimplArchive.Api\SimplArchive.Api.csproj" />
+    <!-- saconsole, so the device-flow CLIENT is exercised against a real server rather than only compiled.
+         The polling contract (interval, slow_down, access_denied) is the half a unit test cannot check. -->
+    <ProjectReference Include="..\..\src\SimplArchive.Cli\SimplArchive.Cli.csproj" />
     <ProjectReference Include="..\..\src\SimplArchive.Infrastructure\SimplArchive.Infrastructure.csproj" />
   </ItemGroup>
 

@@ -42,7 +42,7 @@ public sealed class TenantCreateCommand : AsyncCommand<TenantCreateCommand.Setti
 
     protected override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
-        using var http = new HttpClient { BaseAddress = new Uri(settings.Url.TrimEnd('/') + "/") };
+        using var http = new HttpClient { BaseAddress = new Uri(settings.ResolvedUrl.TrimEnd('/') + "/") };
         var api = new SimplArchiveApi(http);
 
         await api.AuthenticateAsPlatformAdministratorAsync(settings.ClientId, settings.ResolvedSecret, cancellationToken);

@@ -51,6 +51,24 @@ public sealed class SimplArchiveApi(HttpClient http)
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
     }
 
+    public async Task<JsonElement> GetAsync(string path, CancellationToken cancellationToken)
+    {
+        using var response = await http.GetAsync(path, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            // 401 is called out because it has ONE cause here and a generic status would send the reader
+            // looking at rights instead: the session in the environment has expired, and there is no refresh
+            // token by design (ADR 0823).
+            throw new CliException(response.StatusCode == System.Net.HttpStatusCode.Unauthorized
+                ? "The session has expired. Run 'saconsole login' again — this tool holds no refresh token by design."
+                : Describe(response.StatusCode, body, path));
+        }
+
+        return JsonDocument.Parse(body).RootElement.Clone();
+    }
+
     public async Task<JsonElement> PostAsync<TRequest>(string path, TRequest payload, CancellationToken cancellationToken)
     {
         using var response = await http.PostAsJsonAsync(path, payload, Json, cancellationToken);
