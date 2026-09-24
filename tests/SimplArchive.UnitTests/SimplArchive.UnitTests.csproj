@@ -50,6 +50,7 @@
     <ProjectReference Include="..\SimplArchive.TestModule\SimplArchive.TestModule.csproj" />
     <ProjectReference Include="..\..\src\SimplArchive.Auth\SimplArchive.Auth.csproj" />
     <ProjectReference Include="..\..\src\SimplArchive.Api\SimplArchive.Api.csproj" />
+    <ProjectReference Include="..\..\src\SimplArchive.Cli\SimplArchive.Cli.csproj" />
   </ItemGroup>
 
 </Project>

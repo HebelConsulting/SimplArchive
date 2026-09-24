@@ -3,6 +3,7 @@
     <Project Path="src/SimplArchive.Api/SimplArchive.Api.csproj" />
     <Project Path="src/SimplArchive.Application/SimplArchive.Application.csproj" />
     <Project Path="src/SimplArchive.Auth/SimplArchive.Auth.csproj" />
+    <Project Path="src/SimplArchive.Cli/SimplArchive.Cli.csproj" />
     <Project Path="src/SimplArchive.Client/SimplArchive.Client.csproj" />
     <Project Path="src/SimplArchive.DesktopClient/SimplArchive.DesktopClient.csproj" />
     <Project Path="src/SimplArchive.Domain/SimplArchive.Domain.csproj" />

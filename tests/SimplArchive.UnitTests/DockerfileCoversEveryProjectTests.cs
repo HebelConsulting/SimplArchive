@@ -34,7 +34,12 @@ public class DockerfileCoversEveryProjectTests
     //   Worker        — Microsoft.NET.Sdk.Worker, its own host with its own deployment; the Api does not
     //                   reference it. (Surfaced by this very test on its first run, and checked rather than
     //                   assumed: `grep ProjectReference` on the Api finds nothing.)
-    private static readonly string[] NotInTheImage = ["SimplArchive.DesktopClient", "SimplArchive.Worker"];
+    //   Cli           — saconsole (ADR 0822), shipped as a .NET tool an administrator installs, not into the
+    //                   image. It is a CLIENT of a deployed installation and references no project here, so
+    //                   the Api cannot need it; checked the same way, and this test is what caught the
+    //                   assumption that a new src/ project "obviously" did not need a line.
+    private static readonly string[] NotInTheImage =
+        ["SimplArchive.DesktopClient", "SimplArchive.Worker", "SimplArchive.Cli"];
 
     [Fact]
     public void The_restore_layer_copies_every_project_the_image_builds()
