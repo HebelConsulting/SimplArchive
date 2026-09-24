@@ -1,0 +1,94 @@
+# Publishes saconsole (the administrative CLI, ADR 0822) to GitHub Packages AND nuget.org — PUBLIC repo only.
+#
+# Triggered on a v* tag and name-gated to HebelConsulting/SimplArchive, exactly like the Docker and desktop
+# publishes: release tags are created DIRECTLY on the public repo (the mirror does not mirror tags), so the
+# gate is what keeps this a no-op if a v* tag ever appears on the private canonical.
+#
+# THE VERSION COMES FROM THE TAG, not from a property. This repository has no single <Version>: releases are
+# v* tags, and the Docker images derive their version the same way. That is the one structural difference from
+# CAManagement's publish, whose packages share a <Version> in src/Directory.Build.props — do not copy that
+# shape here looking for a file to bump; there isn't one, and inventing one would give the tool a version that
+# disagrees with the release it shipped in.
+#
+# nuget.org uses TRUSTED PUBLISHING — no stored API key. NuGet/login exchanges this run's GitHub OIDC token for
+# a short-lived nuget.org key, valid only because the nuget.org policy pins exactly this repository, this
+# workflow FILE, and the `public` environment. Three things that will bite whoever touches this next:
+#
+#   * the login's `user:` names the policy CREATOR, not the package owner — nuget.org matches policies by
+#     creator, and passing the owner is a bare 401;
+#   * the job MUST declare `environment: public`, or the token's claims do not match the policy and the
+#     exchange fails — and that environment has to exist in the PUBLIC repo, which is where this runs;
+#   * renaming this file breaks the policy match SILENTLY. Update the policy on nuget.org in the same change.
+#
+# This file must NOT join publish/publish-public.sh's withheld set: it is useless in the private repo and is
+# the whole point in the mirror.
+name: Publish saconsole
+
+on:
+  push:
+    tags: ["v*"]
+  # A re-run for a tag whose publish failed after the release was already cut — the version is stated
+  # explicitly rather than guessed, because a wrong one here publishes a package that lies about its release.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish, without the leading v (e.g. 0.33.0)"
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write # lets the runner mint the OIDC token trusted publishing exchanges
+
+jobs:
+  publish:
+    timeout-minutes: 15
+    if: ${{ github.repository == 'HebelConsulting/SimplArchive' }}
+    runs-on: ubuntu-latest
+    # Must match the environment pinned in the nuget.org trusted-publishing policy.
+    environment: public
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Resolve the version
+        id: version
+        run: |
+          set -euo pipefail
+          version="${{ inputs.version }}"
+          if [ -z "$version" ]; then version="${GITHUB_REF_NAME#v}"; fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          echo "publishing saconsole $version"
+
+      - name: Pack
+        run: >-
+          dotnet pack src/SimplArchive.Cli/SimplArchive.Cli.csproj
+          -c Release -o dist/nuget --nologo
+          -p:Version=${{ steps.version.outputs.value }}
+
+      - name: Push to GitHub Packages
+        run: >-
+          dotnet nuget push "dist/nuget/*.nupkg"
+          --source "https://nuget.pkg.github.com/HebelConsulting/index.json"
+          --api-key "${{ secrets.GITHUB_TOKEN }}"
+          --skip-duplicate
+
+      - name: Log in to nuget.org (trusted publishing)
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: monacense
+
+      - name: Push to nuget.org
+        run: >-
+          dotnet nuget push "dist/nuget/*.nupkg"
+          --source "https://api.nuget.org/v3/index.json"
+          --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}"
+          --skip-duplicate
+
+      - name: Report
+        run: |
+          echo "::notice::saconsole ${{ steps.version.outputs.value }} pushed to GitHub Packages and nuget.org."
+          echo "::notice::Install with: dotnet tool install --global HebelConsulting.SimplArchive.Cli"

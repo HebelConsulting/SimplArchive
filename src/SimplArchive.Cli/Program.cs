@@ -11,14 +11,28 @@ app.Configure(config =>
 {
     config.SetApplicationName("saconsole");
 
-    // A CliException carries a message written for the person running the command; anything else is a bug and
-    // keeps its type, because hiding an unexpected exception behind a friendly sentence is how a tool starts
-    // lying about what went wrong.
+    // Three kinds of failure, told apart because calling them all the same thing is how a tool starts lying
+    // about what went wrong.
+    //
+    //   CliException            — something the installation said; the message is written for the reader.
+    //   CommandRuntimeException — Spectre's own parse/validation failure, i.e. the command line was wrong.
+    //                             Found by running the PACKAGED tool: a forgotten --url printed
+    //                             "Unexpected CommandRuntimeException", which tells someone they hit a bug
+    //                             when they merely mistyped.
+    //   anything else           — a real bug, and it keeps its type rather than hiding behind a friendly
+    //                             sentence.
     config.SetExceptionHandler((exception, _) =>
     {
         if (exception.GetBaseException() is CliException expected)
         {
             AnsiConsole.MarkupLine($"[red]{Markup.Escape(expected.Message)}[/]");
+            return 1;
+        }
+
+        if (exception.GetBaseException() is CommandRuntimeException usage)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(usage.Message)}[/]");
+            AnsiConsole.MarkupLine("Run with [blue]--help[/] to see the options.");
             return 1;
         }
 
