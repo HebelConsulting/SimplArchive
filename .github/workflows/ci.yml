@@ -121,9 +121,15 @@ jobs:
           while IFS= read -r file; do
             while IFS=: read -r line _; do
               start=$(( line > 6 ? line - 6 : 1 ))
-              if ! sed -n "${start},${line}p" "$file" | grep -q 'package-manager-exception'; then
-                OFFENDERS="${OFFENDERS}${file}:${line}: $(sed -n "${line}p" "$file" | cut -c1-100)"$'\n'
-              fi
+              # Captured, not piped into `grep -q`: grep exits at its first match and SIGPIPEs sed, and
+              # `pipefail` then reports the signal rather than the match — so a marker that IS present can
+              # read as absent. Here that direction is a false ALARM rather than a silent miss, which is why
+              # it outlived the same bug elsewhere; it is still a gate that can fail for no reason.
+              block=$(sed -n "${start},${line}p" "$file")
+              case "$block" in
+                *package-manager-exception*) ;;
+                *) OFFENDERS="${OFFENDERS}${file}:${line}: $(sed -n "${line}p" "$file" | cut -c1-100)"$'\n' ;;
+              esac
             done < <(grep -nE '(curl|wget)[^|]*\| *(sudo )?(ba)?sh' "$file" || true)
           done < <(git ls-files '*.md' '*.sh' '*.ks' '*.cfg' '*.typ' 'charts/**' \
                      | grep -vE '^(\.github/|CLAUDE\.md|docs/SeedCLAUDE\.md|docs/adr/)')

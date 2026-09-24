@@ -16,6 +16,10 @@ namespace SimplArchive.UnitTests;
 ///
 /// Comment lines are skipped deliberately — the fixes explain the trap, and a guard that punishes
 /// documenting the rule teaches people to stop documenting it.
+///
+/// Workflows are scanned too, with no need to find a `set` line: GitHub's default shell is
+/// <c>bash --noprofile --norc -eo pipefail</c>, so every <c>run:</c> block is already subject to this. That
+/// gap is why <c>ci.yml</c> kept the shape after every script had been fixed.
 /// </summary>
 public sealed partial class GrepQUnderPipefailTests
 {
@@ -29,7 +33,11 @@ public sealed partial class GrepQUnderPipefailTests
 
         var offenders = new List<string>();
 
-        foreach (var file in Directory.EnumerateFiles(root, "*.sh", SearchOption.AllDirectories))
+        var workflows = Path.Combine(root, ".github", "workflows");
+        var files = Directory.EnumerateFiles(root, "*.sh", SearchOption.AllDirectories)
+            .Concat(Directory.Exists(workflows) ? Directory.EnumerateFiles(workflows, "*.yml") : []);
+
+        foreach (var file in files)
         {
             if (file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
                 || file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
@@ -39,7 +47,10 @@ public sealed partial class GrepQUnderPipefailTests
             }
 
             var lines = File.ReadAllLines(file);
-            if (!lines.Any(l => Pipefail().IsMatch(l)))
+
+            // A workflow needs no `set` line: GitHub's default bash shell already sets pipefail.
+            var isWorkflow = file.StartsWith(workflows, StringComparison.Ordinal);
+            if (!isWorkflow && !lines.Any(l => Pipefail().IsMatch(l)))
             {
                 continue; // without pipefail the pipeline reports grep's status, which is correct
             }
