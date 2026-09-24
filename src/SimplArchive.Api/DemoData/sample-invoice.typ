@@ -8,7 +8,12 @@
 #set page(paper: "a4", margin: (x: 2cm, y: 2cm))
 #set text(font: "Helvetica Neue", size: 10pt, fallback: true)
 
-#let accent = rgb("#5b4ee6")
+// Deep teal — a vendor identity that sits WITH the application chrome rather than against it. The previous
+// value, #5b4ee6, was the product's own pre-redesign purple (see ThemeTokens: "the whole application read
+// purple"), left behind when the app moved to teal — so the manual showed a violet document inside a teal
+// application. Distinct from the other demo documents' accents, which stay green/blue/steel/brown so the
+// five read apart at a glance.
+#let accent = rgb("#0b5d57")
 
 // ── Vendor header band ────────────────────────────────────────────────────────
 #block(fill: accent, inset: (x: 16pt, y: 14pt), radius: 4pt, width: 100%)[

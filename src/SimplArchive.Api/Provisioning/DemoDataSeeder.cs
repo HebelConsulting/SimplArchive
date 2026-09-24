@@ -176,7 +176,10 @@ public static class DemoDataSeeder
 
         AddAnnotation(dbContext, tenantId, invoice.Id, invoiceVersion.Id, adminId, now, AnnotationKind.Highlight, 0.575, 0.490, 0.345, 0.030, string.Empty, "#ffd54a");
         AddAnnotation(dbContext, tenantId, invoice.Id, invoiceVersion.Id, adminId, now, AnnotationKind.Note, 0.085, 0.300, 0.300, 0.085, "Line 1: price checked against the framework agreement ✓", "#fff59d");
-        AddAnnotation(dbContext, tenantId, invoice.Id, invoiceVersion.Id, adminId, now, AnnotationKind.Stamp, 0.680, 0.120, 0.230, 0.090, "APPROVED", "#2e7d32");
+        // The stamp sits in the empty band BELOW the payment-terms box. It used to be at y=0.120, which put it
+        // squarely over the "RECHNUNG" heading — an approval stamp obscuring the word that says what the
+        // document is, in the screenshot the manual leads with.
+        AddAnnotation(dbContext, tenantId, invoice.Id, invoiceVersion.Id, adminId, now, AnnotationKind.Stamp, 0.620, 0.665, 0.230, 0.090, "APPROVED", "#2e7d32");
         await dbContext.SaveChangesAsync();
 
         await AddInReviewWorkflowAsync(dbContext, tenantId, invoiceVersion.Id, adminId, now);

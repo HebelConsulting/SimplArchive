@@ -42,17 +42,22 @@ public partial class MainWindowViewModel
         Tree.Add(new TreeNodeViewModel(Guid.Empty, "Invoices", false, null, hasChildren: false)); // an EMPTY folder — shows the pastel glyph (ADR "Empty-folder tree icon")
         Tree.Add(new TreeNodeViewModel(Guid.Empty, "Shared (ref)", false, null, isReference: true));
         Tree.Add(new TreeNodeViewModel(Guid.Empty, "Administration", true, null, syntheticIcon: "mdi-shield-account"));
+        // The DOCUMENT names below are not free to choose: they must be documents DemoDataSeeder actually
+        // creates, because the manual's desktop screenshots sit beside web screenshots taken against the real
+        // seeded app, and two halves of one manual describing two different datasets is what this fixture used
+        // to do (it showed "Invoice 2025-001.pdf" and "sample.docx", which exist nowhere). ManualFixtureMatchesSeedTests
+        // fails the build if they drift apart again.
         Items.Add(new NodeViewModel { Id = Guid.Empty, Name = "Invoices", HasChildren = true, HasVersions = false });
-        Items.Add(new NodeViewModel { Id = Guid.Empty, Name = "Invoice 2025-001.pdf", HasChildren = false, HasVersions = true });
-        Items.Add(new NodeViewModel { Id = Guid.Empty, Name = "sample.docx", HasChildren = false, HasVersions = true });
+        Items.Add(new NodeViewModel { Id = Guid.Empty, Name = "Invoice 2026-003", HasChildren = false, HasVersions = true });
+        Items.Add(new NodeViewModel { Id = Guid.Empty, Name = "Offer 2026-014", HasChildren = false, HasVersions = true });
         Items.Add(new NodeViewModel { Id = Guid.Empty, Name = "Shared Contract.pdf", HasChildren = false, HasVersions = true, IsReference = true });
         SelectedItem = Items[1]; // a document is picked, so Rename/Delete/Download are enabled in the screenshot
-        DetailTitle = "Invoice 2025-001";
-        SysName = "Invoice 2025-001";
+        DetailTitle = "Invoice 2026-003";
+        SysName = "Invoice 2026-003";
         SysFileExtension = ".pdf";
         SysCreatedAt = DateTimeOffset.Parse("2026-07-15 09:12Z", System.Globalization.CultureInfo.InvariantCulture);
         SysCreatedBy = "Demo Admin";
-        SysDocumentDate = new DateTime(2026, 6, 28);
+        SysDocumentDate = new DateTime(2026, 3, 3);
         SysOcrCandidate = false;
         SysOcrLanguages = "German, French";
         MaskLine = "Mask: Basic Entry · version 1";
