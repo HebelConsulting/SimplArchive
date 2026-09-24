@@ -55,15 +55,11 @@ public sealed class AtRestKeyService(
         }
 
         // Read per call like the envelope client, so the list is editable without a restart (ADR 0813).
-        var listed = configuration.GetSection("Encryption:Tenants").Get<string[]>()
-            ?.Where(t => !string.IsNullOrWhiteSpace(t)).ToArray();
-        if (listed is null or { Length: 0 })
-        {
-            return true; // no list = every tenant, the ADR 0813 contract
-        }
-
+        // Both tiers are read from ONE map (EncryptionModes) — this used to be a second, subtly different
+        // copy of the same list logic.
         var name = await TenantNameAsync(tenantId, cancellationToken);
-        return name is not null && listed.Contains(name, StringComparer.OrdinalIgnoreCase);
+        return name is not null
+            && new SimplArchive.Infrastructure.Encryption.EncryptionModes(configuration).Applies(name);
     }
 
     /// <summary>The current KEK in the client-facing shape — for the initiate-upload response.</summary>

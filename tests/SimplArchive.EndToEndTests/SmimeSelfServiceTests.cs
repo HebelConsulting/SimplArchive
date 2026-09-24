@@ -15,7 +15,7 @@ namespace SimplArchive.EndToEndTests;
 
 // Self-service IMAP encryption (#1332, ADR 0816): a user sets their own S/MIME certificate — uploaded or
 // generated — and the core envelopes their IMAP fetches IN-PROCESS, no encryption sidecar involved. The
-// per-test tenant is deliberately NOT in Encryption:Tenants, which is exactly the sidecar-free
+// per-test tenant deliberately has NO encryption mode, which is exactly the sidecar-free
 // installation the feature exists for. The decisive test closes the full circle: the p12 the endpoint
 // returned opens the message the IMAP surface served.
 [Collection(E2ECollection.Name)]

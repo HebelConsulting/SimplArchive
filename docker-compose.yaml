@@ -92,7 +92,10 @@ x-api-env: &api-env
   # original per-installation behaviour). Set to a tenant NAME to envelope only that tenant, e.g.
   # ENCRYPTION_TENANT=Crypto beside the CryptoDemo:* seed — the kiosk's arrangement, so an encrypted demo
   # tenant runs beside an untouched public one. Same shared-anchor reasoning as the URL above.
-  Encryption__Tenants__0: ${ENCRYPTION_TENANT:-}
+  # ADR 0825: a mode per tenant. The dev stack sets the INSTALLATION default, because the old variable held
+  # a tenant NAME and a name cannot be an environment-variable key. `ENCRYPTION_MODE=Storage docker compose up`
+  # encrypts every tenant locally; unset means none, exactly as before.
+  Encryption__DefaultMode: ${ENCRYPTION_MODE:-}
   # SET EXPLICITLY BECAUSE THERE ARE TWO INSTANCES (#1245). The pool ceiling is PER PROCESS, so the database
   # sees it multiplied by the instance count — and the application default is 40, which two instances turn
   # into 80 against a stock `max_connections` of 100 (97 usable after the superuser reserve). That leaves

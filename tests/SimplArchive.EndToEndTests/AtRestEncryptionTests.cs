@@ -73,7 +73,7 @@ public class AtRestEncryptionTests
     [Fact]
     public async Task A_gated_tenants_write_stores_ciphertext_and_every_door_serves_plaintext()
     {
-        // crypt@ is the seeded Crypto admin — the ONE tenant Encryption__Tenants lists in this factory.
+        // crypt@ is the seeded Crypto admin — the ONE tenant given an encryption mode in this factory.
         using var api = _factory.CreateAuthedClient(
             await _factory.GetUserTokenAsync(E2EApiFactory.CryptoAdminEmail, E2EApiFactory.CryptoPassword));
         var before = await SnapshotAsync();

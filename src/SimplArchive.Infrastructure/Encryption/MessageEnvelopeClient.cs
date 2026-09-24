@@ -118,15 +118,9 @@ public sealed class MessageEnvelopeClient(
         }
     }
 
-    private bool TenantListed(string tenantName)
-    {
-        var listed = configuration.GetSection("Encryption:Tenants").GetChildren()
-            .Select(child => child.Value)
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .ToList();
-
-        return listed.Count == 0 || listed.Contains(tenantName, StringComparer.OrdinalIgnoreCase);
-    }
+    // The answer lives in EncryptionModes — one map for both tiers, so they cannot drift into different
+    // readings of the configuration, and a second copy of this lookup has nowhere to be born.
+    private bool TenantListed(string tenantName) => new EncryptionModes(configuration).Applies(tenantName);
 }
 
 /// <summary>Registration, kept out of Program.cs so the integration is one line there.</summary>

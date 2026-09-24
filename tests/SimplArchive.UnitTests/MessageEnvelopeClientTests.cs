@@ -31,10 +31,17 @@ public class MessageEnvelopeClientTests
     private static MessageEnvelopeClient Client(
         string? serviceUrl, HttpMessageHandler handler, params string[] tenants)
     {
+        // ADR 0825: a mode per tenant. No named tenants means the installation default covers everything,
+        // which is the successor to the old "empty list means every tenant".
         var settings = new Dictionary<string, string?> { ["Encryption:ServiceUrl"] = serviceUrl };
-        for (var i = 0; i < tenants.Length; i++)
+        if (tenants.Length == 0)
         {
-            settings[$"Encryption:Tenants:{i}"] = tenants[i];
+            settings["Encryption:DefaultMode"] = "Storage";
+        }
+
+        foreach (var tenant in tenants)
+        {
+            settings[$"Encryption:Modes:{tenant}"] = "Storage";
         }
 
         return new(new StubFactory(handler),
@@ -70,7 +77,7 @@ public class MessageEnvelopeClientTests
     [Fact]
     public async Task An_unlisted_tenant_answers_null_without_any_call()
     {
-        // The per-tenant half of the switch (ADR 0813): with Encryption:Tenants present, an unlisted tenant
+        // The per-tenant half of the switch (ADR 0813, now a mode map — ADR 0825): a tenant with no mode
         // behaves exactly like an unconfigured installation — no call, no hostname resolution, plaintext.
         var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
@@ -86,7 +93,7 @@ public class MessageEnvelopeClientTests
     [Fact]
     public async Task A_listed_tenant_envelopes_and_the_match_ignores_case()
     {
-        // Case-insensitive on purpose: the list is operator-typed configuration, and "crypto" failing to
+        // Case-insensitive on purpose: the map is operator-typed configuration, and "crypto" failing to
         // match "Crypto" would fail silently into plaintext — the wrong direction to fail quietly in.
         var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
@@ -99,14 +106,16 @@ public class MessageEnvelopeClientTests
     }
 
     [Fact]
-    public void A_whitespace_only_list_means_every_tenant()
+    public void An_installation_default_covers_a_tenant_with_no_entry_of_its_own()
     {
-        // The compose passthrough (`Encryption__Tenants__0: ${ENCRYPTION_TENANT:-}`) yields one empty
-        // element when the variable is unset — that must read as "no list", not "a tenant named nothing".
+        // Succeeds the old "a whitespace-only list means every tenant" case. That existed because the compose
+        // passthrough `Encryption__Tenants__0: ${ENCRYPTION_TENANT:-}` yielded one EMPTY element when the
+        // variable was unset, which had to read as "no list" rather than "a tenant named nothing" — a
+        // fragility that came from encoding a policy default in the absence of a value. Under ADR 0825 the
+        // installation-wide answer is its own setting, so there is no empty element to interpret.
         var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
 
-        Assert.True(Client("http://encryption:8080", handler, string.Empty).EnabledFor("Acme"));
-        Assert.True(Client("http://encryption:8080", handler, " ").EnabledFor("Acme"));
+        Assert.True(Client("http://encryption:8080", handler).EnabledFor("Acme"));
     }
 
     [Fact]
