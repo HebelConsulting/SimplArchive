@@ -1,7 +1,7 @@
 namespace SimplArchive.UnitTests;
 
-// The chart's copy of db-init.sql must be byte-identical to scripts/, and the chart must wire the runtime
-// static role end to end (#1249, ADR 0721).
+// EVERY copy of db-init.sql must be byte-identical to scripts/, and the chart must wire the runtime static
+// role end to end (#1249, ADR 0721).
 //
 // WHAT WENT WRONG, AND WHY NOTHING FAILED. A Helm chart cannot read outside itself, so charts/…/files/ carries
 // a copy of the bootstrap SQL. Nothing compared them. ADR 0721 added the static `simplarchive_runtime` login to
@@ -18,10 +18,21 @@ namespace SimplArchive.UnitTests;
 // So this guards the whole chain rather than the file. A test that only compared the two SQL files would have
 // passed the moment somebody copied one over the other, while the policy and the env stayed missing and the app
 // carried on using a credential that dies at 24h.
+//
+// AND THERE WERE THREE COPIES, NOT TWO — which this guard missed for the same reason it was written. The KIOSK
+// carries its own (tools/kiosk/config/db-init.sql), and while the chart was being fixed it sat at 115 lines
+// with ZERO mentions of simplarchive_runtime. A guard that names its subjects one by one only ever watches the
+// ones somebody thought of, so the list is now DERIVED: every db-init.sql in the repository is compared, and a
+// fourth copy appearing anywhere is picked up without anybody remembering to add it.
+//
+// The kiosk drift was also the more dangerous direction. The HOST had the correct file — somebody fixed the
+// running demo by hand — so the repository was no longer the source of truth, and a kiosk rebuilt from
+// tools/kiosk/ would have provisioned the pre-0721 role model whose credential dies at 24h. That is issue #668
+// (the kiosk's config drifts silently) recurring on the very file its item 4 already named.
 public class DbInitCopyLockstepTests
 {
     [Fact]
-    public void The_charts_copy_of_db_init_is_byte_identical()
+    public void Every_copy_of_db_init_is_byte_identical()
     {
         if (PrivateRepositoryGate.RepoRoot() is not { } root)
         {
@@ -29,15 +40,44 @@ public class DbInitCopyLockstepTests
         }
 
         var source = Path.Combine(root, "scripts", "db-init.sql");
-        var copy = Path.Combine(root, "charts", "simplarchive", "files", "db-init.sql");
+        var canonical = File.ReadAllText(source);
 
-        Assert.True(File.Exists(copy), $"{copy} is missing — the chart renders it into a ConfigMap.");
+        // FOUND, not listed. Naming the copies is what let the kiosk's sit unwatched while the chart's was
+        // being fixed; a search finds the one nobody remembered, and finds the next one for free.
+        var copies = Directory.EnumerateFiles(root, "db-init.sql", SearchOption.AllDirectories)
+            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                && !string.Equals(f, source, StringComparison.Ordinal))
+            .OrderBy(f => f, StringComparer.Ordinal)
+            .ToList();
 
-        Assert.True(File.ReadAllText(source) == File.ReadAllText(copy),
-            "scripts/db-init.sql and charts/simplarchive/files/db-init.sql have diverged.\n\n"
-            + "Copy one over the other; do not edit them separately. Two bootstrap scripts that differ mean "
-            + "compose and Kubernetes provision DIFFERENT databases, and only one of them is exercised by the "
-            + "test suite — which is how the chart lost an entire role for a year (#1249).");
+        // Both known copies must still be among them: a rename or a move would otherwise leave this passing
+        // while watching nothing, which is the failure mode the whole file is about.
+        foreach (var required in new[]
+        {
+            Path.Combine("charts", "simplarchive", "files", "db-init.sql"),
+            Path.Combine("tools", "kiosk", "config", "db-init.sql"),
+        })
+        {
+            Assert.True(copies.Any(c => c.EndsWith(required, StringComparison.Ordinal)),
+                $"{required.Replace(Path.DirectorySeparatorChar, '/')} is gone. If it MOVED, this guard is now "
+                + "watching one fewer bootstrap script than the repository ships — which is exactly how the "
+                + "chart lost a role for a year (#1249) and how the kiosk's copy went stale (#668).");
+        }
+
+        var diverged = copies
+            .Where(c => File.ReadAllText(c) != canonical)
+            .Select(c => "  " + Path.GetRelativePath(root, c).Replace(Path.DirectorySeparatorChar, '/'))
+            .ToList();
+
+        Assert.True(diverged.Count == 0,
+            "These copies of db-init.sql have diverged from scripts/db-init.sql:\n"
+            + string.Join("\n", diverged)
+            + "\n\nCopy the canonical file over them; do not edit them separately. Bootstrap scripts that "
+            + "differ mean compose, Kubernetes and the kiosk provision DIFFERENT databases, and only one of "
+            + "them is exercised by the test suite — which is how the chart lost an entire role for a year "
+            + "(#1249), and how the kiosk's copy came to be missing simplarchive_runtime while the running "
+            + "host had it (#668).");
     }
 
     // The four places the runtime static role has to appear. Named individually rather than counted, because a
