@@ -93,10 +93,11 @@ public sealed class SmtpEmailSender : IEmailSender
             using var certificate = System.Security.Cryptography.X509Certificates.X509Certificate2
                 .CreateFromPem(certificatePem);
             using var context = new MimeKit.Cryptography.TemporarySecureMimeContext();
+            // SmimeRecipient states the content cipher; without it MimeKit falls back to 3DES (see that type).
             message.Body = MimeKit.Cryptography.ApplicationPkcs7Mime.Encrypt(
                 context, new MimeKit.Cryptography.CmsRecipientCollection
                 {
-                    new MimeKit.Cryptography.CmsRecipient(certificate),
+                    SimplArchive.Infrastructure.Encryption.SmimeRecipient.For(certificate),
                 }, message.Body);
         }
         catch (Exception exception) when (exception is System.Security.Cryptography.CryptographicException or ArgumentException)

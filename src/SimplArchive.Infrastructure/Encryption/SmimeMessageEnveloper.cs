@@ -31,8 +31,10 @@ public sealed class SmimeMessageEnveloper(ILogger<SmimeMessageEnveloper> logger)
             }
 
             using var context = new TemporarySecureMimeContext();
+            // SmimeRecipient, not `new CmsRecipient(certificate)`: the latter states no cipher preference, and
+            // MimeKit then falls back to 3DES because a bare certificate advertises no S/MIME capabilities.
             message.Body = ApplicationPkcs7Mime.Encrypt(
-                context, new CmsRecipientCollection { new CmsRecipient(certificate) }, body);
+                context, new CmsRecipientCollection { SmimeRecipient.For(certificate) }, body);
 
             using var output = new MemoryStream();
             message.WriteTo(output);
