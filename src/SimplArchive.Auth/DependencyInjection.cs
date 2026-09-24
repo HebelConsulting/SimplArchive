@@ -58,6 +58,15 @@ public static class DependencyInjection
 
                 options.AllowClientCredentialsFlow();
 
+                // The device authorization grant (RFC 8628), for saconsole (ADR 0823). An administrative CLI
+                // is typically run over SSH on a host with no browser and no desktop session, where the
+                // loopback flow the desktop client uses cannot work at all: it needs a browser on the machine
+                // running the command. Here the tool prints a code, and the approval happens in whatever
+                // browser the administrator already has, on whatever machine they are sitting at.
+                options.AllowDeviceAuthorizationFlow();
+                options.SetDeviceAuthorizationEndpointUris("connect/device");
+                options.SetEndUserVerificationEndpointUris("connect/verify");
+
                 // PKCE is required unconditionally for the Authorization Code flow — the Blazor Client is
                 // a public client (no client secret), so proof-of-possession is the only protection
                 // against authorization-code interception.
@@ -135,7 +144,12 @@ public static class DependencyInjection
                 var aspNetCoreBuilder = options.UseAspNetCore()
                     .EnableTokenEndpointPassthrough()
                     .EnableAuthorizationEndpointPassthrough()
-                    .EnableUserInfoEndpointPassthrough();
+                    .EnableUserInfoEndpointPassthrough()
+                    // Device flow: ONLY the verification endpoint is passed through, and the asymmetry is the
+                    // point. Issuing the device and user codes needs no decision, so OpenIddict does it
+                    // itself; approving one needs a PERSON, which is the entire security value of this grant
+                    // and is not something middleware can supply.
+                    .EnableEndUserVerificationEndpointPassthrough();
 
                 // OpenIddict requires HTTPS by default (a secure-by-default behavior we keep everywhere
                 // except local development, where the API commonly runs over plain HTTP). Real
