@@ -89,6 +89,10 @@ public class SearchIndexFirstBuildTests
 
     private static OpenSearchIndexRebuilder Rebuilder(HttpClient http, SimplArchiveDbContext db, CurrentTenantAccessor accessor) =>
         new(http, db, accessor,
+            // No tenant is strict here, so the rebuild indexes everything exactly as before (ADR 0825).
+            new SimplArchive.Infrastructure.Search.StrictTenantSearchPolicy(
+                db, new SimplArchive.Infrastructure.Encryption.EncryptionModes(
+                    new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build())),
             new InMemoryObjectStorage(), new NullTextExtractor(), new ZipArchiveReader(),
             new EffectiveRightsCalculator(db), NullLogger<OpenSearchIndexRebuilder>.Instance);
 

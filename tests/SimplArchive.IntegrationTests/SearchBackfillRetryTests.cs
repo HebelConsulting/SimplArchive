@@ -90,6 +90,11 @@ public class SearchBackfillRetryTests
             new HttpClient(handler) { BaseAddress = new Uri("http://opensearch.invalid/") },
             sp.GetRequiredService<SimplArchiveDbContext>(),
             accessor,
+            // No tenant is strict in these tests, so the rebuild indexes everything exactly as before.
+            new SimplArchive.Infrastructure.Search.StrictTenantSearchPolicy(
+                sp.GetRequiredService<SimplArchiveDbContext>(),
+                new SimplArchive.Infrastructure.Encryption.EncryptionModes(
+                    new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build())),
             sp.GetRequiredService<IObjectStorageClient>(),
             sp.GetRequiredService<ITextExtractor>(),
             sp.GetRequiredService<IArchiveReader>(),

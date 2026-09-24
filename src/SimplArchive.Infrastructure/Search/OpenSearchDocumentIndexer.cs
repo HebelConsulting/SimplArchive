@@ -28,12 +28,13 @@ public sealed class OpenSearchDocumentIndexer : IDocumentIndexer
     private readonly ITextExtractor _extractor;
     private readonly IArchiveReader _archiveReader;
     private readonly IEffectiveRightsCalculator _rightsCalculator;
+    private readonly StrictTenantSearchPolicy _searchPolicy;
     private readonly ILogger<OpenSearchDocumentIndexer> _logger;
 
     public OpenSearchDocumentIndexer(
         HttpClient http, SimplArchiveDbContext dbContext, IObjectStorageClient storage,
         ITextExtractor extractor, IArchiveReader archiveReader, IEffectiveRightsCalculator rightsCalculator,
-        ILogger<OpenSearchDocumentIndexer> logger)
+        StrictTenantSearchPolicy searchPolicy, ILogger<OpenSearchDocumentIndexer> logger)
     {
         _http = http;
         _dbContext = dbContext;
@@ -41,6 +42,7 @@ public sealed class OpenSearchDocumentIndexer : IDocumentIndexer
         _extractor = extractor;
         _archiveReader = archiveReader;
         _rightsCalculator = rightsCalculator;
+        _searchPolicy = searchPolicy;
         _logger = logger;
     }
 
@@ -60,6 +62,17 @@ public sealed class OpenSearchDocumentIndexer : IDocumentIndexer
                 .SingleOrDefaultAsync(cancellationToken);
 
             if (doc is null)
+            {
+                await RemoveAsync(documentId, cancellationToken);
+                return true;
+            }
+
+            // A strict tenant's content must not be in the index at all (ADR 0825). REMOVE rather than skip,
+            // and the difference matters: a tenant switched to strict has entries already written, and merely
+            // declining to update them would leave that plaintext sitting there indefinitely. This way any
+            // document touched after the switch evicts itself, and a full reindex — which excludes strict
+            // tenants by construction — purges the remainder.
+            if (await _searchPolicy.ExcludesAsync(doc.TenantId, cancellationToken))
             {
                 await RemoveAsync(documentId, cancellationToken);
                 return true;

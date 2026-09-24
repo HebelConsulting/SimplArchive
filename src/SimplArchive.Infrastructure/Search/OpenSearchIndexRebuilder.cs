@@ -23,6 +23,7 @@ public sealed class OpenSearchIndexRebuilder
     private const string Alias = AliasName;
 
     private readonly HttpClient _http;
+    private readonly StrictTenantSearchPolicy _searchPolicy;
     private readonly SimplArchiveDbContext _dbContext;
     private readonly CurrentTenantAccessor _tenantAccessor;
     private readonly IObjectStorageClient _storage;
@@ -33,12 +34,14 @@ public sealed class OpenSearchIndexRebuilder
 
     public OpenSearchIndexRebuilder(
         HttpClient http, SimplArchiveDbContext dbContext, CurrentTenantAccessor tenantAccessor,
+        StrictTenantSearchPolicy searchPolicy,
         IObjectStorageClient storage, ITextExtractor extractor, IArchiveReader archiveReader,
         IEffectiveRightsCalculator rightsCalculator, ILogger<OpenSearchIndexRebuilder> logger)
     {
         _http = http;
         _dbContext = dbContext;
         _tenantAccessor = tenantAccessor;
+        _searchPolicy = searchPolicy;
         _storage = storage;
         _extractor = extractor;
         _archiveReader = archiveReader;
@@ -130,6 +133,17 @@ public sealed class OpenSearchIndexRebuilder
         var count = 0;
         foreach (var document in documents)
         {
+            // The rebuild writes to OpenSearch DIRECTLY rather than through IDocumentIndexer, so it needs the
+            // strict-tenant exclusion of its own — a decorator on the interface would have left the full
+            // rebuild happily indexing every strict tenant (ADR 0825).
+            //
+            // This is also what PURGES a tenant switched to strict: the new index is built without it, and the
+            // alias swap retires the old one carrying its text.
+            if (await _searchPolicy.ExcludesAsync(document.TenantId, cancellationToken))
+            {
+                continue;
+            }
+
             _tenantAccessor.TenantId = document.TenantId;
             var body = await BuildBodyAsync(document.Id, cancellationToken);
             if (body is null)

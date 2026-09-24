@@ -271,11 +271,25 @@ public static class DependencyInjection
         // SearchReindexState is registered unconditionally (the reindex endpoint depends on it, ADR 0139).
         services.AddSingleton<SearchReindexState>();
 
+        // Which tenants must stay out of the index, shared by the indexer, the rebuilder and the router.
+        services.AddScoped<SimplArchive.Infrastructure.Search.StrictTenantSearchPolicy>();
+        services.AddScoped<SimplArchive.Infrastructure.Encryption.EncryptionModes>();
+
         var openSearchUrl = configuration["OpenSearch:Url"];
         if (!string.IsNullOrWhiteSpace(openSearchUrl))
         {
             services.AddHttpClient<OpenSearchService>(c => c.BaseAddress = new Uri(openSearchUrl));
-            services.AddScoped<ISearchService>(sp => sp.GetRequiredService<OpenSearchService>());
+
+            // A strict tenant's searches go to the metadata service instead (ADR 0825) — decided per REQUEST,
+            // because the search service is chosen once per installation while the tier is per tenant. The
+            // metadata service is registered alongside so the router can hand to it; it is the same
+            // implementation an installation with no OpenSearch already uses, not a stand-in for this tier.
+            services.AddScoped<MetadataSearchService>();
+            services.AddScoped<ISearchService>(sp => new StrictTenantSearchRouter(
+                sp.GetRequiredService<OpenSearchService>(),
+                sp.GetRequiredService<MetadataSearchService>(),
+                sp.GetRequiredService<ICurrentTenantAccessor>(),
+                sp.GetRequiredService<StrictTenantSearchPolicy>()));
 
             services.AddHttpClient<OpenSearchDocumentIndexer>(c => c.BaseAddress = new Uri(openSearchUrl));
             services.AddScoped<IDocumentIndexer>(sp => sp.GetRequiredService<OpenSearchDocumentIndexer>());
@@ -291,7 +305,8 @@ public static class DependencyInjection
         }
         else
         {
-            services.AddScoped<ISearchService, MetadataSearchService>();
+            services.AddScoped<MetadataSearchService>();
+            services.AddScoped<ISearchService>(sp => sp.GetRequiredService<MetadataSearchService>());
             services.AddSingleton<IDocumentIndexer, NullDocumentIndexer>();
             services.AddScoped<IDocumentIndexQueue, NullDocumentIndexQueue>();
         }
