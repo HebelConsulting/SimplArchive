@@ -2,15 +2,26 @@
 #
 # Triggered on a v* tag. Name-gated to HebelConsulting/SimplArchive (a no-op on the private canonical); like the
 # Docker publish, a name-only gate is fine because attaching release assets is harmless in the private-first
-# window. The win/linux job cross-builds on ubuntu (cheap). The macOS .dmg needs a macos-latest runner (pricier
-# minutes even on public), so it is an OPT-IN job: enable it by setting the repo Actions variable
-# BUILD_MACOS_DMG = true. Uploads use the built-in gh CLI (no third-party action); the first job to run creates
-# the release, the others upload to it.
+# window.
 #
-# Because that job is opt-in, the .dmg is a MANUAL step on a Mac, and the `verify` job below is what stops it
-# being silently forgotten: v0.30.0, v0.31.0 and v0.32.0 all shipped with Windows and Linux only, and nothing
-# said so. The release runbook already listed the step as a checklist item, so the fix is not a better
-# reminder — it is making the omission fail rather than pass quietly.
+# ALL FOUR PACKAGES ARE BUILT ON ONE macOS RUNNER, and that is a correction of a premise rather than a
+# preference. This workflow used to cross-build the win/linux archives on ubuntu and leave the .dmg to an
+# OPT-IN job (`vars.BUILD_MACOS_DMG`), because "a macOS runner is pricey" — true on a private repository, and
+# false here: GitHub's standard runners, macos-latest among them, are FREE in public repositories, and this
+# workflow cannot run anywhere else. So the saving was zero and the price was a manual step on somebody's Mac,
+# which v0.30.0, v0.31.0 and v0.32.0 all shipped without: Windows and Linux only, three times, with nothing
+# saying so. Measured before switching: the win/linux pair takes ~90 s on ubuntu, the .dmg pair ~10 min on an
+# M-series Mac, and a release fires this once.
+#
+# The macOS runner can build every target because `dotnet publish -r win-x64|linux-x64` cross-compiles, while
+# the .dmg needs the .app bundle format, hdiutil and codesign, which only macOS has. Verified rather than
+# assumed, because bsdtar and macOS zip are known for smuggling AppleDouble metadata into archives: a
+# macOS-built linux-x64 tarball carries zero `._` entries, keeps its executable bits, and in a clean
+# runtime-deps container starts and fails at exactly the same point as the ubuntu-built one from v0.33.0 (a
+# missing libSkiaSharp, which a bare container has no graphics stack for). Same behaviour, same line.
+#
+# ONE job, not two, so a release cannot ship half its packages: all four assets are attached together or the
+# release does not appear at all. That is the same rule the `verify` job below exists to state.
 name: Desktop packages
 
 on:
@@ -18,65 +29,59 @@ on:
     tags: ["v*"]
 
 jobs:
-  # Windows + Linux x64 — self-contained portable archives, cross-built on ubuntu (ADR 0478).
-  win-linux:
-    timeout-minutes: 30
+  # Every desktop package, on the one runner that can build them all (ADRs 0444/0478).
+  packages:
+    timeout-minutes: 60
     if: ${{ github.repository == 'HebelConsulting/SimplArchive' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write # create/update the GitHub Release + upload assets
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
-      - name: Package win-x64 + linux-x64
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          scripts/package-windows-linux.sh "$version"
-      - name: Attach to release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes \
-            || gh release upload "$GITHUB_REF_NAME" dist/* --clobber
-
-  # macOS .dmg (arm64 + x64) — OPT-IN (needs a macos runner). Set repo variable BUILD_MACOS_DMG=true to enable.
-  macos:
-    timeout-minutes: 45
-    if: ${{ github.repository == 'HebelConsulting/SimplArchive' && vars.BUILD_MACOS_DMG == 'true' }}
     runs-on: macos-latest
     permissions:
-      contents: write
+      contents: write # create the GitHub Release + upload assets
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
-      - name: Package macOS .dmg
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          scripts/package-macos-dmg.sh "$version"
-      - name: Attach to release
+
+      - name: Package win-x64 + linux-x64
+        run: scripts/package-windows-linux.sh "${GITHUB_REF_NAME#v}"
+
+      - name: Package macOS .dmg (arm64 + x64)
+        run: scripts/package-macos-dmg.sh "${GITHUB_REF_NAME#v}"
+
+      # Named explicitly rather than `dist/*`: a glob that finds three files uploads three files and reports
+      # success, which is the shape that let three releases ship without their .dmgs. An unexpanded name here
+      # fails the step instead.
+      - name: Attach every package to the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes \
-            || gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          assets=(
+            "dist/SimplArchive-$version-win-x64.zip"
+            "dist/SimplArchive-$version-linux-x64.tar.gz"
+            "dist/SimplArchive-$version-arm64.dmg"
+            "dist/SimplArchive-$version-x64.dmg"
+          )
+          for asset in "${assets[@]}"; do
+            [ -f "$asset" ] || { echo "::error::$asset was not built."; exit 1; }
+          done
+          gh release create "$GITHUB_REF_NAME" "${assets[@]}" --title "$GITHUB_REF_NAME" --generate-notes \
+            || gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
 
-  # Every release must carry all four packages. The macOS pair is built by hand (see above), so without this
-  # the release page simply shows fewer assets and looks finished — which is exactly how three releases went
-  # out with no .dmg at all. A skipped job reports success, so absence has to be asserted somewhere that a
-  # person will see.
+  # Every release must carry all four packages. They are all built by one job now, so this should never fire
+  # — which is exactly when a guard is worth keeping: it is the thing that would notice if a future change
+  # split the packaging up again, or if one script silently stopped producing an artefact. A skipped or
+  # partial job reports success, so absence has to be asserted somewhere a person will see.
   #
-  # EXPECT THIS JOB TO BE RED WHEN THE TAG IS PUSHED, and read that as "the release is not finished yet"
-  # rather than as a broken build: the .dmg cannot exist until somebody has run the Mac step. Re-run the job
-  # once they have, and it goes green. That is the whole point — a release stays visibly incomplete until it
-  # actually is complete, instead of looking done the moment the cheap half succeeds.
+  # v0.30.0, v0.31.0 and v0.32.0 each shipped with Windows and Linux only, because the .dmg was a manual step
+  # and nothing checked. This job was added for that, and then could not run at all: it deliberately checks
+  # nothing out, so `gh` had no git remote to resolve the repository from and died with "failed to run git"
+  # — a red verify that looked exactly like the missing-asset verdict it exists to give.
   verify:
     timeout-minutes: 10
     if: ${{ github.repository == 'HebelConsulting/SimplArchive' }}
-    needs: [win-linux]
+    needs: [packages]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -87,7 +92,18 @@ jobs:
         run: |
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
-          attached=$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name')
+          # --repo is REQUIRED here, and its absence is why this job has never once passed. `gh` resolves
+          # which repository it is talking about from the git remote, and this job deliberately does not
+          # check out the tree (it needs nothing from it), so every invocation died before reaching the
+          # release with `failed to run git: fatal: not a git repository`. The sibling calls above get away
+          # without it only because their jobs DO check out, to build from source.
+          #
+          # The failure was indistinguishable from the one this job exists to report — a red `verify` on a
+          # tag — and the runbook TELLS you to expect it red until the .dmgs are attached, so attaching them
+          # and re-running would have left it red with the same verdict and no new information. A guard that
+          # fails for its own reasons is worse than none: it trains the reader to discount the only signal
+          # it was built to give (#1347's class, one level up).
+          attached=$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
 
           missing=""
           for asset in \
@@ -109,8 +125,8 @@ jobs:
           if [ -n "$missing" ]; then
             echo "::error::$GITHUB_REF_NAME is missing release assets:"
             printf '%s' "$missing"
-            echo "The macOS .dmg job is opt-in (BUILD_MACOS_DMG), so build them on a Mac and attach them:"
-            echo "  scripts/package-macos-dmg.sh $version --upload"
+            echo "The packages job builds all four. To complete a release by hand, on a Mac:"
+            echo "  scripts/package-windows-linux.sh $version && scripts/package-macos-dmg.sh $version --upload"
             exit 1
           fi
 

@@ -151,13 +151,19 @@ UNINSTALL
     local out="$OUT_DIR/${stage_name}.zip"
     rm -f "$out"
     echo "==> [$rid] Zipping…"
-    ( cd "$OUT_DIR" && zip -qr "${stage_name}.zip" "$stage_name" )
+    # -X: store no extra file attributes. This script runs on the macOS runner now (all four packages are
+    # built there), and macOS zip/tar are known for smuggling AppleDouble metadata into archives — a Windows
+    # user unzipping __MACOSX folders would be our fault. Measured clean on the current runner image without
+    # it, so this is insurance against a future image, not a fix for an observed defect. A no-op on Linux.
+    ( cd "$OUT_DIR" && zip -qrX "${stage_name}.zip" "$stage_name" )
   else
     local out="$OUT_DIR/${stage_name}.tar.gz"
     rm -f "$out"
     chmod +x "$stage/$EXE_NAME" 2>/dev/null || true   # keep the launcher executable inside the tarball
     echo "==> [$rid] Creating tarball…"
-    tar -czf "$out" -C "$OUT_DIR" "$stage_name"
+    # COPYFILE_DISABLE=1 is the tar half of the same insurance: bsdtar stores extended attributes as `._name`
+    # members, which extract on Linux as junk files beside every real one. Ignored by GNU tar.
+    COPYFILE_DISABLE=1 tar -czf "$out" -C "$OUT_DIR" "$stage_name"
   fi
 
   rm -rf "$publish_dir" "$stage"
