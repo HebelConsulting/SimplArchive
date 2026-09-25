@@ -369,14 +369,17 @@ public sealed class SimplArchiveApiClient
         j.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetDateTimeOffset() : null;
 
 
-    // Fetches a preview/download URL's bytes (a presigned URL — no auth) plus its content-type.
-    public static async Task<(byte[] Bytes, string ContentType)> DownloadAsync(string url, CancellationToken cancellationToken = default)
-    {
-        using var response = await Anonymous.GetAsync(url, cancellationToken);
-        response.EnsureSuccessStatusCode();
-        var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
-        return (bytes, response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream");
-    }
+    /// <summary>
+    /// Fetches a content address's bytes plus its content-type, without sending credentials — the funnel every
+    /// read path in this client goes through.
+    /// </summary>
+    /// <remarks>
+    /// The address may be ABSOLUTE (a presigned object-storage URL) or RELATIVE (the at-rest encryption token
+    /// door, ADR 0818), and both are normal — <see cref="ApiCore.ResolveContentUrl"/> carries the reason, and
+    /// the kiosk failure that proved it was not being honoured here.
+    /// </remarks>
+    public static Task<(byte[] Bytes, string ContentType)> DownloadAsync(string url, CancellationToken cancellationToken = default) =>
+        ApiCore.GetContentAsync(url, cancellationToken);
 
     private Task<List<T>> LoadPagedAsync<T>(string url, string arrayProperty, Func<JsonElement, T> parse, CancellationToken cancellationToken,
         Action<JsonElement>? onPage = null) => Core.LoadPagedAsync(url, arrayProperty, parse, cancellationToken, onPage);

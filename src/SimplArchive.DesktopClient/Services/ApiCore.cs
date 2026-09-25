@@ -20,8 +20,74 @@ namespace SimplArchive.DesktopClient.Services;
 /// </remarks>
 public sealed class ApiCore
 {
-    /// <summary>A token-free client for presigned-URL transfers — a presigned PUT/GET carries its own auth.</summary>
+    /// <summary>A token-free client for content transfers — the address carries its own authorization.</summary>
+    /// <remarks>
+    /// No BaseAddress, ON PURPOSE: that is what stops this client's bearer token — which it does not have —
+    /// or a relative path ever being sent somewhere the server did not address us to. Two shapes arrive here,
+    /// and both authorize themselves without a header: a PRESIGNED object-storage URL (absolute, signed) and
+    /// the at-rest encryption TOKEN DOOR (relative, `?t=` — ADR 0818). Resolve a content address with
+    /// <see cref="ResolveContentUrl"/> before handing it to this client.
+    /// </remarks>
     public static readonly HttpClient Anonymous = new();
+
+    /// <summary>
+    /// Turns a content address the server handed us into one this client can request: a RELATIVE href resolved
+    /// against the installation, an absolute one returned untouched.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Both shapes are normal. A presigned object-storage URL is absolute; the at-rest encryption token door is
+    /// <c>/api/encrypted-content?t=…</c> and deliberately relative, because the server hands one href to both
+    /// clients and a browser resolves it against the page origin (ADR 0818). A desktop <c>HttpClient</c> with no
+    /// base cannot, so the resolution has to happen here — in the one file ADR 0543 lets know the API root.
+    /// </para>
+    /// <para>
+    /// Reported from the kiosk as <i>"Could not load '…': An invalid request URI was provided"</i>: in an
+    /// encrypted tenant EVERY preview and every open-in-native-application failed on the desktop while the web
+    /// client was fine. Nothing had regressed — the token door simply arrived later than the code that assumed
+    /// every content address was absolute, and the assumption was written down as a comment rather than
+    /// expressed as a type, so nothing re-read it.
+    /// </para>
+    /// <para>
+    /// It stays anonymous either way: the door authenticates by its own token parameter, not by a header, so
+    /// resolving the address changes where the request goes and not what it proves.
+    /// </para>
+    /// </remarks>
+    public static Uri ResolveContentUrl(string url) =>
+        // The scheme test is NOT redundant, and leaving it out is a bug that only shows on the platforms this
+        // was reported from. On Unix, Uri.TryCreate("/api/encrypted-content?t=…", UriKind.Absolute, …) returns
+        // TRUE — a leading-slash path is a valid absolute file:// URI — so "is it absolute?" answers yes for
+        // exactly the address that needs resolving, and HttpClient then refuses it with "The 'file' scheme is
+        // not supported". On Windows the same expression answers no and the naive form works, which is the
+        // worst shape a platform difference can take: green on the developer's machine, broken on the user's.
+        Uri.TryCreate(url, UriKind.Absolute, out var absolute)
+            && (absolute.Scheme == Uri.UriSchemeHttp || absolute.Scheme == Uri.UriSchemeHttps)
+            ? absolute
+            : new Uri(new Uri(DesktopClientOptions.ApiBaseUrl), url);
+
+    /// <summary>
+    /// Fetches a content address the server handed us — bytes plus content type — resolving it first and
+    /// sending no credentials.
+    /// </summary>
+    /// <remarks>
+    /// THE one place the desktop reads content, so that resolving the address is a property of the codebase
+    /// rather than something four call sites have to remember. It was not: the preview funnel, the
+    /// open-in-native-application downloader and the page-thumbnail loader each held their own base-less
+    /// <c>HttpClient</c>, so the token door broke three independent doors and the third one broke SILENTLY,
+    /// inside a catch that answers "no thumbnails" (ADR 0575's trade).
+    /// </remarks>
+    public static async Task<(byte[] Bytes, string ContentType)> GetContentAsync(
+        string url, CancellationToken cancellationToken = default)
+    {
+        using var response = await Anonymous.GetAsync(ResolveContentUrl(url), cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadAsByteArrayAsync(cancellationToken),
+            response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream");
+    }
+
+    /// <summary>The bytes alone, for a caller that already knows what it is decoding.</summary>
+    public static async Task<byte[]> GetContentBytesAsync(string url, CancellationToken cancellationToken = default) =>
+        (await GetContentAsync(url, cancellationToken)).Bytes;
 
     private IReadOnlyDictionary<string, string>? _rootLinks;
     private readonly SemaphoreSlim _rootGate = new(1, 1);

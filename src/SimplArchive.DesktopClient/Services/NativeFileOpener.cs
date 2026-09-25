@@ -7,14 +7,14 @@ namespace SimplArchive.DesktopClient.Services;
 // ADR "Cross-platform desktop fat client (Avalonia)".
 public static class NativeFileOpener
 {
-    private static readonly HttpClient Http = new();
-
     // The per-user temp directory (ADR "S3-backed inbox", phase 2) — set to LocalFolders.TempDirectory after
     // login; falls back to the OS temp dir before then.
     public static string? TempDirectoryOverride { get; set; }
 
-    // downloadUrl is a presigned URL (no auth header needed). fileName carries the correct extension so the
-    // OS picks the right application.
+    // downloadUrl is a content address the server handed us — a presigned URL, or the at-rest encryption token
+    // door, which is RELATIVE (ADR 0818) and so must be resolved before this base-less client can request it;
+    // ApiCore.ResolveContentUrl does both. Neither shape needs an auth header. fileName carries the correct
+    // extension so the OS picks the right application.
     public static async Task OpenAsync(string downloadUrl, string fileName, CancellationToken cancellationToken = default)
     {
         var path = await DownloadToTempAsync(downloadUrl, fileName, cancellationToken);
@@ -35,7 +35,7 @@ public static class NativeFileOpener
 
     private static async Task<string> DownloadToAsync(string downloadUrl, string path, CancellationToken cancellationToken)
     {
-        var bytes = await Http.GetByteArrayAsync(downloadUrl, cancellationToken);
+        var bytes = await ApiCore.GetContentBytesAsync(downloadUrl, cancellationToken);
         await File.WriteAllBytesAsync(path, bytes, cancellationToken);
         return path;
     }

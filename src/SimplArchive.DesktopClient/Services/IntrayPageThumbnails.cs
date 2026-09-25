@@ -64,8 +64,7 @@ public static class IntrayPageThumbnails
         IntrayApi.IntrayItemInfo item,
         CancellationToken cancellationToken)
     {
-        using var http = new HttpClient();
-        var bytes = await http.GetByteArrayAsync(item.DownloadUrl, cancellationToken);
+        var bytes = await ApiCore.GetContentBytesAsync(item.DownloadUrl, cancellationToken);
         return PreviewRenderer.RenderPdfPages(bytes).Select(Scale).ToList();
     }
 
@@ -83,11 +82,10 @@ public static class IntrayPageThumbnails
             return [];
         }
 
-        using var http = new HttpClient();
         var thumbnails = new List<Bitmap>(urls.Count);
         foreach (var url in urls)
         {
-            var bytes = await http.GetByteArrayAsync(url, cancellationToken);
+            var bytes = await ApiCore.GetContentBytesAsync(url, cancellationToken);
             thumbnails.Add(Scale(PreviewRenderer.DecodeImage(bytes)));
         }
 
@@ -110,8 +108,7 @@ public static class IntrayPageThumbnails
         {
             try
             {
-                using var http = new HttpClient();
-                var bytes = await http.GetByteArrayAsync(url, cancellationToken);
+                var bytes = await ApiCore.GetContentBytesAsync(url, cancellationToken);
                 return PreviewRenderer.RenderPdfPages(bytes).Select(Scale).Cast<Bitmap?>().ToList();
             }
             catch (Exception)
