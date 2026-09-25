@@ -53,14 +53,25 @@ public class DbInitCopyLockstepTests
 
         // Both known copies must still be among them: a rename or a move would otherwise leave this passing
         // while watching nothing, which is the failure mode the whole file is about.
-        foreach (var required in new[]
+        //
+        // The KIOSK copy is required only in the private repository, and that is not a softening: `tools/` is
+        // withheld from the public mirror (ADR 0484), so there the file is absent BY DESIGN — demanding it
+        // turned the mirror's fast tier red for a day on a checkout where nothing had drifted. The comparison
+        // itself still runs there over whatever copies the mirror DOES publish, which is the chart's, so the
+        // published pair stays watched rather than the whole guard standing down. Asked of the ORIGIN, never of
+        // the file's existence: the latter would also excuse a copy that somebody moved or deleted here.
+        var required = PrivateRepositoryGate.IsPrivateRepository(root)
+            ? new[]
+            {
+                Path.Combine("charts", "simplarchive", "files", "db-init.sql"),
+                Path.Combine("tools", "kiosk", "config", "db-init.sql"),
+            }
+            : [Path.Combine("charts", "simplarchive", "files", "db-init.sql")];
+
+        foreach (var name in required)
         {
-            Path.Combine("charts", "simplarchive", "files", "db-init.sql"),
-            Path.Combine("tools", "kiosk", "config", "db-init.sql"),
-        })
-        {
-            Assert.True(copies.Any(c => c.EndsWith(required, StringComparison.Ordinal)),
-                $"{required.Replace(Path.DirectorySeparatorChar, '/')} is gone. If it MOVED, this guard is now "
+            Assert.True(copies.Any(c => c.EndsWith(name, StringComparison.Ordinal)),
+                $"{name.Replace(Path.DirectorySeparatorChar, '/')} is gone. If it MOVED, this guard is now "
                 + "watching one fewer bootstrap script than the repository ships — which is exactly how the "
                 + "chart lost a role for a year (#1249) and how the kiosk's copy went stale (#668).");
         }

@@ -179,11 +179,24 @@ public partial class PinnedImageLockstepTests
     // scanner could see it, including the one above. The host then carried two Postgres images and pulled the
     // spare on every update, and because that container is only ever a `psql` CLIENT the cost was an image
     // rather than a failure. Nothing was going to notice.
+    //
+    // PRIVATE-REPOSITORY-ONLY, because its whole subject is withheld: `tools/` is not published to the public
+    // mirror (ADR 0484), so in that checkout the bundle is absent BY DESIGN and asserting it exists turned the
+    // mirror's fast tier red for a day (from the #1366 sync onward) on a repository where nothing was wrong.
+    // Gated on the ORIGIN rather than on the directory existing: "skip when the input is missing" would also
+    // stand the guard down in the private repo the day somebody moved the bundle, which is the silent-pass this
+    // file's own derived-list comment exists to prevent.
     [Fact]
     public void The_kiosk_bundle_does_not_pin_one_image_at_two_versions()
     {
-        var kiosk = Path.Combine(RepoPaths.Root(), "tools", "kiosk");
-        Assert.True(Directory.Exists(kiosk), $"The kiosk bundle is missing at {kiosk}.");
+        if (PrivateRepositoryGate.RepoRoot() is not { } root || !PrivateRepositoryGate.IsPrivateRepository(root))
+        {
+            return;
+        }
+
+        var kiosk = Path.Combine(root, "tools", "kiosk");
+        Assert.True(Directory.Exists(kiosk),
+            $"The kiosk bundle is missing at {kiosk}. This is the PRIVATE repository, where it is required.");
 
         // repo -> tag -> the files asking for it.
         var seen = new Dictionary<string, Dictionary<string, List<string>>>(StringComparer.Ordinal);
