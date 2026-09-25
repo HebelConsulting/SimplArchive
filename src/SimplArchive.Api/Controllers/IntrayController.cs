@@ -240,7 +240,8 @@ public class IntrayController : ControllerBase
                 Signed = names.Contains(name + SimplArchive.Infrastructure.Intray.IntrayIngestPipeline.SignedSuffix),
                 Links =
                 [
-                    new Link("download", download.ToString(), "GET"),
+                    // Absent on a strict tenant (#1376) — the item still lists, with no plaintext door.
+                    .. download is null ? Array.Empty<Link>() : [new Link("download", download.ToString(), "GET")],
                     new Link("preview", ItemHref(name, "preview", group, user), "GET"),
                     new Link("mask", ItemHref(name, "mask", group, user), "GET"),
                     new Link("file", ItemHref(name, "file", group, user), "POST"),

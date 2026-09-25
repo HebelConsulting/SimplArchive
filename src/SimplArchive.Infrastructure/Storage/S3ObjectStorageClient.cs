@@ -204,11 +204,13 @@ public class S3ObjectStorageClient : IObjectStorageClient
     public Task<Uri> GetPresignedUploadUrlAsync(string objectKey, TimeSpan expiry, CancellationToken cancellationToken = default)
         => GetPresignedUrlAsync(objectKey, HttpVerb.PUT, expiry, contentDisposition: null, contentType: null, cancellationToken);
 
-    public Task<Uri> GetPresignedDownloadUrlAsync(string objectKey, TimeSpan expiry, string? downloadFileName = null, CancellationToken cancellationToken = default)
-        => GetPresignedUrlAsync(objectKey, HttpVerb.GET, expiry, Disposition("attachment", downloadFileName), contentType: null, cancellationToken);
+    // This implementation never answers null — it always has a URL to give. The nullable return belongs to
+    // the INTERFACE, where the encrypting decorator uses it to refuse on a strict tenant (#1376).
+    public async Task<Uri?> GetPresignedDownloadUrlAsync(string objectKey, TimeSpan expiry, string? downloadFileName = null, CancellationToken cancellationToken = default)
+        => await GetPresignedUrlAsync(objectKey, HttpVerb.GET, expiry, Disposition("attachment", downloadFileName), contentType: null, cancellationToken);
 
-    public Task<Uri> GetPresignedPreviewUrlAsync(string objectKey, TimeSpan expiry, string? fileName = null, string? contentType = null, CancellationToken cancellationToken = default)
-        => GetPresignedUrlAsync(objectKey, HttpVerb.GET, expiry, Disposition("inline", fileName), contentType, cancellationToken);
+    public async Task<Uri?> GetPresignedPreviewUrlAsync(string objectKey, TimeSpan expiry, string? fileName = null, string? contentType = null, CancellationToken cancellationToken = default)
+        => await GetPresignedUrlAsync(objectKey, HttpVerb.GET, expiry, Disposition("inline", fileName), contentType, cancellationToken);
 
     // Content-Disposition value for the response-content-disposition override. RFC 5987 filename* handles
     // spaces/unicode; NO space after the ';' — the SDK leaves a literal space unencoded in the query string,

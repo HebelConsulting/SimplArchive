@@ -53,14 +53,25 @@ public interface IObjectStorageClient
     // downloadFileName (optional): overrides the filename the browser saves the download as, via the S3
     // response-content-disposition parameter (signed into the URL) — see ADR "Download filename from Short
     // Description". When null, the object key's own last segment is used, as before.
-    Task<Uri> GetPresignedDownloadUrlAsync(string objectKey, TimeSpan expiry, string? downloadFileName = null, CancellationToken cancellationToken = default);
+    /// <remarks>
+    /// <b>NULL means this installation will not serve these bytes as plaintext</b> — the strict encryption
+    /// tier (#1376, ADR 0825), where content leaves only as a CMS envelope addressed to the reader's card.
+    /// A caller building a resource omits the link, which is ADR 0543's own signal: a missing rel means
+    /// "not available to you, here, now", and the client disables the affordance rather than trying.
+    ///
+    /// The return is nullable rather than the seam throwing, because presigning happens while BUILDING
+    /// resources — a thrown refusal would take the document's metadata with it. And it is nullable rather
+    /// than a convention, because twenty files reach content: a nullable return turns "did this caller
+    /// handle it?" from a review question into a build error.
+    /// </remarks>
+    Task<Uri?> GetPresignedDownloadUrlAsync(string objectKey, TimeSpan expiry, string? downloadFileName = null, CancellationToken cancellationToken = default);
 
     // Like the download URL but with Content-Disposition: inline so the browser renders the content in place
     // (used by the document preview) rather than forcing a download — see ADR "Repositories workbench UI".
     // contentType (optional) overrides the response Content-Type via the S3 response-content-type parameter
     // — used to force text/plain for .txt so the browser renders it inline regardless of the stored type
     // (ADR "Plain-text inline preview").
-    Task<Uri> GetPresignedPreviewUrlAsync(string objectKey, TimeSpan expiry, string? fileName = null, string? contentType = null, CancellationToken cancellationToken = default);
+    Task<Uri?> GetPresignedPreviewUrlAsync(string objectKey, TimeSpan expiry, string? fileName = null, string? contentType = null, CancellationToken cancellationToken = default);
 
     // Used only at finalize-upload time to compute the SHA256 hash server-side rather than trusting a
     // client-supplied value — see ADR "Document version upload/download endpoints (pragmatic slice)".

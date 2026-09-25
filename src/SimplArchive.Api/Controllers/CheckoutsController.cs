@@ -243,9 +243,11 @@ public class CheckoutsController : ControllerBase
             // The document's current version honoring the pointer (issue #265), else the latest confirmed.
             var version = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, d.Id, d.CurrentVersionId, cancellationToken);
 
+            // Null on a strict tenant (#1376): the check-out still exists and still reports its state, it
+            // simply carries no plaintext URL to fetch the working copy from.
             var downloadUrl = version is null
                 ? null
-                : (await _objectStorage.GetPresignedDownloadUrlAsync(version.ObjectKey, PresignedUrlExpiry, cancellationToken: cancellationToken)).ToString();
+                : (await _objectStorage.GetPresignedDownloadUrlAsync(version.ObjectKey, PresignedUrlExpiry, cancellationToken: cancellationToken))?.ToString();
 
             // Is there a cloud stash (in-progress working copy) for this check-out? If so, offer its download URL
             // so the client restores it on login, and decide whether it's actually MODIFIED — the working copy in
@@ -260,7 +262,7 @@ public class CheckoutsController : ControllerBase
                 hasStash = await _objectStorage.ExistsAsync(stashKey, cancellationToken);
                 if (hasStash)
                 {
-                    stashDownloadUrl = (await _objectStorage.GetPresignedDownloadUrlAsync(stashKey, PresignedUrlExpiry, cancellationToken: cancellationToken)).ToString();
+                    stashDownloadUrl = (await _objectStorage.GetPresignedDownloadUrlAsync(stashKey, PresignedUrlExpiry, cancellationToken: cancellationToken))?.ToString();
                     if (version is not null)
                     {
                         await using var stashStream = await _objectStorage.GetObjectAsync(stashKey, cancellationToken);

@@ -150,8 +150,8 @@ public class DocumentPurgerWormGuardTests
         public Task EnsureTenantBucketAsync(Guid tenantId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task SetBucketLifecycleAsync(Guid tenantId, int incompleteUploadCleanupDays, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<Uri> GetPresignedUploadUrlAsync(string objectKey, TimeSpan expiry, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<Uri> GetPresignedDownloadUrlAsync(string objectKey, TimeSpan expiry, string? downloadFileName = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<Uri> GetPresignedPreviewUrlAsync(string objectKey, TimeSpan expiry, string? fileName = null, string? contentType = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<Uri?> GetPresignedDownloadUrlAsync(string objectKey, TimeSpan expiry, string? downloadFileName = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<Uri?> GetPresignedPreviewUrlAsync(string objectKey, TimeSpan expiry, string? fileName = null, string? contentType = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<Stream> GetObjectAsync(string objectKey, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<bool> ExistsAsync(string objectKey, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<long> GetObjectSizeAsync(string objectKey, CancellationToken cancellationToken = default) => throw new NotSupportedException();

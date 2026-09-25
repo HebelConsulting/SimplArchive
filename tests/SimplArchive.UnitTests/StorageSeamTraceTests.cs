@@ -20,7 +20,10 @@ public class StorageSeamTraceTests
     {
         var (client, log) = Build();
 
-        var url = await client.GetPresignedDownloadUrlAsync(Key, TimeSpan.FromMinutes(5), "Invoice 2026.pdf");
+        var url = await client.GetPresignedDownloadUrlAsync(Key, TimeSpan.FromMinutes(5), "Invoice 2026.pdf")
+            // Non-null here by construction: no tenant in this test is in the strict tier, where the seam
+            // answers null to refuse a plaintext URL (#1376).
+            ?? throw new InvalidOperationException("the seam returned no URL");
 
         // Anti-vacuous, and the assertion this whole test rests on: if the URL carried no signature there would
         // be no secret to leak, and every assertion below would pass while proving nothing.

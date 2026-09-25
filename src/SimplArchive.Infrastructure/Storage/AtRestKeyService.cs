@@ -62,6 +62,24 @@ public sealed class AtRestKeyService(
             && new SimplArchive.Infrastructure.Encryption.EncryptionModes(configuration).Applies(name);
     }
 
+    /// <summary>True when this object belongs to a STRICT-tier tenant, which never serves plaintext.</summary>
+    /// <remarks>
+    /// Beside <see cref="GatedAsync"/> rather than in a second service, because both answer the same question
+    /// from the same three steps — key to tenant id, id to name, name to mode — and two copies of that walk is
+    /// how the tiers would come to disagree about which tenant an object belongs to.
+    /// </remarks>
+    public async Task<bool> StrictAsync(string objectKey, CancellationToken cancellationToken)
+    {
+        if (!Enabled || !TryParseTenant(objectKey, out var tenantId))
+        {
+            return false;
+        }
+
+        var name = await TenantNameAsync(tenantId, cancellationToken);
+        return name is not null
+            && new SimplArchive.Infrastructure.Encryption.EncryptionModes(configuration).IsStrict(name);
+    }
+
     /// <summary>The current KEK in the client-facing shape — for the initiate-upload response.</summary>
     public async Task<ClientKek> ClientKekAsync(CancellationToken cancellationToken)
     {

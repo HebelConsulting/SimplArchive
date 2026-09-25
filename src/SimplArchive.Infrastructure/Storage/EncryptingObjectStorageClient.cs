@@ -116,13 +116,39 @@ public sealed class EncryptingObjectStorageClient(
         // reads fine by the mixed-state contract. Server-side writers are already covered above.
         inner.GetPresignedUploadUrlAsync(objectKey, expiry, cancellationToken);
 
-    public async Task<Uri> GetPresignedDownloadUrlAsync(string objectKey, TimeSpan expiry, string? downloadFileName = null, CancellationToken cancellationToken = default) =>
-        await SwapIfEncryptedAsync(objectKey, expiry, downloadFileName, contentType: null, inline: false, cancellationToken)
-        ?? await inner.GetPresignedDownloadUrlAsync(objectKey, expiry, downloadFileName, cancellationToken);
+    public async Task<Uri?> GetPresignedDownloadUrlAsync(string objectKey, TimeSpan expiry, string? downloadFileName = null, CancellationToken cancellationToken = default) =>
+        await RefusedByStrictTierAsync(objectKey, cancellationToken) ? null
+        : await SwapIfEncryptedAsync(objectKey, expiry, downloadFileName, contentType: null, inline: false, cancellationToken)
+            ?? await inner.GetPresignedDownloadUrlAsync(objectKey, expiry, downloadFileName, cancellationToken);
 
-    public async Task<Uri> GetPresignedPreviewUrlAsync(string objectKey, TimeSpan expiry, string? fileName = null, string? contentType = null, CancellationToken cancellationToken = default) =>
-        await SwapIfEncryptedAsync(objectKey, expiry, fileName, contentType, inline: true, cancellationToken)
-        ?? await inner.GetPresignedPreviewUrlAsync(objectKey, expiry, fileName, contentType, cancellationToken);
+    public async Task<Uri?> GetPresignedPreviewUrlAsync(string objectKey, TimeSpan expiry, string? fileName = null, string? contentType = null, CancellationToken cancellationToken = default) =>
+        await RefusedByStrictTierAsync(objectKey, cancellationToken) ? null
+        : await SwapIfEncryptedAsync(objectKey, expiry, fileName, contentType, inline: true, cancellationToken)
+            ?? await inner.GetPresignedPreviewUrlAsync(objectKey, expiry, fileName, contentType, cancellationToken);
+
+    /// <summary>
+    /// True when this object belongs to a strict-tier tenant, whose content never leaves as plaintext.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Checked BEFORE the encrypted swap, and that order is the point. For an ordinary encrypted tenant the
+    /// swap hands the browser the token door, which serves DECRYPTED bytes over HTTPS — exactly the plaintext
+    /// door the strict tier must not have. Letting the swap run first would replace one plaintext door with
+    /// another and look like it had done something.
+    /// </para>
+    /// <para>
+    /// Answering NULL rather than throwing, because presigning happens while BUILDING resources: a thrown
+    /// refusal would take the document's metadata with it, leaving a strict tenant able to see nothing at all.
+    /// A caller omits the link instead, which is ADR 0543's own signal — a missing rel means "not available to
+    /// you, here, now".
+    /// </para>
+    /// <para>
+    /// READS only. An upload presign stays available: the client encrypts before it sends, so the bytes
+    /// crossing that URL are already ciphertext (see GetPresignedUploadUrlAsync's own note).
+    /// </para>
+    /// </remarks>
+    private Task<bool> RefusedByStrictTierAsync(string objectKey, CancellationToken cancellationToken) =>
+        keys.StrictAsync(objectKey, cancellationToken);
 
     private async Task<Uri?> SwapIfEncryptedAsync(string objectKey, TimeSpan expiry, string? fileName,
         string? contentType, bool inline, CancellationToken cancellationToken)

@@ -123,7 +123,11 @@ public class ExternalLinksController : ControllerBase
                     pageCount));
         }
 
-        var url = await _objectStorage.GetPresignedDownloadUrlAsync(objectKey, PresignedUrlExpiry, null, cancellationToken);
+        // A strict tenant cannot be shared this way: the link is anonymous, so there is no certificate to
+        // envelope to, and the URL IS this response — so it refuses rather than returning an empty one (#1376).
+        var url = await _objectStorage.GetPresignedDownloadUrlAsync(objectKey, PresignedUrlExpiry, null, cancellationToken)
+            ?? throw new Errors.Exceptions.ExternalLinks.ExternalLinkCannotServePlaintextException();
+
         return Ok(new ExternalLinkRedemptionResource
         {
             DownloadUrl = url.ToString(),
@@ -175,6 +179,11 @@ public class ExternalLinksController : ControllerBase
             : await _objectStorage.GetPresignedPreviewUrlAsync(
                 objectKey, PresignedUrlExpiry, fileName,
                 WebDav.ContentTypes.ForExtension(Path.GetExtension(objectKey)), cancellationToken);
+
+        if (url is null)
+        {
+            throw new Errors.Exceptions.ExternalLinks.ExternalLinkCannotServePlaintextException();
+        }
 
         return Redirect(url.ToString());
     }

@@ -121,7 +121,11 @@ public class RenditionService : IDocumentPreviewService
             // forcing text/plain for .txt so it renders inline regardless of the stored type.
             var contentType = PreviewContentTypeOverride(extension);
             var originalUrl = await _objectStorageClient.GetPresignedPreviewUrlAsync(objectKey, expiry, fileName, contentType, cancellationToken);
-            return new DocumentPreview(originalUrl, IsConverted: false);
+
+            // No URL means the strict tier will not serve these bytes as plaintext (#1376). Null is already
+            // this service's word for "no preview available", which the clients render as such — so the tier
+            // needs no new client handling here.
+            return originalUrl is null ? null : new DocumentPreview(originalUrl, IsConverted: false);
         }
 
         var renditionKey = RenditionKey(objectKey, kind);
@@ -139,7 +143,7 @@ public class RenditionService : IDocumentPreviewService
             }
 
             var renditionUrl = await _objectStorageClient.GetPresignedPreviewUrlAsync(renditionKey, expiry, fileName, cancellationToken: cancellationToken);
-            return new DocumentPreview(renditionUrl, IsConverted: true);
+            return renditionUrl is null ? null : new DocumentPreview(renditionUrl, IsConverted: true);
         }
         catch (Exception e)
         {
@@ -194,7 +198,14 @@ public class RenditionService : IDocumentPreviewService
             var urls = new List<Uri>();
             foreach (var key in keys)
             {
-                urls.Add(await _objectStorageClient.GetPresignedPreviewUrlAsync(key, expiry, fileName, cancellationToken: cancellationToken));
+                // One refused page refuses the whole set: a partial page list would show a reader SOME pages of
+                // a document and silently omit others, which is worse than showing none.
+                if (await _objectStorageClient.GetPresignedPreviewUrlAsync(key, expiry, fileName, cancellationToken: cancellationToken) is not { } url)
+                {
+                    return null;
+                }
+
+                urls.Add(url);
             }
 
             return new PreviewPages(urls, IsConverted: true);

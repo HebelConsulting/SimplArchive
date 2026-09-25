@@ -58,8 +58,14 @@ public sealed class DocumentVersionResourceBuilder(
                 ? documentName
                 : Path.GetFileNameWithoutExtension(documentName) + objectExtension;
 
-            var downloadUrl = await storage.GetPresignedDownloadUrlAsync(version.ObjectKey, PresignedUrlExpiry, downloadFileName, cancellationToken);
-            links.Add(new Link("download", downloadUrl.ToString(), "GET"));
+            // No URL means the strict tier will not serve these bytes as plaintext (#1376), so the rel is
+            // OMITTED rather than the resource failing — ADR 0543: a missing rel means "not available to you,
+            // here, now", and the client disables the affordance instead of trying. The document's metadata
+            // still renders, which is the whole reason the seam answers null rather than throwing.
+            if (await storage.GetPresignedDownloadUrlAsync(version.ObjectKey, PresignedUrlExpiry, downloadFileName, cancellationToken) is { } downloadUrl)
+            {
+                links.Add(new Link("download", downloadUrl.ToString(), "GET"));
+            }
 
             // Inline-disposition URL the workbench preview renders in place — see ADR "Repositories
             // workbench UI". For formats the browser can't display (TIFF, office docs), this resolves to a
