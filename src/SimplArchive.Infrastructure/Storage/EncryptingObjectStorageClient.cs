@@ -60,6 +60,34 @@ public sealed class EncryptingObjectStorageClient(
     public async Task<Stream> GetObjectAsync(string objectKey, CancellationToken cancellationToken = default) =>
         (await GetObjectWithMetadataAsync(objectKey, cancellationToken)).Content;
 
+    /// <summary>Refuses for a strict tenant; an ordinary read otherwise (#1394, ADR 0829).</summary>
+    /// <remarks>
+    /// The refusal is per TENANT, not per caller — which is why it can live here at all, while the ENVELOPE
+    /// for download and preview cannot (an envelope is addressed to a person, and this seam has no idea who
+    /// is asking; ADR 0828).
+    /// </remarks>
+    public async Task<Stream> GetObjectForClientAsync(string objectKey, string door, CancellationToken cancellationToken = default)
+    {
+        if (await keys.StrictAsync(objectKey, cancellationToken))
+        {
+            throw new PlaintextContentRefusedException(door);
+        }
+
+        return await GetObjectAsync(objectKey, cancellationToken);
+    }
+
+    /// <summary>The range form of the same refusal — a seeking client is still a client.</summary>
+    public async Task<Stream> GetObjectRangeForClientAsync(
+        string objectKey, long from, long to, string door, CancellationToken cancellationToken = default)
+    {
+        if (await keys.StrictAsync(objectKey, cancellationToken))
+        {
+            throw new PlaintextContentRefusedException(door);
+        }
+
+        return await GetObjectRangeAsync(objectKey, from, to, cancellationToken);
+    }
+
     public async Task<StoredObject> GetObjectWithMetadataAsync(string objectKey, CancellationToken cancellationToken = default)
     {
         var stored = await inner.GetObjectWithMetadataAsync(objectKey, cancellationToken);

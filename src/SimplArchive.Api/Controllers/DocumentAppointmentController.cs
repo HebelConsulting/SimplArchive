@@ -385,7 +385,7 @@ public class DocumentAppointmentController : ControllerBase
             return null;
         }
 
-        await using var stream = await _storage.GetObjectAsync(version.ObjectKey, cancellationToken);
+        await using var stream = await _storage.GetObjectForClientAsync(version.ObjectKey, "the appointment view", cancellationToken);
         using var reader = new StreamReader(stream);
         return (document, await reader.ReadToEndAsync(cancellationToken));
     }

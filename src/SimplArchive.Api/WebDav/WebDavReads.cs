@@ -322,7 +322,7 @@ internal static class WebDavReads
             context.Response.ContentLength = to - from + 1;
             if (body)
             {
-                await using var s = await storage.GetObjectRangeAsync(key, from, to, context.RequestAborted);
+                await using var s = await storage.GetObjectRangeForClientAsync(key, from, to, "a mounted drive", context.RequestAborted);
                 await s.CopyToAsync(context.Response.Body, context.RequestAborted);
             }
 
@@ -332,7 +332,7 @@ internal static class WebDavReads
         context.Response.ContentLength = size;
         if (body)
         {
-            await using var s = await storage.GetObjectAsync(key, context.RequestAborted);
+            await using var s = await storage.GetObjectForClientAsync(key, "a mounted drive", context.RequestAborted);
             await s.CopyToAsync(context.Response.Body, context.RequestAborted);
         }
     }

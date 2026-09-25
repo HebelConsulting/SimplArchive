@@ -130,7 +130,7 @@ public class DocumentBulkController : ControllerBase
             }
 
             extension = itemExtension;
-            await using var stream = await _objectStorage.GetObjectAsync(objectKey, cancellationToken);
+            await using var stream = await _objectStorage.GetObjectForClientAsync(objectKey, "a bulk download", cancellationToken);
             using var buffer = new MemoryStream();
             await stream.CopyToAsync(buffer, cancellationToken);
             payloads.Add(buffer.ToArray());

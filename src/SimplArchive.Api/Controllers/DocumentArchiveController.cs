@@ -222,7 +222,7 @@ public class DocumentArchiveController : ControllerBase
     // Buffers the stored zip into a seekable MemoryStream (ZipArchive needs random access), capping the size.
     private async Task<MemoryStream> BufferAsync(string objectKey, CancellationToken cancellationToken)
     {
-        await using var source = await _objectStorageClient.GetObjectAsync(objectKey, cancellationToken);
+        await using var source = await _objectStorageClient.GetObjectForClientAsync(objectKey, "a zip archive", cancellationToken);
         var buffer = new MemoryStream();
         var chunk = new byte[81920];
         int read;

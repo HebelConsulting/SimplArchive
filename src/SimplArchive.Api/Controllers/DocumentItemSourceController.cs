@@ -294,7 +294,7 @@ public partial class DocumentItemSourceController : ControllerBase
             return null;
         }
 
-        await using var stream = await _storage.GetObjectAsync(version.ObjectKey, cancellationToken);
+        await using var stream = await _storage.GetObjectForClientAsync(version.ObjectKey, "the stored-item view", cancellationToken);
         using var reader = new StreamReader(stream);
         return (document, version, await reader.ReadToEndAsync(cancellationToken));
     }

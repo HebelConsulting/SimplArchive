@@ -53,6 +53,11 @@ public class ApiExceptionHandler : IExceptionHandler
             // indistinguishable from a native error, which is the whole point of real controllers.
             SimplArchive.ModuleAbi.ModuleApiException moduleException =>
                 (moduleException.ErrorCode, moduleException.StatusCode, moduleException.Message),
+            // The strict tier refusing a door that cannot carry an envelope (#1394, ADR 0829). Thrown from
+            // the storage seam, which cannot reference this project's exception types — the same reason the
+            // module case above exists, and the same wire shape.
+            SimplArchive.Application.Abstractions.PlaintextContentRefusedException plaintext =>
+                (plaintext.ErrorCode, plaintext.StatusCode, plaintext.Message),
             _ => ("INTERNAL_ERROR", StatusCodes.Status500InternalServerError, "An unexpected error occurred."),
         };
 

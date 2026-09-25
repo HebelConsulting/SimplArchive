@@ -92,7 +92,7 @@ internal sealed class DavControllerContext
         string text;
         try
         {
-            await using var stream = await _storage.GetObjectAsync(item.ObjectKey, Cancellation);
+            await using var stream = await _storage.GetObjectForClientAsync(item.ObjectKey, "a calendar or contacts program", Cancellation);
             using var reader = new StreamReader(stream);
             text = await reader.ReadToEndAsync(Cancellation);
         }

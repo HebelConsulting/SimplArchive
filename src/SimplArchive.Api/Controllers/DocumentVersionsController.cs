@@ -45,6 +45,7 @@ public class DocumentVersionsController : ControllerBase
     private readonly SimplArchive.Infrastructure.Storage.AtRestKeyService _atRestKeys;
     private readonly IDocumentPreviewService _documentPreviewService;
     private readonly IDocumentTextLayoutService _textLayoutService;
+    private readonly Documents.StrictEnvelopeDelivery _strictEnvelopes;
     private readonly ICurrentUserAccessor _currentUserAccessor;
 
     public DocumentVersionsController(
@@ -52,6 +53,7 @@ public class DocumentVersionsController : ControllerBase
         IObjectStorageClient objectStorageClient,
         IDocumentPreviewService documentPreviewService,
         IDocumentTextLayoutService textLayoutService,
+        Documents.StrictEnvelopeDelivery strictEnvelopes,
         ICurrentUserAccessor currentUserAccessor,
         IDocumentIndexQueue queue,
         DocumentFinalizer finalizer,
@@ -72,6 +74,7 @@ public class DocumentVersionsController : ControllerBase
         _atRestKeys = atRestKeys;
         _documentPreviewService = documentPreviewService;
         _textLayoutService = textLayoutService;
+        _strictEnvelopes = strictEnvelopes;
         _currentUserAccessor = currentUserAccessor;
         _queue = queue;
         _finalizer = finalizer;
@@ -500,6 +503,15 @@ public class DocumentVersionsController : ControllerBase
         {
             return NoContent();
         }
+
+        // The words ARE the document (#1394, ADR 0829). A layout is every word with its coordinates, so this
+        // route reconstructs any document in full — through a rel advertised on every version, and one that
+        // never presigns anything, which is exactly why #1376's refusal did not reach it.
+        //
+        // Refused rather than enveloped (owner, 2026-09-25): the desktop holds the decrypted document anyway
+        // once it reads through the card, so find-in-document can be computed there — and the hit overlay it
+        // also feeds belongs to the content search this tier gives up regardless.
+        await _strictEnvelopes.RefuseIfStrictAsync("the find-in-document overlay", cancellationToken);
 
         var layout = await _textLayoutService.GetTextLayoutAsync(version.ObjectKey, cancellationToken);
         if (layout is null)

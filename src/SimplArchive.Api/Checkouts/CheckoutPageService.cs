@@ -70,7 +70,7 @@ public sealed class CheckoutPageService(IObjectStorageClient storage)
 
     private async Task<byte[]> ReadAsync(string key, CancellationToken cancellationToken)
     {
-        await using var stream = await storage.GetObjectAsync(key, cancellationToken);
+        await using var stream = await storage.GetObjectForClientAsync(key, "a check-out working copy", cancellationToken);
         using var buffer = new MemoryStream();
         await stream.CopyToAsync(buffer, cancellationToken);
         return buffer.ToArray();

@@ -60,6 +60,22 @@ public sealed class StrictEnvelopeDelivery(
     }
 
     /// <summary>
+    /// Refuses when this tenant serves no readable content and the door cannot carry an envelope.
+    /// </summary>
+    /// <remarks>
+    /// For the doors whose output is DERIVED from the document rather than its bytes — the text layout being
+    /// the one that matters, since its words reconstruct the document in full. Those never touch the storage
+    /// seam's client-facing read, so the seam cannot refuse them and the door must say so itself.
+    /// </remarks>
+    public async Task RefuseIfStrictAsync(string door, CancellationToken cancellationToken)
+    {
+        if (await AppliesAsync(cancellationToken))
+        {
+            throw new SimplArchive.Application.Abstractions.PlaintextContentRefusedException(door);
+        }
+    }
+
+    /// <summary>
     /// The caller's usable certificate, or null — which is exactly the question "may the download and preview
     /// rels be advertised to this reader?".
     /// </summary>

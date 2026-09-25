@@ -79,6 +79,33 @@ public interface IObjectStorageClient
     // the stream promptly.
     Task<Stream> GetObjectAsync(string objectKey, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The same read, declared as one whose bytes are about to be SERVED TO A CLIENT.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The strict tier refuses this and lets <see cref="GetObjectAsync"/> through, because the distinction
+    /// that matters is not <i>which store</i> but <i>what the bytes are for</i>: the envelope path, the
+    /// finalizer's hash check and the classifier all read plaintext legitimately, while a mounted drive or a
+    /// zip stream hands it to software that cannot decrypt anything.
+    /// </para>
+    /// <para>
+    /// A seam rather than a check at each door — #1394 found a dozen doors serving plaintext because #1376's
+    /// refusal sat on the PRESIGN and these never presign. Twelve patched call sites would have been twelve
+    /// chances to forget the thirteenth; one declared intent per door is a line a guard can read.
+    /// </para>
+    /// <para>
+    /// <paramref name="door"/> names the thing to stop using, because the reader's remedy is to open the
+    /// document somewhere else. Defaults to a plain read, so every store but the encrypting one is unaffected.
+    /// </para>
+    /// </remarks>
+    Task<Stream> GetObjectForClientAsync(string objectKey, string door, CancellationToken cancellationToken = default) =>
+        GetObjectAsync(objectKey, cancellationToken);
+
+    /// <summary>A byte RANGE declared the same way — what a mounted drive asks for when it seeks.</summary>
+    Task<Stream> GetObjectRangeForClientAsync(string objectKey, long from, long to, string door, CancellationToken cancellationToken = default) =>
+        GetObjectRangeAsync(objectKey, from, to, cancellationToken);
+
     // The object's bytes TOGETHER with its user metadata — one GET, both facts. The at-rest encryption
     // decorator (ADR 0818) rides on this: the wrapped DEK travels as object metadata, so a decrypting read
     // must see both in one call. Default: the plain stream with no metadata, so fakes needn't implement it.

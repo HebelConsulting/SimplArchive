@@ -43,7 +43,7 @@ public class EncryptedContentController : ControllerBase
             return NotFound(); // expired or forged — indistinguishable on purpose, like a dead presigned link
         }
 
-        var content = await _storage.GetObjectAsync(payload.ObjectKey, cancellationToken);
+        var content = await _storage.GetObjectForClientAsync(payload.ObjectKey, "the content link", cancellationToken);
         if (payload.Inline)
         {
             Response.Headers.ContentDisposition = payload.FileName is { } inlineName

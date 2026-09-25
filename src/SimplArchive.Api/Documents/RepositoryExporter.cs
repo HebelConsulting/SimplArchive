@@ -352,7 +352,7 @@ public sealed class RepositoryExporter
 
             var entry = archive.CreateEntry($"blobs/{hash}", CompressionLevel.NoCompression);
             await using var entryStream = entry.Open();
-            await using var blob = await _objectStorage.GetObjectAsync(version.ObjectKey, cancellationToken);
+            await using var blob = await _objectStorage.GetObjectForClientAsync(version.ObjectKey, "a repository export", cancellationToken);
             await blob.CopyToAsync(entryStream, cancellationToken);
         }
 

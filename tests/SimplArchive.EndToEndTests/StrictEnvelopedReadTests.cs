@@ -34,7 +34,8 @@ public class StrictEnvelopedReadTests
     [Fact]
     public async Task A_reader_with_a_certificate_gets_an_envelope_their_own_key_opens()
     {
-        var (api, documentId, pkcs12, _, _) = await StrictReaderAsync(withCertificate: true);
+        var reader = await StrictReaderAsync(withCertificate: true);
+        var (api, documentId, pkcs12) = (reader.Api, reader.DocumentId, reader.Pkcs12);
 
         var version = await CurrentVersionAsync(api, documentId);
         var download = Rel(version, "download");
@@ -62,7 +63,8 @@ public class StrictEnvelopedReadTests
     [Fact]
     public async Task A_reader_without_a_certificate_is_offered_nothing_rather_than_a_button_that_fails()
     {
-        var (api, documentId, _, _, _) = await StrictReaderAsync(withCertificate: false);
+        var reader = await StrictReaderAsync(withCertificate: false);
+        var (api, documentId) = (reader.Api, reader.DocumentId);
 
         var version = await CurrentVersionAsync(api, documentId);
 
@@ -83,7 +85,8 @@ public class StrictEnvelopedReadTests
         // The honest reachable case for a refusal at the door: the rel was emitted, then the certificate was
         // removed. Never plaintext — that would turn an unreachable branch into a silent hole in the tier's
         // only guarantee.
-        var (api, documentId, _, tenantId, email) = await StrictReaderAsync(withCertificate: true);
+        var reader = await StrictReaderAsync(withCertificate: true);
+        var (api, documentId, tenantId, email) = (reader.Api, reader.DocumentId, reader.TenantId, reader.Email);
         var download = Rel(await CurrentVersionAsync(api, documentId), "download")!;
 
         await RegisterCertificateAsync(tenantId, email, null);
@@ -101,12 +104,62 @@ public class StrictEnvelopedReadTests
     {
         // The contrast that stops all of this passing on a build which envelopes everything — and the check
         // that the strict path is driven by the TENANT's mode rather than by anybody having a certificate.
-        var (api, documentId, _, _, _) = await ReaderAsync($"Ordinary{Guid.NewGuid():N}"[..24], withCertificate: true);
+        var ordinary = await ReaderAsync($"Ordinary{Guid.NewGuid():N}"[..24], withCertificate: true);
+        var (api, documentId) = (ordinary.Api, ordinary.DocumentId);
 
         var download = Rel(await CurrentVersionAsync(api, documentId), "download");
 
         Assert.NotNull(download);
         Assert.StartsWith("http", download, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_find_in_document_overlay_is_refused_because_its_words_are_the_document()
+    {
+        // A text layout is every word with its coordinates: a complete plaintext reconstruction, through a rel
+        // advertised on every version and a route that never presigns anything — which is exactly why #1376's
+        // refusal did not reach it (#1394).
+        var reader = await StrictReaderAsync(withCertificate: true);
+        var (api, documentId) = (reader.Api, reader.DocumentId);
+        var versionId = (await CurrentVersionAsync(api, documentId)).GetProperty("id").GetString();
+
+        using var response = await api.GetAsync($"/api/documents/{documentId}/versions/{versionId}/text-layout");
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("PLAINTEXT_CONTENT_REFUSED",
+            JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement
+                .GetProperty("errorCode").GetString());
+    }
+
+    [Fact]
+    public async Task A_mounted_drive_is_refused_rather_than_served_the_file()
+    {
+        // The sharpest of the doors #1394 found: #1376 RECORDED WebDAV as a blind door that is refused, and it
+        // was never refused — it simply was not reachable through a presign, so the decision was written and
+        // the enforcement was not. A mounted drive hands bytes to an operating system that cannot decrypt CMS.
+        var reader = await StrictReaderAsync(withCertificate: true);
+        var davPassword = (await TestJson.Post(reader.Api, "/api/me/webdav-password", new { })).GetProperty("password").GetString()!;
+
+        // The REAL path — repository, then document. An earlier version of this test asked for the document at
+        // the mount root, got a 404 for the wrong reason, and passed while proving nothing.
+        var path = $"/SimplArchive/{reader.RepositoryName}/{reader.DocumentName}.txt";
+
+        using var dav = _factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, path)
+        {
+            Headers = { Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic",
+                Convert.ToBase64String(Encoding.UTF8.GetBytes($"{reader.Email}:{davPassword}"))) },
+        };
+
+        using var response = await dav.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        // 409 and the code, not merely "not 200" — a 404 would satisfy a weaker assertion while proving the
+        // path was wrong rather than the door closed, which is exactly how the first version of this test
+        // passed without exercising anything.
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("PLAINTEXT_CONTENT_REFUSED", body, StringComparison.Ordinal);
+        Assert.DoesNotContain(Marker, body, StringComparison.Ordinal);
     }
 
     private static string? Rel(JsonElement version, string rel) =>
@@ -126,7 +179,7 @@ public class StrictEnvelopedReadTests
     private Task<Reader> StrictReaderAsync(bool withCertificate) =>
         ReaderAsync(E2EApiFactory.StrictTenantName, withCertificate);
 
-    private sealed record Reader(HttpClient Api, Guid DocumentId, byte[]? Pkcs12, Guid TenantId, string Email);
+    private sealed record Reader(HttpClient Api, Guid DocumentId, byte[]? Pkcs12, Guid TenantId, string Email, string RepositoryName, string DocumentName);
 
     /// <summary>
     /// Writes the reader's certificate the way it actually arrives in this tier — from OUTSIDE.
@@ -166,13 +219,15 @@ public class StrictEnvelopedReadTests
             await RegisterCertificateAsync(tenantId, email, certificate.ExportCertificatePem());
         }
 
+        var repositoryName = $"repo-{Guid.NewGuid():N}";
         var repository = (await TestJson.Post(api, "/api/repositories",
-            new { name = $"repo-{Guid.NewGuid():N}" })).GetProperty("id").GetGuid();
+            new { name = repositoryName })).GetProperty("id").GetGuid();
+        var documentName = $"doc-{Guid.NewGuid():N}";
         var documentId = (await TestJson.Post(api, $"/api/documents/{repository}/children",
-            new { name = $"doc-{Guid.NewGuid():N}" })).GetProperty("id").GetGuid();
+            new { name = documentName })).GetProperty("id").GetGuid();
 
         await UploadAsync(api, documentId, Encoding.ASCII.GetBytes($"{Marker} the document a card opens\n"));
-        return new Reader(api, documentId, pkcs12, tenantId, email);
+        return new Reader(api, documentId, pkcs12, tenantId, email, repositoryName, documentName);
     }
 
     /// <summary>Uploads through the real contract — client-side encrypted where the tenant demands it.</summary>
