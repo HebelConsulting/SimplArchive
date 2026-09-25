@@ -150,18 +150,40 @@ public sealed class EncryptingObjectStorageClient(
     private Task<bool> RefusedByStrictTierAsync(string objectKey, CancellationToken cancellationToken) =>
         keys.StrictAsync(objectKey, cancellationToken);
 
+    /// <summary>
+    /// The token door for an object that carries a wrapped DEK, whatever its tenant's mode is TODAY.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The OBJECT is asked, never the gate.</b> This used to short-circuit on
+    /// <see cref="AtRestKeyService.GatedAsync"/> — one HEAD saved per presign on tenants that encrypt nothing
+    /// — and that made an encrypted object unreadable the moment its tenant's mode was turned OFF: the presign
+    /// fell through to object storage, and the browser was handed CIPHERTEXT with a 200 and no error anywhere.
+    /// Turning encryption off for a tenant must not make that tenant's existing content unreadable, and a
+    /// mode is a decision about what to do with the NEXT write, not a claim about what is already stored.
+    /// </para>
+    /// <para>
+    /// ADR 0818 always said the mixed state is by design, but only implemented one half of it — a plaintext
+    /// object on a gated tenant. The other half is an encrypted object on a tenant that is no longer gated,
+    /// and it is the half that loses data in practice rather than failing safe.
+    /// </para>
+    /// <para>
+    /// <b>Not hypothetical:</b> the public kiosk's Demo tenant spent a day encrypted (its config named a key
+    /// the running image did not read, so the absent legacy list meant "every tenant"), and the release that
+    /// corrected the gating would, without this, have served ciphertext for every document in the demo.
+    /// </para>
+    /// <para>
+    /// The price is one HEAD per presign in an installation that has encryption configured at all — a fully
+    /// inert one never resolves this decorator, and a gated tenant already paid exactly this.
+    /// </para>
+    /// </remarks>
     private async Task<Uri?> SwapIfEncryptedAsync(string objectKey, TimeSpan expiry, string? fileName,
         string? contentType, bool inline, CancellationToken cancellationToken)
     {
-        if (!await keys.GatedAsync(objectKey, cancellationToken))
-        {
-            return null;
-        }
-
         var info = await inner.GetObjectInfoAsync(objectKey, cancellationToken);
         if (!info.Metadata.ContainsKey(WrappedDekKey))
         {
-            return null; // plaintext object on a gated tenant (mixed state) — presigned stays correct
+            return null; // a plaintext object — presigned is correct, gated tenant or not (the mixed state)
         }
 
         if (urlIssuer is null)
