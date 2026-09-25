@@ -79,6 +79,25 @@
                                    DateFormat="yyyy-MM-dd" Variant="Variant.Outlined" Class="mb-2" />
                     <MudNumericField T="int?" @bind-Value="_maxAccesses" Label="@Strings.Get("ExtLinkMaxAccesses")"
                                      Min="1" Variant="Variant.Outlined" />
+
+                    @* The recipient this link's content is enveloped to (ADR 0827), matching the desktop dialog
+                       (ADR 0511). Shown on EVERY tenant because the server accepts it everywhere — only its
+                       requiredness follows the tier — and a field that appears and disappears with configuration
+                       the sharer cannot see is worse than one that is simply optional. *@
+                    @* Immediate: the helper text below describes what was pasted, and a description that only
+                       appears after tabbing away is a description most people never see. It also keeps the two
+                       clients the same — the desktop's TextBox updates its description on every change
+                       (ADR 0511) — and the default, committing on blur, would have made the web the odd one. *@
+                    <MudTextField T="string" Value="_recipientCertificatePem" Immediate="true" Lines="3" Class="mt-2"
+                                  Label="@Strings.Get("ExtLinkRecipientCert")" Variant="Variant.Outlined"
+                                  Placeholder="-----BEGIN CERTIFICATE-----"
+                                  Required="_requiresRecipientCertificate"
+                                  HelperText="@_recipientDescription"
+                                  ValueChanged="@(async v => { _recipientCertificatePem = v; await DescribeRecipientAsync(); })" />
+                    @if (_requiresRecipientCertificate)
+                    {
+                        <MudText Typo="Typo.caption">@Strings.Get("ExtLinkCertHint")</MudText>
+                    }
                 }
             }
         </div>
@@ -106,6 +125,10 @@
 
     private readonly List<ExternalLinkResponse> _links = [];
     private bool _canCreate;
+    private bool _requiresRecipientCertificate;
+    private string? _recipientCertificatePem;
+    private string _recipientDescription = string.Empty;
+    private string? _describeCertificateUrl;
     private bool _allowed = true;
     private string? _createdUrl;
     private DateTime? _expiry = DateTime.Today.AddDays(30);
@@ -123,6 +146,10 @@
             var page = await Http.GetFromJsonAsync<ExternalLinkListResponse>(ListUrl);
             _links.AddRange(page?.ExternalLinks ?? []);
             _canCreate = page?.CanCreate ?? false;
+            _requiresRecipientCertificate = page?.RequiresRecipientCertificate ?? false;
+            // Followed, never composed (ADR 0543) — the listing advertises where to ask.
+            _describeCertificateUrl = page?.Links?
+                .FirstOrDefault(l => l.Rel == "describe-certificate")?.Href;
         }
         catch (HttpRequestException)
         {
@@ -144,7 +171,17 @@
                 ? new DateTimeOffset(DateTime.SpecifyKind(d.Date.AddHours(23).AddMinutes(59), DateTimeKind.Unspecified), TimeSpan.Zero)
                 : (DateTimeOffset?)null,
             maxAccesses = _maxAccesses,
+            recipientCertificatePem = string.IsNullOrWhiteSpace(_recipientCertificatePem) ? null : _recipientCertificatePem,
         };
+
+        // The tier's requirement, checked before the round trip — not instead of the server's refusal, which
+        // stands whatever a client believes, but the difference between a field the sharer can still fill in
+        // and an error about one.
+        if (_requiresRecipientCertificate && string.IsNullOrWhiteSpace(_recipientCertificatePem))
+        {
+            Snackbar.Add(Strings.Get("ExtLinkCertRequired"), Severity.Warning);
+            return;
+        }
 
         var response = await Http.PostAsJsonAsync(ListUrl, body);
         if (!response.IsSuccessStatusCode)
@@ -237,10 +274,73 @@
         return string.IsNullOrEmpty(href) ? null : href.TrimStart('/');
     }
 
+    /// <summary>
+    /// Asks the server who the pasted certificate belongs to — the only check available to the sharer, since a
+    /// PEM is unreadable by eye and addressing a document to the wrong key cannot be undone once the link has
+    /// been sent.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The server answers because this runtime cannot.</b> `X509Certificate2` throws
+    /// `PlatformNotSupportedException` in Blazor WASM — measured, not assumed — so there is no local parse to
+    /// fall back on here. The desktop asks the same endpoint even though it COULD parse in-process, so that
+    /// one question has one answer, computed by the same code that validates the certificate on create and
+    /// writes it to the audit.
+    /// </para>
+    /// <para>
+    /// Asked only once the text looks like a whole certificate, so typing does not become a request per
+    /// keystroke — a paste, which is how a PEM actually arrives, satisfies it in one change.
+    /// </para>
+    /// </remarks>
+    private async Task DescribeRecipientAsync()
+    {
+        _recipientDescription = string.Empty;
+        var asked = _recipientCertificatePem;
+        if (string.IsNullOrWhiteSpace(asked)
+            || !asked.Contains("BEGIN CERTIFICATE", StringComparison.Ordinal)
+            || !asked.Contains("END CERTIFICATE", StringComparison.Ordinal)
+            || _describeCertificateUrl is not { } url)
+        {
+            return;
+        }
+
+        var response = await Http.PostAsJsonAsync(url, new { certificatePem = asked });
+
+        // The box may have moved on while the request was in flight, and a description of what WAS in it is
+        // the wrong-subject failure this feature exists to prevent, reproduced inside the dialog.
+        if (_recipientCertificatePem != asked)
+        {
+            return;
+        }
+
+        _recipientDescription = response.IsSuccessStatusCode
+            && await response.Content.ReadFromJsonAsync<CertificateDescriptionResponse>() is { } described
+                ? $"{described.Subject} · {described.Fingerprint}"
+                : Strings.Get("ExtLinkCertUnreadable");
+    }
+
+    private record CertificateDescriptionResponse
+    {
+        public string? Subject { get; set; }
+        public string? Fingerprint { get; set; }
+    }
+
     private record ExternalLinkListResponse
     {
         public List<ExternalLinkResponse> ExternalLinks { get; set; } = [];
         public bool CanCreate { get; set; }
+
+        // Absent means NO, like every capability here — the safe direction: a client that wrongly thinks a
+        // certificate is required merely asks for one it did not need.
+        public bool RequiresRecipientCertificate { get; set; }
+
+        public List<LinkResponse>? Links { get; set; }
+    }
+
+    private record LinkResponse
+    {
+        public string? Rel { get; set; }
+        public string? Href { get; set; }
     }
 
     private record ExternalLinkResponse

@@ -31,7 +31,20 @@ public sealed class ExternalLinksClient(ApiCore core)
         public string ExpiresLocal => ExpiresAt.InZone(SessionTimeZone.Current).ToString("g");
     }
 
-    public sealed record ExternalLinkListInfo(IReadOnlyList<ExternalLinkInfo> Links, bool CanCreate, bool CanViewOthers);
+    /// <param name="RequiresRecipientCertificate">
+    /// The strict tier: a link here must name the key its content is enveloped to (#1390, ADR 0827). Defaults
+    /// to FALSE when the server does not say — the safe direction, because a client that wrongly believes a
+    /// certificate is required merely asks for one it did not need, while the opposite lets a sharer build a
+    /// link the server will refuse.
+    /// </param>
+    /// <param name="DescribeCertificateHref">
+    /// Where a pasted PEM is turned into "who is this?" — followed, never composed (ADR 0543). Null when the
+    /// server does not advertise it, and the dialog then simply shows no description rather than guessing an
+    /// address.
+    /// </param>
+    public sealed record ExternalLinkListInfo(
+        IReadOnlyList<ExternalLinkInfo> Links, bool CanCreate, bool CanViewOthers,
+        bool RequiresRecipientCertificate = false, string? DescribeCertificateHref = null);
 
     // Follows the href the document resource advertised via its "external-links" rel (ADR 0543) — never composed.
     public async Task<ExternalLinkListInfo> GetExternalLinksAsync(string linksHref, CancellationToken cancellationToken = default)
@@ -61,9 +74,11 @@ public sealed class ExternalLinksClient(ApiCore core)
     // is what made a 500 (a non-UTC expiry Postgres refused to store) display as "external links are switched off
     // for this tenant": a message that sent the reader to a setting that was already correct.
     public async Task<ExternalLinkInfo?> CreateExternalLinkAsync(
-        string linksHref, DateTimeOffset? expiresAt, int? maxAccesses, CancellationToken cancellationToken = default)
+        string linksHref, DateTimeOffset? expiresAt, int? maxAccesses,
+        string? recipientCertificatePem = null, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsJsonAsync(linksHref, new { expiresAt, maxAccesses }, cancellationToken);
+        using var response = await _core.Http.PostAsJsonAsync(
+            linksHref, new { expiresAt, maxAccesses, recipientCertificatePem }, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.NotFound)
@@ -76,6 +91,29 @@ public sealed class ExternalLinksClient(ApiCore core)
 
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
         return ParseLink(doc.RootElement);
+    }
+
+    /// <summary>Asks the server who a certificate belongs to — subject and fingerprint, or null if unreadable.</summary>
+    /// <remarks>
+    /// The SERVER answers, though the desktop could parse this in-process, because the web client cannot:
+    /// X509Certificate2 throws PlatformNotSupportedException in the browser runtime. Two implementations of
+    /// one question is how the clients come to disagree, and how what a sharer approves stops matching what
+    /// the audit records — so there is one, and it is the one that also validates the certificate on create.
+    /// </remarks>
+    public async Task<string?> DescribeCertificateAsync(
+        string describeHref, string certificatePem, CancellationToken cancellationToken = default)
+    {
+        using var response = await _core.Http.PostAsJsonAsync(
+            describeHref, new { certificatePem }, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null; // refused — the caller says so in its own words; the server said why in a problem body
+        }
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        var subject = doc.RootElement.TryGetProperty("subject", out var s) ? s.GetString() : null;
+        var fingerprint = doc.RootElement.TryGetProperty("fingerprint", out var f) ? f.GetString() : null;
+        return fingerprint is null ? null : $"{subject} · {fingerprint}";
     }
 
     public async Task<bool> RevokeExternalLinkAsync(string revokeHref, string etag, CancellationToken cancellationToken = default)
@@ -112,7 +150,9 @@ public sealed class ExternalLinksClient(ApiCore core)
         return new ExternalLinkListInfo(
             links,
             root.TryGetProperty("canCreate", out var c) && c.ValueKind == JsonValueKind.True,
-            root.TryGetProperty("canViewOthers", out var v) && v.ValueKind == JsonValueKind.True);
+            root.TryGetProperty("canViewOthers", out var v) && v.ValueKind == JsonValueKind.True,
+            root.TryGetProperty("requiresRecipientCertificate", out var r) && r.ValueKind == JsonValueKind.True,
+            ApiCore.RelHref(root, "describe-certificate"));
     }
 
     private static ExternalLinkInfo ParseLink(JsonElement item) => new(

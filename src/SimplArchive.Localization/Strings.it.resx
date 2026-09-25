@@ -1872,6 +1872,18 @@
   <data name="ExtLinkExpires" xml:space="preserve">
     <value>Scade</value>
   </data>
+  <data name="ExtLinkRecipientCert" xml:space="preserve">
+    <value>Certificato del destinatario (PEM)</value>
+  </data>
+  <data name="ExtLinkCertRequired" xml:space="preserve">
+    <value>Questo tenant condivide i documenti solo come busta. Incollare il certificato del destinatario per creare il collegamento.</value>
+  </data>
+  <data name="ExtLinkCertUnreadable" xml:space="preserve">
+    <value>Questo non è un certificato leggibile.</value>
+  </data>
+  <data name="ExtLinkCertHint" xml:space="preserve">
+    <value>Il documento viene consegnato cifrato al titolare di questo certificato, che lo apre con la propria chiave privata.</value>
+  </data>
   <data name="ExtLinkMaxAccesses" xml:space="preserve">
     <value>Accessi massimi</value>
   </data>

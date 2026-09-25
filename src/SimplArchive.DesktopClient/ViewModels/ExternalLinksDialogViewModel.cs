@@ -54,6 +54,24 @@ public partial class ExternalLinksDialogViewModel : ObservableObject
 
     [ObservableProperty] private bool _canCreate;
 
+    /// <summary>The strict tier: this link must name the key its content is enveloped to (ADR 0827).</summary>
+    [ObservableProperty] private bool _requiresRecipientCertificate;
+
+    /// <summary>The pasted recipient certificate, and what it turns out to be.</summary>
+    [ObservableProperty] private string? _recipientCertificatePem;
+
+    /// <summary>
+    /// Who the pasted certificate says it belongs to — subject and fingerprint, or the reason it could not be
+    /// read. Shown back to the sharer because it is the ONLY check available to them: addressing a document to
+    /// the wrong key is not a mistake anybody can undo afterwards, and a PEM is unreadable by eye. The same two
+    /// fields are what the server's audit record names, so what they see here is what an investigator sees
+    /// later.
+    /// </summary>
+    [ObservableProperty] private string _recipientDescription = string.Empty;
+
+    /// <summary>Where to ask who a certificate belongs to — advertised by the listing, never composed.</summary>
+    private string? _describeCertificateHref;
+
     [ObservableProperty] private bool _canViewOthers;
 
     // Shown once, prominently: the token is a live credential and the list endpoints never return it, so if the
@@ -114,6 +132,8 @@ public partial class ExternalLinksDialogViewModel : ObservableObject
 
         CanCreate = result.CanCreate;
         CanViewOthers = result.CanViewOthers;
+        RequiresRecipientCertificate = result.RequiresRecipientCertificate;
+        _describeCertificateHref = result.DescribeCertificateHref;
 
         if (_crossDocument && CanViewOthers && Users.Count == 0)
         {
@@ -127,13 +147,65 @@ public partial class ExternalLinksDialogViewModel : ObservableObject
         }
     }
 
+    /// <summary>Describes the pasted certificate as soon as it looks complete — see RecipientDescription.</summary>
+    /// <remarks>
+    /// <para>
+    /// The SERVER describes it, though this client could parse it in-process. The web client cannot —
+    /// X509Certificate2 throws PlatformNotSupportedException in the browser runtime — so parsing here would
+    /// leave two implementations of one question, and the two clients would answer it differently the first
+    /// time either changed. One answer, from the same code that validates the certificate on create and writes
+    /// it to the audit.
+    /// </para>
+    /// <para>
+    /// Asked only once the text LOOKS like a whole certificate, so typing does not become a request per
+    /// keystroke. A paste — which is how a PEM actually arrives — satisfies it in one change.
+    /// </para>
+    /// </remarks>
+    partial void OnRecipientCertificatePemChanged(string? value)
+    {
+        RecipientDescription = string.Empty;
+        if (string.IsNullOrWhiteSpace(value) || !LooksComplete(value) || _describeCertificateHref is not { } href)
+        {
+            return;
+        }
+
+        var asked = value;
+        Safe.Fire(async () =>
+        {
+            var described = await _api.ExternalLinks.DescribeCertificateAsync(href, asked);
+
+            // The value may have moved on while the request was in flight; a description of what WAS in the box
+            // is the wrong-subject failure this whole feature exists to prevent, reproduced inside the dialog.
+            if (RecipientCertificatePem == asked)
+            {
+                RecipientDescription = described ?? Strings.Get("ExtLinkCertUnreadable");
+            }
+        });
+    }
+
+    // Enough of a PEM to be worth a round trip. Not validation — the server decides that — just the difference
+    // between a pasted certificate and somebody halfway through typing one.
+    private static bool LooksComplete(string value) =>
+        value.Contains("BEGIN CERTIFICATE", StringComparison.Ordinal)
+        && value.Contains("END CERTIFICATE", StringComparison.Ordinal);
+
     [RelayCommand]
     private async Task CreateAsync()
     {
+        // The tier's requirement, checked before the round trip. Not a substitute for the server's refusal —
+        // which stands whatever a client believes — but the difference between a field the sharer can still
+        // fill in and an error about one.
+        if (RequiresRecipientCertificate && string.IsNullOrWhiteSpace(RecipientCertificatePem))
+        {
+            Status = Strings.Get("ExtLinkCertRequired");
+            return;
+        }
+
         ExternalLinksClient.ExternalLinkInfo? created;
         try
         {
-            created = await _api.ExternalLinks.CreateExternalLinkAsync(_linksHref, Expiry, MaxAccesses);
+            created = await _api.ExternalLinks.CreateExternalLinkAsync(
+                _linksHref, Expiry, MaxAccesses, RecipientCertificatePem);
         }
         catch (ApiActionException e)
         {

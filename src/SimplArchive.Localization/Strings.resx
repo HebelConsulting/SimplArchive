@@ -1872,6 +1872,18 @@
   <data name="ExtLinkExpires" xml:space="preserve">
     <value>Expires</value>
   </data>
+  <data name="ExtLinkRecipientCert" xml:space="preserve">
+    <value>Recipient certificate (PEM)</value>
+  </data>
+  <data name="ExtLinkCertRequired" xml:space="preserve">
+    <value>This tenant shares documents only as an envelope. Paste the recipient's certificate to create the link.</value>
+  </data>
+  <data name="ExtLinkCertUnreadable" xml:space="preserve">
+    <value>This is not a readable certificate.</value>
+  </data>
+  <data name="ExtLinkCertHint" xml:space="preserve">
+    <value>The document is delivered encrypted to this certificate's holder, who opens it with their private key.</value>
+  </data>
   <data name="ExtLinkMaxAccesses" xml:space="preserve">
     <value>Maximum accesses</value>
   </data>

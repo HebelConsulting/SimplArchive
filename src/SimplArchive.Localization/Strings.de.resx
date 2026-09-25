@@ -1872,6 +1872,18 @@
   <data name="ExtLinkExpires" xml:space="preserve">
     <value>Läuft ab</value>
   </data>
+  <data name="ExtLinkRecipientCert" xml:space="preserve">
+    <value>Empfängerzertifikat (PEM)</value>
+  </data>
+  <data name="ExtLinkCertRequired" xml:space="preserve">
+    <value>Dieser Mandant gibt Dokumente nur als Umschlag heraus. Fügen Sie das Zertifikat des Empfängers ein, um den Link zu erstellen.</value>
+  </data>
+  <data name="ExtLinkCertUnreadable" xml:space="preserve">
+    <value>Dies ist kein lesbares Zertifikat.</value>
+  </data>
+  <data name="ExtLinkCertHint" xml:space="preserve">
+    <value>Das Dokument wird verschlüsselt an den Inhaber dieses Zertifikats ausgeliefert, der es mit seinem privaten Schlüssel öffnet.</value>
+  </data>
   <data name="ExtLinkMaxAccesses" xml:space="preserve">
     <value>Maximale Zugriffe</value>
   </data>

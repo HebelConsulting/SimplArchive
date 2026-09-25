@@ -48,6 +48,26 @@
             <NumericUpDown Value="{Binding MaxAccesses}" Minimum="1" Increment="1" FormatString="0" Width="110" />
         </StackPanel>
 
+        <!-- The recipient this link's content is enveloped to (ADR 0827). Shown on EVERY tenant, not only the
+             strict tier, because the server accepts it everywhere: a sharer who wants an envelope should be
+             able to ask for one, and a field that appears and disappears with configuration the sharer cannot
+             see is worse than one that is simply optional. Only its REQUIREDNESS follows the tier.
+
+             Under the box, what the certificate turns out to be. A PEM is unreadable by eye, and addressing a
+             document to the wrong key cannot be undone once the link is sent — so the subject and fingerprint
+             are shown back, the same two fields the server's audit record names. -->
+        <StackPanel DockPanel.Dock="Bottom" Spacing="4" Margin="0,8,0,0" IsVisible="{Binding ShowCreate}">
+            <TextBlock Text="{loc:Tr ExtLinkRecipientCert}" />
+            <TextBox Text="{Binding RecipientCertificatePem}" AcceptsReturn="True" Height="64"
+                     TextWrapping="Wrap" Watermark="-----BEGIN CERTIFICATE-----" />
+            <TextBlock Text="{Binding RecipientDescription}" FontSize="11" TextWrapping="Wrap"
+                       Foreground="{DynamicResource WbMuted}"
+                       IsVisible="{Binding RecipientDescription, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <TextBlock Text="{loc:Tr ExtLinkCertHint}" FontSize="11" TextWrapping="Wrap"
+                       Foreground="{DynamicResource WbFaint}"
+                       IsVisible="{Binding RequiresRecipientCertificate}" />
+        </StackPanel>
+
         <ScrollViewer>
             <ItemsControl ItemsSource="{Binding Links}">
                 <ItemsControl.ItemTemplate>

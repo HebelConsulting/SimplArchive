@@ -36,6 +36,7 @@ public partial class AuditCoverageRatchetTests
     {
         ["BookingsController.cs"] = "AUDITED ELSEWHERE: at CalendarContactClassifier, the one door every booking write path uses — recording it here instead is what produced the asymmetry #1092 exists to fix.",
         ["AuthorizationController.cs"] = "The OIDC authorize endpoint; the sign-in it results in is recorded as Auth.LoggedIn.",
+        ["CertificateDescriptionsController.cs"] = "NOT A MUTATION: it is a POST only because a certificate does not fit in a URL and must not appear in one. Nothing is stored, nothing is decided, and the answer is derived from the request alone — the same body always yields the same description. The act it informs, creating an enveloped external link, IS audited, and names the same certificate.",
         ["CheckoutPagesController.cs"] = "Renders the check-out page; the acts it posts to are audited by their own controllers.",
         ["DavCollectionColorController.cs"] = "A per-user calendar colour. A display preference is not an audit event.",
         ["DocumentAppointmentController.cs"] = "DEBT: appointment edits are document writes and should be audited.",

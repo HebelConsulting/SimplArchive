@@ -144,6 +144,70 @@ public class ExternalLinkEnvelopeTests
         Assert.StartsWith("http", response.Headers.Location!.ToString(), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task The_listing_tells_a_client_whether_a_recipient_is_required()
+    {
+        // How a dialog knows to insist. Without it the client either asks everybody for a certificate, or
+        // discovers the requirement by being refused — with the sharer already looking at an error rather than
+        // at a field they could fill in (#1390).
+        var (strictApi, strictDocument) = await SharedDocumentAsync(E2EApiFactory.StrictTenantName);
+        var strict = await TestJson.Get(strictApi, $"/api/documents/{strictDocument}/external-links");
+        Assert.True(strict.GetProperty("requiresRecipientCertificate").GetBoolean());
+
+        // The contrast, which is what stops this passing on a build that answers true to everything.
+        var (plainApi, plainDocument) = await SharedDocumentAsync($"Ordinary{Guid.NewGuid():N}"[..24]);
+        var ordinary = await TestJson.Get(plainApi, $"/api/documents/{plainDocument}/external-links");
+        Assert.False(ordinary.GetProperty("requiresRecipientCertificate").GetBoolean());
+
+        // Beside canCreate, not instead of it: they answer different questions about the same act — "may
+        // you?" and "on what terms?" — and a client needs both to render the dialog correctly.
+        Assert.True(strict.GetProperty("canCreate").GetBoolean());
+    }
+
+    [Fact]
+    public async Task The_server_describes_a_certificate_so_both_clients_can_show_who_it_is()
+    {
+        // ONE implementation of "who is this?", because Blazor WASM cannot parse an X.509 certificate at all
+        // (PlatformNotSupportedException — measured, not assumed). The desktop could parse in-process and
+        // deliberately does not: two implementations of one question is how the clients come to disagree, and
+        // how what a sharer approves stops matching what the audit later reports (#1390).
+        var (api, documentId) = await SharedDocumentAsync($"Ordinary{Guid.NewGuid():N}"[..24]);
+
+        // Followed, never composed (ADR 0543) — the listing advertises where to ask.
+        var listing = await TestJson.Get(api, $"/api/documents/{documentId}/external-links");
+        var describeHref = listing.GetProperty("links").EnumerateArray()
+            .First(l => l.GetProperty("rel").GetString() == "describe-certificate")
+            .GetProperty("href").GetString()!;
+
+        var (pem, _) = NewRecipient("described@outside.example");
+        var described = await TestJson.Post(api, describeHref, new { certificatePem = pem });
+
+        Assert.Contains("described@outside.example", described.GetProperty("subject").GetString()!, StringComparison.Ordinal);
+
+        // The fingerprint is SHA-256 over the DER: 64 hex characters, and the same value the audit names.
+        Assert.Matches("^[0-9A-F]{64}$", described.GetProperty("fingerprint").GetString()!);
+    }
+
+    [Fact]
+    public async Task Describing_nonsense_is_refused_the_same_way_creating_with_it_would_be()
+    {
+        // The point of sharing one implementation with the create path: a certificate the description accepts
+        // is one the link creation will accept, so a sharer cannot be told "that looks fine" and then refused
+        // a moment later.
+        var (api, documentId) = await SharedDocumentAsync($"Ordinary{Guid.NewGuid():N}"[..24]);
+        var listing = await TestJson.Get(api, $"/api/documents/{documentId}/external-links");
+        var describeHref = listing.GetProperty("links").EnumerateArray()
+            .First(l => l.GetProperty("rel").GetString() == "describe-certificate")
+            .GetProperty("href").GetString()!;
+
+        using var response = await api.PostAsJsonAsync(describeHref, new { certificatePem = "not a certificate" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("INVALID_RECIPIENT_CERTIFICATE",
+            JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement
+                .GetProperty("errorCode").GetString());
+    }
+
     /// <summary>The token a created link redeems with — the last segment of the URL it hands back.</summary>
     private static string TokenOf(JsonElement created) =>
         new Uri(created.GetProperty("url").GetString()!).Segments[^1];

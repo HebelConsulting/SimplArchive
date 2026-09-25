@@ -1872,6 +1872,18 @@
   <data name="ExtLinkExpires" xml:space="preserve">
     <value>Caduca</value>
   </data>
+  <data name="ExtLinkRecipientCert" xml:space="preserve">
+    <value>Certificado del destinatario (PEM)</value>
+  </data>
+  <data name="ExtLinkCertRequired" xml:space="preserve">
+    <value>Este inquilino comparte documentos solo como sobre. Pegue el certificado del destinatario para crear el enlace.</value>
+  </data>
+  <data name="ExtLinkCertUnreadable" xml:space="preserve">
+    <value>Esto no es un certificado legible.</value>
+  </data>
+  <data name="ExtLinkCertHint" xml:space="preserve">
+    <value>El documento se entrega cifrado al titular de este certificado, que lo abre con su clave privada.</value>
+  </data>
   <data name="ExtLinkMaxAccesses" xml:space="preserve">
     <value>Accesos máximos</value>
   </data>

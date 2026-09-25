@@ -109,6 +109,31 @@ public class DocumentExternalLinksController : ControllerBase
         public List<ExternalLinkResource> ExternalLinks { get; set; } = [];
 
         public bool CanCreate { get; set; }
+
+        /// <summary>
+        /// Whether creating a link here REQUIRES naming a recipient certificate — true in the strict
+        /// encryption tier, where content leaves as an envelope or not at all (#1390, ADRs 0825/0827).
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// A capability on the resource, beside <see cref="CanCreate"/>, rather than a rel and rather than a
+        /// global flag on the session. That is ADR 0719/0723's shape: <c>CanCreate</c> already answers "may
+        /// you?" here, and this answers "on what terms?" about the same act, at the same address, for the same
+        /// document — so it belongs in the same answer.
+        /// </para>
+        /// <para>
+        /// <b>Not on <c>/diagnostics/whoami</c></b>, which was the obvious first idea. The tier is a property
+        /// of the TENANT today, so a session-wide flag would be correct by accident; putting it on the resource
+        /// keeps it correct if the answer ever becomes narrower than a tenant, and costs nothing now — the
+        /// dialog already reads this listing to learn whether it may offer the button at all.
+        /// </para>
+        /// <para>
+        /// Its absence means NO, like every other capability here — the safe direction, and the reason the
+        /// clients gate the field's REQUIREDNESS on it rather than the field's existence: a sharer may supply
+        /// a certificate anywhere, and must supply one here.
+        /// </para>
+        /// </remarks>
+        public bool RequiresRecipientCertificate { get; set; }
     }
 
     public class CreateExternalLinkRequest
@@ -213,7 +238,16 @@ public class DocumentExternalLinksController : ControllerBase
                 ],
             }).ToList(),
             CanCreate = await CanCreateAsync(documentId, cancellationToken),
-            Links = [new Link("self", $"/api/documents/{documentId}/external-links", "GET")],
+            RequiresRecipientCertificate = _encryptionModes.IsStrict((await CurrentTenantAsync(cancellationToken)).Name),
+            // describe-certificate: where a client turns a pasted PEM into "who is this?" before creating the
+            // link (ADR 0827). Advertised HERE rather than left for a client to compose, because a client may
+            // know no URL but the API root (ADR 0543) — and advertised on this listing because this is the
+            // resource whose dialog needs it.
+            Links =
+            [
+                new Link("self", $"/api/documents/{documentId}/external-links", "GET"),
+                new Link("describe-certificate", "/api/certificate-descriptions", "POST"),
+            ],
         });
     }
 
