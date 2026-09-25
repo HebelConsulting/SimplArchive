@@ -32,6 +32,7 @@ public class DocumentExternalLinksController : ControllerBase
     private readonly ICurrentTenantAccessor _tenant;
     private readonly IAuditRecorder _audit;
     private readonly IDocumentThumbnailService _thumbnails;
+    private readonly SimplArchive.Infrastructure.Encryption.EncryptionModes _encryptionModes;
     private readonly TimeProvider _clock;
 
     public DocumentExternalLinksController(
@@ -43,6 +44,7 @@ public class DocumentExternalLinksController : ControllerBase
         ICurrentTenantAccessor tenant,
         IAuditRecorder audit,
         IDocumentThumbnailService thumbnails,
+        SimplArchive.Infrastructure.Encryption.EncryptionModes encryptionModes,
         ILogger<DocumentExternalLinksController> logger,
         TimeProvider clock)
     {
@@ -55,6 +57,7 @@ public class DocumentExternalLinksController : ControllerBase
         _tenant = tenant;
         _audit = audit;
         _thumbnails = thumbnails;
+        _encryptionModes = encryptionModes;
         _clock = clock;
     }
 
@@ -113,6 +116,18 @@ public class DocumentExternalLinksController : ControllerBase
         public DateTimeOffset? ExpiresAt { get; set; }
 
         public int? MaxAccesses { get; set; }
+
+        /// <summary>
+        /// The recipient's S/MIME certificate (PEM). Required in the strict tier, where the link delivers an
+        /// envelope addressed to this key rather than the file; ignored nowhere and optional elsewhere
+        /// (#1377, ADR 0827).
+        /// </summary>
+        /// <remarks>
+        /// Accepted on EVERY tenant rather than only strict ones. A sharer who wants an envelope should be
+        /// able to ask for one, and gating the field on the tier would mean the same request succeeds or is
+        /// rejected depending on configuration the caller cannot see.
+        /// </remarks>
+        public string? RecipientCertificatePem { get; set; }
     }
 
     /// <summary>
@@ -240,6 +255,15 @@ public class DocumentExternalLinksController : ControllerBase
             throw new CannotShareFolderException();
         }
 
+        // WHO this is addressed to, settled before anything is created. A strict tenant shares outward only as
+        // an envelope (ADR 0825/0827), so a link with no recipient is one the content route would refuse — and
+        // a refusal that arrives after the sharer has sent the URL to somebody is not a refusal, it is a trap.
+        var recipient = request.RecipientCertificatePem is { Length: > 0 } pem
+            ? RecipientCertificate.Validate(pem)
+            : _encryptionModes.IsStrict(tenant.Name)
+                ? throw new ExternalLinkRequiresRecipientCertificateException()
+                : (RecipientCertificate.Described?)null;
+
         var now = _clock.GetUtcNow();
         var expiresAt = request.ExpiresAt ?? now.AddDays(tenant.ExternalLinkMaxDays);
         if (expiresAt <= now || expiresAt > now.AddDays(tenant.ExternalLinkMaxDays))
@@ -258,14 +282,19 @@ public class DocumentExternalLinksController : ControllerBase
             // Non-null by the CanCreateAsync gate above, which admits no service account (ADR 0546).
             CreatedByUserId = _currentUser.UserId!.Value,
             CreatedAt = now,
+            RecipientCertificatePem = request.RecipientCertificatePem is { Length: > 0 } certificate ? certificate : null,
         };
 
         _dbContext.ExternalLinks.Add(link);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        // The link id, never the token — an audit log is exported and streamed to a SIEM (ADR 0546).
+        // The link id, never the token — an audit log is exported and streamed to a SIEM (ADR 0546). The
+        // RECIPIENT goes in for the same reason the id does and the token does not: a fingerprint and a subject
+        // identify who the content was addressed to without being able to redeem anything. On an enveloped
+        // link it is the only such record anywhere — the certificate itself dies with the link.
+        var addressedTo = recipient is { } who ? $", addressed to {who}" : string.Empty;
         await _audit.RecordAsync(AuditActions.ExternalLinkCreated, "Document", documentId, document.Name,
-            $"External link {link.Id} created, expires {expiresAt:u}", cancellationToken: cancellationToken);
+            $"External link {link.Id} created, expires {expiresAt:u}{addressedTo}", cancellationToken: cancellationToken);
 
         // Draw the landing page's thumbnail NOW, while a signed-in person is waiting on a request they expect to
         // take a moment — rather than when a stranger opens the link and would otherwise watch an empty card

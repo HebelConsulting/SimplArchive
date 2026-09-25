@@ -44,6 +44,24 @@ public class ExternalLink : ITenantScoped, IConcurrencyTracked
     // creator-pair pattern every other entity follows: handing a document to someone outside the tenant is an
     // act of judgement about a recipient, and an automation has no one to answer for that judgement. Required,
     // so "a person did this" is a property of the schema rather than a convention the code upholds.
+    /// <summary>
+    /// The recipient's S/MIME certificate (PEM), when this link delivers an ENVELOPE rather than the file
+    /// (#1377, ADR 0827). Null on an ordinary link, which is every link outside the strict tier.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// On the LINK rather than on a user, because the point of an external link is a recipient who has no
+    /// account — and rather than in a table of its own, because it has exactly one owner and exactly one
+    /// lifetime: revoking or expiring the link disposes of it, with no second thing to sweep.
+    /// </para>
+    /// <para>
+    /// Not secret — a certificate is a public key and is meant to be handed around — so it needs no
+    /// protection at rest beyond the row's own. What it IS, is the only record of who the content was
+    /// addressed to, which is why the creation audit names its fingerprint and subject.
+    /// </para>
+    /// </remarks>
+    public string? RecipientCertificatePem { get; set; }
+
     public Guid CreatedByUserId { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

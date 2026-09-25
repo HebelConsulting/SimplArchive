@@ -34,6 +34,7 @@ public class ExternalLinksController : ControllerBase
     private readonly CurrentTenantAccessor _tenant;
     private readonly IAuditRecorder _audit;
     private readonly IDocumentThumbnailService _thumbnails;
+    private readonly SimplArchive.Infrastructure.Encryption.SmimeMessageEnveloper _enveloper;
     private readonly TimeProvider _clock;
 
     public ExternalLinksController(
@@ -42,6 +43,7 @@ public class ExternalLinksController : ControllerBase
         CurrentTenantAccessor tenant,
         IAuditRecorder audit,
         IDocumentThumbnailService thumbnails,
+        SimplArchive.Infrastructure.Encryption.SmimeMessageEnveloper enveloper,
         TimeProvider clock)
     {
         _dbContext = dbContext;
@@ -49,6 +51,7 @@ public class ExternalLinksController : ControllerBase
         _tenant = tenant;
         _audit = audit;
         _thumbnails = thumbnails;
+        _enveloper = enveloper;
         _clock = clock;
     }
 
@@ -157,12 +160,27 @@ public class ExternalLinksController : ControllerBase
     [HttpGet("{token}/content")]
     public async Task<IActionResult> Content(string token, [FromQuery] bool download, CancellationToken cancellationToken)
     {
-        if (await ResolveAsync(token, cancellationToken) is not ({ } _, { } document, { } objectKey))
+        if (await ResolveAsync(token, cancellationToken) is not ({ } link, { } document, { } objectKey))
         {
             return Gone();
         }
 
         var fileName = document.Name + Path.GetExtension(objectKey);
+
+        // An ENVELOPED link (#1377, ADR 0827): the recipient was named when the link was created, so the
+        // document leaves as CMS addressed to their key instead of as a presigned URL to the bytes.
+        //
+        // This is the one place the Api puts file bytes through itself on this path, and it has to be: a
+        // presigned URL addresses a STORED OBJECT, and "this document, enveloped to this certificate" is not
+        // one — it is per-link, per-certificate, and does not exist until somebody computes it. The standing
+        // rule that the Api never proxies bytes already carries exactly this exception for exactly this reason
+        // (a zip ENTRY is not its own object either). The alternative — materialising the envelope into the
+        // bucket and presigning that — would leave an artefact decryptable by an outsider at rest in a tier
+        // whose entire claim is that the core stores nothing readable.
+        if (link.RecipientCertificatePem is { Length: > 0 } recipientCertificate)
+        {
+            return await EnvelopedAsync(objectKey, fileName, recipientCertificate, cancellationToken);
+        }
 
         // Two different presigns, because the disposition is the whole difference between the two buttons:
         // "attachment" makes the browser save the file, "inline" lets it render one it understands. The download
@@ -224,6 +242,49 @@ public class ExternalLinksController : ControllerBase
 
     // Everything a redemption has to be true for, in one place, so the landing page and the content route cannot
     // drift apart on what "usable" means. Returns nulls rather than throwing: every failure is the same answer.
+    /// <summary>Reads the document and hands it back as an S/MIME envelope addressed to the recipient.</summary>
+    /// <remarks>
+    /// <para>
+    /// Buffers whole, because CMS envelopes as one unit — the same constraint at-rest encryption already
+    /// accepted (an encrypted object is fetched whole, decrypted, then sliced), so the effective size ceiling
+    /// does not move; it now applies to this route too. An external link is one document to one outsider, not
+    /// a bulk path, which is what makes that affordable. If links ever become a fan-out mechanism, this is the
+    /// line to revisit.
+    /// </para>
+    /// <para>
+    /// No <c>From</c>: it would cost a lookup of the creator on the one path in the system that runs with no
+    /// principal, to tell the recipient something the mail carrying the link already told them — and it would
+    /// hand an outsider an internal address they were never given.
+    /// </para>
+    /// <para>
+    /// A failed envelope REFUSES. Serving the plaintext instead is the silent fall-back ADR 0825 exists to
+    /// forbid, and it would be invisible: the recipient would get their document and nobody would learn that
+    /// the guarantee had lapsed.
+    /// </para>
+    /// </remarks>
+    private async Task<IActionResult> EnvelopedAsync(
+        string objectKey, string fileName, string certificatePem, CancellationToken cancellationToken)
+    {
+        // Through the storage seam, so an at-rest-encrypted object arrives decrypted (ADR 0818) — the envelope
+        // is built over the document, never over its ciphertext.
+        await using var content = await _objectStorage.GetObjectAsync(objectKey, cancellationToken);
+        using var buffer = new MemoryStream();
+        await content.CopyToAsync(buffer, cancellationToken);
+
+        var enveloped = _enveloper.TryEnvelopeDocument(
+            buffer.ToArray(),
+            WebDav.ContentTypes.ForExtension(Path.GetExtension(objectKey)),
+            fileName,
+            from: null,
+            certificatePem)
+            ?? throw new Errors.Exceptions.ExternalLinks.ExternalLinkEnvelopeFailedException();
+
+        // .p7m and application/pkcs7-mime: what S/MIME-capable mail software opens by double-click. The name
+        // keeps the document's stem so the recipient can tell what it is before decrypting it.
+        return File(enveloped, "application/pkcs7-mime",
+            Path.GetFileNameWithoutExtension(fileName) + ".p7m");
+    }
+
     private async Task<(ExternalLink? Link, Document? Document, string? ObjectKey)> ResolveAsync(
         string token, CancellationToken cancellationToken)
     {
