@@ -91,6 +91,24 @@ Running your own instance instead of the demo? Substitute your host; the paths a
 
 Production deploys via the **Helm chart** in [`charts/simplarchive`](charts/simplarchive) — an API Deployment/Service/Ingress/HPA/PDB with health probes, non-root containers, and secret wiring; dependencies (Postgres, object storage, OpenSearch, …) are external/managed. The chart's [`values.yaml`](charts/simplarchive/values.yaml) documents the full configuration surface, and pre-install/pre-upgrade migration hooks apply schema changes off the app's startup path.
 
+## Encryption Service — a paid extra, in development
+
+A separate **Encryption Service** is being built for SimplArchive and will be available as a **paid extra**. It
+provides **comprehensive encryption** for an entire installation: document content is encrypted where it is
+stored, under keys held in hardware the operating organisation controls, and the level is set **per tenant** — so
+an archive that needs it can run beside one that does not.
+
+Built today: content encrypted at rest with per-object keys wrapped by an installation key in a hardware security
+module — rotating that key re-wraps the keys rather than rewriting the documents — and mail served to a user's own
+mail program encrypted to their registered certificate. In development: a stricter level for organisations such as
+government and defence, where every read is encrypted to the certificate on the reader's smartcard and full-text
+search across document contents is given up in exchange, while names, index fields and dates stay searchable.
+
+It is **custody, not mathematics**: content is never stored in readable form, the keys live in hardware the
+organisation controls, and every decryption is recorded — but the service *can* decrypt, because that is what lets
+a lost or reissued smartcard be replaced without losing access to the archive. It is not a claim that nobody could
+ever read your documents, and a system able to re-key on card reissue could not honestly make that claim.
+
 ## Architecture at a glance
 
 - **Clean Architecture** — `Domain` → `Application` → `Infrastructure`/`Auth` → `Api` → `Client`/`Worker`, with the dependency direction enforced as tests.

@@ -945,6 +945,18 @@ follows from the account you sign in with.
 #shot("screenshots/desktop-server-manager.png",
   [The desktop server manager: connection profiles for several SimplArchive servers.])
 
+== Encryption of the archive itself <encryptionservice>
+
+A separate *Encryption Service*#idx("Encryption Service") is under development for SimplArchive, and will be available as a *paid
+extra*. It provides *comprehensive encryption* for an entire installation: document content encrypted where it
+is stored, under keys held in hardware the operating organisation controls, with the level set per tenant — so
+an archive that needs this can have it beside one that does not.
+
+This manual covers only the part you operate yourself — registering the certificate that makes the mail your
+program fetches readable on your devices alone (see @imap). Everything else the service does, including what its
+protection does and does not claim, is described in *its own manual*: it is a separate product with its own
+releases, and documenting it twice is how the two come to disagree.
+
 // ─────────────────────────────────────────────────────────────────────────────
 #pagebreak()
 = Appendix — glossary & links

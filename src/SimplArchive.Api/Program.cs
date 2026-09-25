@@ -281,6 +281,8 @@ builder.Services.AddScoped<SimplArchive.Api.Concurrency.ServiceAccountVerbs>();
 builder.Services.AddScoped<SimplArchive.Api.Concurrency.AclEntryVerbs>();
 builder.Services.AddScoped<SimplArchive.Api.Concurrency.WorkflowStateVerbs>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentVersionResourceBuilder>();
+// The strict tier's delivery step (#1393, ADR 0828) — scoped, because the answer it gives is about the caller.
+builder.Services.AddScoped<SimplArchive.Api.Documents.StrictEnvelopeDelivery>();
 builder.Services.AddScoped<SimplArchive.Api.Concurrency.GroupVerbs>();
 builder.Services.AddScoped<SimplArchive.Api.Concurrency.TagDefinitionVerbs>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentResourceLinks>();

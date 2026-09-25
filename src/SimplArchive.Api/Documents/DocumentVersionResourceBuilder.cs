@@ -34,7 +34,8 @@ public sealed record VersionRow(
 public sealed class DocumentVersionResourceBuilder(
     SimplArchiveDbContext dbContext,
     IDocumentPreviewService previews,
-    IObjectStorageClient storage)
+    IObjectStorageClient storage,
+    StrictEnvelopeDelivery envelopes)
 {
     // The same window the upload URL uses. A presigned link is handed to a browser that is about to follow it,
     // so it wants to be short; fifteen minutes survives a slow render without leaving a usable URL in a log.
@@ -58,11 +59,30 @@ public sealed class DocumentVersionResourceBuilder(
                 ? documentName
                 : Path.GetFileNameWithoutExtension(documentName) + objectExtension;
 
+            // THE STRICT TIER'S DELIVERY (#1393, ADR 0828). The seam refuses to presign, correctly — no URL
+            // can be an envelope — so these two rels point at a core-served route that envelopes the bytes to
+            // the reader instead. The REL NAMES are unchanged, which is the point of ADR 0543's "rel names,
+            // not paths, are the compatibility surface": a client follows `download` and gets what this tenant
+            // can give it.
+            //
+            // And they are emitted ONLY when this reader has a usable certificate. A rel that is always
+            // present and sometimes fails is the lying affordance 0543 exists to prevent; absent, it means
+            // exactly "not available to you, here, now", and the client offers enrolment instead of a button.
+            var envelopeCertificate = await envelopes.AppliesAsync(cancellationToken)
+                ? await envelopes.ReaderCertificateAsync(cancellationToken)
+                : null;
+
+            if (envelopeCertificate is not null)
+            {
+                var enveloped = $"/api/documents/{version.DocumentId}/versions/{version.Id}/enveloped-content";
+                links.Add(new Link("download", enveloped, "GET"));
+                links.Add(new Link("preview", $"{enveloped}?inline=true", "GET"));
+            }
             // No URL means the strict tier will not serve these bytes as plaintext (#1376), so the rel is
             // OMITTED rather than the resource failing — ADR 0543: a missing rel means "not available to you,
             // here, now", and the client disables the affordance instead of trying. The document's metadata
             // still renders, which is the whole reason the seam answers null rather than throwing.
-            if (await storage.GetPresignedDownloadUrlAsync(version.ObjectKey, PresignedUrlExpiry, downloadFileName, cancellationToken) is { } downloadUrl)
+            else if (await storage.GetPresignedDownloadUrlAsync(version.ObjectKey, PresignedUrlExpiry, downloadFileName, cancellationToken) is { } downloadUrl)
             {
                 links.Add(new Link("download", downloadUrl.ToString(), "GET"));
             }
@@ -73,8 +93,11 @@ public sealed class DocumentVersionResourceBuilder(
             // document preview via Gotenberg"). Null when no viewable preview can be produced (conversion
             // failed / converter down) — omit the link so the client shows "No preview available" rather
             // than a blank pane (ADR "Preview fallback when a rendition can't be produced").
-            var preview = await previews.GetPreviewUrlAsync(version.ObjectKey, PresignedUrlExpiry, downloadFileName, cancellationToken);
-            if (preview is not null)
+            // The preview rel was already added above for an enveloped reader — pointing at the same route with
+            // an inline disposition, because what differs between "open it" and "save it" is the disposition
+            // and not the bytes.
+            if (envelopeCertificate is null
+                && await previews.GetPreviewUrlAsync(version.ObjectKey, PresignedUrlExpiry, downloadFileName, cancellationToken) is { } preview)
             {
                 links.Add(new Link("preview", preview.Url.ToString(), "GET"));
                 previewConverted = preview.IsConverted;
