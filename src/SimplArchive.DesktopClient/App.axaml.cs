@@ -65,6 +65,40 @@ public partial class App : Application
                 () => viewModel.LoginCommand.ExecuteAsync(null),
                 () => viewModel.LogoutCommand.Execute(null));
 
+            // The card PIN prompt (#1353, ADR 0832), owned by the window because a dialog needs one — ADR 0730's
+            // "what the view supplies stays a callback": CardSession is a static reached from a content read,
+            // and the window it must be modal over does not exist when that static is first touched.
+            //
+            // Dispatched to the UI thread rather than assumed to be on it: the funnel's await usually resumes
+            // there, but "usually" is not a property to build a modal on, and InvokeAsync is a no-op when we
+            // are already there.
+            Services.CardSession.PinPrompt = async () => await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(
+                async () =>
+                {
+                    var pinDialog = new CardPinDialog();
+                    await pinDialog.ShowDialog(window);
+                    return pinDialog.Pin;
+                });
+
+            // The card leaving the reader discards what it decrypted (#1353 decision 2, ADR 0832). The user
+            // stays signed in — the owner's refinement of that decision — so this closes CONTENT, not the
+            // session: an unattended screen stops showing a decrypted document, and metadata browsing is
+            // unaffected because none of it was ever enveloped.
+            var cardWatcher = new Services.CardPresenceWatcher(() =>
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    viewModel.DiscardDecryptedContent(
+                        SimplArchive.Localization.Strings.Get("CardRemovedContentClosed"))));
+            cardWatcher.Start();
+
+            // Signing out drops the card session with everything else: the login it holds is a live capability
+            // on the user's own key, and leaving it open past their session would outlive the thing that
+            // authorised it.
+            viewModel.LogoutRequested += Services.CardSession.Close;
+
+            // And the content funnel's authenticated client goes with it: a client left behind after the
+            // session ends is the drift that left tabs holding a stale API client after sign-out.
+            viewModel.LogoutRequested += () => Services.ApiCore.Authenticated = null;
+
             // A session that ends is NOT a connectivity failure — the server is answering, it just will not
             // accept this session any more — so it gets its own modal, naming the server it happened on.
             Services.RenewingAuthHandler.SessionEnded += Services.AppExceptions.ReportSessionEnded;
@@ -77,6 +111,8 @@ public partial class App : Application
             // Logout returns to a fresh logon window and closes the main window.
             viewModel.LogoutRequested += () =>
             {
+                cardWatcher.Stop();
+                cardWatcher.Dispose();
                 heartbeat.Stop();
                 ShowLogon(desktop);
                 window.Close();

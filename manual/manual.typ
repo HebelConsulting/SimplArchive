@@ -412,7 +412,8 @@ connection on, every message arrives encrypted to that certificate; your mail pr
 automatically once the identity is installed, and devices without it see only an encrypted attachment.
 *Or read it off a card.*#idx("Smartcard") If your certificate lives on a smartcard or a USB token, *Add a card
 or token…* lists what your readers can see — every device, and every certificate on each — and registers the one
-you pick. Only the certificate is sent; the private key never leaves the device, which is the point of keeping it
+you pick. Before choosing this, read @cardsetup on what a card covers: it is the strongest option for the
+archive itself, and it leaves mail unreadable on an iPhone or iPad, which cannot use a card for S/MIME. Only the certificate is sent; the private key never leaves the device, which is the point of keeping it
 there. You are not asked for a PIN, because reading a certificate off a device does not need one. This is a
 desktop-client feature: a browser cannot reach a card reader, and the web client says so where the option would
 be.
@@ -1012,6 +1013,24 @@ workflow, administration.
   by the archive, not by the client, not by anything else running on the machine.
 ]
 
+*Reading with your card.* The first document you open asks for your *card PIN*, once. It is not asked again
+while you stay signed in and the card stays in the reader — one document's preview, its page images and its
+searchable text are three separate reads, and a prompt for each would be unusable. The PIN itself is not
+stored: what the client keeps is the unlocked connection to the card, not the number you typed.
+
+*Taking your card out closes what it opened.* Within a few seconds of removing the card, any document on screen
+that it decrypted is closed and the pages it drew are discarded. You stay signed in and can carry on browsing
+folders, index data and search results — none of that is encrypted — and putting the card back lets you open
+documents again. This protects the document you left on an unattended screen; it does not sign you out, so lock
+your computer as you normally would when you leave it.
+
+If a document cannot be opened, the message says *which* of the three things is missing — smartcard software on
+the computer, a card in a reader, or a certificate matching the document — because the remedy for each is
+somewhere completely different.
+
+Preparing a card in the first place — putting a key on it, getting a certificate onto it, and registering that
+certificate here — is set out in @cardsetup.
+
 == Encryption of the archive itself <encryptionservice>
 
 A separate *Encryption Service*#idx("Encryption Service") is under development for SimplArchive, and will be available as a *paid
@@ -1019,10 +1038,181 @@ extra*. It provides *comprehensive encryption* for an entire installation: docum
 is stored, under keys held in hardware the operating organisation controls, with the level set per tenant — so
 an archive that needs this can have it beside one that does not.
 
+Two things it adds are worth naming here, because they are what people run into first with the self-service
+certificate this application provides: *several certificates per person* — one per device, so a smartcard in
+a computer and an identity on a phone can both be addressed at once — and *automated enrolment*, for more
+people than an administrator wants to prepare by hand. @cardsetup explains where that limit is met.
+
 This manual covers only the part you operate yourself — registering the certificate that makes the mail your
 program fetches readable on your devices alone (see @imap). Everything else the service does, including what its
 protection does and does not claim, is described in *its own manual*: it is a separate product with its own
 releases, and documenting it twice is how the two come to disagree.
+
+// ─────────────────────────────────────────────────────────────────────────────
+#pagebreak()
+= Appendix — preparing a smartcard or token <cardsetup>
+
+This is the one-time technical setup behind @encryptedreads: putting a key on a card, getting a certificate
+onto it, and registering that certificate with the archive. It is work for whoever administers the cards —
+an ordinary user meets only the last step.
+
+The procedure below is for a *PIV* card or token, which is what the archive's clients speak. A specific
+device is used as the worked example because the key-generation commands belong to the card's own tool and
+differ per vendor; everything from the certificate request onwards is the same for any PIV device.
+
+#note[
+  *About the device in the example.* This manual uses a YubiKey because they are widely available and
+  affordable, which makes the example easy to follow along with. It is not a recommendation, and the archive
+  requires nothing of that vendor: any PIV-capable card or token works, and only the commands in steps 1, 2,
+  3 and 5 — the ones that speak to the card itself — would change. Substitute your own device's tool there.
+]
+
+== What has to be true, and why
+
+#note[
+  Four choices are not free. Getting one wrong produces a card that looks right and cannot read a document.
+
+  - *Slot 9D (Key Management).* That is the decryption slot. 9A is authentication and 9C is signing; a
+    certificate in either cannot open an envelope, and using the wrong one is the classic first mistake.
+  - *RSA 2048, not an elliptic curve.* Content is enveloped with RSA key transport. An EC key needs key
+    agreement instead, which is much thinner ground.
+  - *PIN policy on, touch policy OFF.* A touch requirement means a physical tap *per decryption* — and one
+    document's preview, page images and searchable text are three separate reads. Acceptable for signing,
+    unusable for an archive.
+  - *The key is generated ON the card.* That is the whole point: it cannot be copied off, so there is no
+    file of it to lose.
+]
+
+== Tools
+
+Two are needed, and a third is not.
+
+- *The card's own tool*, for generating the key and writing the certificate back. Card personalisation and
+  key generation are card-applet operations, not PKCS#11 ones. In this example that is `ykman`.
+- *The PKCS#11 module*, so the desktop client can reach the card at all. Install *OpenSC*; the client looks
+  for `opensc-pkcs11` in the usual places and offers a file picker if it is somewhere else.
+- *`caconsole`*, the certificate tool, if the certificate is issued by your own certificate authority. It
+  installs from the public package feed and needs no credentials:
+
+```sh
+dotnet tool install --global HebelConsulting.CAManagement.Cli
+caconsole list-slots --module /path/to/opensc-pkcs11.so
+```
+
+#note[
+  *`saconsole` is not involved.* The archive's own command-line tool signs in, creates tenants and reports
+  who you are; it has no certificate commands. If you were told to install it for this, you were told wrong.
+]
+
+== The walk-through
+
+*1 — Personalise the card,* once per card. These two objects must exist before anything else will behave.
+
+```sh
+ykman piv objects generate chuid
+ykman piv objects generate ccc
+```
+
+*2 — Generate the key on the card,* into the Key Management slot.
+
+```sh
+ykman piv keys generate 9d public.pem \
+    --algorithm rsa2048 --pin-policy once --touch-policy never
+```
+
+*3 — Ask the card for a certificate request.* The card signs the request itself, which is what proves it
+holds the key.
+
+```sh
+ykman piv certificates request 9d public.pem holder.csr \
+    --subject "CN=Card Holder,O=Example,C=CH"
+```
+
+#note[
+  *Use the card's tool for this step, not the certificate tool.* `caconsole` can produce a request from a
+  key that lives on a token — but a PKCS#11 module only surfaces a PIV slot once that slot carries a
+  *certificate*, and this one does not yet. Asking the certificate tool first fails with
+  `No private key with label '…' found on the token`, which reads like a wrong label and is not one.
+]
+
+*4 — Issue the certificate* from your own authority, and *5 — write it back to the card.*
+
+```sh
+caconsole issue --token-label ca --pin <ca-pin> \
+    --ca-label root --ca-cert ca.crt --csr holder.csr --days 365 --out holder.crt
+
+ykman piv certificates import 9d holder.crt
+```
+
+*6 — Remove the card and put it back in.* The operating system creates its view of a token when the card is
+*inserted*, so a card personalised in place is not yet visible to anything. Skipping this makes a correctly
+prepared card look broken.
+
+== Registering it with the archive
+
+In the desktop client, open *Encrypted mail (S/MIME)…* from the account menu and choose *Add a card or
+token…*. It lists every certificate on every device in a reader — not just the first — because a card can
+carry several and a computer can have more than one reader. Pick the one from the Key Management slot and
+register it. No PIN is asked: a certificate is public, and only reading a *document* needs the key.
+
+From then on the archive addresses that person's content to that certificate, and @encryptedreads describes
+what they see.
+
+#note[
+  *A warning about key usage is expected and is not a problem.* Many certificate authorities mark a
+  key-management certificate for signing only. The card decrypts regardless — neither the archive nor the
+  card enforces that field — so the dialog says so and lets you continue rather than refusing a certificate
+  that works.
+]
+
+== What a card covers, and what it may not
+
+One certificate is registered, and *two* different things use it: the archive envelopes document content to
+it, and it also envelopes the mail your mail program fetches (see @imap). Those are read by different
+software, and a key on a card changes what can read them.
+
+- *The desktop client opens card-held content.* That is what @cardsetup prepares, and it is the case this
+  manual describes end to end.
+- *Your mail program is its own question.* It can only open mail enveloped to a card if it can use a
+  hardware token for S/MIME itself. Some desktop mail programs can, through the facilities their operating
+  system provides for smartcards; whether yours does is a question for its documentation, not for this
+  manual.
+- *On an iPhone or iPad it cannot.* Mail there reads S/MIME using an identity installed into the device,
+  and there is no route for a mail app to use a card — over NFC or otherwise. A card-held certificate
+  therefore leaves mail on those devices unreadable, even while documents open normally on the desktop.
+
+#note[
+  *So choose by what you need to read.* If the point is that the private key never leaves hardware, a card
+  is right and mail on a phone is the thing you give up. If people must read archived mail on phones and
+  tablets, register a *generated* identity instead (see @imap) — it installs on those devices in one tap,
+  at the cost of the key existing as a file. Registering one replaces the other: delete the current
+  certificate first — and if you need *both* at once, that is the next section.
+]
+
+== When one certificate per person is not enough
+
+The limitation behind the choice above is that this application stores *one* certificate per user. That is
+what makes a card an either/or: the certificate that is on the card is the certificate everything is
+addressed to, so the devices that cannot use the card cannot read anything.
+
+Several certificates per person dissolves it — a card for the computer and an installed identity for the
+phone, each addressed alongside the other, so the same document opens on both without the card's key ever
+leaving it. That, and *automated enrolment* for more people than one administrator wants to prepare by hand,
+belong to the separate *Encryption Service* described in @encryptionservice. If you need either, contact
+support and ask about it; it is a paid extra.
+
+Nothing in this appendix is wasted if you go that way — the card is prepared the same, and it is the
+registration that the service takes over.
+
+== When something looks wrong
+
+- *The dialog says no smartcard software was found.* OpenSC is not installed, or is somewhere unusual — use
+  *Choose module…* and point at it.
+- *It says no card or token is in a reader,* with the card plainly in the reader. Remove it and re-insert
+  it (see step 6), and check nothing else on the machine is talking to the card at the same time.
+- *The card's own tool reports the private key as `EMPTY`.* On firmware older than 5.3 the card cannot be
+  asked what a slot holds, so the tool prints that whether or not a key is there. It is not evidence.
+  Settle it by using the key rather than by reading a summary.
 
 // ─────────────────────────────────────────────────────────────────────────────
 #pagebreak()

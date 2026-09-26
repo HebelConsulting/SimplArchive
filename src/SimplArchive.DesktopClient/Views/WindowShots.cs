@@ -151,7 +151,14 @@ public static class WindowShots
                 .UseSkia()
                 .WithInterFont()
                 .SetupWithoutStarting();
-            var cardWin = new Views.CardCertificateDialog();
+
+            // `--pin` renders the PIN prompt instead (#1353, ADR 0832). Same reason as everything else here:
+            // it is a Window, so nothing else can look at it — and it appears only when a user with a card
+            // opens an encrypted document, which is the worst possible moment to discover a XAML load crash.
+            Avalonia.Controls.Window cardWin = args.Contains("--pin")
+                ? new Views.CardPinDialog()
+                : new Views.CardCertificateDialog();
+
             cardWin.Show();
             Dispatcher.UIThread.RunJobs();
             cardWin.CaptureRenderedFrame()?.Save(args[cardShotIndex + 1]);

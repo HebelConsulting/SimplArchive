@@ -43,4 +43,14 @@ regexes = [
   # The module-settings E2E fixture's login password (#1082). Same class as intrayocr1234 above: a
   # throwaway value seeded into a Testcontainers database that lives for one test run.
   '''modsettings1234''',
+  # SaConsoleTests' PLACEHOLDER private key (#1353). `saconsole me certificate register` refuses a file
+  # holding key material before it is sent, and the test proves that by handing it a PEM that begins
+  # `-----BEGIN PRIVATE KEY-----` — which is precisely what the private-key rule looks for. The body is the
+  # literal `MIIE...`, three dots, so it is not key material and never was.
+  #
+  # Allowlisted BY THE PLACEHOLDER BODY rather than by the header or the file: matching `MIIE\.\.\.` keeps
+  # the private-key rule live everywhere, including in this same file, so a real key pasted here would still
+  # be caught. Suppressing the header would have switched the rule off for the one test whose subject is
+  # detecting that header.
+  '''MIIE\.\.\.''',
 ]

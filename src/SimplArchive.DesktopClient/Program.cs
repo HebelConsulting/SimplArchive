@@ -82,6 +82,22 @@ internal static class Program
         // Register the Material Design Icons provider (backs the <i:Icon Value="mdi-…" /> glyphs).
         IconProvider.Current.Register<MaterialDesignIconProvider>();
 
+        // The WHOLE path, on real hardware: `--card-open-test` (#1353, ADR 0832).
+        //
+        // Builds an envelope the way the SERVER builds one — MimeKit ApplicationPkcs7Mime, AES-256 stated
+        // explicitly — addressed to the certificate on the card, and opens it through the production
+        // EnvelopeOpener. No test can do this, because no test has a card; and a fake would only prove the
+        // client agrees with the fake.
+        //
+        // The PIN comes from CARD_PIN so nothing has to be typed and nothing is written down.
+        if (args.Contains("--card-open-test"))
+        {
+            Services.CardSession.PinPrompt = () =>
+                Task.FromResult(Environment.GetEnvironmentVariable("CARD_PIN"));
+
+            Environment.Exit(CardOpenSelfTest().GetAwaiter().GetResult() ? 0 : 1);
+        }
+
         // What is actually on the card in this reader: `--card-test` (#1398).
         //
         // A hook rather than a test, because no test can have a card. It prints every token present and every
@@ -828,4 +844,78 @@ internal static class Program
             .LogToTrace();
 
 
+
+    /// <summary>Envelopes a marker to the card's own certificate and opens it through the real funnel.</summary>
+    private static async Task<bool> CardOpenSelfTest()
+    {
+        if (Services.CardCertificates.FindModule() is not { } module)
+        {
+            Console.WriteLine("no PKCS#11 module found");
+            return false;
+        }
+
+        if (Services.CardCertificates.Read(module).FirstOrDefault() is not { } onCard)
+        {
+            Console.WriteLine("no certificate on any token in a reader");
+            return false;
+        }
+
+        Console.WriteLine($"card certificate : {onCard.Certificate.Subject}");
+
+        var marker = $"CARD-OPENED-THROUGH-THE-FUNNEL-{DateTime.Now:HH:mm:ss}";
+        var message = new MimeKit.MimeMessage { Subject = "invoice" };
+        message.Body = new MimeKit.MimePart(MimeKit.ContentType.Parse("application/pdf"))
+        {
+            Content = new MimeKit.MimeContent(
+                new MemoryStream(System.Text.Encoding.ASCII.GetBytes(marker))),
+            ContentDisposition = new MimeKit.ContentDisposition(MimeKit.ContentDisposition.Attachment)
+            {
+                FileName = "invoice.pdf",
+            },
+            ContentTransferEncoding = MimeKit.ContentEncoding.Base64,
+        };
+
+        // AES-256 stated explicitly, exactly as the server states it: a bare CmsRecipient advertises no S/MIME
+        // capabilities and MimeKit then falls back to 3DES, which would make this prove the client opens a
+        // cipher the installation never sends.
+        using (var context = new MimeKit.Cryptography.TemporarySecureMimeContext())
+        {
+            message.Body = MimeKit.Cryptography.ApplicationPkcs7Mime.Encrypt(
+                context,
+                new MimeKit.Cryptography.CmsRecipientCollection
+                {
+                    new MimeKit.Cryptography.CmsRecipient(onCard.Certificate)
+                    {
+                        EncryptionAlgorithms = [MimeKit.Cryptography.EncryptionAlgorithm.Aes256],
+                    },
+                },
+                message.Body);
+        }
+
+        using var wire = new MemoryStream();
+        message.WriteTo(wire);
+        var served = wire.ToArray();
+        var leaked = System.Text.Encoding.ASCII.GetString(served).Contains(marker, StringComparison.Ordinal);
+        Console.WriteLine($"envelope         : {served.Length} bytes; plaintext present: {leaked}");
+
+        try
+        {
+            var (bytes, contentType) = await Services.EnvelopeOpener.OpenAsync(served, "application/pkcs7-mime");
+            var text = System.Text.Encoding.ASCII.GetString(bytes);
+            Console.WriteLine($"opened as        : {contentType}");
+            Console.WriteLine($"PLAINTEXT        : {text}");
+            Console.WriteLine($"MATCHES          : {text == marker}");
+
+            return !leaked && text == marker && contentType == "application/pdf";
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"OPENING FAILED   : {e.GetType().FullName}: {e.Message}");
+            return false;
+        }
+        finally
+        {
+            Services.CardSession.Close();
+        }
+    }
 }

@@ -5040,6 +5040,18 @@
   <data name="SmimeCardOnly" xml:space="preserve">
     <value>Per aggiungere una carta serve il client desktop: un browser non può raggiungere un lettore di carte.</value>
   </data>
+  <data name="CardPinTitle" xml:space="preserve">
+    <value>PIN della carta</value>
+  </data>
+  <data name="CardPinBody" xml:space="preserve">
+    <value>Questo documento è cifrato per il certificato sulla sua carta. Inserisca il PIN della carta per aprirlo.</value>
+  </data>
+  <data name="CardPinOnce" xml:space="preserve">
+    <value>Richiesto una sola volta finché resta connesso e la carta resta nel lettore. Il PIN stesso non viene memorizzato.</value>
+  </data>
+  <data name="CardRemovedContentClosed" xml:space="preserve">
+    <value>La carta è stata rimossa, quindi il documento aperto è stato chiuso. La reinserisca per continuare a leggere.</value>
+  </data>
   <data name="CardTitle" xml:space="preserve">
     <value>Certificato su carta o token</value>
   </data>

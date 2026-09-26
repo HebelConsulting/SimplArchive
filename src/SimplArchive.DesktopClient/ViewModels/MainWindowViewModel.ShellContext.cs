@@ -133,6 +133,30 @@ public sealed partial class MainWindowViewModel
     internal IReadOnlyList<PreviewViewModel> PreviewSurfaces =>
         [Preview, Intray.Preview, Search.Preview, RecycleBin.Preview, Checkout.Preview];
 
+    /// <summary>
+    /// Throws away everything the card decrypted — called when the card leaves the reader (#1353, ADR 0832).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The user stays signed in (owner, 2026-09-26). What goes is the CONTENT: every preview surface is reset,
+    /// so no page rendered from a decrypted document is still on screen or still held as a bitmap. Metadata,
+    /// the tree, listings and search results are unaffected — none of them was enveloped.
+    /// </para>
+    /// <para>
+    /// Uses the one <see cref="PreviewSurfaces"/> list rather than naming panes, for the reason recorded there:
+    /// the two lists that preceded it drifted, and a tab missing from one silently kept working with stale
+    /// state. Here that would mean a decrypted page left on screen after the card was pulled — the exact thing
+    /// this method exists to prevent — which is why it must never become its own list.
+    /// </para>
+    /// </remarks>
+    public void DiscardDecryptedContent(string placeholder)
+    {
+        foreach (var preview in PreviewSurfaces)
+        {
+            preview.Reset(placeholder);
+        }
+    }
+
     /// <summary>Hands every preview surface the session's API client, or takes it away at sign-out.</summary>
     private void SetPreviewApi(SimplArchiveApiClient? api)
     {

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using SimplArchive.DesktopClient;
 using SimplArchive.DesktopClient.Services;
@@ -39,9 +40,17 @@ namespace SimplArchive.UiEndToEndTests;
 // parallel with this one — a collision there would surface as a connection failure rather than a 404, and the
 // real fix is ONE collection for everything that mutates that global.
 [Collection(UiCollection.Name)]
-public class DesktopContentAddressTests
+public class DesktopContentAddressTests : IDisposable
 {
     private const string DoorPath = "/api/encrypted-content";
+
+    // ApiCore.Authenticated is process-global and is populated by ANY test that signs in — a constructor sets
+    // it. Restoring it here rather than trusting what ran before is the #1401 lesson applied in advance: this
+    // class already had to be pulled into a collection because it both writes and reads process-global state,
+    // and a second such static would have re-earned the same intermittent failure.
+    private readonly HttpClient? _originalAuthenticated = ApiCore.Authenticated;
+
+    public void Dispose() => ApiCore.Authenticated = _originalAuthenticated;
 
     [Fact]
     public async Task The_preview_funnel_fetches_a_RELATIVE_token_door_address()
@@ -49,6 +58,7 @@ public class DesktopContentAddressTests
         using var installation = new Installation();
         var previous = DesktopClientOptions.ApiBaseUrl;
         DesktopClientOptions.ApiBaseUrl = installation.BaseUrl;
+        ApiCore.Authenticated = null;   // signed out, deterministically — not "whatever ran before this"
         try
         {
             var (bytes, contentType) = await SimplArchiveApiClient.DownloadAsync($"{DoorPath}?t=OPAQUE-TOKEN");
@@ -58,13 +68,86 @@ public class DesktopContentAddressTests
             // The token has to survive the resolution: it IS the authorization, so a resolver that kept the
             // path and dropped the query would turn every preview into a 400 instead of an exception.
             Assert.Equal($"{DoorPath}?t=OPAQUE-TOKEN", installation.LastRequest);
-            // And nothing may add credentials on the way — the door authenticates by its token, and this
-            // client is base-less exactly so that a header cannot follow an address off-installation.
-            Assert.Null(installation.LastAuthorization);
+
+            // Nothing is asserted here about credentials any more, and the reason is worth stating. This test
+            // used to require that NO Authorization header was sent, on the grounds that "a header cannot
+            // follow an address off-installation". That concern is real and unchanged — but it is about the
+            // DESTINATION, and this address resolves to our own installation. It is now asserted where it
+            // belongs, by A_presigned_address_ELSEWHERE_is_never_sent_the_bearer_token.
+            //
+            // The door itself is [AllowAnonymous] and authorizes by its `?t=` parameter, so a header it does
+            // not read changes nothing. Keeping the old assertion would have meant deciding which relative
+            // addresses may carry credentials by recognising their PATHS — exactly the composed-URL knowledge
+            // ADR 0543 exists to keep out of clients.
         }
         finally
         {
             DesktopClientOptions.ApiBaseUrl = previous;
+        }
+    }
+
+    [Fact]
+    public async Task An_authorized_content_route_on_OUR_installation_is_sent_the_bearer_token()
+    {
+        // WHAT BROKE, LIVE, on a strict tenant: "Could not load 'Invoice 2026-003': 401 (Unauthorized)".
+        //
+        // A third shape of content address arrived with the strict tier and it breaks the assumption the other
+        // tests here encode. `/api/documents/…/enveloped-content` is RELATIVE, like the token door — but it is
+        // an ordinary [Authorize] route that authorizes by HEADER, not by anything in the address. Sent through
+        // the credential-free client it 401s, and every preview and download on such a tenant fails with it.
+        //
+        // So "does this address carry its own authorization?" is not answerable from the address, and the rule
+        // is about the DESTINATION: credentials go to the installation we are signed in to, and nowhere else.
+        using var installation = new Installation();
+        var previousUrl = DesktopClientOptions.ApiBaseUrl;
+        var previousClient = ApiCore.Authenticated;
+        DesktopClientOptions.ApiBaseUrl = installation.BaseUrl;
+        using var signedIn = new HttpClient();
+        signedIn.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "THE-SESSION-TOKEN");
+        ApiCore.Authenticated = signedIn;
+        try
+        {
+            await SimplArchiveApiClient.DownloadAsync(
+                "/api/documents/d/versions/v/enveloped-content?inline=true");
+
+            Assert.Equal("/api/documents/d/versions/v/enveloped-content?inline=true", installation.LastRequest);
+            Assert.Equal("Bearer THE-SESSION-TOKEN", installation.LastAuthorization);
+        }
+        finally
+        {
+            DesktopClientOptions.ApiBaseUrl = previousUrl;
+            ApiCore.Authenticated = previousClient;
+        }
+    }
+
+    [Fact]
+    public async Task A_presigned_address_ELSEWHERE_is_never_sent_the_bearer_token()
+    {
+        // The other half, and the one that must not regress while fixing the first: object storage is a
+        // different host in a split-network deployment (ObjectStorage:PublicServiceUrl), and a bearer token
+        // following an address off-installation is the leak the credential-free client exists to prevent.
+        // Signed in here, deliberately — before the fix there was no token to leak, so this asserts something
+        // only now worth asserting.
+        using var storage = new Installation();
+        using var installation = new Installation();
+        var previousUrl = DesktopClientOptions.ApiBaseUrl;
+        var previousClient = ApiCore.Authenticated;
+        DesktopClientOptions.ApiBaseUrl = installation.BaseUrl;
+        using var signedIn = new HttpClient();
+        signedIn.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "THE-SESSION-TOKEN");
+        ApiCore.Authenticated = signedIn;
+        try
+        {
+            await SimplArchiveApiClient.DownloadAsync(
+                $"{storage.BaseUrl}bucket/tenants/x/content.pdf?X-Amz-Signature=abc");
+
+            Assert.Null(storage.LastAuthorization);
+            Assert.Null(installation.LastRequest);
+        }
+        finally
+        {
+            DesktopClientOptions.ApiBaseUrl = previousUrl;
+            ApiCore.Authenticated = previousClient;
         }
     }
 

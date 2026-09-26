@@ -143,10 +143,20 @@ public static class CardCertificates
                 ? Concerns.KeyUsage
                 : Concerns.None;
 
-    private static IReadOnlyList<Found> ReadFromToken(string modulePath)
+    private static IReadOnlyList<Found> ReadFromToken(string modulePath) =>
+        CardModule.Use(ReadFromLibrary, (IReadOnlyList<Found>)[]);
+
+    /// <summary>
+    /// The walk itself, over the module <see cref="CardModule"/> owns and inside its gate.
+    /// </summary>
+    /// <remarks>
+    /// It used to load a library of its own, which was the second <c>C_Initialize</c> in the process and
+    /// therefore the second half of <c>CKR_CRYPTOKI_ALREADY_INITIALIZED</c> — invisible until a real preview
+    /// read the card from several tasks at once.
+    /// </remarks>
+    internal static IReadOnlyList<Found> ReadFromLibrary(Pkcs11Library library)
     {
         var found = new List<Found>();
-        using var library = new Pkcs11Library(new Pkcs11Options { ModulePath = modulePath });
 
         foreach (var slot in library.GetSlotList(tokenPresent: true))
         {
@@ -194,7 +204,7 @@ public static class CardCertificates
             }
             catch (Exception e)
             {
-                DesktopLog.Warn(e, "Reading a slot of the PKCS#11 module at {Module} failed", modulePath);
+                DesktopLog.Warn(e, "Reading a slot of the PKCS#11 module failed");
             }
         }
 

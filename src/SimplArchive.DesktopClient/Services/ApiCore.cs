@@ -31,6 +31,32 @@ public sealed class ApiCore
     public static readonly HttpClient Anonymous = new();
 
     /// <summary>
+    /// The signed-in client, for content addresses on OUR OWN installation. Null before sign-in.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A third shape of content address arrived with the strict tier and breaks the assumption the comment
+    /// above records: <c>/api/documents/…/enveloped-content</c> is a RELATIVE href, like the token door, but it
+    /// is an ordinary <c>[Authorize]</c> route and authorizes by HEADER, not by anything in the address. Sent
+    /// through <see cref="Anonymous"/> it answers <b>401</b>, and every preview and download on a strict tenant
+    /// fails with it (reported live: <i>"Could not load 'Invoice 2026-003': 401 (Unauthorized)"</i>).
+    /// </para>
+    /// <para>
+    /// So "does this address carry its own authorization?" stopped being answerable from the address alone, and
+    /// the rule became about the DESTINATION instead: <b>credentials go to the installation we are signed in to
+    /// and nowhere else.</b> That keeps the property the anonymous client exists for — a bearer token must
+    /// never follow an address off-installation to a presigned object-storage URL — while letting our own API
+    /// authenticate us. See <see cref="IsOwnInstallation"/>.
+    /// </para>
+    /// <para>
+    /// This is the session's own <see cref="Http"/>, so a content read also gets token RENEWAL for free rather
+    /// than 401ing the moment an access token ages out mid-preview. Cleared at sign-out, because a client left
+    /// behind after the session ends is the drift that left tabs holding a stale API client (ADR 0730's note).
+    /// </para>
+    /// </remarks>
+    public static HttpClient? Authenticated { get; set; }
+
+    /// <summary>
     /// Turns a content address the server handed us into one this client can request: a RELATIVE href resolved
     /// against the installation, an absolute one returned untouched.
     /// </summary>
@@ -65,6 +91,17 @@ public sealed class ApiCore
             ? absolute
             : new Uri(new Uri(DesktopClientOptions.ApiBaseUrl), url);
 
+    /// <summary>Whether this resolved address is on the installation we are signed in to.</summary>
+    /// <remarks>
+    /// Scheme and authority only — the path is irrelevant, and comparing it would be a way to get this wrong
+    /// later. Answered about the RESOLVED address rather than the raw href, so an absolute URL that happens to
+    /// point back at our own API is treated the same as the relative form that means the same thing.
+    /// </remarks>
+    public static bool IsOwnInstallation(Uri address) =>
+        Uri.TryCreate(DesktopClientOptions.ApiBaseUrl, UriKind.Absolute, out var installation)
+        && Uri.Compare(address, installation, UriComponents.SchemeAndServer, UriFormat.UriEscaped,
+            StringComparison.OrdinalIgnoreCase) == 0;
+
     /// <summary>
     /// Fetches a content address the server handed us — bytes plus content type — resolving it first and
     /// sending no credentials.
@@ -79,14 +116,20 @@ public sealed class ApiCore
     public static async Task<(byte[] Bytes, string ContentType)> GetContentAsync(
         string url, CancellationToken cancellationToken = default)
     {
-        using var response = await Anonymous.GetAsync(ResolveContentUrl(url), cancellationToken);
+        // WHICH CLIENT depends on WHERE this goes, never on how the href was spelled. Our own installation may
+        // need a bearer (the strict tier's enveloped-content route is [Authorize]); anywhere else must never
+        // receive one, which is the whole reason the anonymous client has no BaseAddress and no default header.
+        var address = ResolveContentUrl(url);
+        var client = IsOwnInstallation(address) && Authenticated is { } authenticated ? authenticated : Anonymous;
+
+        using var response = await client.GetAsync(address, cancellationToken);
         response.EnsureSuccessStatusCode();
 
         // A strict tenant serves content only as a CMS envelope addressed to the reader (ADR 0828), so it is
         // opened HERE — the one funnel every read path in this client already passes through, which is why
         // rendering, opening in the real application, dragging out and thumbnailing all get it at once
         // instead of four times. An ordinary response is returned untouched.
-        return EnvelopeOpener.Open(
+        return await EnvelopeOpener.OpenAsync(
             await response.Content.ReadAsByteArrayAsync(cancellationToken),
             response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream");
     }
@@ -136,6 +179,10 @@ public sealed class ApiCore
         {
             BaseAddress = new Uri(_apiRootUrl),
         };
+
+        // The content funnel is static and this is an instance, so the session publishes itself for it. Last
+        // one wins, which is correct: a second ApiCore means a new session, and content reads belong to it.
+        Authenticated = Http;
         // The APP language, chosen at the logon window and applied before this client exists (ADR 0767):
         // module-localized texts are composed server-side from Accept-Language, and the sentence next to a
         // German UI must be German even on an English OS.

@@ -1,0 +1,19 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.CardPinDialog"
+        Title="{loc:Tr CardPinTitle}" Width="420" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="10">
+        <!-- Says WHY it is being asked. A PIN prompt with no reason is the shape every credential-phishing
+             dialog also has, and this one appears in the middle of opening a document rather than at sign-in. -->
+        <TextBlock TextWrapping="Wrap" Text="{loc:Tr CardPinBody}" />
+        <TextBox x:Name="PinBox" PasswordChar="•" KeyDown="OnKeyDown" />
+        <TextBlock Foreground="{DynamicResource WbMuted}" FontSize="12" TextWrapping="Wrap"
+                   Text="{loc:Tr CardPinOnce}" />
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button x:Name="OkButton" Content="{loc:Tr Ok}" Click="OnOk" IsDefault="True" />
+            <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

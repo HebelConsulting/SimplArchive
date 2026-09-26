@@ -21,16 +21,22 @@ public class DesktopEnvelopeOpenerTests : IDisposable
     private const string Marker = "DESKTOP-OPENED-THE-ENVELOPE";
 
     private readonly Func<X509Certificate2Collection> _originalKeys = EnvelopeOpener.Keys;
+    private readonly IReadOnlyList<EnvelopeOpener.Opener> _originalOpeners = EnvelopeOpener.Openers;
 
-    public void Dispose() => EnvelopeOpener.Keys = _originalKeys;
+    public void Dispose()
+    {
+        EnvelopeOpener.Keys = _originalKeys;
+        EnvelopeOpener.Openers = _originalOpeners;
+    }
 
     [Fact]
-    public void An_envelope_addressed_to_a_key_this_machine_holds_opens_into_the_document()
+    public async Task An_envelope_addressed_to_a_key_this_machine_holds_opens_into_the_document()
     {
         var recipient = NewCertificate();
+        SoftwareOnly();
         EnvelopeOpener.Keys = () => [recipient];
 
-        var (bytes, contentType) = EnvelopeOpener.Open(
+        var (bytes, contentType) = await EnvelopeOpener.OpenAsync(
             Envelope(recipient, Encoding.ASCII.GetBytes(Marker), "application/pdf", "invoice.pdf"),
             "application/pkcs7-mime");
 
@@ -42,47 +48,62 @@ public class DesktopEnvelopeOpenerTests : IDisposable
     }
 
     [Fact]
-    public void An_ordinary_response_is_returned_exactly_as_it_arrived()
+    public async Task An_ordinary_response_is_returned_exactly_as_it_arrived()
     {
         // The anti-vacuous half, and the one that matters for every tenant that is NOT strict: this hook sits
         // in the funnel every read passes through, so "does nothing unless it is an envelope" is a property of
         // the whole client rather than of this method.
+        SoftwareOnly();
         EnvelopeOpener.Keys = () => [];
         var plain = Encoding.ASCII.GetBytes("%PDF-1.7 an ordinary document");
 
-        var (bytes, contentType) = EnvelopeOpener.Open(plain, "application/pdf");
+        var (bytes, contentType) = await EnvelopeOpener.OpenAsync(plain, "application/pdf");
 
         Assert.Same(plain, bytes);
         Assert.Equal("application/pdf", contentType);
     }
 
     [Fact]
-    public void An_envelope_addressed_to_somebody_else_refuses_rather_than_returning_the_bytes()
+    public async Task An_envelope_addressed_to_somebody_else_refuses_rather_than_returning_the_bytes()
     {
         // Never a fall back to what arrived. Handing the caller undecrypted CMS would render as a corrupt
         // document and send them looking for a damaged file instead of a missing key.
         var addressee = NewCertificate();
+        SoftwareOnly();
         EnvelopeOpener.Keys = () => [NewCertificate()];
 
-        var thrown = Assert.Throws<EnvelopeNotOpenedException>(() => EnvelopeOpener.Open(
+        var thrown = await Assert.ThrowsAsync<EnvelopeNotOpenedException>(() => EnvelopeOpener.OpenAsync(
             Envelope(addressee, Encoding.ASCII.GetBytes(Marker), "application/pdf", "invoice.pdf"),
             "application/pkcs7-mime"));
 
-        Assert.Contains("does not hold the key", thrown.Message, StringComparison.Ordinal);
+        // The message now names which of the three things is missing (#1353 acceptance 3), and this host has
+        // no card in a reader — so it must say so rather than blaming the document.
+        Assert.Contains("addressed to", thrown.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void With_no_key_at_all_it_says_that_rather_than_that_the_document_is_wrong()
+    public async Task With_no_key_at_all_it_says_that_rather_than_that_the_document_is_wrong()
     {
         // The commonest real case — a reader who has not enrolled — and the message decides whether they go
         // looking for their certificate or for a broken file.
+        SoftwareOnly();
         EnvelopeOpener.Keys = () => [];
 
-        var thrown = Assert.Throws<EnvelopeNotOpenedException>(() => EnvelopeOpener.Open(
+        var thrown = await Assert.ThrowsAsync<EnvelopeNotOpenedException>(() => EnvelopeOpener.OpenAsync(
             Envelope(NewCertificate(), [1, 2, 3], "application/pdf", "x.pdf"), "application/pkcs7-mime"));
 
-        Assert.Contains("no certificate with a private key", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("addressed to", thrown.Message, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// Only the software opener, so these tests are about decryption rather than about this host's hardware.
+    /// </summary>
+    /// <remarks>
+    /// Without it, the card opener would run on a developer's machine with a reader and not on CI, which makes
+    /// the same assertion mean two different things — the shape that produces a test nobody trusts.
+    /// </remarks>
+    private static void SoftwareOnly() =>
+        EnvelopeOpener.Openers = [EnvelopeOpener.Openers[0]];
 
     /// <summary>An envelope built the way the server builds one — same library, same shape.</summary>
     private static byte[] Envelope(X509Certificate2 recipient, byte[] content, string contentType, string fileName)
