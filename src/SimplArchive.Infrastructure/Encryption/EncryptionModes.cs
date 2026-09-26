@@ -71,6 +71,9 @@ public sealed class EncryptionModes(IConfiguration configuration)
     /// <summary>Retired keys, refused at startup rather than silently ignored.</summary>
     public static readonly string[] LegacySections = ["Encryption:Tenants", "Encryption:StrictTenants"];
 
+    /// <summary>The encryption service's address. Null means nothing performs encryption at all.</summary>
+    public const string ServiceUrlKey = "Encryption:ServiceUrl";
+
     /// <summary>This tenant's mode — its own override, else the installation default, else none.</summary>
     public EncryptionMode ModeFor(string tenantName) =>
         Map().TryGetValue(tenantName, out var mode) ? mode : Default();
@@ -123,6 +126,85 @@ public sealed class EncryptionModes(IConfiguration configuration)
             + $"Modes are {string.Join(", ", Enum.GetNames<EncryptionMode>())}. Setting {DefaultSection} keeps "
             + "the old \"no list means every tenant\" behaviour, which also keeps newly provisioned tenants "
             + "encrypted.");
+    }
+
+    /// <summary>
+    /// Refuses every configuration that claims encryption the installation will not perform.
+    /// </summary>
+    /// <remarks>
+    /// One call site, two rules, because they are the same failure wearing different clothes: a retired key
+    /// silently means "off", and a mode with no service silently means "off". Neither reports anything, and
+    /// both leave an installation believing it has a tier it does not have.
+    /// </remarks>
+    public static void ThrowIfMisconfigured(IConfiguration configuration)
+    {
+        ThrowIfLegacyConfigured(configuration);
+        ThrowIfModeHasNoService(configuration);
+    }
+
+    /// <summary>
+    /// Refuses to start when a mode claims encryption the installation has no service to perform (#1406).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>What went wrong.</b> A tenant set to <c>Strict</c> with no <c>Encryption:ServiceUrl</c> served
+    /// <b>plaintext to an anonymous caller</b> — measured: a version advertised a presigned object-storage URL
+    /// and fetching it with no credentials returned <c>BEGIN:VCALENDAR</c>. The two halves of the tier are
+    /// controlled by DIFFERENT settings: this class reads only the mode map, while the refusal to hand out
+    /// readable bytes lives in <c>EncryptingObjectStorageClient</c>, which is registered only when the service
+    /// URL is set. So the mode said one thing and the doors did another, and nothing anywhere said so.
+    /// </para>
+    /// <para>
+    /// <b>Why a refusal rather than a warning.</b> An administrator has written <c>Strict</c> in their
+    /// configuration, every surface behaves normally, and the guarantee is simply absent — with nothing in a
+    /// log, a health check or a startup line to say so. That is the same failure the retired
+    /// <see cref="LegacySections"/> keys are refused for, and the argument recorded there applies unchanged:
+    /// an installation running with encryption silently off is the failure nobody notices.
+    /// </para>
+    /// <para>
+    /// <b>In Development too</b>, deliberately, unlike <c>ProductionReadinessValidator</c> — which exists to
+    /// keep dev-grade settings out of production. This is not a setting that is fine locally and wrong in
+    /// production: it is a configuration that lies everywhere, and it was met on a developer's machine
+    /// (a live demonstration served plaintext from a tenant configured Strict). A developer misled by it is
+    /// exactly as misled as an administrator.
+    /// </para>
+    /// <para>
+    /// The cost is accepted and worth naming: configuring a mode without the service used to be a convenient
+    /// way to demonstrate envelope DELIVERY without running the encryption service, and that stops working.
+    /// A delivery-without-at-rest tier is a real thing people want, and it is being built as its own named
+    /// mode rather than left as a misconfiguration that happens to work (#1411).
+    /// </para>
+    /// </remarks>
+    public static void ThrowIfModeHasNoService(IConfiguration configuration)
+    {
+        if (!string.IsNullOrWhiteSpace(configuration[ServiceUrlKey]))
+        {
+            return;
+        }
+
+        var claimed = new List<string>();
+
+        if (Parse(configuration[DefaultSection], DefaultSection) > EncryptionMode.None)
+        {
+            claimed.Add($"{DefaultSection} = {configuration[DefaultSection]}");
+        }
+
+        claimed.AddRange(configuration.GetSection(Section).GetChildren()
+            .Where(child => !string.IsNullOrWhiteSpace(child.Value)
+                && Parse(child.Value, $"{Section}:{child.Key}") > EncryptionMode.None)
+            .Select(child => $"{Section}:{child.Key} = {child.Value}"));
+
+        if (claimed.Count == 0)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"{string.Join(", ", claimed)} — but {ServiceUrlKey} is not set, so nothing performs that "
+            + "encryption (#1406, ADR 0825).\n\n"
+            + "This is refused rather than ignored because it is invisible: content would be stored and "
+            + "SERVED as plaintext while the configuration claims a tier, and no surface would report it.\n\n"
+            + $"Either set {ServiceUrlKey} to the encryption service, or set the mode to None.");
     }
 
     private Dictionary<string, EncryptionMode> Map() =>

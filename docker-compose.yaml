@@ -95,6 +95,16 @@ x-api-env: &api-env
   # ADR 0825: a mode per tenant. The dev stack sets the INSTALLATION default, because the old variable held
   # a tenant NAME and a name cannot be an environment-variable key. `ENCRYPTION_MODE=Storage docker compose up`
   # encrypts every tenant locally; unset means none, exactly as before.
+  #
+  # SET IT WITHOUT THE URL ABOVE AND THE API REFUSES TO START (#1406), naming both settings. That is not a
+  # nuisance guard: a mode with no service used to run happily and serve PLAINTEXT to anonymous callers while
+  # the configuration claimed a tier — measured on this very stack, a presigned URL returning BEGIN:VCALENDAR
+  # from a tenant set to Strict. The refusal applies in Development too, because a developer reading
+  # `ENCRYPTION_MODE=Strict` in their own compose command is misled exactly as an administrator would be.
+  #
+  # So a local encryption demo needs the service running as well. Envelope delivery WITHOUT at-rest
+  # encryption is a real thing people want, and it is becoming its own named mode rather than staying a
+  # misconfiguration that happens to work (#1411).
   Encryption__DefaultMode: ${ENCRYPTION_MODE:-}
   # SET EXPLICITLY BECAUSE THERE ARE TWO INSTANCES (#1245). The pool ceiling is PER PROCESS, so the database
   # sees it multiplied by the instance count — and the application default is 40, which two instances turn

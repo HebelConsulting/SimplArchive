@@ -60,10 +60,10 @@ builder.Configuration.AddOpenBaoSecrets();
 // migration). A no-op in Development, so local dev + the tests are unaffected.
 ProductionReadinessValidator.ThrowIfNotProductionReady(builder.Configuration, builder.Environment);
 
-// Every environment, not just production: retired encryption keys are wrong everywhere (ADR 0825), and
-// ignoring them would leave an installation running with encryption silently OFF. Deliberately beside the
-// readiness gate rather than inside it, which runs outside Development only.
-SimplArchive.Infrastructure.Encryption.EncryptionModes.ThrowIfLegacyConfigured(builder.Configuration);
+// Every environment, not just production: a configuration that LIES about encryption is wrong everywhere —
+// a retired key, or a mode with no service to perform it, each leaving the guarantee silently absent (ADR
+// 0825, #1406). Beside the readiness gate rather than inside it, which runs outside Development only.
+SimplArchive.Infrastructure.Encryption.EncryptionModes.ThrowIfMisconfigured(builder.Configuration);
 
 // Add services to the container.
 

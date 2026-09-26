@@ -134,4 +134,69 @@ public class EncryptionModesTests
                 + "configured. This is why the installation-wide mode is its own key rather than a '*' entry.");
         }
     }
+
+    // ---- A mode nothing can perform (#1406) -----------------------------------------------------------
+    //
+    // MEASURED before this refusal existed: a tenant set to Strict with no Encryption:ServiceUrl advertised a
+    // presigned object-storage URL, and fetching it with NO CREDENTIALS returned `BEGIN:VCALENDAR`. Readable
+    // content, from a tenant configured Strict, to a caller with none.
+    //
+    // The cause is that the two halves are different settings — this class reads the mode map, while the
+    // refusal to hand out readable bytes lives in EncryptingObjectStorageClient, which is registered only when
+    // the service URL is set. So the mode said one thing, the doors did another, and nothing reported it.
+
+    [Theory]
+    [InlineData("Storage")]
+    [InlineData("Strict")]
+    public void A_default_mode_with_no_service_refuses_to_start(string mode)
+    {
+        var thrown = Assert.Throws<InvalidOperationException>(
+            () => EncryptionModes.ThrowIfModeHasNoService(Config((EncryptionModes.DefaultSection, mode))));
+
+        // The message must name BOTH halves: what was claimed, and the setting that is missing. Naming only
+        // one sends the reader to change the wrong thing.
+        Assert.Contains(mode, thrown.Message, StringComparison.Ordinal);
+        Assert.Contains(EncryptionModes.ServiceUrlKey, thrown.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_PER_TENANT_mode_with_no_service_refuses_too_and_names_the_tenant()
+    {
+        // The likelier shape in practice: the installation default is None and one tenant was raised — which
+        // is exactly how the kiosk's CryptoDemo tenant is configured.
+        var thrown = Assert.Throws<InvalidOperationException>(
+            () => EncryptionModes.ThrowIfModeHasNoService(Config(($"{EncryptionModes.Section}:CryptoDemo", "Strict"))));
+
+        Assert.Contains("CryptoDemo", thrown.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void With_the_service_configured_any_mode_is_fine()
+    {
+        EncryptionModes.ThrowIfModeHasNoService(Config(
+            (EncryptionModes.ServiceUrlKey, "http://encryption:8080"),
+            (EncryptionModes.DefaultSection, "Strict"),
+            ($"{EncryptionModes.Section}:Acme", "Storage")));
+    }
+
+    [Fact]
+    public void None_needs_no_service_and_that_is_the_ordinary_installation()
+    {
+        // The anti-vacuous half, and by far the commonest configuration: no service, no modes, nothing to
+        // refuse. A guard that failed here would stop every installation that does not buy encryption.
+        EncryptionModes.ThrowIfModeHasNoService(Config());
+        EncryptionModes.ThrowIfModeHasNoService(Config((EncryptionModes.DefaultSection, "None")));
+        EncryptionModes.ThrowIfModeHasNoService(Config(($"{EncryptionModes.Section}:Acme", "None")));
+    }
+
+    [Fact]
+    public void An_empty_service_url_counts_as_absent()
+    {
+        // `Encryption__ServiceUrl:` in compose yields an EMPTY string, not a missing key — which is exactly
+        // how the development stack spells "no encryption service" (ENCRYPTION_SERVICE_URL:-), so a
+        // null-only check would have let the dev stack straight past this guard.
+        Assert.Throws<InvalidOperationException>(() => EncryptionModes.ThrowIfModeHasNoService(Config(
+            (EncryptionModes.ServiceUrlKey, string.Empty),
+            (EncryptionModes.DefaultSection, "Strict"))));
+    }
 }
