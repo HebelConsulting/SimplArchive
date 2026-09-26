@@ -91,23 +91,45 @@ Running your own instance instead of the demo? Substitute your host; the paths a
 
 Production deploys via the **Helm chart** in [`charts/simplarchive`](charts/simplarchive) — an API Deployment/Service/Ingress/HPA/PDB with health probes, non-root containers, and secret wiring; dependencies (Postgres, object storage, OpenSearch, …) are external/managed. The chart's [`values.yaml`](charts/simplarchive/values.yaml) documents the full configuration surface, and pre-install/pre-upgrade migration hooks apply schema changes off the app's startup path.
 
-## Encryption Service — a paid extra, in development
+## Encryption — two paid extras, in development
 
-A separate **Encryption Service** is being built for SimplArchive and will be available as a **paid extra**. It
-provides **comprehensive encryption** for an entire installation: document content is encrypted where it is
-stored, under keys held in hardware the operating organisation controls, and the level is set **per tenant** — so
-an archive that needs it can run beside one that does not.
+Encryption for SimplArchive is being built as **two separate products**, and the line between them is not
+packaging: it is **whether the component holds a secret.**
 
-Built today: content encrypted at rest with per-object keys wrapped by an installation key in a hardware security
-module — rotating that key re-wraps the keys rather than rewriting the documents — and mail served to a user's own
-mail program encrypted to their registered certificate. In development: a stricter level for organisations such as
-government and defence, where every read is encrypted to the certificate on the reader's smartcard and full-text
-search across document contents is given up in exchange, while names, index fields and dates stay searchable.
+**The Encryption Module — encrypted delivery.** Content leaves the archive as an envelope addressed to the
+reader's own certificates, of which a person may hold several — one per device, so a smartcard in a computer and
+an identity on a phone can both be addressed at once. It holds **nothing**: an envelope is built from *public*
+certificates and the private keys never leave the card or device they were created on. Because there is no key
+to guard, it needs no hardware security module and no second process — it installs into the archive itself, per
+tenant, with a licence.
 
-It is **custody, not mathematics**: content is never stored in readable form, the keys live in hardware the
-organisation controls, and every decryption is recorded — but the service *can* decrypt, because that is what lets
-a lost or reissued smartcard be replaced without losing access to the archive. It is not a claim that nobody could
-ever read your documents, and a system able to re-key on card reissue could not honestly make that claim.
+**The Encryption Service — encryption at rest.** Document content is encrypted where it is stored, with
+per-object keys wrapped by an installation key held in a hardware security module the operating organisation
+controls; rotating that key re-wraps the keys rather than rewriting the documents. This one *does* hold a
+secret — the key that decrypts the archive — which is exactly why it is a separate process with its own
+security posture.
+
+They are bought independently, and the level is set **per tenant**, so an archive that needs either can run
+beside one that does not:
+
+| | encrypted at rest | encrypted on delivery |
+|---|---|---|
+| neither | — | — |
+| Service | ✓ | — |
+| Module | — | ✓ |
+| both | ✓ | ✓ |
+
+In development on top of that: a **strict** level for organisations such as government and defence, where the
+archive serves no readable content at all — every read is encrypted to the certificate on the reader's
+smartcard, and full-text search across document contents is given up in exchange, while names, index fields and
+dates stay searchable.
+
+It is **custody, not mathematics**: with the Service, content is never stored in readable form, the keys live in
+hardware the organisation controls, and every decryption is recorded — but it *can* decrypt, because that is
+what lets a lost or reissued smartcard be replaced without losing access to the archive. It is not a claim that
+nobody could ever read your documents, and a system able to re-key on card reissue could not honestly make that
+claim. The Module makes a narrower and simpler claim: what leaves the archive is readable only by the person it
+was addressed to — and, where it is used without the Service, **what is stored is not encrypted**.
 
 ## Architecture at a glance
 
