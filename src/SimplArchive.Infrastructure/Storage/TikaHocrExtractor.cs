@@ -87,7 +87,7 @@ public sealed partial class TikaHocrExtractor : IImageTextLayoutExtractor
 
             // Trimmed BEFORE the empty check, so a token that is only punctuation drops out entirely rather
             // than becoming a clickable box that copies nothing (#788).
-            var text = TextLayoutValue.Trim(WebUtility.HtmlDecode(Tags().Replace(m.Groups["t"].Value, "")));
+            var text = SimplArchive.TextLayout.WordValue.Trim(WebUtility.HtmlDecode(Tags().Replace(m.Groups["t"].Value, "")));
             if (text.Length == 0)
             {
                 continue;

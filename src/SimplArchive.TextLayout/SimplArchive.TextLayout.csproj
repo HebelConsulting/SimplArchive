@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- TargetFramework is set explicitly (not just inherited from Directory.Build.props) because the Docker
+       restore layer copies only the .csproj files, not Directory.Build.props — every project does the same. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- "PDF bytes → per-page word boxes", once, for every surface that needs it (#1402).
+
+       It was a private detail of the server until the strict tier made it a CLIENT question. On a strict-tier
+       tenant the text-layout endpoint refuses (409 PLAINTEXT_CONTENT_REFUSED, ADR 0829) — returning every word
+       with its coordinates reconstructs the document through a route that never presigns anything — so
+       find-in-document has to be computed where the document is already in the clear, which is the desktop
+       client after it opens the envelope with the card (ADR 0830).
+
+       A LEAF, like SimplArchive.Localization / .Theming / .Presentation, rather than shared by moving the
+       reader into one of them: this one is not dependency-free (it needs a PDF parser), and putting a PDF
+       parser into Presentation would ship it into the Blazor WASM bundle, which can never call it.
+
+       It does NOT reference SimplArchive.Application, and that is enforced rather than preferred:
+       ArchitectureTests' `Application_depends_only_on_Domain` means the shared records could not have moved
+       here, so this project owns the shape its algorithm produces and each caller maps it to whatever its own
+       layer already speaks. Those wire shapes were separate before this existed — the desktop parses its own
+       `TextLayoutBox` from JSON today — so nothing is duplicated that was not already. -->
+
+  <ItemGroup>
+    <!-- Apache-2.0, already in build/licenses/package-license-overrides.json for the server's use of it. -->
+    <PackageReference Include="UglyToad.PdfPig" Version="1.7.0-custom-5" />
+  </ItemGroup>
+
+</Project>

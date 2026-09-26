@@ -1,4 +1,4 @@
-using SimplArchive.Application.Abstractions;
+using SimplArchive.TextLayout;
 
 namespace SimplArchive.UnitTests;
 
@@ -9,7 +9,7 @@ namespace SimplArchive.UnitTests;
 /// Pure string work, so it is asserted as a function rather than through a rendered overlay: a UI test here
 /// would be slow and would not pin the cases that actually matter, which are the awkward ones below.
 /// </remarks>
-public class TextLayoutValueTests
+public class WordValueTests
 {
     [Theory]
     // The reported cases: a word ending a phrase, and one ending a list item.
@@ -44,5 +44,5 @@ public class TextLayoutValueTests
     [InlineData("Vertrag", "Vertrag")]
     [InlineData("", "")]
     public void Trims_what_the_sentence_added_and_keeps_what_the_value_contains(string raw, string expected) =>
-        Assert.Equal(expected, TextLayoutValue.Trim(raw));
+        Assert.Equal(expected, WordValue.Trim(raw));
 }

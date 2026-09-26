@@ -826,7 +826,11 @@ public sealed partial class PreviewViewModel : ObservableObject
                 }
 
                 HasPreviewPages = PreviewPages.Count > 0;
-                await AttachOverlaysAsync(preview.TextLayoutUrl);
+                // The bytes are handed on, so find-in-document can be computed HERE when the server will not
+                // answer — on a strict tenant it refuses (409, ADR 0829), because word boxes reconstruct the
+                // document through a route that presigns nothing. These are the same bytes the card just
+                // decrypted, and the same extraction the server would have run (#1402).
+                await AttachOverlaysAsync(preview.TextLayoutUrl, pdfBytes: bytes);
                 break;
 
             case PreviewMediaKind.Text:
@@ -884,14 +888,14 @@ public sealed partial class PreviewViewModel : ObservableObject
 
     // Attaches both overlays after the pages are built: assigns each page its index, loads the search hit-overlay,
     // then loads the sticky notes (ADR "Document annotations").
-    private async Task AttachOverlaysAsync(string? textLayoutUrl)
+    private async Task AttachOverlaysAsync(string? textLayoutUrl, byte[]? pdfBytes = null)
     {
         for (var i = 0; i < PreviewPages.Count; i++)
         {
             PreviewPages[i].PageIndex = i;
         }
 
-        await LoadHitOverlayAsync(textLayoutUrl);
+        await LoadHitOverlayAsync(textLayoutUrl, pdfBytes);
 
         AnnotationsAvailable = _annotationsUrl is not null && PreviewPages.Count > 0;
         if (AnnotationsAvailable)
@@ -903,34 +907,30 @@ public sealed partial class PreviewViewModel : ObservableObject
     // Fetches the per-page word boxes for the just-loaded preview and attaches them to the pages, then applies
     // the current find query (search-seeded or typed). No overlay if the format is unsupported / nothing was
     // recognized. See ADR "Search hit overlay".
-    private async Task LoadHitOverlayAsync(string? textLayoutUrl)
+    // Where the words come from is a POLICY with two sources and a precedence, so it lives in its own class
+    // (PreviewWordSource) — which is also what keeps this view-model under the 1000-line limit, and what makes
+    // that precedence testable without standing up a preview.
+    private async Task LoadHitOverlayAsync(string? textLayoutUrl, byte[]? pdfBytes = null)
     {
         CanFindInDocument = false;
-        if (Api is null || textLayoutUrl is null || PreviewPages.Count == 0)
+        if (PreviewPages.Count == 0)
         {
             return;
         }
 
-        try
+        var pages = await PreviewWordSource.LoadAsync(Api, textLayoutUrl, pdfBytes);
+        if (pages.Count == 0 || pages.All(p => p.Count == 0))
         {
-            var layout = await Api.Versions.GetTextLayoutAsync(textLayoutUrl);
-            if (layout is null || layout.Pages.Count == 0)
-            {
-                return;
-            }
-
-            for (var i = 0; i < PreviewPages.Count && i < layout.Pages.Count; i++)
-            {
-                PreviewPages[i].SetWords(layout.Pages[i].Words);
-            }
-
-            CanFindInDocument = true;
-            ApplyFindToPages();
+            return; // nothing to find — leave the affordance off rather than offering an empty search
         }
-        catch (Exception)
+
+        for (var i = 0; i < PreviewPages.Count && i < pages.Count; i++)
         {
-            // Best-effort — no overlay on failure.
+            PreviewPages[i].SetWords(pages[i]);
         }
+
+        CanFindInDocument = true;
+        ApplyFindToPages();
     }
 
     public void Reset(string? placeholder)

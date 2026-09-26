@@ -65,7 +65,7 @@ public sealed class DocumentTextLayoutService : IDocumentTextLayoutService
                 var displayBytes = await ReadBytesAsync(displayKey, cancellationToken);
                 var partial = isImage
                     ? await _imageExtractor.ExtractAsync(displayBytes, cancellationToken)
-                    : PdfTextLayoutReader.Read(displayBytes);
+                    : FromWordBoxes(SimplArchive.TextLayout.PdfWordBoxes.Read(displayBytes));
 
                 // An image page that OCRs to nothing still holds a page slot, so overlay page indices stay
                 // aligned with the preview's pages; a PDF contributes all its own pages.
@@ -107,4 +107,23 @@ public sealed class DocumentTextLayoutService : IDocumentTextLayoutService
     // "<dir>/<stem>.textlayout.json" — same directory as the original, its extension replaced (the shared derived-
     // artefact key scheme, ObjectKeyBuilder issue #338, so all derived artefacts sit alongside the object).
     private static string SidecarKey(string objectKey) => ObjectKeyBuilder.DerivedKey(objectKey, ".textlayout.json");
+
+    /// <summary>
+    /// The leaf's word boxes in this layer's shape — the whole cost of sharing the algorithm rather than
+    /// copying it (#1402).
+    /// </summary>
+    /// <remarks>
+    /// The two record sets exist because <c>SimplArchive.TextLayout</c> cannot reference Application:
+    /// <c>ArchitectureTests.Application_depends_only_on_Domain</c> forbids the edge, so the shared records could
+    /// not move there and the leaf owns the shape its algorithm produces. That is a better trade than it looks —
+    /// the clients already parse their own wire shapes for this (the desktop's <c>TextLayoutBox</c>), so nothing
+    /// is duplicated here that was not already, and what IS shared is the part that would drift: the Y-flip and
+    /// the punctuation rule.
+    /// </remarks>
+    private static DocumentTextLayout FromWordBoxes(SimplArchive.TextLayout.WordLayout layout) =>
+        new(layout.Pages
+            .Select(page => new TextLayoutPage(page.Words
+                .Select(w => new TextLayoutWord(w.Text, w.X, w.Y, w.Width, w.Height))
+                .ToList()))
+            .ToList());
 }

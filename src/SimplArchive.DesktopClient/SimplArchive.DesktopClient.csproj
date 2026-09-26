@@ -81,6 +81,9 @@
     <!-- The design tokens (ADR 0578): the shipped palette for the icon art, and the loader that
          applies a custom theme at startup. -->
     <ProjectReference Include="..\SimplArchive.Presentation\SimplArchive.Presentation.csproj" />
+    <!-- "PDF bytes -> word boxes", shared with the server (#1402): on a strict tenant the text-layout
+         endpoint refuses, so find-in-document is computed from the bytes the card decrypted. -->
+    <ProjectReference Include="..\SimplArchive.TextLayout\SimplArchive.TextLayout.csproj" />
     <ProjectReference Include="..\SimplArchive.Theming\SimplArchive.Theming.csproj" />
   </ItemGroup>
 

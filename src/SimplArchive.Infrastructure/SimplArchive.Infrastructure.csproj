@@ -1,6 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <!-- "PDF bytes -> word boxes" lives in a leaf now, because the strict tier made it a CLIENT
+         question too (#1402): the desktop computes find-in-document from bytes the card just decrypted. -->
+    <ProjectReference Include="..\SimplArchive.TextLayout\SimplArchive.TextLayout.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\SimplArchive.Application\SimplArchive.Application.csproj" />
     <ProjectReference Include="..\SimplArchive.ModuleAbi\SimplArchive.ModuleAbi.csproj" />
   </ItemGroup>

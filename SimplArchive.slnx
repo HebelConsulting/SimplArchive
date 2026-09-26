@@ -11,6 +11,7 @@
     <Project Path="src/SimplArchive.Localization/SimplArchive.Localization.csproj" />
     <Project Path="src/SimplArchive.ModuleAbi/SimplArchive.ModuleAbi.csproj" />
     <Project Path="src/SimplArchive.Presentation/SimplArchive.Presentation.csproj" />
+    <Project Path="src/SimplArchive.TextLayout/SimplArchive.TextLayout.csproj" />
     <Project Path="src/SimplArchive.Theming/SimplArchive.Theming.csproj" />
     <Project Path="src/SimplArchive.Worker/SimplArchive.Worker.csproj" />
   </Folder>
