@@ -26,7 +26,15 @@ jobs:
     name: Build + unit + integration
     runs-on: ubuntu-latest
     steps:
+      # fetch-tags, because one guard compares the kiosk's config keys against the LAST RELEASE's code
+      # (KioskConfigKeysAgainstReleasedImageTests, #1382): the kiosk syncs config from main but runs the image
+      # from the last v* tag, so a key renamed in between is silently ignored on the host. A default checkout
+      # fetches no tags at all. NOT fetch-depth: 0 — this repository's pack is over a gigabyte and every PR
+      # would pay for it; tags at the default depth are enough to read the tagged tree, and the guard REFUSES
+      # to render a verdict if they turn out not to be (its sentinel), rather than passing or blaming a rename.
       - uses: actions/checkout@v7
+        with:
+          fetch-tags: true
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
