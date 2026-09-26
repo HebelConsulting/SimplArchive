@@ -16,6 +16,7 @@ namespace SimplArchive.UiEndToEndTests;
 // Built against a real envelope produced the way the server produces one (MimeKit, CMS EnvelopedData, RSA key
 // transport), rather than a fixture blob: a test that constructs its own idea of the format proves the client
 // agrees with the TEST, which is the failure mode of every replay built by analogy.
+[Collection(UiCollection.Name)]
 public class DesktopEnvelopeOpenerTests : IDisposable
 {
     private const string Marker = "DESKTOP-OPENED-THE-ENVELOPE";

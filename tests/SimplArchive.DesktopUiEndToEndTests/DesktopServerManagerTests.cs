@@ -6,7 +6,7 @@ namespace SimplArchive.UiEndToEndTests;
 // The Ctrl/Cmd+P server manager (ADR "Desktop server configuration") at the VM level — pure config logic, no
 // server needed (so no fixture collection): add / edit / remove a deployment profile (name + API-root URL) and
 // confirm it round-trips through the persisted server-config file.
-[Collection("DesktopConfig")]
+[Collection(UiCollection.Name)]
 public class DesktopServerManagerTests
 {
     [Fact]

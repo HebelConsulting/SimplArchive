@@ -14,7 +14,7 @@ namespace SimplArchive.UiEndToEndTests;
 //
 // The property under test throughout is that this client knows no module: it never names a rel, never reads
 // a module-specific field, and would render a second module's action with no change at all.
-[Collection("DesktopConfig")]
+[Collection(UiCollection.Name)]
 public class DesktopModuleActionTests
 {
     private static JsonElement Document(string moduleActions) =>

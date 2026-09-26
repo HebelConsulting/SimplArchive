@@ -13,7 +13,7 @@ namespace SimplArchive.UiEndToEndTests;
 //
 // View-model level: IndexHeight is what the XAML RowDefinition binds to, so GridLength.Auto here IS "fits its
 // content" on screen.
-[Collection("DesktopConfig")]
+[Collection(UiCollection.Name)]
 public class DesktopDetailPanePeekTests
 {
     // Collapsing and re-expanding must return to fit-to-content, NOT to whatever the pane was last dragged to.

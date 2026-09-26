@@ -5,10 +5,10 @@ namespace SimplArchive.UiEndToEndTests;
 
 // The i18n framework (ADR "Desktop UI localization"): strings resolve from the English resx by default and the
 // German satellite under de, and a missing key falls back to the key itself.
-// In the "DesktopConfig" collection so it's serialized with the other tests that mutate process-global state:
+// In the UI collection so it is serialized with every other test that mutates process-global state (#1401):
 // Culture.Apply here sets the process-wide DefaultThreadCurrentUICulture, which would otherwise race with (and
 // leak German into) the culture-dependent status messages those tests assert on in English.
-[Collection("DesktopConfig")]
+[Collection(UiCollection.Name)]
 public class DesktopLocalizationTests
 {
     [Fact]

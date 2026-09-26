@@ -9,7 +9,7 @@ namespace SimplArchive.UiEndToEndTests;
 // The startup logon window VM (ADR "Desktop logon window", login redesign slice B) — pure logic, no server or
 // browser (the reachability + OAuth steps are injectable seams): auto-seed a default server, show the "no
 // connection" message when the server is unreachable, and fire LoginSucceeded + remember the choices on success.
-[Collection("DesktopConfig")]
+[Collection(UiCollection.Name)]
 public class DesktopLogonTests
 {
     [Fact]

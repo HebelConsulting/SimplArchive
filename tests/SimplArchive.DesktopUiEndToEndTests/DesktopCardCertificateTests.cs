@@ -20,6 +20,7 @@ namespace SimplArchive.UiEndToEndTests;
 // hazard. These tests do mutate process-global statics, but they are the ONLY class that touches
 // CardCertificates.Reader or ModulePathOverride, and xUnit runs a class's own methods sequentially. So there is
 // nothing to race with. If another class ever starts setting either, this needs to join it in one collection.
+[Collection(UiCollection.Name)]
 public class DesktopCardCertificateTests : IDisposable
 {
     private readonly Func<string, IReadOnlyList<CardCertificates.Found>> _originalReader = CardCertificates.Reader;

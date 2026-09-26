@@ -7,11 +7,11 @@ namespace SimplArchive.UiEndToEndTests;
 // The environment banner (#501): a server profile declares which environment it IS, and the main window wears
 // a thin strip saying so. VM-level — the strip's rendering is covered by `--screenshot --envbanner <id>`.
 //
-// In the DesktopConfig collection because two of these tests set ServerProfileStore.PathOverride, which is
+// In the UI collection because two of these tests set ServerProfileStore.PathOverride, which is
 // STATIC — every class touching it must serialize behind the same collection, or they clobber each other's
 // store mid-test. Forgetting this attribute is invisible in isolation runs and failed 2/222 in the full suite,
 // with the other class's profiles appearing in this one's assertions.
-[Collection("DesktopConfig")]
+[Collection(UiCollection.Name)]
 public class DesktopEnvironmentBannerTests
 {
     [Fact]

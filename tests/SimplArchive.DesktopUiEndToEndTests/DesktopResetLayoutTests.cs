@@ -14,9 +14,9 @@ namespace SimplArchive.UiEndToEndTests;
 // classes in PARALLEL — so this class and DesktopDetailPanePeekTests were setting and clearing the same field at
 // the same time, each reading the other's layout file. The symptom was a DIFFERENT test failing per run, in tens
 // of milliseconds, with no server involved: "Expected Auto, Actual 1.5*" is one class seeing the other's drag.
-// Both pass 3/3 alone. DesktopConfigCollection already existed for exactly this hazard on
+// Both pass 3/3 alone. A collection already existed for exactly this hazard on
 // ServerProfileStore.PathOverride; this class simply never joined it.
-[Collection("DesktopConfig")]
+[Collection(UiCollection.Name)]
 public class DesktopResetLayoutTests
 {
     [Fact]

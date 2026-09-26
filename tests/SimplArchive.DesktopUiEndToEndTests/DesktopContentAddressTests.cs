@@ -35,10 +35,9 @@ namespace SimplArchive.UiEndToEndTests;
 // it with every class that assigns that global to a live server.
 //
 // It costs nothing, which was worth measuring rather than assuming: no test here injects the fixture, so a
-// filtered run of this class still finishes in 39 ms without standing the app up. The residual hazard is the
-// "DesktopConfig" collection, whose logon tests also assign the global (to localhost:8080) and still run in
-// parallel with this one — a collision there would surface as a connection failure rather than a 404, and the
-// real fix is ONE collection for everything that mutates that global.
+// filtered run of this class still finishes in 39 ms without standing the app up. The residual hazard it used
+// to carry — a second collection whose logon tests also assigned the global — is gone: every class that
+// mutates process-global desktop state is now in THIS collection, and a guard keeps it that way (#1401).
 [Collection(UiCollection.Name)]
 public class DesktopContentAddressTests : IDisposable
 {
