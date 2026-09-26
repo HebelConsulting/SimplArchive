@@ -199,4 +199,44 @@ public class EncryptionModesTests
             (EncryptionModes.ServiceUrlKey, string.Empty),
             (EncryptionModes.DefaultSection, "Strict"))));
     }
+
+    // ---- The modes are not a severity scale (#1411) ---------------------------------------------------
+    //
+    // `Applies` read `>= Storage`, which is true of today's three values and a trap for the fourth. Storage
+    // names WHAT is protected and Strict names a POSTURE, so a delivery-only tier is stronger on delivery
+    // while encrypting nothing at rest — wherever it were inserted, one comparison would be wrong, and wrong
+    // SILENTLY: above Storage it turns at-rest wrapping on for a mode whose definition is that content is not
+    // wrapped, for exactly the tenants in that mode.
+    //
+    // This test is the half that matters. It enumerates the enum, so a new value cannot be added without
+    // classifying it — failing at the moment of the change, loudly, rather than at runtime, quietly, on one
+    // tenant's content.
+
+    [Fact]
+    public void Only_the_modes_that_wrap_at_rest_apply()
+    {
+        foreach (var mode in Enum.GetValues<EncryptionMode>())
+        {
+            var wrapsAtRest = mode is EncryptionMode.Storage or EncryptionMode.Strict;
+
+            Assert.Equal(wrapsAtRest, Modes((EncryptionModes.DefaultSection, mode.ToString())).Applies("Any"));
+        }
+    }
+
+    [Fact]
+    public void A_NEW_mode_must_be_classified_rather_than_inheriting_a_position()
+    {
+        // The guard above compares against a list written here; this one states WHY that list may not be
+        // replaced by a comparison. If a fourth value is ever added and someone "simplifies" Applies back to
+        // an ordering, exactly one of these two assertions breaks — whichever way they sort it.
+        var values = Enum.GetValues<EncryptionMode>();
+
+        Assert.Equal(EncryptionMode.None, values.Min());
+        Assert.True(values.Length == 3,
+            "A mode was added. `Applies` lists the modes that wrap at rest and must be reviewed — NOT by "
+            + "sorting the enum: these values are not a scale (Storage names what is protected, Strict names a "
+            + "posture, a delivery-only tier is stronger on delivery and encrypts nothing at rest). Decide "
+            + "whether the new mode wraps, add it to that list or leave it out deliberately, then update this "
+            + "count. See ADR 0834 and #1411.");
+    }
 }

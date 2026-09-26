@@ -80,8 +80,25 @@ public sealed class EncryptionModes(IConfiguration configuration)
 
     private EncryptionMode Default() => Parse(configuration[DefaultSection], DefaultSection);
 
-    /// <summary>True when content is encrypted at rest for this tenant — both tiers do.</summary>
-    public bool Applies(string tenantName) => ModeFor(tenantName) >= EncryptionMode.Storage;
+    /// <summary>True when content is encrypted at rest for this tenant.</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Membership, not ordering.</b> This read <c>&gt;= Storage</c>, which is true of today's three values
+    /// and is a trap for the fourth: the modes are not a severity scale. <c>Storage</c> names what is
+    /// protected, <c>Strict</c> names a posture, and a delivery-only tier (#1411, ADR 0834) is *stronger* on
+    /// delivery while encrypting *nothing* at rest — so wherever such a value were inserted, one comparison
+    /// would be wrong.
+    /// </para>
+    /// <para>
+    /// Wrong <b>silently</b>, which is what makes it worth a line of its own: as a value above
+    /// <c>Storage</c> it would turn at-rest wrapping ON for a mode whose whole definition is that content is
+    /// not wrapped, and only for tenants in that mode. Listing the modes that wrap means a new value is
+    /// simply not included until somebody decides it should be — and
+    /// <c>Only_the_modes_that_wrap_at_rest_apply</c> makes that decision compulsory by enumerating the enum.
+    /// </para>
+    /// </remarks>
+    public bool Applies(string tenantName) =>
+        ModeFor(tenantName) is EncryptionMode.Storage or EncryptionMode.Strict;
 
     /// <summary>True when the strict tier applies.</summary>
     public bool IsStrict(string tenantName) => ModeFor(tenantName) == EncryptionMode.Strict;
