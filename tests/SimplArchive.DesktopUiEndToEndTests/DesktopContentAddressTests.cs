@@ -24,6 +24,21 @@ namespace SimplArchive.UiEndToEndTests;
 // value. A test of the resolver alone would pass on a client that never called it — which is precisely the
 // defect, three times over: the preview funnel, the open-in-native-application downloader and the
 // page-thumbnail loader each held their own base-less HttpClient.
+//
+// IN THE UI COLLECTION, and not because it wants the fixture — it never touches it. `DesktopClientOptions.
+// ApiBaseUrl` is process-global, and these tests are the only ones that both SET it and then make a real
+// request that depends on it. Left uncollected, a test in the UI collection reassigning it to the self-hosted
+// Api mid-flight sent this request there instead, and the loopback stand-in's assertion failed as a bare
+// `404 (Not Found)` from a server it never meant to talk to — measured 1 failure in a full suite run, 5/5
+// passing alone, which is exactly the shape that reads as a code regression. Joining the collection serialises
+// it with every class that assigns that global to a live server.
+//
+// It costs nothing, which was worth measuring rather than assuming: no test here injects the fixture, so a
+// filtered run of this class still finishes in 39 ms without standing the app up. The residual hazard is the
+// "DesktopConfig" collection, whose logon tests also assign the global (to localhost:8080) and still run in
+// parallel with this one — a collision there would surface as a connection failure rather than a 404, and the
+// real fix is ONE collection for everything that mutates that global.
+[Collection(UiCollection.Name)]
 public class DesktopContentAddressTests
 {
     private const string DoorPath = "/api/encrypted-content";

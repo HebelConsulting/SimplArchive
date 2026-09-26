@@ -81,7 +81,13 @@ public sealed class ApiCore
     {
         using var response = await Anonymous.GetAsync(ResolveContentUrl(url), cancellationToken);
         response.EnsureSuccessStatusCode();
-        return (await response.Content.ReadAsByteArrayAsync(cancellationToken),
+
+        // A strict tenant serves content only as a CMS envelope addressed to the reader (ADR 0828), so it is
+        // opened HERE — the one funnel every read path in this client already passes through, which is why
+        // rendering, opening in the real application, dragging out and thumbnailing all get it at once
+        // instead of four times. An ordinary response is returned untouched.
+        return EnvelopeOpener.Open(
+            await response.Content.ReadAsByteArrayAsync(cancellationToken),
             response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream");
     }
 

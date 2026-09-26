@@ -56,6 +56,10 @@
          Docnet.Core (MIT) bundles PDFium (BSD-3) natives for win/macOS/Linux incl. arm64, and has NO
          SkiaSharp dependency (avoids a conflict with Avalonia's SkiaSharp 2.88). See ADR "Desktop workbench UI". -->
     <PackageReference Include="Docnet.Core" Version="2.6.0" />
+    <!-- MimeKit (MIT) — reads the S/MIME envelope a strict-tier read arrives in (#1353, ADR 0828). Same
+         version Infrastructure builds those envelopes with, deliberately: two versions of one format is how
+         a producer and a consumer come to disagree about it. -->
+    <PackageReference Include="MimeKit" Version="4.17.0" />
     <!-- Real-time notifications hub client (ADR "Real-time notifications (SignalR)"). -->
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.9" />
   </ItemGroup>
