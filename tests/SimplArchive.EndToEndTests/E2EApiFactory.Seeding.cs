@@ -348,10 +348,13 @@ public sealed partial class E2EApiFactory
     }
 
     // Runs the workflow escalation sweep synchronously (the hosted worker's on-demand equivalent) for tests.
-    public async Task RunEscalationSweepAsync()
+    // Returns what the sweep ACTED on, which a concurrency test needs: two overlapping sweeps must report one
+    // winner between them (#1425), and a test that could only see the notifications would pass on the right
+    // count reached the wrong way.
+    public async Task<int> RunEscalationSweepAsync()
     {
         using var scope = Services.CreateScope();
-        await scope.ServiceProvider.GetRequiredService<SimplArchive.Application.Abstractions.IWorkflowEscalationService>().SweepAsync();
+        return await scope.ServiceProvider.GetRequiredService<SimplArchive.Application.Abstractions.IWorkflowEscalationService>().SweepAsync();
     }
 
     // Seeds a custom mask with a retention period, returning its Mask id (assignable via PUT /documents/{id}/mask).

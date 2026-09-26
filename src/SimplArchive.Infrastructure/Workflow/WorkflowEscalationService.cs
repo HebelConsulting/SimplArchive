@@ -41,27 +41,88 @@ public sealed class WorkflowEscalationService : IWorkflowEscalationService
         {
             var due = state.DueAt!.Value;
 
-            if (state.EscalatedAt is null && now >= due)
+            var escalating = state.EscalatedAt is null && now >= due;
+            var reminding = !escalating && state.ReminderSentAt is null && now >= due - ReminderLead && now < due;
+            if (!escalating && !reminding)
+            {
+                continue;
+            }
+
+            // ONE state, ONE transaction — the claim and the notifications commit together, and no row lock is
+            // held across states (a batch-wide transaction is how two sweeps deadlock). See ClaimAsync.
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+            if (!await ClaimAsync(state, escalating, now, cancellationToken))
+            {
+                // The other instance's sweep won this one. The normal outcome of two instances sweeping
+                // (ADR 0808), not an error.
+                await transaction.RollbackAsync(cancellationToken);
+                continue;
+            }
+
+            if (escalating)
             {
                 await EscalateAsync(state, now, cancellationToken);
-                state.EscalatedAt = now;
-                state.ReminderSentAt ??= now; // both set → drops out of future candidate scans
-                acted++;
             }
-            else if (state.ReminderSentAt is null && now >= due - ReminderLead && now < due)
+            else
             {
                 await RemindAsync(state, now, cancellationToken);
-                state.ReminderSentAt = now;
-                acted++;
             }
-        }
 
-        if (acted > 0)
-        {
+            // No bookkeeping is written here — the CLAIM already did it, atomically, and the ChangeTracker
+            // cannot see an ExecuteUpdate, so writing it again would be a second update from stale state.
             await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            acted++;
         }
 
         return acted;
+    }
+
+    /// <summary>
+    /// Takes this workflow state's escalation (or reminder) for THIS sweep, atomically, and says whether it was
+    /// won. Escalating sets both markers, exactly as the sweep used to: that is what drops the state out of
+    /// future candidate scans rather than leaving it to be reminded about after it has already escalated.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A compare-and-swap on the marker that was read, so the database picks the winner and the loser gets 0
+    /// rows. Same mechanism as the reminder sweep's, and for the same reason (#1425): the sweep used to read
+    /// candidates whose marker was null, send the notifications, stamp the markers and save once at the end —
+    /// the correct transactional shape (ADR 0794) with no exclusion, so two sweeps both read null before either
+    /// committed and both acted.
+    /// </para>
+    /// <para>
+    /// <b>Not hypothetical, and worse here than for a reminder.</b> ADR 0808 runs two app instances, each
+    /// registering this sweep's worker on its own timer, so the overlap is the arrangement. And an escalation
+    /// notifies the reviewer, the submitter AND every tenant administrator — so one overlapped sweep duplicates
+    /// it for the whole admin group, not for one person.
+    /// </para>
+    /// <para>
+    /// Deliberately not shared with the reminder sweep's version: what differs is the WHOLE body — which
+    /// markers, and which of two actions they gate — so a common helper would be a passthrough to
+    /// <c>ExecuteUpdateAsync</c> wearing a name, and the pattern is what is worth repeating, not the line.
+    /// </para>
+    /// </remarks>
+    private async Task<bool> ClaimAsync(
+        WorkflowState state, bool escalating, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var rows = _dbContext.WorkflowStates
+            .IgnoreQueryFilters(TenantFilterOnly)
+            .Where(w => w.Id == state.Id);
+
+        var won = escalating
+            ? await rows.Where(w => w.EscalatedAt == null)
+                .ExecuteUpdateAsync(
+                    set => set
+                        .SetProperty(w => w.EscalatedAt, (DateTimeOffset?)now)
+                        .SetProperty(w => w.ReminderSentAt, w => w.ReminderSentAt ?? now),
+                    cancellationToken)
+            : await rows.Where(w => w.ReminderSentAt == null)
+                .ExecuteUpdateAsync(
+                    set => set.SetProperty(w => w.ReminderSentAt, (DateTimeOffset?)now), cancellationToken);
+
+        return won == 1;
     }
 
     private async Task EscalateAsync(WorkflowState state, DateTimeOffset now, CancellationToken cancellationToken)
