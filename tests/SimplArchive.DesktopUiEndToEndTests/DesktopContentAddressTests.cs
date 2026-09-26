@@ -99,6 +99,11 @@ public class DesktopContentAddressTests : IDisposable
         // So "does this address carry its own authorization?" is not answerable from the address, and the rule
         // is about the DESTINATION: credentials go to the installation we are signed in to, and nowhere else.
         using var installation = new Installation();
+        // The route REFUSES without a bearer, exactly as the real one does. So this no longer inspects the
+        // header afterwards — the fetch simply fails if the client does not send it, which is the difference
+        // between a test that depends on the rule and one that remembers to check it.
+        installation.BearerRequiredOn.Add("enveloped-content");
+
         var previousUrl = DesktopClientOptions.ApiBaseUrl;
         var previousClient = ApiCore.Authenticated;
         DesktopClientOptions.ApiBaseUrl = installation.BaseUrl;
@@ -107,11 +112,44 @@ public class DesktopContentAddressTests : IDisposable
         ApiCore.Authenticated = signedIn;
         try
         {
-            await SimplArchiveApiClient.DownloadAsync(
+            var (bytes, _) = await SimplArchiveApiClient.DownloadAsync(
                 "/api/documents/d/versions/v/enveloped-content?inline=true");
 
+            Assert.Equal("PLAINTEXT-FROM-THE-DOOR", Encoding.ASCII.GetString(bytes));
             Assert.Equal("/api/documents/d/versions/v/enveloped-content?inline=true", installation.LastRequest);
             Assert.Equal("Bearer THE-SESSION-TOKEN", installation.LastAuthorization);
+        }
+        finally
+        {
+            DesktopClientOptions.ApiBaseUrl = previousUrl;
+            ApiCore.Authenticated = previousClient;
+        }
+    }
+
+    [Fact]
+    public async Task THE_REGRESSION_a_signed_out_client_cannot_read_an_authorized_route()
+    {
+        // The defect exactly as it reached a live demonstration: "Could not load 'Invoice 2026-003': Response
+        // status code does not indicate success: 401 (Unauthorized)".
+        //
+        // With no authenticated client the funnel falls back to the credential-free one — correct for a
+        // presigned URL, and fatal for an [Authorize] route. This pins that the failure is a 401 from the
+        // ROUTE rather than something the client swallows: before the fix it happened on every strict-tier
+        // preview and download, and no test could see it because the stand-in answered 200 to everyone.
+        using var installation = new Installation();
+        installation.BearerRequiredOn.Add("enveloped-content");
+
+        var previousUrl = DesktopClientOptions.ApiBaseUrl;
+        var previousClient = ApiCore.Authenticated;
+        DesktopClientOptions.ApiBaseUrl = installation.BaseUrl;
+        ApiCore.Authenticated = null;
+        try
+        {
+            var thrown = await Assert.ThrowsAsync<HttpRequestException>(
+                () => SimplArchiveApiClient.DownloadAsync("/api/documents/d/versions/v/enveloped-content"));
+
+            Assert.Equal(HttpStatusCode.Unauthorized, thrown.StatusCode);
+            Assert.Null(installation.LastAuthorization);
         }
         finally
         {
@@ -266,6 +304,15 @@ public class DesktopContentAddressTests : IDisposable
     }
 
     /// <summary>A loopback stand-in for one host — the installation, or an object store.</summary>
+    /// <remarks>
+    /// <b>It refuses what the real server refuses</b> (#1408). This stand-in used to answer <c>200</c> to
+    /// anything, which is why it watched the strict tier's 401 go past: the test could only INSPECT the
+    /// Authorization header afterwards, and a test that inspects rather than depends passes just as happily
+    /// when the header is absent and nobody wrote the assertion. Making it reject like
+    /// <c>DocumentVersionEnvelopedContentController</c> — <c>[Authorize]</c>, so no header means 401 — turns
+    /// the credential rule into something the client must SATISFY rather than something a test remembers to
+    /// look at.
+    /// </remarks>
     private sealed class Installation : IDisposable
     {
         private readonly HttpListener _listener = new();
@@ -285,6 +332,17 @@ public class DesktopContentAddressTests : IDisposable
 
         public string? LastAuthorization { get; private set; }
 
+        /// <summary>
+        /// Paths that require a bearer, mirroring an <c>[Authorize]</c> route.
+        /// </summary>
+        /// <remarks>
+        /// A fragment rather than a whole path, so a test names the route it means
+        /// (<c>enveloped-content</c>) without restating an address the server owns. The at-rest token door is
+        /// deliberately NOT listed: it is <c>[AllowAnonymous]</c> and authorizes by its <c>?t=</c> parameter,
+        /// so requiring a header there would be the stand-in inventing a contract the server does not have.
+        /// </remarks>
+        public List<string> BearerRequiredOn { get; } = [];
+
         private async Task ServeAsync()
         {
             while (_listener.IsListening)
@@ -301,6 +359,18 @@ public class DesktopContentAddressTests : IDisposable
 
                 LastRequest = context.Request.Url?.PathAndQuery;
                 LastAuthorization = context.Request.Headers["Authorization"];
+
+                var path = context.Request.Url?.AbsolutePath ?? string.Empty;
+                if (BearerRequiredOn.Any(fragment => path.Contains(fragment, StringComparison.Ordinal))
+                    && string.IsNullOrEmpty(LastAuthorization))
+                {
+                    // Exactly what the real route does, and the whole point of this stand-in refusing at all:
+                    // the client either sends the credential or it does not get the bytes.
+                    context.Response.StatusCode = (int)HttpStatusCode.Unauthorized;
+                    context.Response.Close();
+                    continue;
+                }
+
                 var body = Encoding.ASCII.GetBytes("PLAINTEXT-FROM-THE-DOOR");
                 context.Response.ContentType = "image/png";
                 await context.Response.OutputStream.WriteAsync(body);
