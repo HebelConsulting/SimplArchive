@@ -22,7 +22,11 @@ public sealed class WhoAmICommand(IAnsiConsole console) : AsyncCommand<UserSessi
         using var http = new HttpClient { BaseAddress = new Uri(settings.ResolvedUrl.TrimEnd('/') + "/") };
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", settings.ResolvedToken);
 
-        var me = await new SimplArchiveApi(http).GetAsync("api/diagnostics/whoami", cancellationToken);
+        // FOLLOWED, not composed (ADR 0543): the root advertises `whoami`, so the tool does not need to know
+        // that it lives under /api/diagnostics — and will not break when it stops doing so.
+        var api = new SimplArchiveApi(http);
+        var me = await api.GetAsync(
+            await new Hypermedia(api).RootHrefAsync("whoami", cancellationToken), cancellationToken);
 
         string? Text(string name) => me.TryGetProperty(name, out var v) ? v.GetString() : null;
         bool Flag(string name) => me.TryGetProperty(name, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.True;

@@ -82,6 +82,43 @@ public sealed class SimplArchiveApi(HttpClient http)
         return JsonDocument.Parse(body).RootElement.Clone();
     }
 
+    /// <summary>
+    /// Sends raw bytes — a certificate is a FILE, not a JSON field.
+    /// </summary>
+    /// <remarks>
+    /// The certificate endpoint takes the PEM (or DER) as the request body rather than wrapped in a document,
+    /// which is what lets the same bytes the card tool exported be sent unchanged. Base64-ing them into JSON
+    /// would add a step for every caller and a way to get it wrong.
+    /// </remarks>
+    public async Task<JsonElement> PutBytesAsync(
+        string path, byte[] payload, string contentType, CancellationToken cancellationToken)
+    {
+        using var content = new ByteArrayContent(payload);
+        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+
+        using var response = await http.PutAsync(path, content, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new CliException(Describe(response.StatusCode, body, path));
+        }
+
+        return JsonDocument.Parse(body).RootElement.Clone();
+    }
+
+    /// <summary>Deletes a resource; an empty body is a normal answer and not a failure.</summary>
+    public async Task DeleteAsync(string path, CancellationToken cancellationToken)
+    {
+        using var response = await http.DeleteAsync(path, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new CliException(Describe(
+                response.StatusCode, await response.Content.ReadAsStringAsync(cancellationToken), path));
+        }
+    }
+
     /// <summary>Turns an RFC 7807 body into one line, falling back to the status when it is not one.</summary>
     internal static string Describe(System.Net.HttpStatusCode status, string body, string path)
     {

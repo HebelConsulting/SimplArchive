@@ -69,7 +69,11 @@ public sealed class LoginCommand(IAnsiConsole console) : AsyncCommand<LoginComma
         // success and then fails on the first real command has told the administrator the wrong thing about
         // where the problem is.
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        var me = await new SimplArchiveApi(http).GetAsync("api/diagnostics/whoami", cancellationToken);
+        var api = new SimplArchiveApi(http);
+        // FOLLOWED from the root (ADR 0543), which also makes this a stronger proof than a composed path: it
+        // shows the freshly minted token can read the root AND the resource the root points at.
+        var me = await api.GetAsync(
+            await new Hypermedia(api).RootHrefAsync("whoami", cancellationToken), cancellationToken);
         var who = me.TryGetProperty("userName", out var name) ? name.GetString() : null;
         var tenant = me.TryGetProperty("tenantName", out var t) ? t.GetString() : null;
 

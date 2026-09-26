@@ -95,4 +95,62 @@ public sealed class SaConsoleTests
 
         Assert.Contains("502", message, StringComparison.Ordinal);
     }
+
+    // ---- `me certificate` (#1353, ADR 0833) ----------------------------------------------------------
+    //
+    // The refusal is the feature here. Registering a certificate is one PUT; what an administrator actually
+    // meets is a file that turns out to be the wrong file, and the useful moment to say so is BEFORE the
+    // bytes leave the machine — at which point the reader can still see which path they named.
+
+    [Fact]
+    public void A_file_holding_a_private_key_is_refused_before_it_is_sent()
+    {
+        var pem = "-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----\n"u8.ToArray();
+
+        var thrown = Assert.Throws<CliException>(
+            () => CertificateRegisterCommand.RefusePrivateKey(pem, "/tmp/holder.key"));
+
+        Assert.Contains("PRIVATE KEY", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("/tmp/holder.key", thrown.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void An_encrypted_private_key_is_refused_too()
+    {
+        // "BEGIN ENCRYPTED PRIVATE KEY" still contains the phrase, which is why the check is a substring
+        // rather than an exact header match — a password on the key does not make it a certificate.
+        var pem = "-----BEGIN ENCRYPTED PRIVATE KEY-----\nMIIE...\n"u8.ToArray();
+
+        Assert.Throws<CliException>(() => CertificateRegisterCommand.RefusePrivateKey(pem, "/tmp/x.pem"));
+    }
+
+    [Theory]
+    [InlineData("/tmp/identity.p12")]
+    [InlineData("/tmp/identity.pfx")]
+    public void A_PKCS12_bundle_is_refused_by_extension(string path)
+    {
+        // Caught by NAME because its bytes are opaque — and it is exactly the file somebody who just
+        // generated an identity reaches for, with the private key inside it.
+        var thrown = Assert.Throws<CliException>(
+            () => CertificateRegisterCommand.RefusePrivateKey([0x30, 0x82, 0x0a, 0x01], path));
+
+        Assert.Contains("private key", thrown.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void A_public_certificate_passes()
+    {
+        // The anti-vacuous half: the guard must not refuse the thing it exists to accept.
+        var pem = "-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----\n"u8.ToArray();
+
+        CertificateRegisterCommand.RefusePrivateKey(pem, "/tmp/holder.pem");
+    }
+
+    [Fact]
+    public void A_DER_certificate_passes_although_it_is_not_text()
+    {
+        // DER is binary, so the ASCII scan reads noise. It must not accidentally match, and the extension
+        // must not be mistaken for a bundle.
+        CertificateRegisterCommand.RefusePrivateKey([0x30, 0x82, 0x03, 0x1f, 0x30, 0x82], "/tmp/holder.der");
+    }
 }

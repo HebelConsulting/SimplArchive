@@ -80,6 +80,25 @@ public static class SaConsoleApp
             config.AddCommand<WhoAmICommand>("whoami")
                 .WithDescription("Name the installation and identity the current session acts as.");
 
+            // The caller's OWN certificate (#1353, ADR 0833) — the self-service resource, under `me` rather
+            // than a bare `certificate`, because the noun has to say WHOSE. An administrator registering on
+            // somebody else's behalf is a different resource and a different right, and naming this one `me`
+            // leaves room for that instead of having to rename this when it arrives.
+            config.AddBranch("me", me =>
+            {
+                me.SetDescription("The signed-in user's own settings.");
+                me.AddBranch("certificate", certificate =>
+                {
+                    certificate.SetDescription("The certificate this user's content is enveloped to.");
+                    certificate.AddCommand<CertificateShowCommand>("show")
+                        .WithDescription("Report the registered certificate, or that there is none.");
+                    certificate.AddCommand<CertificateRegisterCommand>("register")
+                        .WithDescription("Register a certificate from a file (the public certificate only).");
+                    certificate.AddCommand<CertificateDeleteCommand>("delete")
+                        .WithDescription("Remove the registered certificate.");
+                });
+            });
+
             config.AddBranch("tenant", tenant =>
             {
                 tenant.SetDescription("Installation-level tenant administration (platform administrator).");

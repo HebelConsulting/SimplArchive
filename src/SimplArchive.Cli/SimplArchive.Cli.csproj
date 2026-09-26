@@ -13,7 +13,11 @@
         <PackAsTool>true</PackAsTool>
         <ToolCommandName>saconsole</ToolCommandName>
         <PackageId>HebelConsulting.SimplArchive.Cli</PackageId>
-        <Description>saconsole — administrative CLI for a SimplArchive installation: tenants, service accounts and user certificates, over the HTTP API.</Description>
+        <!-- The description is what a reader sees on the package feed before they install anything, so it lists
+             what the tool DOES rather than what it is meant to grow into. It claimed service accounts and user
+             certificates while having neither; certificates arrived with #1353 and service accounts have not,
+             so they come out until they do. A package description is a promise made to strangers. -->
+        <Description>saconsole — administrative CLI for a SimplArchive installation: sign in, provision tenants, and register the certificate your content is enveloped to, over the HTTP API.</Description>
     </PropertyGroup>
 
     <ItemGroup>

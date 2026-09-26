@@ -85,6 +85,17 @@ public partial class ClientHypermediaTests
         ["src/SimplArchive.Client/Services/ApiRoot.cs"] = 1,
         ["src/SimplArchive.DesktopClient/Services/ApiCore.cs"] = 1,
         ["src/SimplArchive.Client/Services/BrowseService.cs"] = 1,
+
+        // saconsole's entry point, the same single permanent exception the two clients each get: the API root
+        // is the one URL a client may know, and this is the line that knows it. Spelled "api" with no slash,
+        // which is why it is counted here rather than matching the api/ pattern by accident.
+        ["src/SimplArchive.Cli/Infrastructure/Hypermedia.cs"] = 1,
+
+        // AND ONE GENUINE GAP, recorded rather than hidden: nothing in the API advertises a rel for
+        // provisioning a tenant — `grep 'Link("tenants"' src` finds nothing — so a conforming client CANNOT
+        // reach it, which by ADR 0543's own terms makes the endpoint incomplete rather than this tool
+        // non-conforming. Tracked as #1409. When the rel lands, this line goes with the composed URL.
+        ["src/SimplArchive.Cli/Commands/TenantCreateCommand.cs"] = 1,
     };
 
     [Fact]
@@ -287,7 +298,13 @@ public partial class ClientHypermediaTests
     // disagree about what they are scanning.
     private static IEnumerable<string> ClientFiles(string root)
     {
-        foreach (var project in new[] { "src/SimplArchive.Client", "src/SimplArchive.DesktopClient" })
+        // saconsole is a CLIENT of the deployed application (ADR 0822 says so in its own csproj), so ADR 0543
+        // binds it identically — and it drifted precisely because this guard did not look at it. Owner,
+        // 2026-09-26: "Even in saconsole always follow the rels. No assumed urls."
+        foreach (var project in new[]
+                 {
+                     "src/SimplArchive.Client", "src/SimplArchive.DesktopClient", "src/SimplArchive.Cli",
+                 })
         {
             var dir = Path.Combine(root, project.Replace('/', Path.DirectorySeparatorChar));
             if (!Directory.Exists(dir))
