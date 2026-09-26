@@ -5,6 +5,14 @@
          process, so closing it killed the client mid-session with no warning and no chance to save (#421).
          On macOS and Linux this is identical to Exe, so it is set unconditionally rather than per-RID.
          The headless diagnostic flags still print — Program.Main attaches to the parent console for them. -->
+    <!-- MULTI-TARGETED, and the only project in the solution that is (#1398). PKCS#11's CK_ULONG is C's
+         `unsigned long`: 8 bytes on Unix LP64 and 4 on Windows LLP64, and Windows' pkcs11.h additionally forces
+         1-byte struct packing. HebelConsulting.CAManagement.Pkcs11 therefore ships two assemblies, and a
+         `net10.0` consumer running on Windows would load the Unix one and marshal every structure wrongly —
+         broken interop rather than a subtle bug. Overrides Directory.Build.props' single TargetFramework, which
+         every other project still uses. -->
+    <TargetFrameworks>net10.0;net10.0-windows</TargetFrameworks>
+    <TargetFramework />
     <OutputType>WinExe</OutputType>
     <!-- The Windows executable's icon, in Explorer, the taskbar and the title bar. Multi-resolution
          (16/32/48/64/96/128/256) generated from the same Assets/cabinet-1024.png artwork as the macOS .icns. -->
@@ -43,6 +51,10 @@
     <!-- Headless render-to-PNG mode (Program screenshot flag), so the UI can be verified without a display. -->
     <PackageReference Include="Avalonia.Headless" Version="11.3.18" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <!-- Reads the certificates a PKCS#11 device carries, so one can be registered as the caller's own
+         (#1398, ADR 0831). The package ships one assembly per ABI, which is why this project multi-targets —
+         see the TargetFrameworks comment above. -->
+    <PackageReference Include="HebelConsulting.CAManagement.Pkcs11" Version="0.7.0" />
     <!-- The client's own log (ADR 0613): a rolling text file beside its settings, because stderr goes nowhere in
          a packaged build. Same Serilog the server uses, so the levels mean one thing across the product. -->
     <PackageReference Include="Serilog" Version="4.2.0" />

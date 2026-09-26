@@ -1,0 +1,37 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:views="using:SimplArchive.DesktopClient.Views"
+        x:Class="SimplArchive.DesktopClient.Views.CardCertificateDialog"
+        Title="{loc:Tr CardTitle}" Width="560" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="10">
+        <TextBlock TextWrapping="Wrap" Text="{loc:Tr CardBody}" />
+
+        <!-- Every certificate on every token present, never a pre-picked one. A PIV card has four key slots and
+             may carry a certificate in each, and a user may have two readers plugged in — so which one to
+             register is theirs to say, and the list names the DEVICE as well as the subject so two cards with
+             similar names are still distinguishable. -->
+        <ListBox x:Name="CertificateList" MaxHeight="260" SelectionChanged="OnSelectionChanged">
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="views:CardCertificateRow">
+                    <StackPanel Margin="2" Spacing="2">
+                        <TextBlock Text="{Binding Subject}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Device}" FontSize="12" Foreground="{DynamicResource WbMuted}"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Concern}" FontSize="12" TextWrapping="Wrap"
+                                   IsVisible="{Binding HasConcern}" Foreground="#b45309" />
+                    </StackPanel>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <TextBlock x:Name="StatusText" Foreground="{DynamicResource WbMuted}" FontSize="12" TextWrapping="Wrap" />
+
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button x:Name="ChooseModuleButton" Content="{loc:Tr CardChooseModule}" Click="OnChooseModule" />
+            <Button x:Name="RegisterButton" Content="{loc:Tr CardRegister}" IsEnabled="False" Click="OnRegister" />
+            <Button Content="{loc:Tr Close}" Click="OnClose" IsCancel="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

@@ -65,7 +65,8 @@ build_one() {
   # -p:Version stamps the assembly's InformationalVersion, which is what the client reports as its own version
   # (ClientUpdate) + the update check compares against the release tag — WITHOUT it the build defaults to 1.0.0.
   # The CFBundleVersion in Info.plist below is separate macOS bundle metadata and does NOT affect this.
-  dotnet publish "$PROJECT" -c Release -r "$rid" --self-contained true \
+  # The project multi-targets since #1398; macOS is always the `net10.0` assembly (Unix CK_ULONG width).
+  dotnet publish "$PROJECT" -c Release -r "$rid" -f net10.0 --self-contained true \
     -p:Version="$VERSION" -p:PublishSingleFile=false -p:DebugType=none -p:DebugSymbols=false \
     -o "$publish_dir"
 

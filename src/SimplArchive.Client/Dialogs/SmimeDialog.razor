@@ -35,8 +35,8 @@
 
             @if (_selfService)
             {
-                @* Both entrances render always and DISABLE while a certificate is set (#1332's state
-                   machine) — the visible-but-disabled pair says "delete first", which hiding would not. *@
+                @* All three entrances render always and DISABLE while a certificate is set (#1332's state
+                   machine) — visible-but-disabled says "delete first", which hiding would not. *@
                 <MudDivider Class="my-3" />
                 <MudFileUpload T="IBrowserFile" FilesChanged="UploadAsync" Accept=".pem,.crt,.cer,.der" Class="d-inline-flex">
                     <CustomContent Context="upload">
@@ -56,6 +56,22 @@
                                Disabled="@(_enabled || _busy || string.IsNullOrWhiteSpace(_p12Password))">
                         @Strings.Get("SmimeGenerate")
                     </MudButton>
+                </div>
+
+                @* THE THIRD ENTRANCE, shown and permanently disabled (#1398). The desktop client reads the
+                   certificate off a card or token; a browser cannot reach a card reader at all, so this can
+                   never work here.
+
+                   Drawn rather than omitted, deliberately, and against the usual rule that an unavailable
+                   affordance is simply absent (ADR 0543): that rule makes absence mean "not available to you,
+                   HERE, NOW" — a fact about permission or state. This is a fact about the CLIENT, and a user
+                   who read the manual and then found nothing would conclude the feature does not exist rather
+                   than that it lives in the other client. The disabled row says which. *@
+                <div class="d-flex gap-2 align-center mt-3">
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.CreditCard" Disabled="true">
+                        @Strings.Get("SmimeAddCard")
+                    </MudButton>
+                    <MudText Typo="Typo.caption">@Strings.Get("SmimeCardOnly")</MudText>
                 </div>
             }
         </div>

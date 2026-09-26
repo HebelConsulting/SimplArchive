@@ -5034,6 +5034,48 @@
   <data name="SmimeExpires" xml:space="preserve">
     <value>Valido fino al</value>
   </data>
+  <data name="SmimeAddCard" xml:space="preserve">
+    <value>Aggiungi una carta o un token…</value>
+  </data>
+  <data name="SmimeCardOnly" xml:space="preserve">
+    <value>Per aggiungere una carta serve il client desktop: un browser non può raggiungere un lettore di carte.</value>
+  </data>
+  <data name="CardTitle" xml:space="preserve">
+    <value>Certificato su carta o token</value>
+  </data>
+  <data name="CardBody" xml:space="preserve">
+    <value>La chiave privata resta sul dispositivo. Viene registrato solo il certificato.</value>
+  </data>
+  <data name="CardNoModule" xml:space="preserve">
+    <value>Nessun modulo PKCS#11 trovato su questo computer. Installare OpenSC oppure scegliere il file del modulo.</value>
+  </data>
+  <data name="CardChooseModule" xml:space="preserve">
+    <value>Scegli modulo…</value>
+  </data>
+  <data name="CardNoToken" xml:space="preserve">
+    <value>Nessuna carta o token trovato in un lettore. Inserirlo e riprovare.</value>
+  </data>
+  <data name="CardNoCertificate" xml:space="preserve">
+    <value>Il dispositivo è stato letto, ma non contiene alcun certificato.</value>
+  </data>
+  <data name="CardReadFailed" xml:space="preserve">
+    <value>Impossibile leggere il dispositivo.</value>
+  </data>
+  <data name="CardRegister" xml:space="preserve">
+    <value>Registra questo certificato</value>
+  </data>
+  <data name="CardDevice" xml:space="preserve">
+    <value>Dispositivo</value>
+  </data>
+  <data name="CardConcernExpired" xml:space="preserve">
+    <value>Questo certificato è scaduto e verrà rifiutato.</value>
+  </data>
+  <data name="CardConcernNotYetValid" xml:space="preserve">
+    <value>Questo certificato non è ancora valido.</value>
+  </data>
+  <data name="CardConcernKeyUsage" xml:space="preserve">
+    <value>L'uso della chiave dichiarato non menziona la cifratura della chiave. Potrebbe funzionare comunque: molti dispositivi non lo impongono.</value>
+  </data>
   <data name="SmimeUpload" xml:space="preserve">
     <value>Carica certificato (.pem, .crt)</value>
   </data>

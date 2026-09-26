@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
@@ -55,6 +56,7 @@ public partial class SmimeDialog : Window
         NotAfterBox.Text = status.NotAfter?.ToString("yyyy-MM-dd") ?? string.Empty;
         DeleteButton.IsVisible = status.SelfService && status.Enabled;
         UploadButton.IsEnabled = status.SelfService && !status.Enabled;
+        AddCardButton.IsEnabled = status.SelfService && !status.Enabled;
         P12PasswordBox.IsEnabled = status.SelfService && !status.Enabled;
         GenerateButton.IsEnabled = status.SelfService && !status.Enabled
             && !string.IsNullOrWhiteSpace(P12PasswordBox.Text);
@@ -100,6 +102,38 @@ public partial class SmimeDialog : Window
         }
         catch
         {
+            StatusText.Text = Strings.Get("SmimeUploadError");
+        }
+    });
+
+    // Register what is already on a card or token (#1398, ADR 0831). The picker decides WHICH certificate —
+    // a device may carry several and a computer may have several devices — and registration is the same PUT
+    // the upload entrance makes, because what travels is the same thing: the public certificate. The private
+    // key never leaves the device, which is the entire reason to want this entrance.
+    private void OnAddCard(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (_status is not { } status)
+        {
+            return;
+        }
+
+        var picker = new CardCertificateDialog();
+        await picker.ShowDialog(this);
+        if (picker.ChosenPem is not { Length: > 0 } pem)
+        {
+            return;
+        }
+
+        try
+        {
+            Apply(await _api.Profile.UploadSmimeCertificateAsync(status, Encoding.UTF8.GetBytes(pem)));
+            StatusText.Text = string.Empty;
+        }
+        catch
+        {
+            // The same message as a failed upload, deliberately: from here the two are the same operation, and
+            // the reasons a server refuses (expired, malformed, self-service closed) do not depend on where the
+            // certificate came from.
             StatusText.Text = Strings.Get("SmimeUploadError");
         }
     });

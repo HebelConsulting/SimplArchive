@@ -410,8 +410,15 @@ key), or type a password and *generate* a complete identity: you get a `.p12` to
 stored on the server, and the password you typed is what the device asks for at import. From the next mail
 connection on, every message arrives encrypted to that certificate; your mail program decrypts it
 automatically once the identity is installed, and devices without it see only an encrypted attachment.
-While a certificate is set, upload and generate stay greyed out — *Delete certificate* switches your mail
-back to plain, and the two options come back. On installations where certificates are managed centrally,
+*Or read it off a card.*#idx("Smartcard") If your certificate lives on a smartcard or a USB token, *Add a card
+or token…* lists what your readers can see — every device, and every certificate on each — and registers the one
+you pick. Only the certificate is sent; the private key never leaves the device, which is the point of keeping it
+there. You are not asked for a PIN, because reading a certificate off a device does not need one. This is a
+desktop-client feature: a browser cannot reach a card reader, and the web client says so where the option would
+be.
+
+While a certificate is set, all three entrances stay greyed out — *Delete certificate* switches your mail
+back to plain, and they come back. On installations where certificates are managed centrally,
 the dialog says so and there is nothing to set up. The profile also installs the *archive's own mail-in
 certificate*: composing an encrypted message *to* the archive's ingest address (`archive@` your
 installation's mail domain) then works out of the box — the archive decrypts it on arrival and files a

@@ -105,6 +105,59 @@ public static class WindowShots
             return true;
         }
 
+        // Headless render of the card-certificate picker (#1398, ADR 0831): `--card-screenshot <out.png>`.
+        //
+        // The only way to LOOK at this window. It is a Window, so no VM-level test renders it, and the
+        // interesting states depend on hardware nobody's CI has. `--rows` injects synthetic rows so the populated
+        // layout — two devices, a subject that wraps, an amber concern line — can be checked without a card;
+        // without it the real reader runs and the figure shows whatever this machine actually has, which is how
+        // the empty and "no module" states get looked at.
+        var cardShotIndex = Array.IndexOf(args, "--card-screenshot");
+        if (cardShotIndex >= 0 && cardShotIndex + 1 < args.Length)
+        {
+            var cardLangIndex = Array.IndexOf(args, "--lang");
+            if (cardLangIndex >= 0 && cardLangIndex + 1 < args.Length)
+            {
+                SimplArchive.Localization.Culture.Apply(args[cardLangIndex + 1]);
+            }
+
+            if (args.Contains("--rows"))
+            {
+                Services.CardCertificates.Reader = _ =>
+                [
+                    new Services.CardCertificates.Found(
+                        "Florian Hebel (PIV test)", "862b4a1390bc153e", "Certificate for Key Management",
+                        SyntheticCertificate("CN=Florian Hebel, O=Hebel Consulting, C=CH",
+                            System.Security.Cryptography.X509Certificates.X509KeyUsageFlags.KeyEncipherment)),
+                    new Services.CardCertificates.Found(
+                        "Second reader", "0f1e2d3c4b5a6978", "Certificate for Digital Signature",
+                        SyntheticCertificate("CN=Florian Hebel (signing), O=Hebel Consulting, C=CH",
+                            System.Security.Cryptography.X509Certificates.X509KeyUsageFlags.DigitalSignature)),
+                ];
+                // A module path that EXISTS, so FindModule answers and the injected reader is reached — the
+                // probe is real code and must not be bypassed just because the reader is not.
+                //
+                // A throwaway temp file rather than this assembly's own path: Assembly.Location returns an
+                // EMPTY string in a single-file app, which is exactly how the packaged client is published, so
+                // the analyzer rejects it (IL3000) and warnings are errors here. The file's contents never
+                // matter — FindModule only asks whether something is there.
+                var stub = Path.Combine(Path.GetTempPath(), "simplarchive-card-screenshot.module");
+                File.WriteAllBytes(stub, []);
+                Services.CardCertificates.ModulePathOverride = stub;
+            }
+
+            AppBuilder.Configure<App>()
+                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .UseSkia()
+                .WithInterFont()
+                .SetupWithoutStarting();
+            var cardWin = new Views.CardCertificateDialog();
+            cardWin.Show();
+            Dispatcher.UIThread.RunJobs();
+            cardWin.CaptureRenderedFrame()?.Save(args[cardShotIndex + 1]);
+            return true;
+        }
+
         // Headless render of the server manager (ADR "Desktop server configuration") — catches XAML/binding load
         // crashes: `--servers-screenshot <out.png>`.
         var serversShotIndex = Array.IndexOf(args, "--servers-screenshot");
@@ -532,5 +585,19 @@ public static class WindowShots
             return true;
         }
         return false;
+    }
+
+    /// <summary>A certificate that exists only to fill a figure — never written anywhere, never registered.</summary>
+    private static System.Security.Cryptography.X509Certificates.X509Certificate2 SyntheticCertificate(
+        string subject, System.Security.Cryptography.X509Certificates.X509KeyUsageFlags usage)
+    {
+        using var key = System.Security.Cryptography.RSA.Create(2048);
+        var request = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+            subject, key, System.Security.Cryptography.HashAlgorithmName.SHA256,
+            System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+        request.CertificateExtensions.Add(
+            new System.Security.Cryptography.X509Certificates.X509KeyUsageExtension(usage, critical: false));
+
+        return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(2));
     }
 }

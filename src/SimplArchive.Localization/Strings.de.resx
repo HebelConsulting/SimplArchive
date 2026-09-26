@@ -5034,6 +5034,48 @@
   <data name="SmimeExpires" xml:space="preserve">
     <value>Gültig bis</value>
   </data>
+  <data name="SmimeAddCard" xml:space="preserve">
+    <value>Karte oder Token hinzufügen…</value>
+  </data>
+  <data name="SmimeCardOnly" xml:space="preserve">
+    <value>Zum Hinzufügen einer Karte wird der Desktop-Client benötigt — ein Browser erreicht kein Kartenlesegerät.</value>
+  </data>
+  <data name="CardTitle" xml:space="preserve">
+    <value>Zertifikat auf Karte oder Token</value>
+  </data>
+  <data name="CardBody" xml:space="preserve">
+    <value>Der private Schlüssel verbleibt auf dem Gerät. Registriert wird nur das Zertifikat.</value>
+  </data>
+  <data name="CardNoModule" xml:space="preserve">
+    <value>Auf diesem Computer wurde kein PKCS#11-Modul gefunden. Installieren Sie OpenSC oder wählen Sie die Moduldatei selbst aus.</value>
+  </data>
+  <data name="CardChooseModule" xml:space="preserve">
+    <value>Modul auswählen…</value>
+  </data>
+  <data name="CardNoToken" xml:space="preserve">
+    <value>In keinem Lesegerät wurde eine Karte oder ein Token gefunden. Bitte einlegen und erneut versuchen.</value>
+  </data>
+  <data name="CardNoCertificate" xml:space="preserve">
+    <value>Das Gerät wurde gelesen, enthält aber kein Zertifikat.</value>
+  </data>
+  <data name="CardReadFailed" xml:space="preserve">
+    <value>Das Gerät konnte nicht gelesen werden.</value>
+  </data>
+  <data name="CardRegister" xml:space="preserve">
+    <value>Dieses Zertifikat registrieren</value>
+  </data>
+  <data name="CardDevice" xml:space="preserve">
+    <value>Gerät</value>
+  </data>
+  <data name="CardConcernExpired" xml:space="preserve">
+    <value>Dieses Zertifikat ist abgelaufen und wird abgelehnt.</value>
+  </data>
+  <data name="CardConcernNotYetValid" xml:space="preserve">
+    <value>Dieses Zertifikat ist noch nicht gültig.</value>
+  </data>
+  <data name="CardConcernKeyUsage" xml:space="preserve">
+    <value>Die angegebene Schlüsselverwendung nennt keine Schlüsselverschlüsselung. Es kann dennoch funktionieren — viele Geräte erzwingen dies nicht.</value>
+  </data>
   <data name="SmimeUpload" xml:space="preserve">
     <value>Zertifikat hochladen (.pem, .crt)</value>
   </data>

@@ -82,6 +82,52 @@ internal static class Program
         // Register the Material Design Icons provider (backs the <i:Icon Value="mdi-…" /> glyphs).
         IconProvider.Current.Register<MaterialDesignIconProvider>();
 
+        // What is actually on the card in this reader: `--card-test` (#1398).
+        //
+        // A hook rather than a test, because no test can have a card. It prints every token present and every
+        // certificate on each — subject, expiry, key usage and whatever concern the classifier raises — so the
+        // enumeration can be checked against real hardware before the dialog is trusted to show it, and so a
+        // user reporting "my card is not offered" can be asked to run one command.
+        //
+        // No PIN: certificates are public objects. If this ever starts prompting, something has begun asking
+        // the token for private objects, and that is the bug rather than an inconvenience.
+        if (args.Contains("--card-test"))
+        {
+            var module = Services.CardCertificates.FindModule();
+            if (module is null)
+            {
+                Console.WriteLine("no PKCS#11 module found; looked in:");
+                foreach (var candidate in Services.CardCertificates.ModuleCandidates())
+                {
+                    Console.WriteLine($"  {candidate}");
+                }
+
+                Environment.Exit(1);
+            }
+
+            Console.WriteLine($"module: {module}");
+            try
+            {
+                var found = Services.CardCertificates.Read(module);
+                Console.WriteLine($"certificates found: {found.Count}");
+                foreach (var one in found)
+                {
+                    var concern = Services.CardCertificates.Concern(one.Certificate, DateTimeOffset.UtcNow);
+                    Console.WriteLine($"  token '{one.TokenLabel}' (serial {one.TokenSerial}) object '{one.ObjectLabel}'");
+                    Console.WriteLine($"    subject : {one.Certificate.Subject}");
+                    Console.WriteLine($"    expires : {one.Certificate.NotAfter:yyyy-MM-dd}");
+                    Console.WriteLine($"    concern : {concern}");
+                }
+
+                Environment.Exit(found.Count > 0 ? 0 : 1);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"reading the token FAILED: {e.GetType().Name}: {e.Message}");
+                Environment.Exit(1);
+            }
+        }
+
         // Check that the app icon reaches EVERY window, not just MainWindow: `--icon-test` (#421).
         //
         // Worth a hook of its own because the failure is invisible: the icon lives on the TITLE BAR, which a

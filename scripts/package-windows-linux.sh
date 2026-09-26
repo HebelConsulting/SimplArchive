@@ -44,9 +44,16 @@ build_one() {
   local publish_dir="$OUT_DIR/publish-$rid"
   local stage="$OUT_DIR/$stage_name"
 
-  echo "==> [$rid] Publishing $EXE_NAME (self-contained single-file, Release)…"
+  # The project multi-targets since #1398, so the framework has to be named or `dotnet publish` refuses.
+  # WHICH one is not cosmetic: PKCS#11's CK_ULONG is 4 bytes on Windows and 8 on Unix, and Windows also packs
+  # its structures to 1 byte — so publishing the Windows archive from the `net10.0` assembly would produce a
+  # client that mis-marshals every card call, and nothing in the build would say so.
+  local tfm="net10.0"
+  [[ "$rid" == win-* ]] && tfm="net10.0-windows"
+
+  echo "==> [$rid] Publishing $EXE_NAME (self-contained single-file, Release, $tfm)…"
   rm -rf "$publish_dir" "$stage"
-  dotnet publish "$PROJECT" -c Release -r "$rid" --self-contained true \
+  dotnet publish "$PROJECT" -c Release -r "$rid" -f "$tfm" --self-contained true \
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
     -p:EnableCompressionInSingleFile=true -p:DebugType=none -p:DebugSymbols=false \
     -p:Version="$VERSION" -o "$publish_dir"

@@ -52,7 +52,11 @@ public static class DesktopCapture
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        foreach (var a in new[] { "run", "--project", csproj, "--no-build", "--no-launch-profile", "--" })
+        // --framework is REQUIRED since the desktop client multi-targeted (#1398, ADR 0831): `dotnet run`
+        // refuses outright on a multi-target project, and every figure in the manual comes through here. The
+        // capture harness runs on Linux and macOS, so net10.0 is always the right one — the Windows TFM exists
+        // for the PKCS#11 ABI, not for rendering.
+        foreach (var a in new[] { "run", "--project", csproj, "--framework", "net10.0", "--no-build", "--no-launch-profile", "--" })
         {
             psi.ArgumentList.Add(a);
         }

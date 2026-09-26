@@ -32,10 +32,17 @@
         <TextBlock x:Name="NoneText" IsVisible="False" Foreground="{DynamicResource WbMuted}" FontSize="12"
                    TextWrapping="Wrap" Text="{loc:Tr SmimeNone}" />
 
-        <!-- Both entrances render always and DISABLE while a certificate is set (#1332's state machine) —
-             visible-but-disabled says "delete first", which hiding would not. -->
+        <!-- All THREE entrances render always and DISABLE while a certificate is set (#1332's state machine) —
+             visible-but-disabled says "delete first", which hiding would not. The panel itself is hidden where
+             self-service is closed (ADR 0813), so on an installation whose certificates are provisioned
+             centrally the card entrance is ABSENT rather than offered and then refused — which would send a
+             user to fetch their card for nothing. -->
         <StackPanel x:Name="SelfServicePanel" Spacing="8">
             <Button x:Name="UploadButton" Content="{loc:Tr SmimeUpload}" Click="OnUpload" />
+            <!-- The THIRD entrance (#1398): read the certificate off a card or token. Beside the other two and
+                 disabled on the same condition, because all three register the same thing — only the provenance
+                 of the certificate differs. -->
+            <Button x:Name="AddCardButton" Content="{loc:Tr SmimeAddCard}" Click="OnAddCard" />
             <TextBlock Text="{loc:Tr SmimeP12Password}" FontWeight="SemiBold" FontSize="12" />
             <DockPanel LastChildFill="True">
                 <Button x:Name="GenerateButton" DockPanel.Dock="Right" Margin="6,0,0,0"

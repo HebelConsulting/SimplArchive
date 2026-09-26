@@ -5034,6 +5034,48 @@
   <data name="SmimeExpires" xml:space="preserve">
     <value>Valid until</value>
   </data>
+  <data name="SmimeAddCard" xml:space="preserve">
+    <value>Add a card or token…</value>
+  </data>
+  <data name="SmimeCardOnly" xml:space="preserve">
+    <value>Adding a card requires the desktop client — a browser cannot reach a card reader.</value>
+  </data>
+  <data name="CardTitle" xml:space="preserve">
+    <value>Certificate on a card or token</value>
+  </data>
+  <data name="CardBody" xml:space="preserve">
+    <value>The private key stays on the device. Only the certificate is registered.</value>
+  </data>
+  <data name="CardNoModule" xml:space="preserve">
+    <value>No PKCS#11 module was found on this computer. Install OpenSC, or choose the module file yourself.</value>
+  </data>
+  <data name="CardChooseModule" xml:space="preserve">
+    <value>Choose module…</value>
+  </data>
+  <data name="CardNoToken" xml:space="preserve">
+    <value>No card or token was found in a reader. Insert it and try again.</value>
+  </data>
+  <data name="CardNoCertificate" xml:space="preserve">
+    <value>The device was read, but carries no certificate.</value>
+  </data>
+  <data name="CardReadFailed" xml:space="preserve">
+    <value>The device could not be read.</value>
+  </data>
+  <data name="CardRegister" xml:space="preserve">
+    <value>Register this certificate</value>
+  </data>
+  <data name="CardDevice" xml:space="preserve">
+    <value>Device</value>
+  </data>
+  <data name="CardConcernExpired" xml:space="preserve">
+    <value>This certificate has expired and will be refused.</value>
+  </data>
+  <data name="CardConcernNotYetValid" xml:space="preserve">
+    <value>This certificate is not valid yet.</value>
+  </data>
+  <data name="CardConcernKeyUsage" xml:space="preserve">
+    <value>Its stated key usage does not mention key encipherment. It may still work — many devices do not enforce this.</value>
+  </data>
   <data name="SmimeUpload" xml:space="preserve">
     <value>Upload certificate (.pem, .crt)</value>
   </data>
