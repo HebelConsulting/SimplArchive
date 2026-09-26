@@ -147,11 +147,16 @@ internal sealed class LmtpSession
         // transferring the body — and ADR 0628 requires 550 rather than a silent accept, so the sender learns.
         if ((await delivery.ResolveAsync(address, cancellationToken)).Count == 0)
         {
+            // The note is the difference between "none of three conditions held" and WHICH one the administrator
+            // meant to satisfy (#1369). Asked only here, on the refusal path, so it costs nothing normally — and
+            // it is null whenever there is nothing to add, which on a public-facing MTA is almost every refusal.
+            var note = await delivery.DescribeRefusalAsync(address, cancellationToken);
+
             _logger.LogWarning(
                 "LMTP: refused recipient {Address} — no tenant claims its domain, no user owns its local "
-                + "part, and no mailbox claims it. The MTA will bounce to the sender. Set "
+                + "part, and no mailbox claims it.{Note} The MTA will bounce to the sender. Set "
                 + "Serilog:MinimumLevel:Override:SimplArchive.Api.Lmtp to Trace to see the exchange",
-                address);
+                address, note is null ? string.Empty : $" {note}");
             await ReplyAsync("550 no such recipient here");
             return;
         }

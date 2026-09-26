@@ -180,6 +180,89 @@ public class LmtpDelivery
         return targets;
     }
 
+    /// <summary>
+    /// Why a refused recipient might have been MEANT to work — a note for the refusal's Warning, or null when
+    /// there is nothing to add (#1369).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// One wrong turn produced this, and it cost a debugging session: a <c>Mailbox</c> document was created and
+    /// <b>named</b> after the address, in the right folder, with the right mask — and mail to it bounced,
+    /// because a department mailbox claims addresses through its <c>eMail Addresses</c> field and <b>never</b>
+    /// through its name. Nothing anywhere said so. The document looked correct in the tree, correct in the
+    /// detail pane, and the refusal listed the three conditions that would have permitted delivery rather than
+    /// which one had failed. It was found by comparing field values against a mailbox known to work.
+    /// </para>
+    /// <para>
+    /// <b>Making the field required is the obvious fix and is wrong</b>, which is why this is a diagnostic
+    /// instead: a PERSONAL mailbox with no addresses is correct (it derives its address from its owner), and the
+    /// mask field-heal refuses required fields, so requiring it would strand every existing tenant. The product
+    /// genuinely permits both shapes; only one of them is a mistake, and this is where the difference can be
+    /// stated cheaply.
+    /// </para>
+    /// <para>
+    /// Called only on the refusal path, so its query costs nothing in the common case. It deliberately matches
+    /// on the document NAME — the same mistake being diagnosed — because that is the evidence that somebody
+    /// intended this address to work.
+    /// </para>
+    /// </remarks>
+    public async Task<string?> DescribeRefusalAsync(string address, CancellationToken cancellationToken)
+    {
+        if (address.Split('@') is not [{ Length: > 0 }, { Length: > 0 } domain])
+        {
+            return null;
+        }
+
+        // Only for a domain this installation actually serves: naming a document for mail addressed to
+        // somebody else's domain would be noise, and on a public-facing MTA most refusals are exactly that.
+        var tenantId = await _dbContext.TenantMailDomains.IgnoreQueryFilters(["TenantFilter"])
+            .Where(d => d.Domain.ToUpper() == domain.ToUpperInvariant() && d.VerifiedAt != null)
+            .Select(d => (Guid?)d.TenantId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (tenantId is not { } tenant)
+        {
+            return null;
+        }
+
+        // A Mailbox document NAMED after the refused address, in that tenant. Its claims are counted rather
+        // than assumed empty: a mailbox that claims OTHER addresses is a different (and much rarer) mistake,
+        // and saying "empty" about it would be false.
+        var named = await _dbContext.Documents.IgnoreQueryFilters(["TenantFilter"])
+            .Where(d => d.TenantId == tenant && d.Name.ToUpper() == address.ToUpperInvariant())
+            .Join(_dbContext.MaskVersions.IgnoreQueryFilters(["TenantFilter"]),
+                d => d.MaskVersionId, mv => mv.Id, (d, mv) => new { d.Id, d.Name, d.ParentId, mv.MaskId })
+            .Where(x => x.MaskId == WellKnownMaskIds.Mailbox)
+            .Select(x => new { x.Id, x.Name, x.ParentId })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (named is null)
+        {
+            return null;
+        }
+
+        var claims = await _dbContext.FieldValues.IgnoreQueryFilters(["TenantFilter"])
+            .Where(v => v.DocumentId == named.Id && v.Value != string.Empty)
+            .Join(_dbContext.FieldDefinitions.IgnoreQueryFilters(["TenantFilter"]),
+                v => v.FieldDefinitionId, f => f.Id, (v, f) => f.Name)
+            .CountAsync(n => n == WellKnownMaskSeeder.MailboxAddressesFieldName, cancellationToken);
+
+        var parentName = named.ParentId is { } parentId
+            ? await _dbContext.Documents.IgnoreQueryFilters(["TenantFilter"])
+                .Where(d => d.Id == parentId).Select(d => d.Name).FirstOrDefaultAsync(cancellationToken)
+            : null;
+
+        var where = parentName is null ? "at the top level" : $"in '{parentName}'";
+
+        return claims == 0
+            ? $"A Mailbox document NAMED '{named.Name}' exists {where} and its "
+                + $"'{WellKnownMaskSeeder.MailboxAddressesFieldName}' field is EMPTY — a mailbox claims addresses "
+                + "through that field, never through its name, so it receives nothing. Add the address to the field."
+            : $"A Mailbox document NAMED '{named.Name}' exists {where}, and it claims {claims} address(es) — but "
+                + "not this one. Check the spelling in its "
+                + $"'{WellKnownMaskSeeder.MailboxAddressesFieldName}' field.";
+    }
+
     /// <summary>Files the message and returns the LMTP reply line for THIS recipient.</summary>
     public async Task<string> DeliverAsync(string address, string sender, byte[] payload, CancellationToken cancellationToken)
     {
