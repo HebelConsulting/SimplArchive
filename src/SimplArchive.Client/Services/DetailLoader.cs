@@ -198,6 +198,7 @@ public sealed class DetailLoader(
         detail.SysCreatedAt = current.CreatedAt;
         detail.SysCreatedBy = current.CreatedByName ?? "";
         detail.SysOcrCandidate = candidate is not null;
+        detail.SysContentIsEnveloped = current.ContentIsEnveloped;
         detail.SysOcrVerdict = candidate?.Verdict;
         detail.MakeSearchableHref = candidate?.MakeSearchableHref;
         detail.SysOcrCodes = candidate?.OcrCodes ?? [];

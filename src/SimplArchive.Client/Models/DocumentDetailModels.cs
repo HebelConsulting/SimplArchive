@@ -90,6 +90,17 @@ public record VersionResponse
 
     public bool IsSigned { get; set; }
 
+    /// <summary>
+    /// True when this tenant delivers content ENVELOPED to the reader's own key (the strict tier), which a
+    /// browser cannot open — so this pane explains that instead of saying "no preview available" (#1352).
+    /// </summary>
+    /// <remarks>
+    /// The server states it because absence cannot be read: a strict version carries no <c>download</c> and no
+    /// <c>preview</c> rel, which is byte-for-byte what a failed rendition looks like. Two permanent conditions
+    /// needing different sentences, distinguishable only if the server says which.
+    /// </remarks>
+    public bool ContentIsEnveloped { get; set; }
+
     public List<LinkResponse> Links { get; set; } = [];
 }
 

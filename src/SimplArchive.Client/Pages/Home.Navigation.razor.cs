@@ -702,6 +702,9 @@ public partial class Home
         Detail.SysCreatedAt = null;
         Detail.SysCreatedBy = string.Empty;
         Detail.SysOcrCandidate = false;
+        // Cleared with the rest (ADR 0559): a stale true would tell the user a readable document needs the
+        // desktop client, and a stale false would report "no preview available" about an enveloped one.
+        Detail.SysContentIsEnveloped = false;
         Detail.SysOcrVerdict = null;
         Detail.MakeSearchableHref = null; // an address must not outlive its subject (ADR 0559)
         Detail.SysOcrCodes = [];

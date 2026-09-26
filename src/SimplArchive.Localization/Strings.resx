@@ -1083,6 +1083,9 @@
   <data name="PvExitFullscreen" xml:space="preserve">
     <value>Exit full screen (Esc)</value>
   </data>
+  <data name="PreviewEnvelopedUseDesktop" xml:space="preserve">
+    <value>This archive delivers documents enveloped to your personal key, which a web browser cannot open. Use the SimplArchive desktop client to read this document.</value>
+  </data>
   <data name="NoPreview" xml:space="preserve">
     <value>No preview available.</value>
   </data>

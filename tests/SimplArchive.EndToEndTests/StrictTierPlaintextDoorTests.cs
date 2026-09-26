@@ -43,6 +43,22 @@ public class StrictTierPlaintextDoorTests
         Assert.Contains("download", Rels(resource));
     }
 
+    // The flag that lets a CLIENT tell the two apart (#1352). Without it a strict version and a version whose
+    // rendition failed are byte-for-byte identical in the links — both carry neither `download` nor `preview` —
+    // so the web client reported "no preview available" about a document it is simply not allowed to render in a
+    // browser, which sends the reader looking for a broken file instead of to the desktop client.
+    [Fact]
+    public async Task A_strict_tenants_version_SAYS_its_content_is_enveloped_and_an_ordinary_one_does_not()
+    {
+        var strict = await VersionResourceAsync(E2EApiFactory.StrictTenantName);
+        Assert.True(strict.GetProperty("contentIsEnveloped").GetBoolean());
+
+        // The contrast, and the half that stops this passing on a build that answers true to everything —
+        // the same tenant that keeps its download above.
+        var ordinary = await VersionResourceAsync(E2EApiFactory.CryptoTenantName);
+        Assert.False(ordinary.GetProperty("contentIsEnveloped").GetBoolean());
+    }
+
     private static HashSet<string> Rels(JsonElement resource) =>
         resource.TryGetProperty("links", out var links)
             ? links.EnumerateArray()

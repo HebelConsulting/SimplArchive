@@ -155,6 +155,17 @@ public sealed class DetailState
     /// </summary>
     public bool SysOcrCandidate { get; set; }
 
+    /// <summary>
+    /// True when this tenant delivers content ENVELOPED to the reader's own key (the strict tier) — which a
+    /// browser cannot open, so the panes explain that rather than reporting a missing preview (#1352).
+    /// </summary>
+    /// <remarks>
+    /// Cleared with the rest of the subject's state on selection change, like every other value here: an
+    /// inherited claim about the wrong document is what ADR 0559 exists to prevent, and this one would
+    /// wrongly tell a user that a perfectly readable document needs the desktop client.
+    /// </remarks>
+    public bool SysContentIsEnveloped { get; set; }
+
     /// <summary>The candidate version's persisted verdict, null while unjudged — the quiet line that says
     /// why the automatic OCR did or did not run (ADR 0626's principle, in the pane).</summary>
     public string? SysOcrVerdict { get; set; }

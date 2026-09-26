@@ -444,7 +444,7 @@
                     <MudButton Class="wb-rib-btn" data-tour="action-new-folder" Size="Size.Small" Disabled="@(_selectedFolder is not { CanCreateChildren: true })" OnClick="() => NewFolderAsync(_selectedFolder)" title="@Strings.Get("NewFolder")" aria-label="@Strings.Get("NewFolder")">
                         <MudIcon Icon="@Icons.Material.Filled.CreateNewFolder" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("NewFolder")</span>
                     </MudButton>
-                    <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_downloadUrl is null)" OnClick="DownloadAsync" title="@Strings.Get("Download")" aria-label="@Strings.Get("Download")">
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_downloadUrl is null)" OnClick="DownloadAsync" title="@DownloadTooltip" aria-label="@Strings.Get("Download")">
                         <MudIcon Icon="@Icons.Material.Filled.Download" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("Download")</span>
                     </MudButton>
                     <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selectedItem is null)" OnClick="() => OpenVersionsAsync(_selectedItem!)" title="@Strings.Get("RibbonVersions")" aria-label="@Strings.Get("RibbonVersions")">
@@ -788,7 +788,7 @@
                                IPreviewAnnotationHost, because acting on one writes to the version's
                                annotation collection — document state this pane deliberately does not hold. *@
                             <PreviewPane @ref="_repoPreview" DataPane="preview" DataTour="pane-preview" CollapseGutter="true"
-                                         EmptyText="@(_selectedItem is null ? Strings.Get("NoDocSelected") : Strings.Get("NoPreview"))"
+                                         EmptyText="@PreviewEmptyText"
                                          ConvertedBadgeTooltip="@Strings.Get("ConvertedPreviewTooltip")"
                                          AnnotationHost="Annotations">
                                 <Toolbar>

@@ -45,6 +45,10 @@ public sealed class DocumentVersionResourceBuilder(
     public async Task<DocumentVersionResource> BuildAsync(VersionRow version, string documentName, CancellationToken cancellationToken)
     {
         var links = new List<Link> { new("self", $"/api/documents/{version.DocumentId}/versions/{version.Id}", "GET") };
+
+        // Declared here rather than inside the confirmed-version branch below, because the resource is built for
+        // a pending version too and the answer — does this TENANT envelope? — is the same either way.
+        var enveloping = false;
         var previewConverted = false;
 
         if (version.Status == DocumentVersionStatus.Confirmed)
@@ -68,7 +72,8 @@ public sealed class DocumentVersionResourceBuilder(
             // And they are emitted ONLY when this reader has a usable certificate. A rel that is always
             // present and sometimes fails is the lying affordance 0543 exists to prevent; absent, it means
             // exactly "not available to you, here, now", and the client offers enrolment instead of a button.
-            var envelopeCertificate = await envelopes.AppliesAsync(cancellationToken)
+            enveloping = await envelopes.AppliesAsync(cancellationToken);
+            var envelopeCertificate = enveloping
                 ? await envelopes.ReaderCertificateAsync(cancellationToken)
                 : null;
 
@@ -163,6 +168,10 @@ public sealed class DocumentVersionResourceBuilder(
             Comment = version.Comment,
             OcrVerdict = version.OcrVerdict?.ToString(),
             IsSigned = version.IsSigned == true,
+            // Stated rather than left to be inferred from the absent rels (#1352): a strict tenant's version
+            // looks exactly like one whose rendition failed, and "no preview available" is the wrong
+            // explanation for a browser that cannot open an envelope by construction.
+            ContentIsEnveloped = enveloping,
             Links = links,
         };
     }

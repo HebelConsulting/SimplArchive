@@ -1083,6 +1083,9 @@
   <data name="PvExitFullscreen" xml:space="preserve">
     <value>Esci dallo schermo intero (Esc)</value>
   </data>
+  <data name="PreviewEnvelopedUseDesktop" xml:space="preserve">
+    <value>Questo archivio consegna i documenti cifrati per la vostra chiave personale e un browser web non può aprirli. Per leggere questo documento utilizzate il client desktop SimplArchive.</value>
+  </data>
   <data name="NoPreview" xml:space="preserve">
     <value>Nessuna anteprima disponibile.</value>
   </data>
