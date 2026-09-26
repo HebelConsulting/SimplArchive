@@ -704,7 +704,8 @@ you may see; a folder you have no rights to simply is not there, rather than bei
   [Calendar], [*CalDAV*#idx("CalDAV")], [Calendars and your task deadlines — see @davsub],
   [File manager], [*WebDAV*#idx("WebDAV")], [One mountable drive — see @webdav],
   [Notes app], [IMAP], [Notes with real version history — see @imap],
-  [Browser], [—], [The full workbench, on any screen],
+  [Browser], [—], [The full workbench, on any screen — except opening encrypted content,
+    see @encryptedreads],
 )
 
 == One password for your devices
@@ -885,6 +886,39 @@ stranger which of those they hit would confirm a real link exists and hint at ho
   [The recipient's view: the document's name and a picture of its first page. This one is a single page, so it
    carries no page-count marker. No account, one document, nothing else reachable from it.])
 
+== Sharing to one named recipient <linkcertificate>
+
+An external link is open by construction: whoever holds the URL can open the document. When that is too much, the
+link can be *addressed to a certificate*#idx("External link (encrypted)") instead — and then only the holder of
+the matching private key can read what it delivers.
+
+*How you do it.* In the create dialog, paste the recipient's certificate (their `.pem` or `.crt` — the
+certificate only, never a private key) into the certificate field before creating the link. The dialog reads it
+and shows you back the *subject* and the *fingerprint* it found.
+
+#note[
+  *Check the subject and fingerprint before you send the link.* They are your only confirmation that the
+  certificate is the one you meant, and addressing a document to the wrong key cannot be undone: the person you
+  intended will not be able to open it, and whoever holds the key you actually used will. The remedy is to revoke
+  the link and create a new one — an existing link cannot be re-addressed.
+]
+
+#shot("screenshots/web-external-link-certificate.png",
+  [Addressing a link to a recipient: the pasted certificate is described back as its subject and fingerprint,
+   which is what to check before sending the URL.])
+
+*What the recipient gets.* The landing page looks the same, but the download hands them a `.p7m` — the document
+inside an encrypted envelope addressed to their certificate. Mail software that handles S/MIME opens it with
+their own key; a browser or file manager cannot, and will simply save a file they must open with the right
+program. Tell them to expect that, because a `.p7m` nobody warned them about reads as a broken download.
+
+*Where the archive itself is encrypted, this is the only way to share outward.* On such an installation the
+archive serves no readable content at all, so a link with no recipient is one it could never fulfil — and the
+dialog *refuses to create one*, rather than letting you send a URL that fails when it is opened. The certificate
+is not an option there but the requirement. Two smaller differences follow from the same cause: the recipient's
+page carries *no picture of the first page* (the picture is content too), and *Open document* has nothing to
+show inline, so downloading the envelope is the whole of what the link does.
+
 == The controls an administrator holds
 
 Sharing outward is the one action that leaves the system, so it is gated twice and can be stopped in one move.
@@ -944,6 +978,32 @@ follows from the account you sign in with.
 
 #shot("screenshots/desktop-server-manager.png",
   [The desktop server manager: connection profiles for several SimplArchive servers.])
+
+== When the archive hands you encrypted content <encryptedreads>
+
+On an installation configured for it, the archive does not serve readable document content at all. What arrives
+is an *envelope addressed to your own certificate*#idx("Encrypted content") — the same certificate you registered
+to make your mail readable (see @imap) — and it is opened on your own machine, with your own key, by the client
+you are working in.
+
+Two consequences are worth meeting in a manual rather than in the application, because neither looks like what it
+is.
+
+*Without a registered certificate, download and preview are not offered.* Not refused with an error — *absent*.
+The document, its index data and its history all still render; the buttons that would hand you content simply
+are not there. That is deliberate: a button that fails when clicked teaches nothing, while a missing one, beside
+the certificate entry in your account menu, points at the remedy. Register a certificate and the buttons appear.
+
+*The desktop client opens these envelopes; the web client cannot.* A browser has no access to the certificate
+store your private key lives in, so on such an installation reading documents is work for the desktop client.
+The web client stays fully usable for everything that is not content — browsing, index data, search results,
+workflow, administration.
+
+#note[
+  *A key held on a smartcard never leaves it.* Where your private key lives on a card or a token rather than in a
+  file, the card performs the one operation that opens each envelope, and the key itself is never read out — not
+  by the archive, not by the client, not by anything else running on the machine.
+]
 
 == Encryption of the archive itself <encryptionservice>
 

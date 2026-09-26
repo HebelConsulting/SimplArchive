@@ -451,6 +451,25 @@ public static partial class WebCapture
     // click timed out. Hence the fallback to the dialog's own close control, and hence this throws rather than
     // logging on failure — a capture that continues past an undismissed modal cannot do anything but fail
     // sixty seconds later, somewhere that looks unrelated.
+    /// <summary>A throwaway certificate to paste into the recipient field, so the figure shows a real subject.</summary>
+    /// <remarks>
+    /// Generated rather than committed as a fixture: a certificate on disk expires, and an expired one is
+    /// REFUSED by the same validation the figure is meant to illustrate — so the capture would start failing on a
+    /// date nobody chose. The name is stable so the wait above can key on it.
+    /// </remarks>
+    private static string SampleRecipientCertificatePem()
+    {
+        using var key = System.Security.Cryptography.RSA.Create(2048);
+        var request = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+            "CN=Auditor (external), O=Example Audit", key,
+            System.Security.Cryptography.HashAlgorithmName.SHA256,
+            System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+        using var certificate = request.CreateSelfSigned(
+            DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(2));
+
+        return new string(System.Security.Cryptography.PemEncoding.Write("CERTIFICATE", certificate.RawData));
+    }
+
     private static async Task DismissAnyDialogAsync(IPage page)
     {
         var scrim = page.Locator(".mud-overlay-scrim");
@@ -545,6 +564,37 @@ public static partial class WebCapture
             await page.GetByRole(AriaRole.Button, new() { Name = "External links…" }).First.ClickAsync();
             var dialog = page.Locator(".mud-dialog").First;
             await dialog.WaitForAsync(new() { Timeout = 10000 });
+
+            // THE CERTIFICATE FIELD, shot before anything is created (#1395). The form — expiry, uses, recipient
+            // certificate — is what the dialog shows until the primary button is pressed, so this figure and the
+            // one below are two different states of the same dialog rather than two dialogs.
+            //
+            // The subject and fingerprint the field describes back are the sharer's only check that they are
+            // addressing the person they meant, which is what the figure has to show — an empty field would be a
+            // picture of a text box.
+            step = "describe a recipient certificate";
+            var recipient = SampleRecipientCertificatePem();
+            await dialog.GetByLabel("Recipient certificate").FillAsync(recipient);
+
+            // Wait for the SERVER's answer, not a fixed pause: the description is fetched (this runtime cannot
+            // parse an X.509 certificate at all), so shooting too early would produce a figure of the field with
+            // no description — the one thing it exists to show.
+            step = "wait for the certificate description";
+            await dialog.GetByText("CN=Auditor", new() { Exact = false }).First.WaitForAsync(new() { Timeout = 15000 });
+
+            // Scrolled back to the top: filling a textarea leaves the caret at the END, so the figure would
+            // otherwise open on the base64 tail and the "-----END CERTIFICATE-----" line — a picture of noise,
+            // where the reader needs to recognise the shape of what they are being asked to paste.
+            await dialog.Locator("textarea").First.EvaluateAsync("el => el.scrollTop = 0");
+            await page.WaitForTimeoutAsync(400);
+            await ShotAsync(page, outDir, "external-link-certificate");
+
+            // CLEARED before creating, deliberately. Leaving it would make the next figure an enveloped link and
+            // the landing-page figure a .p7m download — quietly changing two figures that document the ordinary
+            // case, with nothing in their filenames to say so.
+            step = "clear the certificate field";
+            await dialog.GetByLabel("Recipient certificate").FillAsync(string.Empty);
+            await page.WaitForTimeoutAsync(300);
 
             step = "click Create external link";
             await dialog.GetByRole(AriaRole.Button, new() { Name = "Create external link…" }).ClickAsync();
