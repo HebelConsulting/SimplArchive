@@ -114,6 +114,58 @@ public class StrictTierEnvelopedReadTests
         Assert.StartsWith("http", download, StringComparison.Ordinal);
     }
 
+    // THE TENANT SHAPE ADR 0813 ACTUALLY DESCRIBES, and the one that did not work (#1433). Self-service is
+    // closed for exactly the tenants the envelope client serves, so nothing writes User.SmimeCertificatePem —
+    // and this read path consulted only that column, so every reader on a properly-configured strict tenant got
+    // a permanent 409. The certificate lives in the Encryption Service's registry, which has a real provisioning
+    // door and which the notification dispatcher has always consulted; this path was the one that did not.
+    [Fact]
+    public async Task A_certificate_held_by_the_SERVICE_is_found_and_the_envelope_opens_with_its_key()
+    {
+        var reader = await StrictReaderAsync(withCertificate: false, withRegistryCertificate: true);
+
+        // The rel is advertised at all — which is the half that was broken: with nothing on the user row and the
+        // registry unconsulted, the resource carried no door and the client correctly offered nothing.
+        using var response = await reader.Api.GetAsync(reader.EnvelopeHref);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+        Assert.DoesNotContain(Marker, Encoding.ASCII.GetString(bytes), StringComparison.Ordinal);
+
+        // And it is addressed to the REGISTRY's key. Asserting the 200 alone would pass on an envelope built to
+        // some other certificate, which is exactly the mistake a "found it" check cannot see.
+        var message = await MimeMessage.LoadAsync(new MemoryStream(bytes));
+        using var context = new TemporarySecureMimeContext();
+        await context.ImportAsync(new MemoryStream(reader.Pkcs12), "reader");
+        var enveloped = Assert.IsAssignableFrom<ApplicationPkcs7Mime>(message.Body);
+        var decrypted = Assert.IsAssignableFrom<MimePart>(enveloped.Decrypt(context));
+
+        using var opened = new MemoryStream();
+        Assert.NotNull(decrypted.Content);
+        await decrypted.Content!.DecodeToAsync(opened);
+        Assert.Equal($"{Marker} inside the strict document\n", Encoding.ASCII.GetString(opened.ToArray()));
+    }
+
+    [Fact]
+    public async Task The_users_OWN_certificate_still_wins_over_the_registry()
+    {
+        // The precedence, which matches the notification dispatcher's (`column ?? registry`). It matters because
+        // the desktop's card flow registers a certificate the USER holds (ADR 0831) — a registry entry must not
+        // override the key actually in the reader's hand, or the envelope would be addressed to something they
+        // cannot open.
+        var reader = await StrictReaderAsync(withCertificate: true, withRegistryCertificate: true);
+
+        using var response = await reader.Api.GetAsync(reader.EnvelopeHref);
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+
+        // Opened with the USER's key, not the registry's — the registry's p12 is deliberately not imported here.
+        var message = await MimeMessage.LoadAsync(new MemoryStream(bytes));
+        using var context = new TemporarySecureMimeContext();
+        await context.ImportAsync(new MemoryStream(reader.Pkcs12), "reader");
+        var enveloped = Assert.IsAssignableFrom<ApplicationPkcs7Mime>(message.Body);
+        Assert.IsAssignableFrom<MimePart>(enveloped.Decrypt(context));
+    }
+
     private sealed record Reader(
         HttpClient Api, JsonElement Version, string? EnvelopeHrefOrNull, string ForcedEnvelopeHref, byte[] Pkcs12)
     {
@@ -121,11 +173,12 @@ public class StrictTierEnvelopedReadTests
             ?? throw new InvalidOperationException("the version advertises no enveloped-content address");
     }
 
-    private Task<Reader> StrictReaderAsync(bool withCertificate) =>
-        ReaderAsync(E2EApiFactory.StrictTenantName, withCertificate);
+    private Task<Reader> StrictReaderAsync(bool withCertificate, bool withRegistryCertificate = false) =>
+        ReaderAsync(E2EApiFactory.StrictTenantName, withCertificate, withRegistryCertificate);
 
     /// <summary>A signed-in reader in a tenant, a document with content, and that version's addresses.</summary>
-    private async Task<Reader> ReaderAsync(string tenantName, bool withCertificate)
+    private async Task<Reader> ReaderAsync(
+        string tenantName, bool withCertificate, bool withRegistryCertificate = false)
     {
         var tenantId = await _factory.SeedTenantNamedAsync(tenantName);
 
@@ -150,6 +203,18 @@ public class StrictTierEnvelopedReadTests
                 .SingleAsync(u => u.TenantId == tenantId && u.NormalizedEmail == email.ToUpperInvariant());
             user.SmimeCertificatePem = pem;
             await db.SaveChangesAsync();
+        }
+
+        // …or in the SERVICE's registry, which is where a strict tenant's identities actually live (#1433) and
+        // needs no database handle — the provisioning door is HTTP. When both are present the user's own wins,
+        // so this overwrites the key the test opens with only when the row is empty.
+        if (withRegistryCertificate)
+        {
+            var registryPkcs12 = _factory.RegisterEncryptionCertificate(email);
+            if (!withCertificate)
+            {
+                pkcs12 = registryPkcs12;
+            }
         }
 
         var repository = (await TestJson.Post(api, "/api/repositories",

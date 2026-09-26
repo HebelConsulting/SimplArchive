@@ -40,8 +40,19 @@ public sealed class StrictEnvelopeDelivery(
     ICurrentUserAccessor currentUser,
     EncryptionModes modes,
     IObjectStorageClient storage,
-    SmimeMessageEnveloper enveloper)
+    SmimeMessageEnveloper enveloper,
+    SimplArchive.Infrastructure.Encryption.MessageEnvelopeClient registry)
 {
+    // MEMOISED FOR THE REQUEST, which is all this class lives for (registered scoped). The resource builder
+    // asks ReaderCertificateAsync once per version, so a versions dialog asks several times — and since #1433
+    // the answer can cost an outbound call to the encryption service. Per-request is also the only caching
+    // that needs no policy: a certificate REVOKED between requests is re-read on the next one, so there is no
+    // window in which a withdrawn reading certificate is still handed out.
+    //
+    // Null is a real answer here ("no usable certificate"), so the fact of having asked is its own flag.
+    private bool _asked;
+    private string? _certificate;
+
     /// <summary>True when this tenant serves content only as an envelope.</summary>
     public async Task<bool> AppliesAsync(CancellationToken cancellationToken)
     {
@@ -50,14 +61,23 @@ public sealed class StrictEnvelopeDelivery(
             return false;
         }
 
-        var name = await dbContext.Tenants
-            .IgnoreQueryFilters(["TenantFilter"])
-            .Where(t => t.Id == tenantId)
-            .Select(t => t.Name)
-            .FirstOrDefaultAsync(cancellationToken);
-
+        var name = await TenantNameAsync(cancellationToken);
         return name is not null && modes.IsStrict(name);
     }
+
+    /// <summary>This request's tenant NAME, which is what the mode map and the registry are both keyed by.</summary>
+    /// <remarks>
+    /// One query rather than two spellings of it: the mode lookup and the certificate registry ask the same
+    /// question, and a second copy is how they would come to disagree about which tenant this is.
+    /// </remarks>
+    private async Task<string?> TenantNameAsync(CancellationToken cancellationToken) =>
+        tenant.TenantId is not { } tenantId
+            ? null
+            : await dbContext.Tenants
+                .IgnoreQueryFilters(["TenantFilter"])
+                .Where(t => t.Id == tenantId)
+                .Select(t => t.Name)
+                .FirstOrDefaultAsync(cancellationToken);
 
     /// <summary>
     /// Refuses when this tenant serves no readable content and the door cannot carry an envelope.
@@ -80,11 +100,37 @@ public sealed class StrictEnvelopeDelivery(
     /// rels be advertised to this reader?".
     /// </summary>
     /// <remarks>
+    /// <para>
     /// USABLE, not merely present: a stored certificate that no longer parses would otherwise produce a rel
-    /// whose request fails, which is the affordance ADR 0543 exists to prevent. Reading it costs a parse per
-    /// resource build, against a column that is empty for almost every installation.
+    /// whose request fails, which is the affordance ADR 0543 exists to prevent.
+    /// </para>
+    /// <para>
+    /// <b>Two sources, and the second one is why this tier worked at all (#1433).</b> The user's own column is
+    /// asked first; where it is empty, the ENCRYPTION SERVICE's registry is asked. That is not a new idea — it
+    /// is the precedence <c>EmailNotificationDispatcher</c> has always used — and this path was simply missing
+    /// it, which made the strict tier unusable on a tenant configured the way ADR 0813 describes: self-service
+    /// is closed for exactly the tenants the envelope client serves, so nothing writes the column, and the
+    /// registry (which has a real <c>PUT …/certificate</c> door) was never consulted. Every reader got a
+    /// permanent 409.
+    /// </para>
+    /// <para>
+    /// Both sources are VALIDATED the same way, because "unusable" has to mean the same thing wherever the
+    /// certificate came from — otherwise the rel's presence would depend on which source answered.
+    /// </para>
     /// </remarks>
     public async Task<string?> ReaderCertificateAsync(CancellationToken cancellationToken)
+    {
+        if (_asked)
+        {
+            return _certificate;
+        }
+
+        _asked = true;
+        _certificate = await FindCertificateAsync(cancellationToken);
+        return _certificate;
+    }
+
+    private async Task<string?> FindCertificateAsync(CancellationToken cancellationToken)
     {
         if (currentUser.UserId is not { } userId)
         {
@@ -93,11 +139,30 @@ public sealed class StrictEnvelopeDelivery(
             return null;
         }
 
-        var pem = await dbContext.Users
+        var reader = await dbContext.Users
             .Where(u => u.Id == userId)
-            .Select(u => u.SmimeCertificatePem)
+            .Select(u => new { u.SmimeCertificatePem, u.Email })
             .FirstOrDefaultAsync(cancellationToken);
 
+        if (Usable(reader?.SmimeCertificatePem) is { } own)
+        {
+            return own;
+        }
+
+        // The registry, for the tenants whose identities are provisioned centrally — which is precisely the
+        // population whose self-service is closed. Asked only when the column is empty, so an installation that
+        // registers into the core pays nothing for this.
+        if (reader?.Email is not { Length: > 0 } email || await TenantNameAsync(cancellationToken) is not { } name)
+        {
+            return null;
+        }
+
+        return Usable(await registry.TryGetCertificatePemAsync(name, email, cancellationToken));
+    }
+
+    /// <summary>The certificate if it parses, else null — the same judgement for both sources.</summary>
+    private static string? Usable(string? pem)
+    {
         if (string.IsNullOrWhiteSpace(pem))
         {
             return null;
@@ -110,8 +175,8 @@ public sealed class StrictEnvelopeDelivery(
         }
         catch (Errors.Exceptions.ExternalLinks.InvalidRecipientCertificateException)
         {
-            // Registered but unusable. The rel disappears and the reader is told to register a current one,
-            // which is a better answer than a button that fails.
+            // Present but unusable. The rel disappears and the reader is told to register a current one, which
+            // is a better answer than a button that fails.
             return null;
         }
     }

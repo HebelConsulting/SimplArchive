@@ -148,6 +148,30 @@ public sealed partial class E2EApiFactory : WebApplicationFactory<Program>, IAsy
 
     public void RegisterEncryptionRecipient(string email) => _encryptionRecipients[email] = true;
 
+    // A certificate held by the SERVICE's registry rather than on the user row (#1433). That is how a strict
+    // tenant's identities actually arrive — self-service is closed for exactly those tenants (ADR 0813), and the
+    // service has the provisioning door (PUT /api/users/{email}/certificate) — so a test that planted the column
+    // instead would be testing a state no installation can reach.
+    //
+    // Returns the PKCS#12 so the test can OPEN what the server envelopes: proving the certificate was found is
+    // not the same as proving the envelope is addressed to its key.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _registryCertificates =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    public byte[] RegisterEncryptionCertificate(string email, string password = "reader")
+    {
+        using var key = System.Security.Cryptography.RSA.Create(2048);
+        var request = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+            $"CN={email}", key, System.Security.Cryptography.HashAlgorithmName.SHA256,
+            System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+        using var certificate = request.CreateSelfSigned(
+            DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(1));
+
+        _registryCertificates[email] = certificate.ExportCertificatePem();
+        return certificate.Export(
+            System.Security.Cryptography.X509Certificates.X509ContentType.Pkcs12, password);
+    }
+
     /// <summary>Raw storage access for tests that must see what the BUCKET holds — the at-rest tests'
     /// whole point is that stored bytes differ from served bytes (ADR 0818), which no API-level read can
     /// show (the decorator decrypts every server-side path).</summary>
@@ -176,6 +200,14 @@ public sealed partial class E2EApiFactory : WebApplicationFactory<Program>, IAsy
                 + "\r\nMIAGCSqGSIb3DQEHA6CAMIACAQA=\r\n";
             return Results.Bytes(System.Text.Encoding.ASCII.GetBytes(enveloped), "message/rfc822");
         });
+
+        // The registry lookup the core asks when a user's own column is empty — the source a strict tenant's
+        // identities actually live in (#1433). A real PEM, because the core VALIDATES it and then envelopes to
+        // it; a marker string would pass the fetch and fail the parse, which is the wrong half to stub.
+        app.MapGet("/api/users/{email}/certificate", (string email) =>
+            _registryCertificates.TryGetValue(email, out var pem)
+                ? Results.Text(pem, "application/x-pem-file")
+                : Results.NotFound());
 
         // The at-rest half (ADR 0818): unlike the envelope leg, these two answer with REAL crypto — an
         // in-memory RSA keypair standing in for the HSM. The decorator's whole write path runs through
