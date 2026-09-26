@@ -194,6 +194,14 @@ public sealed class TestModule : IIndustryModule
     [
         new ModuleSetting("endpoint", "Service endpoint", Description: "Where the fixture would call."),
         new ModuleSetting("apiSecret", "API secret", IsSecret: true),
+        // A CHOICE (ABI 0.29): one decision whose values are a fixed set, rather than independent flags an
+        // administrator could combine into something meaningless. Declared here because the host's refusal of
+        // an undeclared value is only provable against a module that declares some.
+        new ModuleSetting("posture", "Posture", Description: "How strictly the fixture behaves.")
+        {
+            Kind = ModuleSettingKind.Choice,
+            Choices = ["strict", "permissive"],
+        },
     ];
 
     public void ConfigureServices(IServiceCollection services)

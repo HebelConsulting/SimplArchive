@@ -40,6 +40,22 @@
                             <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2 d-block">@item.Description</MudText>
                         }
                     }
+                    else if (item.Kind == "Choice")
+                    {
+                        @* One decision, so one control whose values are the declared set — a text box would let
+                           an administrator save a combination that means nothing, and the server would refuse it
+                           after the fact. The empty option is what expresses "no value": it clears the setting,
+                           and it is also what a stale stored value falls back to (ModuleSettingsForm.ChoiceEntry). *@
+                        <MudSelect T="string" Label="@item.Label" @bind-Value="_entries[item.Key]"
+                                   Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2 wb-mod-setting"
+                                   HelperText="@item.Description" Clearable="false">
+                            <MudSelectItem T="string" Value="@string.Empty">@Strings.Get("ModSettingsNotSet")</MudSelectItem>
+                            @foreach (var choice in item.Choices)
+                            {
+                                <MudSelectItem T="string" Value="@choice">@choice</MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
                     else
                     {
                         <MudTextField T="string" Label="@item.Label" @bind-Value="_entries[item.Key]"
@@ -92,9 +108,14 @@
                 // to prefill and an empty box must not be read as "clear it".
                 // A Boolean has no "untouched" state to preserve — an absent row IS false, so the box starts
                 // unchecked and saving writes whichever way the user left it.
-                _entries[item.Key] = item.Kind == "Boolean"
-                    ? (string.Equals(item.Value, "true", StringComparison.OrdinalIgnoreCase) ? "true" : "false")
-                    : item.IsSecret ? string.Empty : item.Value ?? string.Empty;
+                // A Choice starts on its stored value only while the module still declares it — the shared
+                // rule, because dropping a stale value is a decision the two clients must make identically.
+                _entries[item.Key] = item.Kind switch
+                {
+                    "Boolean" => string.Equals(item.Value, "true", StringComparison.OrdinalIgnoreCase) ? "true" : "false",
+                    "Choice" => SimplArchive.Presentation.ModuleSettingsForm.ChoiceEntry(item.Choices, item.Value),
+                    _ => item.IsSecret ? string.Empty : item.Value ?? string.Empty,
+                };
             }
         }
         catch (Exception)
@@ -145,6 +166,7 @@
         public string? Description { get; set; }
         public bool IsSecret { get; set; }
         public string Kind { get; set; } = "Text";
+        public List<string> Choices { get; set; } = [];
         public bool HasValue { get; set; }
         public string? Value { get; set; }
     }

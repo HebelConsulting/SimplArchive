@@ -64,6 +64,72 @@ public class ModuleLoaderTests
         Assert.False(ModuleLoader.AbiCompatible(-1));
     }
 
+    // A Choice with no choices (ABI 0.29) is a module-declaration defect whose symptoms all point at the CORE:
+    // the form offers a chooser with nothing in it, and every value the tenant tries is refused by the very
+    // validation that compares against the empty list. So the host says whose fault it is — once, at load,
+    // because the defect is a property of the build rather than of a request.
+    [Fact]
+    public void A_choice_declaring_no_values_is_named_at_load()
+    {
+        var logger = new CapturingLogger();
+
+        ModuleLoader.WarnAboutUnusableSettings(new SettingsModule(
+        [
+            new ModuleSetting("fine", "A text setting"),
+            new ModuleSetting("posture", "Posture") { Kind = ModuleSettingKind.Choice, Choices = ["strict"] },
+            new ModuleSetting("empty", "Chooses nothing") { Kind = ModuleSettingKind.Choice },
+        ]), logger);
+
+        var warning = Assert.Single(logger.Warnings);
+        Assert.Contains("empty", warning);
+        Assert.Contains("settings-module", warning);
+
+        // And the module still loads: an unusable form control is no reason to withhold its masks, its
+        // controllers and its state machines from a tenant that is licensed for them.
+        Assert.DoesNotContain("NOT loaded", warning);
+    }
+
+    private sealed class SettingsModule(IReadOnlyList<ModuleSetting> settings) : IIndustryModule
+    {
+        public string ModuleId => "settings-module";
+
+        public string DisplayName => "Settings declaration fixture";
+
+        public int AbiMajorVersion => ModuleAbiVersion.Major;
+
+        public string LicenseVerifyKeyPem => string.Empty;
+
+        public IReadOnlyList<ModuleMaskSeed> Masks => [];
+
+        public IReadOnlyList<ModuleSetting> Settings { get; } = settings;
+
+        public void ConfigureServices(IServiceCollection services)
+        {
+        }
+    }
+
+    private sealed class CapturingLogger : Microsoft.Extensions.Logging.ILogger
+    {
+        public List<string> Warnings { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            Microsoft.Extensions.Logging.LogLevel logLevel,
+            Microsoft.Extensions.Logging.EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel == Microsoft.Extensions.Logging.LogLevel.Warning)
+            {
+                Warnings.Add(formatter(state, exception));
+            }
+        }
+    }
+
     [Fact]
     public void A_missing_directory_means_no_modules_not_an_error()
     {

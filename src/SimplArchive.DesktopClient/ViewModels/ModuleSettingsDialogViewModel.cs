@@ -89,13 +89,32 @@ public sealed partial class ModuleSettingEntryViewModel : ObservableObject
         IsSecret = setting.IsSecret;
         HasValue = setting.HasValue;
         IsBoolean = string.Equals(setting.Kind, "Boolean", StringComparison.Ordinal);
+        IsChoice = string.Equals(setting.Kind, "Choice", StringComparison.Ordinal);
+
+        // The empty option FIRST and always: it is how the form expresses "no value" — clearing the setting so
+        // the module falls back to whatever it does without one — and it is also what a stored value the module
+        // no longer declares lands on. It carries a LABEL rather than being a blank row, which would read as a
+        // list that failed to load.
+        Choices = IsChoice
+            ?
+            [
+                new ModuleSettingChoice(string.Empty, Strings.Get("ModSettingsNotSet")),
+                .. (setting.Choices ?? []).Select(c => new ModuleSettingChoice(c, c)),
+            ]
+            : [];
 
         // A secret starts EMPTY even when set: its value never crossed the wire, so there is nothing to
         // prefill — and the watermark is what says the box being empty does not mean "not configured".
         // A Boolean has no such state: an absent row IS false, so it starts unchecked and saves either way.
-        Entry = IsBoolean
-            ? (string.Equals(setting.Value, "true", StringComparison.OrdinalIgnoreCase) ? "true" : "false")
-            : setting.IsSecret ? string.Empty : setting.Value ?? string.Empty;
+        // A Choice starts on its stored value only while the module still declares it (the shared rule —
+        // dropping a stale value is a decision both clients must make identically).
+        Entry = setting.Kind switch
+        {
+            "Boolean" => string.Equals(setting.Value, "true", StringComparison.OrdinalIgnoreCase) ? "true" : "false",
+            "Choice" => SimplArchive.Presentation.ModuleSettingsForm.ChoiceEntry(
+                setting.Choices ?? [], setting.Value),
+            _ => setting.IsSecret ? string.Empty : setting.Value ?? string.Empty,
+        };
     }
 
     public string Key { get; }
@@ -110,9 +129,24 @@ public sealed partial class ModuleSettingEntryViewModel : ObservableObject
     /// else, so a text field would hand the administrator a way to fail the save (ABI 0.27).</summary>
     public bool IsBoolean { get; }
 
-    /// <summary>The text form's visibility — the two are mutually exclusive, and expressing the negation here
+    /// <summary>One decision, so one control offering the declared values — an administrator cannot type a
+    /// combination that means nothing and learn it was refused only on save (ABI 0.29).</summary>
+    public bool IsChoice { get; }
+
+    /// <summary>What the chooser offers, the empty "no value" option first.</summary>
+    public IReadOnlyList<ModuleSettingChoice> Choices { get; }
+
+    /// <summary>The chooser's two-way face over the string the form actually sends — the same arrangement as
+    /// <see cref="Checked"/>, and for the same reason: what travels is the module's own value, verbatim.</summary>
+    public ModuleSettingChoice? SelectedChoice
+    {
+        get => Choices.FirstOrDefault(c => string.Equals(c.Value, Entry, StringComparison.Ordinal));
+        set => Entry = value?.Value ?? string.Empty;
+    }
+
+    /// <summary>The text form's visibility — the three are mutually exclusive, and expressing the negation here
     /// keeps the template free of a converter that only this one screen would use.</summary>
-    public bool IsText => !IsBoolean;
+    public bool IsText => !IsBoolean && !IsChoice;
 
     /// <summary>The checkbox's two-way face over the string the form actually sends.</summary>
     public bool Checked
@@ -137,5 +171,14 @@ public sealed partial class ModuleSettingEntryViewModel : ObservableObject
     /// <summary>Raised from the hook that actually changes the value <see cref="Checked"/> is computed FROM.
     /// A computed property notified from the wrong hook — or from none — is a control that silently stops
     /// tracking the state it draws.</summary>
-    partial void OnEntryChanged(string value) => OnPropertyChanged(nameof(Checked));
+    partial void OnEntryChanged(string value)
+    {
+        OnPropertyChanged(nameof(Checked));
+        OnPropertyChanged(nameof(SelectedChoice));
+    }
 }
+
+/// <summary>One option a <c>Choice</c> setting offers: the value the module stores, and what the form shows for
+/// it. The two differ only for the empty "not set" option — a module's values are its own vocabulary and are
+/// never translated here (ADR 0767 leaves that to the module).</summary>
+public sealed record ModuleSettingChoice(string Value, string Display);

@@ -54,6 +54,10 @@ public sealed class TestModuleController : ControllerBase
 
         /// <summary>A key this module never declared: must read as null, never another module's value.</summary>
         public string? Undeclared { get; set; }
+
+        /// <summary>The CHOICE's value — read back verbatim, which is the whole reason the host compares it
+        /// that way rather than case-insensitively (ABI 0.29).</summary>
+        public string? Posture { get; set; }
     }
 
     /// <summary>
@@ -69,6 +73,7 @@ public sealed class TestModuleController : ControllerBase
             Endpoint = await facade.GetSettingAsync("endpoint", cancellationToken),
             ApiSecret = await facade.GetSettingAsync("apiSecret", cancellationToken),
             Undeclared = await facade.GetSettingAsync("nothing-declares-this", cancellationToken),
+            Posture = await facade.GetSettingAsync("posture", cancellationToken),
             Links = [new Link("self", "/api/test-module/settings-seen", "GET")],
         });
 

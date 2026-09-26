@@ -280,9 +280,12 @@ public sealed class AdminClient(ApiCore core)
     /// one is set (ADR 0772); the module reads the plaintext, the administrator never does.</summary>
     public sealed record ModuleSettingInfo(
         string Key, string Label, string? Description, bool IsSecret, bool HasValue, string? Value,
-        // What the value holds (ABI 0.27) — "Text" or "Boolean". Defaulted rather than required so an
+        // What the value holds (ABI 0.27) — "Text", "Boolean" or "Choice". Defaulted rather than required so an
         // older server, which sends no kind at all, still parses as the text form it has always been.
-        string Kind = "Text");
+        string Kind = "Text",
+        // A Choice's permitted values (ABI 0.29); empty for every other kind, and empty from an older server,
+        // which is the same thing a module declaring none would send — a chooser with nothing to choose.
+        IReadOnlyList<string>? Choices = null);
 
     /// <summary>A filed license artefact the Activate dialog offers — the stamped fields are the verified
     /// claims' projection and stay empty until a license has been through a successful activation.</summary>
@@ -345,7 +348,11 @@ public sealed class AdminClient(ApiCore core)
                     s.GetProperty("isSecret").GetBoolean(),
                     s.GetProperty("hasValue").GetBoolean(),
                     s.TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null,
-                    s.TryGetProperty("kind", out var k) && k.ValueKind == JsonValueKind.String ? k.GetString() ?? "Text" : "Text"));
+                    s.TryGetProperty("kind", out var k) && k.ValueKind == JsonValueKind.String ? k.GetString() ?? "Text" : "Text",
+                    s.TryGetProperty("choices", out var ch) && ch.ValueKind == JsonValueKind.Array
+                        ? ch.EnumerateArray().Where(c => c.ValueKind == JsonValueKind.String)
+                            .Select(c => c.GetString()!).ToList()
+                        : null));
             }
         }
 

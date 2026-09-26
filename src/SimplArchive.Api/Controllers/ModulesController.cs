@@ -345,6 +345,16 @@ public class ModulesController : ControllerBase
                 throw new ModuleSettingValueInvalidException(moduleId, key);
             }
 
+            // A Choice means one of the declared values or it means nothing — the same argument as the
+            // Boolean above, generalised (ABI 0.29). Compared VERBATIM, because the values are the setting's
+            // vocabulary rather than display text: a case-insensitive match would let two spellings of one
+            // choice both be stored, and the module reading them back would have to know that.
+            if (setting.Kind == ModuleAbi.ModuleSettingKind.Choice && !string.IsNullOrEmpty(value)
+                && !setting.Choices.Contains(value, StringComparer.Ordinal))
+            {
+                throw new ModuleSettingValueInvalidException(moduleId, key);
+            }
+
             var row = existing.FirstOrDefault(v => string.Equals(v.Key, key, StringComparison.Ordinal));
 
             if (string.IsNullOrEmpty(value))
@@ -456,6 +466,7 @@ public class ModulesController : ControllerBase
                     Description = setting.Description,
                     IsSecret = setting.IsSecret,
                     Kind = setting.Kind.ToString(),
+                    Choices = setting.Choices,
                     HasValue = stored is not null,
                     // A secret's value never crosses the wire; a plain setting's does, or the form could not
                     // show what it is about to change.
@@ -486,6 +497,16 @@ public class ModulesController : ControllerBase
         /// <summary>What the value holds, so the form draws a checkbox rather than a text box (ABI 0.27).
         /// Serialized as the enum's NAME, which is what a client matches on.</summary>
         public string Kind { get; set; } = nameof(ModuleAbi.ModuleSettingKind.Text);
+
+        /// <summary>
+        /// The permitted values for a <c>Choice</c>; empty for every other kind (ABI 0.29).
+        /// </summary>
+        /// <remarks>
+        /// Carried in the resource rather than fetched separately: a client that had to ask for the choices
+        /// would be composing a second address for something that belongs to the setting it is already
+        /// holding (ADR 0557 — one read, many follows).
+        /// </remarks>
+        public IReadOnlyList<string> Choices { get; set; } = [];
 
         /// <summary>Whether a value is configured — the only thing reported for a secret.</summary>
         public bool HasValue { get; set; }

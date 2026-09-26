@@ -43,7 +43,7 @@ public class ModuleSettingsTests
             // what this assertion is really guarding, since the PUT refuses anything not in it.
             var before = await TestJson.Get(rig.Admin, SettingsUrl);
             var declared = before.GetProperty("items").EnumerateArray().ToList();
-            Assert.Equal(["apiSecret", "core.protocolReadRefresh", "endpoint"],
+            Assert.Equal(["apiSecret", "core.protocolReadRefresh", "endpoint", "posture"],
                 declared.Select(i => i.GetProperty("key").GetString()).Order());
             Assert.All(declared, item => Assert.False(item.GetProperty("hasValue").GetBoolean()));
 
@@ -51,6 +51,11 @@ public class ModuleSettingsTests
             // a box you type "true" into — and an older server that sends none must still read as text.
             Assert.Equal("Boolean", Item(before, "core.protocolReadRefresh").GetProperty("kind").GetString());
             Assert.Equal("Text", Item(before, "endpoint").GetProperty("kind").GetString());
+
+            // A Choice carries its vocabulary WITH it (ABI 0.29) — the chooser's values, in the same read that
+            // named the setting. Its own behaviour is pinned below; this is the form seeing it at all.
+            Assert.Equal("Choice", Item(before, "posture").GetProperty("kind").GetString());
+            Assert.Empty(Item(before, "endpoint").GetProperty("choices").EnumerateArray());
 
             await TestJson.Put(rig.Admin, SettingsUrl, new
             {
@@ -313,6 +318,62 @@ public class ModuleSettingsTests
             var items = (await TestJson.Get(rig.Admin, SettingsUrl)).GetProperty("items").EnumerateArray();
             Assert.False(items.Single(i => i.GetProperty("key").GetString() == ProtocolReadRefreshSetting.Key)
                 .GetProperty("hasValue").GetBoolean());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", null);
+        }
+    }
+
+    // The Choice's two halves, which are one fact: the declared values reach the form, and nothing else can be
+    // stored. Either half alone is worse than neither — a form offering the right list while the server accepts
+    // anything means an administrator who edits by script silently configures a value the module cannot read,
+    // and a server refusing values the form does not show is a Save that fails for no visible reason.
+    [Fact]
+    public async Task A_choice_carries_its_values_to_the_form_and_refuses_anything_else()
+    {
+        var rig = await RigAsync();
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", vendorKey.ExportSubjectPublicKeyInfoPem());
+        try
+        {
+            await ActivateAsync(rig, vendorKey);
+
+            var declared = Item(await TestJson.Get(rig.Admin, SettingsUrl), "posture");
+            Assert.Equal("Choice", declared.GetProperty("kind").GetString());
+            Assert.Equal(
+                ["strict", "permissive"],
+                declared.GetProperty("choices").EnumerateArray().Select(c => c.GetString() ?? string.Empty).ToArray());
+
+            var refused = await rig.Admin.PutAsJsonAsync(SettingsUrl, new
+            {
+                values = new Dictionary<string, string?> { ["posture"] = "lenient" },
+            });
+            Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+            Assert.Equal("MODULE_SETTING_VALUE_INVALID",
+                JsonSerializer.Deserialize<JsonElement>(await refused.Content.ReadAsStringAsync())
+                    .GetProperty("errorCode").GetString());
+
+            // Verbatim, not case-insensitively: the value is the module's own vocabulary, and accepting a second
+            // spelling would mean the module reading it back has to know about both.
+            Assert.Equal(HttpStatusCode.BadRequest, (await rig.Admin.PutAsJsonAsync(SettingsUrl, new
+            {
+                values = new Dictionary<string, string?> { ["posture"] = "Strict" },
+            })).StatusCode);
+
+            Assert.False(Item(await TestJson.Get(rig.Admin, SettingsUrl), "posture")
+                .GetProperty("hasValue").GetBoolean());
+
+            // A declared value stores, reads back, and is what the MODULE sees — the whole point of the setting.
+            Assert.True((await rig.Admin.PutAsJsonAsync(SettingsUrl, new
+            {
+                values = new Dictionary<string, string?> { ["posture"] = "permissive" },
+            })).IsSuccessStatusCode);
+
+            Assert.Equal("permissive", Item(await TestJson.Get(rig.Admin, SettingsUrl), "posture")
+                .GetProperty("value").GetString());
+            Assert.Equal("permissive",
+                (await TestJson.Get(rig.Admin, "/api/test-module/settings-seen")).GetProperty("posture").GetString());
         }
         finally
         {

@@ -27,6 +27,23 @@ public static class ModuleSettingsForm
     public readonly record struct Field(string Key, bool IsSecret, string Entry);
 
     /// <summary>
+    /// What a <c>Choice</c> field's control starts on (ABI 0.29): the stored value when the module still
+    /// declares it, otherwise nothing selected.
+    /// </summary>
+    /// <remarks>
+    /// The case this exists for is a module UPGRADE that drops or renames a choice while a tenant still has the
+    /// old value stored. The host refuses any value outside the declared list, so the old one cannot be saved
+    /// back — meaning there is no arrangement in which showing it helps: offering it produces a form whose Save
+    /// always fails. Starting on nothing instead states the truth, that the tenant has to choose again, and the
+    /// empty option every client renders is what makes that visible rather than looking like a control that
+    /// failed to load. Shared because the alternative is one client clearing a value the other preserves.
+    /// </remarks>
+    public static string ChoiceEntry(IReadOnlyList<string> choices, string? storedValue) =>
+        storedValue is { Length: > 0 } stored && choices.Contains(stored, StringComparer.Ordinal)
+            ? stored
+            : string.Empty;
+
+    /// <summary>
     /// The key → value map to PUT: every field the user meant to change, and nothing else.
     /// </summary>
     public static Dictionary<string, string?> ValuesToSend(IEnumerable<Field> fields)

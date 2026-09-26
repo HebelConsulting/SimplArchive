@@ -46,6 +46,25 @@ public sealed record ModuleSetting(
     /// is exactly how ABI 0.21 took the kiosk down for 1h34m (#1147).
     /// </remarks>
     public ModuleSettingKind Kind { get; init; } = ModuleSettingKind.Text;
+
+    /// <summary>
+    /// The permitted values when <see cref="Kind"/> is <see cref="ModuleSettingKind.Choice"/>; empty otherwise.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// INIT-ONLY, for the same reason as <see cref="Kind"/> and with the same evidence behind it (ADR 0789):
+    /// a fifth primary-constructor parameter changes the record's constructor, and a module compiled against
+    /// an older ABI then dies with <c>MissingMethodException</c> — <b>after loading successfully</b>, so the
+    /// version gate does not catch it. That is how ABI 0.21 took the kiosk down for 1h34m (#1147).
+    /// </para>
+    /// <para>
+    /// The values are stored and compared VERBATIM — they are the setting's vocabulary, not display text. A
+    /// module that wants a translated label renders it from the value, the way every other module-supplied
+    /// text works (ADR 0767); putting the label here would make the stored value depend on the reader's
+    /// language.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<string> Choices { get; init; } = [];
 }
 
 /// <summary>What a <see cref="ModuleSetting"/> holds (ABI 0.27).</summary>
@@ -59,4 +78,18 @@ public enum ModuleSettingKind
     /// else, so a typo cannot become a third state nobody handles.
     /// </summary>
     Boolean = 1,
+
+    /// <summary>
+    /// One of a fixed set the module declares in <see cref="ModuleSetting.Choices"/>. The host renders a
+    /// select and refuses a value outside the set — the same guarantee <see cref="Boolean"/> gives,
+    /// generalised beyond two.
+    /// </summary>
+    /// <remarks>
+    /// Reach for this when the answers are one decision rather than independent flags. The first case was
+    /// <i>"may users register their own certificates, and how?"</i> — off, hardware only, or any method — and
+    /// encoding it as two booleans would have let an administrator save a combination that means nothing
+    /// (<i>may not enrol, but may generate</i>). A set makes the illegal states unrepresentable, which is the
+    /// same reason <see cref="Boolean"/> exists rather than <see cref="Text"/> holding <c>"true"</c>.
+    /// </remarks>
+    Choice = 2,
 }

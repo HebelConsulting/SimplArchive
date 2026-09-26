@@ -45,6 +45,32 @@ public class ModuleSettingsFormTests
         Assert.Null(values["endpoint"]);
     }
 
+    // A Choice's starting value (ABI 0.29). The case worth pinning is the module UPGRADE: a value the module
+    // no longer declares cannot be saved back — the host refuses it — so a form that offered it would have a
+    // Save that always fails. Starting on nothing says "choose again", which is the truth.
+    [Fact]
+    public void A_choice_starts_on_its_stored_value_while_the_module_still_declares_it()
+    {
+        Assert.Equal("permissive", ModuleSettingsForm.ChoiceEntry(["strict", "permissive"], "permissive"));
+    }
+
+    [Fact]
+    public void A_choice_whose_stored_value_is_no_longer_declared_starts_on_nothing()
+    {
+        Assert.Equal(string.Empty, ModuleSettingsForm.ChoiceEntry(["strict", "permissive"], "lenient"));
+
+        // Verbatim, like the host's own comparison: a differently-spelled value is a value the module cannot
+        // read, so treating it as a match would put the form one Save away from a refusal.
+        Assert.Equal(string.Empty, ModuleSettingsForm.ChoiceEntry(["strict", "permissive"], "Strict"));
+    }
+
+    [Fact]
+    public void An_unconfigured_choice_starts_on_nothing()
+    {
+        Assert.Equal(string.Empty, ModuleSettingsForm.ChoiceEntry(["strict"], null));
+        Assert.Equal(string.Empty, ModuleSettingsForm.ChoiceEntry([], "strict"));
+    }
+
     [Fact]
     public void Nothing_typed_at_all_sends_nothing()
     {

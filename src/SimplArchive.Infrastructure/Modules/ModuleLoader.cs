@@ -94,6 +94,8 @@ public static class ModuleLoader
                     var build = assembly.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()
                         ?.InformationalVersion;
 
+                    WarnAboutUnusableSettings(module, logger);
+
                     logger.LogInformation("Loaded module {ModuleId} ({DisplayName}) build {Build} from {Path}.",
                         module.ModuleId, module.DisplayName, build ?? "unknown", candidate);
                     loaded.Add(new LoadedModule(module, candidate, build));
@@ -112,6 +114,31 @@ public static class ModuleLoader
         }
 
         return loaded;
+    }
+
+    /// <summary>
+    /// Names any setting the host will be unable to offer — currently a <c>Choice</c> declaring no
+    /// <see cref="ModuleSetting.Choices"/> (ABI 0.29). The module still loads: an unusable form control is not
+    /// a reason to withhold its masks, its controllers and its state machines.
+    /// </summary>
+    /// <remarks>
+    /// Said ONCE, at load, rather than on every settings read — the defect is a property of the build, so a
+    /// per-request warning would be the same sentence thousands of times. And said at all because the failure
+    /// is otherwise invisible in both directions (ADR 0626): the form renders a chooser with nothing to choose,
+    /// and every value a tenant tries is refused by the validation that compares against the empty list. The
+    /// administrator would conclude the setting is broken by the CORE, with nothing pointing at the module.
+    /// </remarks>
+    public static void WarnAboutUnusableSettings(IIndustryModule module, ILogger logger)
+    {
+        foreach (var setting in module.Settings.Where(
+            s => s.Kind == ModuleSettingKind.Choice && s.Choices.Count == 0))
+        {
+            logger.LogWarning(
+                "Module {ModuleId} declares setting '{Key}' as a Choice but offers no choices. The form can offer "
+                + "nothing and every value will be refused — the module must declare its permitted values. The "
+                + "rest of the module is loaded normally.",
+                module.ModuleId, setting.Key);
+        }
     }
 
     /// <summary>The compat rule, its own method so the refusal is testable without loading anything:

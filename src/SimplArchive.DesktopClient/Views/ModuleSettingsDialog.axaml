@@ -22,6 +22,17 @@
                                  HorizontalAlignment="Stretch" IsVisible="{Binding IsText}" />
                         <CheckBox Content="{Binding Label}" IsChecked="{Binding Checked}"
                                   IsVisible="{Binding IsBoolean}" />
+                        <!-- One decision, one control: the values are the module's declared set, so an
+                             administrator cannot enter a combination that means nothing (ABI 0.29). -->
+                        <TextBlock Text="{Binding Label}" FontSize="12" IsVisible="{Binding IsChoice}" />
+                        <ComboBox ItemsSource="{Binding Choices}" SelectedItem="{Binding SelectedChoice}"
+                                  HorizontalAlignment="Stretch" IsVisible="{Binding IsChoice}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ModuleSettingChoice">
+                                    <TextBlock Text="{Binding Display}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
                         <TextBlock Text="{Binding Description}" FontSize="11" TextWrapping="Wrap"
                                    Foreground="{DynamicResource WbMuted}" IsVisible="{Binding HasDescription}" />
                     </StackPanel>

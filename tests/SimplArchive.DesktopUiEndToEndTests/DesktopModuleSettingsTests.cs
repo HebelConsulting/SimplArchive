@@ -54,6 +54,74 @@ public class DesktopModuleSettingsTests
         Assert.Equal('\0', plain.PasswordChar);   // Avalonia's "no masking"
     }
 
+    // A CHOICE renders as a chooser over the declared values (ABI 0.29, ADR 0835) — not a text box, which
+    // would let an administrator type something the server then refuses, and not a pair of checkboxes, which
+    // can express a combination that means nothing.
+    [Fact]
+    public void A_choice_offers_the_declared_values_with_an_empty_option_first()
+    {
+        var posture = Entry(new AdminClient.ModuleSettingInfo(
+            "posture", "Door posture", Description: null, IsSecret: false, HasValue: true, Value: "permissive",
+            Kind: "Choice", Choices: ["strict", "permissive"]));
+
+        Assert.True(posture.IsChoice);
+        Assert.False(posture.IsText);        // the three controls are mutually exclusive
+        Assert.False(posture.IsBoolean);
+
+        // The empty option FIRST, and LABELLED: it is how the form says "no value" — which clears the setting —
+        // and a blank row would read as a list that failed to load.
+        Assert.Equal(string.Empty, posture.Choices[0].Value);
+        Assert.NotEqual(string.Empty, posture.Choices[0].Display);
+        Assert.Equal(["strict", "permissive"], posture.Choices.Skip(1).Select(c => c.Value));
+
+        // The stored value is selected, and the module's own value is what it carries — never a translation.
+        Assert.Equal("permissive", posture.SelectedChoice?.Value);
+        Assert.Equal("permissive", posture.SelectedChoice?.Display);
+    }
+
+    [Fact]
+    public void Choosing_the_empty_option_clears_the_setting()
+    {
+        var posture = Entry(new AdminClient.ModuleSettingInfo(
+            "posture", "Door posture", null, IsSecret: false, HasValue: true, Value: "strict",
+            Kind: "Choice", Choices: ["strict", "permissive"]));
+
+        posture.SelectedChoice = posture.Choices[0];
+
+        // An empty entry on a non-secret is sent as null, which the server's merge reads as "clear it" — so the
+        // chooser can express "no value" rather than being a one-way door into a configured state.
+        Assert.Equal(string.Empty, posture.Entry);
+        Assert.Null(SimplArchive.Presentation.ModuleSettingsForm.ValuesToSend(
+            [new(posture.Key, posture.IsSecret, posture.Entry)])[posture.Key]);
+    }
+
+    // The module-UPGRADE case: a value the module no longer declares cannot be saved back, because the host
+    // refuses anything outside the list. So the chooser starts on nothing — "choose again" — rather than
+    // showing a value whose Save would always fail.
+    [Fact]
+    public void A_stored_value_the_module_no_longer_declares_starts_on_nothing()
+    {
+        var posture = Entry(new AdminClient.ModuleSettingInfo(
+            "posture", "Door posture", null, IsSecret: false, HasValue: true, Value: "lenient",
+            Kind: "Choice", Choices: ["strict", "permissive"]));
+
+        Assert.Equal(string.Empty, posture.Entry);
+        Assert.Equal(string.Empty, posture.SelectedChoice?.Value);
+    }
+
+    // An older server sends no `choices` at all. It must degrade to a chooser with nothing to choose — the same
+    // visible state as a module that declared none — rather than throwing while the dialog builds.
+    [Fact]
+    public void A_choice_with_no_declared_values_still_builds()
+    {
+        var empty = Entry(new AdminClient.ModuleSettingInfo(
+            "posture", "Door posture", null, IsSecret: false, HasValue: false, Value: null, Kind: "Choice"));
+
+        Assert.True(empty.IsChoice);
+        Assert.Single(empty.Choices);            // the empty option, and nothing to pick
+        Assert.Equal(string.Empty, empty.Entry);
+    }
+
     // The affordance follows the server's answer (ADR 0543): a module that declares no settings gets no rel,
     // and therefore no button — rather than a button opening an empty form.
     [Fact]

@@ -4998,6 +4998,9 @@
   <data name="ModSettingsLoading" xml:space="preserve">
     <value>Cargando…</value>
   </data>
+  <data name="ModSettingsNotSet" xml:space="preserve">
+    <value>(sin definir)</value>
+  </data>
   <data name="ModSettingsSecretSet" xml:space="preserve">
     <value>configurado — dejar vacío para conservarlo</value>
   </data>
