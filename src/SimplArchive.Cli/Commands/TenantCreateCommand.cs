@@ -47,13 +47,18 @@ public sealed class TenantCreateCommand : AsyncCommand<TenantCreateCommand.Setti
 
         await api.AuthenticateAsPlatformAdministratorAsync(settings.ClientId, settings.ResolvedSecret, cancellationToken);
 
-        var created = await api.PostAsync("api/tenants", new
-        {
-            name = settings.Name,
-            administratorEmail = settings.AdministratorEmail,
-            administratorDisplayName = settings.AdministratorDisplayName,
-            repositoryName = settings.RepositoryName,
-        }, cancellationToken);
+        // FOLLOWED, not composed (ADR 0543, #1409). The root emits `tenants` only to a platform administrator,
+        // so authenticating FIRST is what makes it visible — and a refusal here names the honest cause: either
+        // the installation predates the rel, or this principal is not a platform administrator. Composing the
+        // path instead would have turned the second case into a 403 from a URL the tool invented.
+        var created = await api.PostAsync(
+            await new Hypermedia(api).RootHrefAsync("tenants", cancellationToken), new
+            {
+                name = settings.Name,
+                administratorEmail = settings.AdministratorEmail,
+                administratorDisplayName = settings.AdministratorDisplayName,
+                repositoryName = settings.RepositoryName,
+            }, cancellationToken);
 
         var administrator = created.GetProperty("tenantAdministrator");
         var password = administrator.GetProperty("password").GetString();

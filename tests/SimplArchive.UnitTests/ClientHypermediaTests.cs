@@ -91,11 +91,11 @@ public partial class ClientHypermediaTests
         // which is why it is counted here rather than matching the api/ pattern by accident.
         ["src/SimplArchive.Cli/Infrastructure/Hypermedia.cs"] = 1,
 
-        // AND ONE GENUINE GAP, recorded rather than hidden: nothing in the API advertises a rel for
-        // provisioning a tenant — `grep 'Link("tenants"' src` finds nothing — so a conforming client CANNOT
-        // reach it, which by ADR 0543's own terms makes the endpoint incomplete rather than this tool
-        // non-conforming. Tracked as #1409. When the rel lands, this line goes with the composed URL.
-        ["src/SimplArchive.Cli/Commands/TenantCreateCommand.cs"] = 1,
+        // There used to be one more: TenantCreateCommand composed "api/tenants" because nothing advertised a
+        // rel for provisioning a tenant. That was recorded as a GAP IN THE API rather than a tool exception,
+        // and #1409 closed it — the root now emits `tenants` (with the three other platform-administrator
+        // collections) to a platform administrator, and the command follows it. The entry is gone rather than
+        // lowered to 0, because a file that composes nothing does not belong in a list of exceptions.
     };
 
     [Fact]

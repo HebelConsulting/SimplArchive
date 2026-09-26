@@ -12,15 +12,59 @@ namespace SimplArchive.Api.Controllers;
 /// <summary>
 /// The API root discovery document — see ADR "API discoverability / root endpoint design", ADR
 /// "Repositories controller and Document creation". Public, no authentication required; individual
-/// linked resources still enforce their own auth/ACL once followed. "admin" links to a route that
-/// doesn't exist yet (separate future work) — the link exists so a client can discover it once it does.
+/// linked resources still enforce their own auth/ACL once followed.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Anonymous, and the tenant-scoped rels are emitted to everyone: what a caller may DO is answered by the
+/// resource they follow to, not by the root's list. The exception is the PLATFORM-ADMINISTRATOR rels below,
+/// which are conditional — see <see cref="PlatformAdministratorLinks"/> for why that difference is not an
+/// inconsistency.
+/// </para>
+/// <para>
+/// The <c>admin</c> rel is the TENANT-admin surface (<see cref="AdminController"/>, the synthetic
+/// "Administration → Users" branch), not the platform one. Said here because the name invites the other
+/// reading, and because this comment claimed for a long time that the route "doesn't exist yet" — it had
+/// existed for months, which is the kind of stale note that makes a reader distrust the rest.
+/// </para>
+/// </remarks>
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api")]
 [AllowAnonymous]
 public class RootController : ControllerBase
 {
+    /// <summary>
+    /// The four collections only a platform administrator may use, which until #1409 were reachable by NO rel —
+    /// so a conforming client had to conclude they did not exist, and the one tool that needed them composed a
+    /// path instead.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Conditional, unlike every other rel here</b>, and the difference is not arbitrary. A tenant-scoped rel
+    /// is emitted to everyone because the caller is a member of the tenant either way and the followed resource
+    /// answers what they may do. A platform administrator is a DIFFERENT PRINCIPAL KIND with no tenant at all
+    /// (ADR 0206) — it cannot sign in to either client — so for every other caller these four are not "refused",
+    /// they are not part of the API at all. Emitting them anyway would hand a signed-in user four addresses that
+    /// can only ever answer 403, which is exactly the lying affordance ADR 0543 exists to prevent.
+    /// </para>
+    /// <para>
+    /// Kept as a list rather than inlined in the array above so the conditional emission is one statement and the
+    /// set is readable as a set — this is the platform surface, and the next platform endpoint belongs here rather
+    /// than wherever it was first needed.
+    /// </para>
+    /// </remarks>
+    private static readonly Link[] PlatformAdministratorLinks =
+    [
+        // Provisioning a tenant: the reason #1409 was filed, and `saconsole`'s one composed URL until now.
+        new Link("tenants", "/api/tenants", "GET"),
+        new Link("platformAdministrators", "/api/platform-administrators", "GET"),
+        // KEK rotation (ADR 0821) — deliberately no client UI, because a platform administrator cannot sign in
+        // to one; a rel is how the surface is reachable by the tooling that CAN act as one.
+        new Link("encryptionKeys", "/api/encryption/keys", "GET"),
+        new Link("searchReindex", "/api/search/reindex", "GET"),
+    ];
+
     public class RootResource : HypermediaResource
     {
         // The server's own build version (ADR 0512), so the desktop client's self-update check can tell whether it
@@ -32,6 +76,7 @@ public class RootController : ControllerBase
     public async Task<IActionResult> Get(
         [FromServices] IReadOnlyList<ModuleLoader.LoadedModule> modules,
         [FromServices] ICurrentTenantAccessor tenantAccessor,
+        [FromServices] ICurrentPlatformAdministratorAccessor platformAdministratorAccessor,
         [FromServices] SimplArchiveDbContext dbContext,
         CancellationToken cancellationToken)
     {
@@ -119,6 +164,12 @@ public class RootController : ControllerBase
                 new Link("openApi", "/openapi/v1.json", "GET"),
             ],
         };
+
+        // The platform-administrator surface, emitted ONLY to a platform administrator (#1409).
+        if (platformAdministratorAccessor.PlatformAdministratorId is not null)
+        {
+            resource.Links.AddRange(PlatformAdministratorLinks);
+        }
 
         // Module entry rels (ADR 0737): a loaded module's RootLinks appear only for a tenant whose
         // activation is ACTIVE — for everyone else (other tenants, anonymous callers, platform admins)
