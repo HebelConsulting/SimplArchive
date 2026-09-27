@@ -87,6 +87,11 @@ public sealed class RetentionService : IRetentionService
             orderby d.Id
             select new { d.Id, d.Name, d.CreatedAt, d.RetentionOverrideUntil, d.CurrentVersionId, RetentionYears = mv.RetentionYears!.Value };
 
+        // NO AsNoTracking IS NEEDED, and that is worth stating rather than adding a redundant call: ADR 0836
+        // requires rows a sweep claims to be read untracked, because ExecuteUpdate is invisible to the
+        // ChangeTracker. This query PROJECTS into an anonymous type, which EF never tracks — so the requirement is
+        // met structurally. The one place that did track a Document was the `SingleAsync` the claim replaced.
+
         // The cap is on DISPOSALS, so it means what its name says. It used to sit on the candidate query as a
         // bare `.Take(500)` — before the expiry test below, which runs client-side — so it capped candidates
         // EXAMINED instead. A tenant with more than 500 retention-managed documents therefore looked at an
@@ -160,9 +165,35 @@ public sealed class RetentionService : IRetentionService
                 continue;
             }
 
-            var document = await _dbContext.Documents.SingleAsync(d => d.Id == candidate.Id, cancellationToken);
-            document.DeletedAt = DateTimeOffset.UtcNow;
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            // CLAIM IT (ADR 0836, #1442). This read `SingleAsync(d => d.Id == candidate.Id)` and assigned
+            // DeletedAt — and `_dbContext.Documents` carries the SoftDeleteFilter, so once the other instance
+            // disposed the document this matched ZERO rows and threw "Sequence contains no elements". There was no
+            // duplicate (the throw beat both the soft delete and the audit event), but RetentionWorker catches
+            // Exception and logs "Retention sweep failed", so the loser abandoned every remaining candidate in its
+            // page and named neither the document nor the real cause. Now it updates 0 rows and moves on.
+            //
+            // `DeletedAt == null` is written explicitly even though the query filter already implies it: relying on
+            // a filter for a compare-and-swap is a claim that disappears the day somebody adds IgnoreQueryFilters,
+            // and this line is the whole exclusion.
+            //
+            // THE TOKEN IS REGENERATED HERE, and it has to be said why. Document is IConcurrencyTracked, and
+            // SaveChanges regenerates the token for every Modified tracked entity — ExecuteUpdate does not, because
+            // the ChangeTracker never sees the row. Leaving it alone would silently retire a 412 that fires today:
+            // a caller holding the ETag from before the disposal would write successfully to a document that is now
+            // in the recycle bin, instead of being told to reload. Disposal is a change the reader cares about, so
+            // it invalidates their tag exactly as it did before.
+            var claimed = await _dbContext.Documents
+                .Where(d => d.Id == candidate.Id && d.DeletedAt == null)
+                .ExecuteUpdateAsync(
+                    set => set
+                        .SetProperty(d => d.DeletedAt, DateTimeOffset.UtcNow)
+                        .SetProperty(d => d.ConcurrencyToken, Guid.NewGuid()),
+                    cancellationToken);
+
+            if (claimed == 0)
+            {
+                continue; // another instance disposed it first — its side effects are its own
+            }
 
             await _indexQueue.EnqueueAsync(candidate.Id, cancellationToken); // drop it from search
             await _audit.RecordForActorAsync(

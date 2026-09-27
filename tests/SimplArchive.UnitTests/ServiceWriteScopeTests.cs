@@ -70,7 +70,17 @@ public partial class ServiceWriteScopeTests
 
         ["EphemeralMailSweepWorker.cs"] = Background,
         ["EphemeralContentSweepWorker.cs"] = Background,
-        ["RetentionService.cs"] = Background,
+
+        // RetentionService.cs was here as Background and is REMOVED because it no longer writes a tracked entity
+        // at all (#1442): its disposal became a CLAIM — one `ExecuteUpdate` compare-and-swapping `DeletedAt` from
+        // null (ADR 0836) — so no `Document` is ever loaded, modified and saved by it. This guard's own refusal is
+        // what said so, which is the behaviour worth keeping: an entry whose verdict has become unverifiable is
+        // failed rather than silently carried, so the list cannot fill with justifications for writes that no
+        // longer happen.
+        //
+        // NOT a sign that the concurrency question went away — the claim sets `ConcurrencyToken` itself, precisely
+        // because `ExecuteUpdate` skips the regeneration `SaveChanges` performs. Whether the other converted
+        // sweeps should do the same is #1444.
 
         ["DavWrites.cs"] = Protocol,
         ["WebDavWrites.cs"] = Protocol,
