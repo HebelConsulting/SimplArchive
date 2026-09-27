@@ -285,8 +285,26 @@ postfix:
 ingress:
   enabled: false
   className: ""
+  # SESSION AFFINITY IS REQUIRED once replicaCount (or the HPA) is above 1 — and it is 2 by default above, so
+  # this applies to a stock install (ADR 0839). It is NOT the same requirement as the Valkey backplane, and
+  # having the backplane does not satisfy it: the backplane fans out MESSAGES between replicas, while affinity
+  # is about a client being able to ESTABLISH a hub connection at all.
+  #
+  # A SignalR client POSTs /hubs/notifications/negotiate and is handed a connectionId that exists only on the
+  # replica that issued it, then opens the WebSocket carrying that id. Without affinity the second request is
+  # balanced to a DIFFERENT replica, which has never heard of the connection and answers 404 — so with two
+  # replicas a hub connection succeeds about half the time, and real-time notifications silently degrade to
+  # "sometimes". Observed on the kiosk before ADR 0839: negotiate answered 200 by one instance, the upgrade
+  # answered 404 by the other, seconds apart.
+  #
+  # The annotation is controller-specific, so the chart cannot default it (className is deliberately empty).
+  # For ingress-nginx, uncomment these three. For another controller, use its equivalent — and check it, because
+  # nothing here can.
   annotations: {}
     # cert-manager.io/cluster-issuer: letsencrypt-prod
+    # nginx.ingress.kubernetes.io/affinity: "cookie"
+    # nginx.ingress.kubernetes.io/session-cookie-name: "simplarchive-affinity"
+    # nginx.ingress.kubernetes.io/session-cookie-path: "/"
   hosts:
     - host: simplarchive.example.com
       paths:

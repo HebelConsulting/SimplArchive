@@ -282,6 +282,69 @@ public class InstanceParityTests
         }
     }
 
+    /// <summary>
+    /// The SignalR hub must be routed with a STICKY policy, not round-robin (ADR 0839).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A hub connection is a two-request handshake — <c>POST …/negotiate</c> hands out a <c>connectionId</c> that
+    /// exists only in the process that issued it, then the WebSocket upgrade carries that id. Balanced
+    /// independently across two instances, the upgrade reaches the instance that did not negotiate and gets a
+    /// <c>404</c>, so the hub works about half the time. Observed on the live kiosk.
+    /// </para>
+    /// <para>
+    /// This belongs beside the other instance-parity cases because it is the same family of defect: something
+    /// true of one instance and not the other, served to a visitor at random. It is guarded rather than merely
+    /// fixed because the failure is a COIN FLIP — it reads as flaky networking, which is the report most likely
+    /// to be dismissed, and a silent reversion of one Caddyfile line would bring it back in exactly that form.
+    /// </para>
+    /// <para>
+    /// The Valkey backplane does NOT satisfy this, and the assertion says so in its message: the backplane fans
+    /// out messages between instances, which is a different problem from establishing a connection. That
+    /// confusion is what let this sit.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void The_signalr_hub_is_routed_with_session_affinity()
+    {
+        var file = Path.Combine("tools", "kiosk", "Caddyfile");
+        if (Withheld(file))
+        {
+            return; // the public mirror has no tools/, by design
+        }
+
+        var text = Read(file);
+
+        var hub = text.IndexOf("handle /hubs/", StringComparison.Ordinal);
+        Assert.True(hub >= 0,
+            "The kiosk Caddyfile no longer routes /hubs/* separately. The SignalR handshake needs session "
+            + "affinity across the two app instances (ADR 0839): without its own handler the hub falls back to "
+            + "the round-robin block, and a negotiate on one instance followed by an upgrade on the other answers "
+            + "404 — a hub that connects about half the time and reads as flaky networking.");
+
+        // SCOPED TO THE HUB BLOCK, not the whole file: asserting the file merely CONTAINS a sticky policy would
+        // pass if some other route had one while /hubs kept round_robin, which is the exact defect.
+        var lines = text[hub..].Split('\n');
+
+        // The handler ends at ITS OWN closing brace — a line whose only content is `}` at exactly one level of
+        // indent, so a nested reverse_proxy's closing brace does not end the block early. Expressed by measuring
+        // the indent rather than matching an escaped tab, because writing that escape by hand is how this method
+        // first shipped as a string literal spanning two lines.
+        var closing = Array.FindIndex(lines, 1, l => l.Trim() == "}" && l.TrimStart().Length + 1 == l.Length);
+        Assert.True(closing > 0, "the /hubs handler is not a closed block — this guard cannot read it.");
+
+        var block = string.Join('\n', lines[..closing]);
+
+        Assert.True(block.Contains("lb_policy cookie", StringComparison.Ordinal),
+            "The /hubs handler does not use a sticky (cookie) load-balancing policy. The Valkey backplane does "
+            + "NOT cover this — it fans out messages between instances, while affinity is about a client being "
+            + "able to establish a hub connection at all (ADR 0839, and Microsoft's documented requirement for "
+            + $"multi-server SignalR even with a backplane). The handler reads:\n{block}");
+
+        Assert.False(block.Contains("round_robin", StringComparison.Ordinal),
+            $"The /hubs handler still names round_robin, which is what breaks the handshake. It reads:\n{block}");
+    }
+
     /// <summary>The <c>KEY: value</c> pairs under a service block's <c>environment:</c>, values unquoted.</summary>
     private static Dictionary<string, string> EnvironmentKeys(string block)
     {
