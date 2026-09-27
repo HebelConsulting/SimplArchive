@@ -133,8 +133,17 @@ public class EmailNotificationDispatcherTests
 
         using (var read = CreateContext(connection))
         {
-            // Both are marked handled (EmailedAt set) so neither is re-scanned — the muted one is suppressed, not retried.
-            Assert.NotNull((await read.Notifications.IgnoreQueryFilters().SingleAsync(n => n.Id == muted.Id)).EmailedAt);
+            // NEITHER is re-scanned, because both queue rows are gone — and they say DIFFERENT things about what
+            // happened, which is the point of the queue (ADR 0840).
+            Assert.Empty(await read.EmailOutbox.ToListAsync());
+
+            // The muted one was never emailed, and now says so. The old shape stamped EmailedAt on it — the only
+            // way it had to mean "handled" — so the row claimed an email nobody had sent, and "was this emailed?"
+            // could not be answered from the data. This assertion is the inverse of the one it replaces.
+            Assert.Null((await read.Notifications.IgnoreQueryFilters().SingleAsync(n => n.Id == muted.Id)).EmailedAt);
+            Assert.Null((await read.Notifications.IgnoreQueryFilters().SingleAsync(n => n.Id == muted.Id)).EmailFailedAt);
+
+            // The one that WAS sent is stamped, as before.
             Assert.NotNull((await read.Notifications.IgnoreQueryFilters().SingleAsync(n => n.Id == kept.Id)).EmailedAt);
         }
     }

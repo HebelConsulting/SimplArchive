@@ -94,8 +94,12 @@ public sealed class NotificationService : INotificationService
     // Adds a new notification, or — for a coalescable type on a document — merges the event into the recipient's
     // existing UNREAD notification for that same document within the coalesce window (incrementing EventCount and
     // refreshing the title/body/timestamp) instead of inserting a new row. Does not save (the caller does).
-    // Leaves EmailedAt untouched: an un-emailed digest is emailed once with its final count; an already-emailed one
-    // isn't re-emailed on each subsequent event.
+    // EMAIL IS NOT THIS METHOD'S CONCERN ANY MORE (ADR 0840), and it used to be: this note read "leaves EmailedAt
+    // untouched" because that column WAS the pending set, which made coalescing a second semantic consumer of a
+    // column it does not care about — get it wrong and a digest is emailed per event, or never. Now a merge
+    // touches no queue row at all: the row enqueued with the FIRST event sits pending, and whenever the sweep
+    // drains it, it reads whatever EventCount has become. One email with the final count falls out of doing
+    // nothing, and a coalesced-into notification that was already emailed has no row to send again.
     private async Task AddOrCoalesceAsync(
         Guid tenantId, Guid recipientUserId, NotificationType type, string title, string body, Guid? documentId,
         DateTimeOffset now, CancellationToken cancellationToken)

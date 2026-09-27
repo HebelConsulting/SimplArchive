@@ -52,6 +52,15 @@ public class MigrationDataPreservationTests
         // no user base to migrate; old-shape rows keep working as history, they only lose the second
         // pointer to a projection that no longer exists apart from the booking.
         "20260904073335_BookingIsTheIcs",
+        // The email outbox (ADR 0840): drops Notifications.EmailAttempts. The VALUES ARE NOT LOST — the same
+        // migration creates EmailOutbox and backfills it from the pending notifications first, carrying each
+        // notification's EmailAttempts into EmailOutbox.Attempts, so a notification three failures into its retry
+        // budget keeps those three. The column goes because the count is bookkeeping about a delivery attempt
+        // rather than a fact about the notification, and it is deleted with the queue row once the outcome is
+        // known. Down() carries the counts back before dropping the table, so a rollback loses no more than the
+        // forward migration did. The index dropped alongside it (EmailedAt, EmailFailedAt, Id) backed the old
+        // pending predicate, which no longer exists.
+        "20260927151156_AddEmailOutbox",
     };
 
     private static SimplArchiveDbContext MetadataContext() =>

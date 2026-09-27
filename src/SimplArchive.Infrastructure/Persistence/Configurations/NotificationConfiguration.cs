@@ -20,15 +20,11 @@ public class NotificationConfiguration : IEntityTypeConfiguration<Notification>
         // notifications carry 1.
         builder.Property(n => n.EventCount).HasDefaultValue(1);
 
-        // Email retry bookkeeping (ADR 0612). Default 0 so existing rows read as "never attempted" rather than
-        // null-and-ambiguous; EmailFailedAt stays nullable because "gave up" is genuinely an absent state for
-        // almost every row.
-        builder.Property(n => n.EmailAttempts).HasDefaultValue(0);
-
-        // The pending-email sweep's exact predicate: un-emailed, not given up, oldest first. Without this it is a
-        // scan of every notification ever created, on a table that only grows.
-        builder.HasIndex(n => new { n.EmailedAt, n.EmailFailedAt, n.Id });
-
+        // NO index on (EmailedAt, EmailFailedAt, Id) any more, and no EmailAttempts column (ADR 0840). That index
+        // backed the old pending-email predicate, which was a scan of the two timestamps; the pending set now
+        // lives in EmailOutbox with its own (State, EnqueuedAt, Id) index, so this one served nothing but its own
+        // maintenance cost on a table that only grows. The timestamps themselves stay as the RECORD of what
+        // happened — nothing queries them.
         builder.HasIndex(n => new { n.TenantId, n.RecipientUserId, n.CreatedAt, n.Id });
 
         builder.HasOne<Tenant>()

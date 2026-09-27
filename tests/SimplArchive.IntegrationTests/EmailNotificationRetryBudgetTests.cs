@@ -11,7 +11,8 @@ using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.IntegrationTests;
 
-// Issue #433 / ADR 0612. A send that fails deliberately leaves EmailedAt null so the next sweep retries — which
+// Issue #433 / ADR 0612 (queue shape: ADR 0840). A send that fails leaves its QUEUE ROW pending so the next sweep
+// retries — which
 // is right for a transient failure and catastrophic for an address that can never receive mail: the row stays
 // pending forever, and a batch (200) of such rows is entirely hopeless, so every legitimate notification behind
 // them is never looked at again. The symptom is mail that simply does not arrive, which is why it needs a test
@@ -150,9 +151,14 @@ public class EmailNotificationRetryBudgetTests
 
         using var read = CreateContext(connection);
         var row = await read.Notifications.IgnoreQueryFilters().SingleAsync(n => n.Id == doomed.Id);
-        Assert.Equal(MaxEmailAttempts, row.EmailAttempts);
         Assert.NotNull(row.EmailFailedAt);
         Assert.Null(row.EmailedAt); // the mail never went; the in-app notification is untouched
+
+        // The attempt COUNT moved to the queue row (ADR 0840) and the row is deleted once the outcome is known,
+        // so it cannot be asserted after the fact — `sender.Attempts.Count` above is the honest measure of how
+        // many times it was tried. What IS assertable, and is stronger than the old count, is that nothing is
+        // left OWED: an empty queue means the hopeless row is not circling.
+        Assert.Empty(await read.EmailOutbox.Where(o => o.NotificationId == doomed.Id).ToListAsync());
 
         // And an administrator can see it happened without reading a log — recorded with an EXPLICIT
         // System actor (#1312): this sweep has no ambient principal, so the ambient-resolving RecordAsync
@@ -187,8 +193,8 @@ public class EmailNotificationRetryBudgetTests
 
         using var read = CreateContext(connection);
         var row = await read.Notifications.IgnoreQueryFilters().SingleAsync(n => n.Id == doomed.Id);
-        Assert.Equal(1, row.EmailAttempts);
         Assert.NotNull(row.EmailFailedAt);
+        Assert.Empty(await read.EmailOutbox.Where(o => o.NotificationId == doomed.Id).ToListAsync());
     }
 
     // The defect itself: a hopeless row must not keep a good one from ever being looked at.
@@ -226,8 +232,11 @@ public class EmailNotificationRetryBudgetTests
         Assert.Equal(20 * MaxEmailAttempts + 1, sender.Attempts.Count);
 
         using var read = CreateContext(connection);
-        var pendingLeft = await read.Notifications.IgnoreQueryFilters()
-            .CountAsync(n => n.EmailedAt == null && n.EmailFailedAt == null);
+        // READ THE QUEUE, not the timestamps. `EmailedAt == null && EmailFailedAt == null` WAS the pending
+        // predicate and is not any more (ADR 0840) — a notification suppressed by preference now has neither
+        // stamped, so that count would report a muted row as pending forever and this assertion would fail for
+        // a reason that is not the defect it guards.
+        var pendingLeft = await read.EmailOutbox.CountAsync();
         Assert.Equal(0, pendingLeft); // nothing is left circling forever
     }
 

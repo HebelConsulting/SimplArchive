@@ -120,23 +120,31 @@ public class Notification : ITenantScoped
     // Null = unread; set = read at that instant.
     public DateTimeOffset? ReadAt { get; set; }
 
-    // Email delivery bookkeeping (ADR "Email notifications (SMTP)"): null = not yet emailed; set to the send
-    // instant once EmailNotificationWorker delivers it. A failed send leaves it null so the next sweep retries.
+    /// <summary>
+    /// When this notification's email was sent, or null if it never was (ADR "Email notifications (SMTP)").
+    /// </summary>
+    /// <remarks>
+    /// <b>A RECORD, no longer a predicate</b> (ADR 0840). This and <see cref="EmailFailedAt"/> used to BE the
+    /// pending set — <c>EmailedAt == null &amp;&amp; EmailFailedAt == null</c> was the query the sweep ran — and
+    /// that is what could not be claimed: the only marker available to compare-and-swap was the success marker,
+    /// and claiming with it records a failed send as sent (ADR 0836). What is owed now lives in
+    /// <c>EmailOutbox</c>; these two say what happened.
+    /// <para>
+    /// So <b>null no longer means "will be emailed"</b>. A notification suppressed by the recipient's channel
+    /// preference is stamped with NEITHER, and reads truthfully as never emailed — where the old code set this
+    /// column without sending anything, because it had nowhere else to record "handled".
+    /// </para>
+    /// </remarks>
     public DateTimeOffset? EmailedAt { get; set; }
 
     /// <summary>
-    /// How many times emailing this notification has been attempted and failed (ADR 0612). A failed send
-    /// deliberately leaves <see cref="EmailedAt"/> null so the next sweep retries — at-least-once — but without
-    /// a count there is nothing to distinguish "the server was down for a minute" from "this address cannot
-    /// receive mail", and the second kind never leaves the pending set.
-    /// </summary>
-    public int EmailAttempts { get; set; }
-
-    /// <summary>
     /// When the system gave up emailing this notification: the retry budget was spent, or the server rejected
-    /// the address permanently. Set means it leaves the pending set for good — which is the point, because a
-    /// bounded batch made entirely of hopeless rows stalls every legitimate notification behind it. The in-app
-    /// notification is unaffected; only the email is abandoned.
+    /// the address permanently. The in-app notification is unaffected; only the email is abandoned.
     /// </summary>
+    /// <remarks>
+    /// The retry COUNT that leads here lives on the queue row (<c>EmailOutbox.Attempts</c>) rather than beside
+    /// this column, because it is bookkeeping about a delivery attempt rather than a fact about the
+    /// notification — and it is deleted with the row once the outcome is known, while this stays.
+    /// </remarks>
     public DateTimeOffset? EmailFailedAt { get; set; }
 }

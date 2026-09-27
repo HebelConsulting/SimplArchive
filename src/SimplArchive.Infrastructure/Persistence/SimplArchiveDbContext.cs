@@ -221,6 +221,12 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
     // SearchablePdfWorker. Not ITenantScoped (the worker spans every tenant).
     public DbSet<Conversion.SearchablePdfOutbox> SearchablePdfOutbox => Set<Conversion.SearchablePdfOutbox>();
 
+    // Durable notification-email queue (ADR 0840) — drained by EmailNotificationDispatcher, which CLAIMS each
+    // row before sending (ADR 0836). Not ITenantScoped (the sweep spans every tenant), and unlike its two
+    // siblings above it is enqueued from SaveChanges rather than by callers: a forgotten email enqueue is
+    // silent, where a forgotten index enqueue is noticed by searching. See EmailOutboxEnqueuer.
+    public DbSet<Notifications.EmailOutbox> EmailOutbox => Set<Notifications.EmailOutbox>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -310,6 +316,7 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
         SyncResourcePrincipalsAsync(CancellationToken.None).GetAwaiter().GetResult();
         PrepareMaskVersionsAsync(CancellationToken.None).GetAwaiter().GetResult();
         DavChangeRecorder.RecordAsync(this, DavKinds, CancellationToken.None).GetAwaiter().GetResult();
+        EmailOutboxEnqueuer.Enqueue(this, ChangeTracker);
         RegenerateConcurrencyTokens();
         return base.SaveChanges();
     }
@@ -335,6 +342,12 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
 
         // DAV collection changes, recorded at the one door every write path uses (#806, DavChangeRecorder).
         var davChanges = await DavChangeRecorder.RecordAsync(this, DavKinds, cancellationToken);
+
+        // A queue row for every notification being inserted, so the email it owes commits in the SAME transaction
+        // as the notification itself (ADR 0840). Here rather than at the six creation sites because a forgotten
+        // enqueue sends no mail, silently — see EmailOutboxEnqueuer for why that argument does not apply to the
+        // two outboxes that ARE enqueued by their callers.
+        EmailOutboxEnqueuer.Enqueue(this, ChangeTracker);
 
         RegenerateConcurrencyTokens();
 
