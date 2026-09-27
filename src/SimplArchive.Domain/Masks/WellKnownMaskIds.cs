@@ -161,20 +161,20 @@ public static class WellKnownMaskIds
     /// tell a flight from a grounding, and the conflict check would have to tell them apart by mask on every
     /// row — the same reasoning that gave the Schedule its own mask rather than reusing Calendar.
     /// </remarks>
-    public static readonly Guid Maintenance = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E46");
+    public static readonly Guid Blockers = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E46");
 
-    /// <summary>One out-of-service window — the <c>.ics</c> in a resource's Maintenance collection (ADR 0778).</summary>
+    /// <summary>One out-of-service window — the <c>.ics</c> in a resource's Blockers collection (ADR 0778).</summary>
     /// <remarks>
     /// Shaped like <see cref="Booking"/> deliberately: same calendar facts under the same field names, so the
     /// classifier and every calendar surface read both without a second code path. Its domain field is Reason
     /// rather than Purpose — a booking says what the resource is FOR, a block says what is wrong with it.
     /// </remarks>
-    public static readonly Guid MaintenanceBlock = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E47");
+    public static readonly Guid Block = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E47");
 
     /// <summary>A bookable resource's OFFERED time (ADR 0780) — the third of the trio.</summary>
     /// <remarks>
     /// A resource answers three different questions about one timeline: when it is SPOKEN FOR (Schedule),
-    /// when it is UNAVAILABLE (Maintenance), and when it is OFFERED (this). They are separate collections
+    /// when it is UNAVAILABLE (Blockers), and when it is OFFERED (this). They are separate collections
     /// because they are separate questions — a client subscribing to an instructor to see when they can be
     /// asked to fly wants the third, not the first.
     /// </remarks>
@@ -234,15 +234,15 @@ public static class WellKnownMaskIds
         // booking calendar on nothing, a booking outside a Schedule a claim without a subject, and a plain
         // Appointment inside a Schedule would be visible time the conflict check cannot see. Rights still
         // flow from the room the normal way — see the room, see its schedule, see its bookings.
-        new(MeetingRoom, "Meeting room", [(Schedule, "Schedule"), (Maintenance, "Maintenance"), (Availability, "Availability")]),
+        new(MeetingRoom, "Meeting room", [(Schedule, "Schedule"), (Blockers, "Blockers"), (Availability, "Availability")]),
         new(Schedule, "Schedule", [(Booking, "Booking")]),
-        // A Maintenance collection holds exactly its blocks (ADR 0778), two-directionally for the same reason
-        // the Schedule row is: a block outside a Maintenance collection is a grounding of nothing, and anything
-        // else inside one would be time the suspension rule cannot see. Which RESOURCES admit a Maintenance
+        // A Blockers collection holds exactly its blocks (ADR 0778), two-directionally for the same reason
+        // the Schedule row is: a block outside a Blockers collection is a grounding of nothing, and anything
+        // else inside one would be time the suspension rule cannot see. Which RESOURCES admit a Blockers
         // collection is DERIVED from IsBookable at rule-load (MaskContainmentRules), exactly as the Schedule
         // is — the row above covers the core's own meeting room, and a module's bookable mask gets both
         // collections without declaring either.
-        new(Maintenance, "Maintenance", [(MaintenanceBlock, "Maintenance block")]),
+        new(Blockers, "Blockers", [(Block, "Block")]),
         // ...and the offered-time collection holds exactly its windows (ADR 0780), two-directionally
         // for the same reason: a window outside an Availability collection is an offer of nothing.
         new(Availability, "Availability", [(AvailabilityWindow, "Availability window")]),
@@ -282,11 +282,11 @@ public static class WellKnownMaskIds
         // while the schedule was a plain Calendar, whose cardinality the decided boundary left uncapped.
         new(MeetingRoom, "Meeting room", Schedule, "Schedule", 1),
 
-        // One Maintenance collection per room, for the same reason (ADR 0778): the block flow files into THE
-        // maintenance collection, so "which one?" must have exactly one answer. Like the Schedule row above,
+        // One Blockers collection per room, for the same reason (ADR 0778): the block flow files into THE
+        // blockers collection, so "which one?" must have exactly one answer. Like the Schedule row above,
         // this caps the CORE's bookable mask; a module's bookable mask inherits the derived admission without
         // a cardinality cap, which is the Schedule's existing gap rather than a new one.
-        new(MeetingRoom, "Meeting room", Maintenance, "Maintenance", 1),
+        new(MeetingRoom, "Meeting room", Blockers, "Blockers", 1),
 
         // One Availability collection per resource, for the reason the other two are capped: the
         // publish flow files into THE collection, so "which one?" must have exactly one answer.
@@ -310,7 +310,7 @@ public static class WellKnownMaskIds
     /// </para>
     /// </remarks>
     public static readonly IReadOnlySet<Guid> FolderMasks =
-        new HashSet<Guid> { Folder, Repository, UserFolder, MyDocuments, Mailbox, ImapSpecial, ImapFolder, Notebook, NotebookSection, Addressbook, Calendar, MeetingRoom, Schedule, Maintenance, Availability };
+        new HashSet<Guid> { Folder, Repository, UserFolder, MyDocuments, Mailbox, ImapSpecial, ImapFolder, Notebook, NotebookSection, Addressbook, Calendar, MeetingRoom, Schedule, Blockers, Availability };
 
     /// <summary>
     /// The file extensions that make a well-known mask the automatic choice for an upload (#671).
@@ -383,11 +383,11 @@ public static class WellKnownMaskIds
             [Note] = "note",
             [Contact] = "contact",
             [Appointment] = "appointment",
-            // Its own token for the same reason Schedule has one: a maintenance calendar and a booking
+            // Its own token for the same reason Schedule has one: a blockers calendar and a booking
             // calendar sit side by side on one resource, and two masks drawn identically are two things
             // the eye cannot separate.
-            [Maintenance] = "maintenance",
-            [MaintenanceBlock] = "maintenance-block",
+            [Blockers] = "blockers",
+            [Block] = "block",
             // Offered time: an open door rather than a calendar, so the trio on one resource reads as
             // three different things at a glance instead of three calendars.
             [Availability] = "availability",
@@ -424,12 +424,12 @@ public static class WellKnownMaskIds
         // is filed — a hand-made second one would break the cardinality that makes "the schedule" singular.
         // Booking stays here for the PLAIN create paths only — any .ics WRITE into a Schedule is the
         // real creation path and is gated by rights on the Schedule, not by this set.
-        new HashSet<Guid> { Repository, UserFolder, MyDocuments, ImapSpecial, Notebook, Booking, Schedule, Maintenance, MaintenanceBlock, Availability, AvailabilityWindow };
+        new HashSet<Guid> { Repository, UserFolder, MyDocuments, ImapSpecial, Notebook, Booking, Schedule, Blockers, Block, Availability, AvailabilityWindow };
 
     /// <summary>The well-known masks an ITEM wears — the complement of <see cref="FolderMasks"/>.</summary>
     /// <remarks>Stated rather than derived, so the partition guard has two sides to compare instead of one.</remarks>
     public static readonly IReadOnlySet<Guid> ItemMasks =
-        new HashSet<Guid> { BasicEntry, EMail, Note, Contact, Appointment, Booking, License, MaintenanceBlock, AvailabilityWindow };
+        new HashSet<Guid> { BasicEntry, EMail, Note, Contact, Appointment, Booking, License, Block, AvailabilityWindow };
 
     /// <summary>
     /// Typed folders that ALSO admit a plain <see cref="Folder"/>, so a user can make folders of their own

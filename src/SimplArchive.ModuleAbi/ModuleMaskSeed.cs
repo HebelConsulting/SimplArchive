@@ -156,14 +156,36 @@ public static class CoreMaskIds
     /// <see cref="ModuleMaskSeed.IsBookable"/>; named here for AllowedParents declarations.</summary>
     public static readonly Guid Schedule = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E45");
 
-    /// <summary>The Maintenance collection a bookable resource holds (core ADR 0778) — when it is
+    /// <summary>The Blockers collection a bookable resource holds (core ADR 0778) — when it is
     /// UNAVAILABLE, as against when it is spoken for. Admitted implicitly by
     /// <see cref="ModuleMaskSeed.IsBookable"/> exactly as the Schedule is, so a module's bookable mask gets
     /// both without declaring either.</summary>
+    public static readonly Guid Blockers = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E46");
+
+    /// <summary>The former name of <see cref="Blockers"/> — the same mask, the same Guid (#1339).</summary>
+    /// <remarks>
+    /// <para>
+    /// Kept because renaming a public static field is <b>source- and binary-breaking</b>, and this assembly is a
+    /// published contract that out-of-repo modules compile against. A module built against ABI 0.29 or earlier
+    /// resolves this member; removing it would refuse to load it for a word change (ADR 0741 puts the gate on
+    /// the major, so the alternative was a major bump that stops every existing module until rebuilt).
+    /// </para>
+    /// <para>
+    /// <b>The trigger that retires it</b> (the workaround-dependency rule): delete it once no supported module
+    /// references it — which for the in-house flight-school module means one release after it moves to
+    /// <see cref="Blockers"/>. Until then both names are the same Guid, so a module using either is correct.
+    /// </para>
+    /// <para>
+    /// The rename itself: the collection says what the entry DOES (it blocks a resource's availability) rather
+    /// than presuming why — maintenance is one reason among several, beside reserved, damaged and seasonal.
+    /// </para>
+    /// </remarks>
+    [Obsolete("Renamed to Blockers (#1339) — the same mask and the same Guid. Kept so a module built against " +
+              "ABI 0.29 or earlier still resolves it; it will be removed once no supported module uses it.")]
     public static readonly Guid Maintenance = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E46");
 
     /// <summary>The Availability collection a bookable resource holds (core ADR 0780) — its OFFERED time,
-    /// as against when it is spoken for (Schedule) or withdrawn (Maintenance). Admitted implicitly by
+    /// as against when it is spoken for (Schedule) or withdrawn (Blockers). Admitted implicitly by
     /// <see cref="ModuleMaskSeed.IsBookable"/> like the other two.</summary>
     public static readonly Guid Availability = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E48");
 

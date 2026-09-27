@@ -53,7 +53,7 @@ public partial class SimplArchiveDbContext
         }
 
         // Derived from the kind table by extension, never a hand-written list of three: that list is what
-        // left Maintenance and Availability out of the dav-collections listing (ADR 0786's sibling lesson),
+        // left Blockers and Availability out of the dav-collections listing (ADR 0786's sibling lesson),
         // and a core kind added later must arrive here without anybody remembering this file.
         //
         // CORE-ONLY IS DELIBERATE, and this is the one place in the DAV layer where that is true (#1261).

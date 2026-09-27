@@ -16,7 +16,7 @@ namespace SimplArchive.Domain.CalDav;
 /// <c>calendar</c> — every .ics collection reports <c>calendar</c> there, so a client could not tell a
 /// Schedule from an Availability and therefore could not offer a MOVE that would be accepted. It lives on the
 /// kind itself rather than in a map beside the listing, because a map beside the listing is precisely the
-/// hand-written mask list that left Maintenance and Availability unusable in the first place.
+/// hand-written mask list that left Blockers and Availability unusable in the first place.
 /// </remarks>
 /// <param name="ReadOnly">
 /// When true, CalDAV/CardDAV writes (PUT/DELETE) to this collection are refused — the collection is
@@ -61,14 +61,14 @@ public static class DavCollectionKinds
     public static readonly DavCollectionKind Schedule =
         new(WellKnownMaskIds.Schedule, WellKnownMaskIds.Booking, ".ics", "Event UID", "schedule");
 
-    /// <summary>A resource's Maintenance collection (ADR 0778): calendar wire behaviour, block items.</summary>
+    /// <summary>A resource's Blockers collection (ADR 0778): calendar wire behaviour, block items.</summary>
     /// <remarks>
     /// Its own kind rather than a second use of <see cref="Schedule"/>, so that a client subscribing to an
     /// aircraft sees two collections and can tell a flight from a grounding. Both serve <c>.ics</c> and index
     /// the same UID field, which is what lets one classifier handle either.
     /// </remarks>
-    public static readonly DavCollectionKind Maintenance =
-        new(WellKnownMaskIds.Maintenance, WellKnownMaskIds.MaintenanceBlock, ".ics", "Event UID", "maintenance");
+    public static readonly DavCollectionKind Blockers =
+        new(WellKnownMaskIds.Blockers, WellKnownMaskIds.Block, ".ics", "Event UID", "Blockers");
 
     /// <summary>A resource's Availability collection (ADR 0780): calendar wire behaviour, window items.</summary>
     /// <remarks>
@@ -79,7 +79,7 @@ public static class DavCollectionKinds
     public static readonly DavCollectionKind Availability =
         new(WellKnownMaskIds.Availability, WellKnownMaskIds.AvailabilityWindow, ".ics", "Event UID", "availability");
 
-    public static readonly IReadOnlyList<DavCollectionKind> All = [Calendar, Addressbook, Schedule, Maintenance, Availability];
+    public static readonly IReadOnlyList<DavCollectionKind> All = [Calendar, Addressbook, Schedule, Blockers, Availability];
 
     /// <summary>The kind for a folder mask, or null when the folder is not a synced collection.</summary>
     public static DavCollectionKind? ForFolderMask(Guid? folderMaskId) =>

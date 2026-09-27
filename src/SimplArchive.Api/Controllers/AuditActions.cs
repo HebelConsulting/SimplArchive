@@ -193,7 +193,7 @@ public static class AuditActions
     public const string BookingCreated = "Booking.Created";
     public const string BookingChanged = "Booking.Changed";
 
-    // Maintenance blocks (ADR 0778). SEPARATE actions for grounding and releasing, by owner decision: the
+    // Blockers (ADR 0778). SEPARATE actions for grounding and releasing, by owner decision: the
     // person who takes an aircraft out of service and the person who returns it to service are not always the
     // same, and a single "Booking.BlockChanged" could not answer who cleared it to fly — which is the one
     // question an investigation asks. They carry their own rights for the same reason (CanBlockResources /

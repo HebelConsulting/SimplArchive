@@ -35,7 +35,7 @@ public static class CollectionKindColours
     public const string Schedule = "#4A5568";
 
     /// <summary>Time the resource is unavailable. Warning-coloured on purpose: it is the one that stops work.</summary>
-    public const string Maintenance = "#B4541E";
+    public const string Blockers = "#B4541E";
 
     /// <summary>Time that is OFFERED — an invitation rather than a commitment, so it reads as open.</summary>
     public const string Availability = "#2E8B70";

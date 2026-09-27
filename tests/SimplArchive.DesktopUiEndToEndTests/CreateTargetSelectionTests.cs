@@ -11,7 +11,7 @@ namespace SimplArchive.DesktopUiEndToEndTests;
 // Two causes, both here:
 //
 //   * The dialog pre-selected the FIRST candidate. Collections are ordered personal-first then
-//     alphabetically, and a bookable resource contributes Availability / Maintenance / Schedule — so
+//     alphabetically, and a bookable resource contributes Availability / Blockers / Schedule — so
 //     "Availability" is first for every room, and the most likely intent, booking, sorts last. The old
 //     reasoning ("the first is the caller's personal collection") is sound for a set of calendars and wrong
 //     the moment the candidates differ in MEANING.
@@ -29,7 +29,7 @@ public class CreateTargetSelectionTests
         var form = new AppointmentEditViewModel();
         form.OpenForCreate([
             Target("Room / Availability", "availability"),
-            Target("Room / Maintenance", "maintenance"),
+            Target("Room / Blockers", "blockers"),
             Target("Room / Schedule", "schedule"),
         ]);
 

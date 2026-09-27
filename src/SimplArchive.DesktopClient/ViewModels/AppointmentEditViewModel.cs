@@ -171,7 +171,7 @@ public sealed partial class AppointmentEditViewModel : StructuredEditFormViewMod
 
     /// <summary>When the repeat stops, or null for a series with no end.</summary>
     /// <remarks>
-    /// A booking or a maintenance block MUST have one — two endless claims cannot be compared for overlap, so
+    /// A booking or a block MUST have one — two endless claims cannot be compared for overlap, so
     /// the server refuses an unbounded claim (#1133). An availability window may be left open: an offer takes
     /// nothing from anyone.
     /// </remarks>

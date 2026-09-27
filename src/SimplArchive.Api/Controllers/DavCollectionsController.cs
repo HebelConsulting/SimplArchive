@@ -101,12 +101,12 @@ public class DavCollectionsController : ControllerBase
             return Forbid();
         }
 
-        // A resource's Schedule, Maintenance and Availability are calendars to every client of this listing
+        // A resource's Schedule, Blockers and Availability are calendars to every client of this listing
         // (ADRs 0744/0778/0780), and so is a module's read-only Logbook (ADR 0791): they list in the Calendar
         // tab and subscribe over CalDAV like any other — what differs is what each admits.
         //
         // DERIVED from the kind registry by extension, never hand-written. The list here used to name its masks
-        // one by one, so Maintenance and Availability — added when their slices landed — never reached it: both
+        // one by one, so Blockers and Availability — added when their slices landed — never reached it: both
         // collections existed, were served over CalDAV, and were invisible in both clients' Calendar tabs. That
         // is the SECOND place this exact trap fired; DavProtocol carried the first. A list that must be kept in
         // step with a table is a list that will not be — and a module's kind is one this file could never name.
@@ -163,7 +163,7 @@ public class DavCollectionsController : ControllerBase
         var kindColourByMaskVersion = maskVersions.ToDictionary(
             v => v.Id,
             v => v.MaskId == WellKnownMaskIds.Schedule ? Presentation.CollectionKindColours.Schedule
-                : v.MaskId == WellKnownMaskIds.Maintenance ? Presentation.CollectionKindColours.Maintenance
+                : v.MaskId == WellKnownMaskIds.Blockers ? Presentation.CollectionKindColours.Blockers
                 : v.MaskId == WellKnownMaskIds.Availability ? Presentation.CollectionKindColours.Availability
                 : Presentation.CollectionKindColours.None);
 

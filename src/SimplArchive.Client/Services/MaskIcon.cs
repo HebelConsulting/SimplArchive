@@ -54,8 +54,8 @@ public static class MaskIcon
         // The out-of-service pair (ADR 0778). A wrench for the collection and a busy/blocked calendar
         // for the window inside it: the Schedule beside it is an AVAILABLE calendar, and the two sit on
         // one resource, so they have to read as opposites at a glance rather than as two calendars.
-        ["maintenance"] = (Icons.Material.Filled.Build, Icons.Material.Outlined.Build),
-        ["maintenance-block"] = (Icons.Material.Filled.EventBusy, Icons.Material.Outlined.EventBusy),
+        ["blockers"] = (Icons.Material.Filled.Build, Icons.Material.Outlined.Build),
+        ["block"] = (Icons.Material.Filled.EventBusy, Icons.Material.Outlined.EventBusy),
         // Offered time (ADR 0780): an open door rather than a third calendar, so the trio on one resource
         // reads as three different things — spoken for, unavailable, offered — instead of three calendars.
         ["availability"] = (Icons.Material.Filled.DoorFront, Icons.Material.Outlined.DoorFront),

@@ -511,7 +511,7 @@ public class TypedItemsController : ControllerBase
     // same finalizer pass every .ics write goes through.
     //
     // DERIVED from the kind registry, not written out (#1122). Written out, it said [Calendar, Schedule] and
-    // went on saying it when Maintenance (ADR 0778) and Availability (ADR 0780) arrived — so this endpoint
+    // went on saying it when Blockers (ADR 0778) and Availability (ADR 0780) arrived — so this endpoint
     // 404'd both LISTING and CREATING in those two collections, which is the server half of the same omission
     // ChildCreationPolicy.AdmitsCalendarEntries had made on the advertising side. Fixing only the advertising
     // half would have been worse than neither: a create rel the server then refuses is exactly the affordance

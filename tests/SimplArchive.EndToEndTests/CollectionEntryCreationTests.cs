@@ -8,7 +8,7 @@ namespace SimplArchive.EndToEndTests;
 //
 // Reported from use while testing a release: "how can I add availability now? No context-menu, no buttons on
 // calendar tab." It was not a client gap. Two independent places listed the calendar-shaped masks by hand and
-// both said Calendar and Schedule, neither having been updated when Maintenance (ADR 0778) and Availability
+// both said Calendar and Schedule, neither having been updated when Blockers (ADR 0778) and Availability
 // (ADR 0780) arrived:
 //
 //   * ChildCreationPolicy.AdmitsCalendarEntries gated whether the create is ADVERTISED — on the document
@@ -62,7 +62,7 @@ public class CollectionEntryCreationTests
     // here cannot be told from the room itself being wrong.
     [Theory]
     [InlineData("Schedule")]
-    [InlineData("Maintenance")]
+    [InlineData("Blockers")]
     [InlineData("Availability")]
     public async Task A_resource_collection_advertises_its_create_and_accepts_one(string collectionName)
     {

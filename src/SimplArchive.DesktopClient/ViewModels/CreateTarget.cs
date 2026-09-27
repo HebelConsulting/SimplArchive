@@ -18,7 +18,7 @@ namespace SimplArchive.DesktopClient.ViewModels;
 /// <param name="DisplayName">Parent-qualified, so two same-named collections are tellable apart (ADR 0619).</param>
 /// <param name="CreateHref">The collection's advertised create address.</param>
 /// <param name="CollectionKind">
-/// Which kind of collection it is — <c>calendar</c>, <c>schedule</c>, <c>maintenance</c>,
+/// Which kind of collection it is — <c>calendar</c>, <c>schedule</c>, <c>blockers</c>,
 /// <c>availability</c>, <c>addressbook</c> (#1122). The dialog reads it to decide whether the candidates
 /// differ in MEANING, and therefore whether pre-selecting one of them would be a guess (#1125).
 /// </param>

@@ -81,14 +81,14 @@ public class BookingFlowTests
         // (DESCRIPTION -> indexed field), proving the round trip through the same pass a CalDAV PUT takes.
         //
         // The room holds THREE collections, not one (#1097): making a resource bookable provisions its
-        // Schedule, Maintenance and Availability, so a calendar client finds them without anybody booking in
+        // Schedule, Blockers and Availability, so a calendar client finds them without anybody booking in
         // the app first. Asserted as the exact set rather than loosened to "contains Schedule", because what
         // a bookable resource holds is a fact worth noticing when it changes.
         var children = await ChildrenByNameAsync(api, roomId);
-        Assert.Equal(["Schedule", "Maintenance", "Availability"], children.Keys.OrderBy(k => k switch
+        Assert.Equal(["Schedule", "Blockers", "Availability"], children.Keys.OrderBy(k => k switch
         {
             "Schedule" => 0,
-            "Maintenance" => 1,
+            "Blockers" => 1,
             _ => 2,
         }));
 

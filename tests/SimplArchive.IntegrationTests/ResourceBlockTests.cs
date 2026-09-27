@@ -242,14 +242,14 @@ public class ResourceBlockTests
         {
             // The sync keys on the document wearing the MaintenanceBlock mask, so the fixture has to give it
             // one — the classifier stamps it on the real path.
-            var maskId = WellKnownMaskIds.MaintenanceBlock;
+            var maskId = WellKnownMaskIds.Block;
             setup.Masks.Add(new Mask { Id = maskId, TenantId = f.TenantId, CreatedAt = DateTimeOffset.UtcNow });
             setup.MaskVersions.Add(new MaskVersion
             {
                 Id = maskVersionId,
                 TenantId = f.TenantId,
                 MaskId = maskId,
-                Name = "Maintenance block",
+                Name = "Block",
                 CreatedAt = DateTimeOffset.UtcNow,
             });
             await setup.SaveChangesAsync();

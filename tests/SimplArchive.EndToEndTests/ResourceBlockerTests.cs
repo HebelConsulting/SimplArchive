@@ -7,7 +7,7 @@ using SimplArchive.Domain.Masks;
 namespace SimplArchive.EndToEndTests;
 
 // The maintenance block, end to end over the surface people actually use (ADR 0778): an .ics written into a
-// resource's Maintenance collection.
+// resource's Blockers collection.
 //
 // Driven through CalDAV rather than a controller because there IS no block controller — the block IS the
 // .ics, the same way the booking is (ADR 0744), so the write path is the classifier's single door and that is
@@ -16,15 +16,15 @@ namespace SimplArchive.EndToEndTests;
 // block is refused with its own code rather than as a slot conflict.
 [Collection(E2ECollection.Name)]
 [Trait("Area", "e2e-2")]
-public class MaintenanceBlockTests
+public class ResourceBlockerTests
 {
     private readonly E2EApiFactory _factory;
 
-    public MaintenanceBlockTests(E2EApiFactory factory) => _factory = factory;
+    public ResourceBlockerTests(E2EApiFactory factory) => _factory = factory;
 
     private sealed record World(HttpClient Api, HttpClient Dav, AuthenticationHeaderValue Basic, Guid RoomId, string RoomName, string MaintenanceHref);
 
-    // A bookable room with its Maintenance collection, plus a DAV credential for the seeded user.
+    // A bookable room with its Blockers collection, plus a DAV credential for the seeded user.
     private async Task<World> SeedAsync(bool canBlock, bool canRelease)
     {
         var (clientId, secret, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
@@ -48,10 +48,10 @@ public class MaintenanceBlockTests
         await TestJson.Put(api, $"/api/documents/{roomId}/mask", new { maskId = WellKnownMaskIds.MeetingRoom });
 
         // Both collections, explicitly: the booking flow creates the Schedule lazily (#1097) and nothing
-        // creates the Maintenance collection at all, so a test that assumed either would be testing the
+        // creates the Blockers collection at all, so a test that assumed either would be testing the
         // fixture rather than the feature.
         var scheduleId = await ProvisionedCollectionAsync(api, roomId, "Schedule");
-        var maintenanceId = await ProvisionedCollectionAsync(api, roomId, "Maintenance");
+        var blockersId = await ProvisionedCollectionAsync(api, roomId, "Blockers");
 
         var davPassword = (await TestJson.Post(api, "/api/me/webdav-password", new { })).GetProperty("password").GetString()!;
         var basic = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{email}:{davPassword}")));
@@ -74,7 +74,7 @@ public class MaintenanceBlockTests
         // set instead of the collection.
         var block = System.Text.RegularExpressions.Regex
             .Split(body, "</[a-zA-Z]+:response>", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
-            .First(b => b.Contains($"{roomName} / Maintenance", StringComparison.Ordinal));
+            .First(b => b.Contains($"{roomName} / Blockers", StringComparison.Ordinal));
         return System.Text.RegularExpressions.Regex.Match(block, "<[^>]*href[^>]*>([^<]+)</").Groups[1].Value;
     }
 
@@ -214,7 +214,7 @@ public class MaintenanceBlockTests
 
     /// <summary>The collection a bookable resource was PROVISIONED with (#1097), found by name.</summary>
     /// <remarks>
-    /// These tests used to create Schedule and Maintenance themselves, because nothing did. Assigning a
+    /// These tests used to create Schedule and Blockers themselves, because nothing did. Assigning a
     /// bookable mask now provisions all three, so creating one here would collide with the provisioned
     /// folder on the sibling-name invariant — and, worse, a test that still made its own would be testing
     /// its fixture rather than what a real resource looks like.

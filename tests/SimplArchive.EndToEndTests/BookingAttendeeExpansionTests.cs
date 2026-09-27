@@ -252,7 +252,7 @@ public class BookingAttendeeExpansionTests
 
     /// <summary>The collection a bookable resource was PROVISIONED with (#1097), found by name.</summary>
     /// <remarks>
-    /// These tests used to create Schedule and Maintenance themselves, because nothing did. Assigning a
+    /// These tests used to create Schedule and Blockers themselves, because nothing did. Assigning a
     /// bookable mask now provisions all three, so creating one here would collide with the provisioned
     /// folder on the sibling-name invariant — and, worse, a test that still made its own would be testing
     /// its fixture rather than what a real resource looks like.

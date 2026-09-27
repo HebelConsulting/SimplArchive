@@ -22,7 +22,7 @@ public sealed class DavCollection
     public string Kind { get; set; } = string.Empty;
 
     /// <summary>
-    /// Which collection this actually is: <c>calendar</c>, <c>schedule</c>, <c>maintenance</c>,
+    /// Which collection this actually is: <c>calendar</c>, <c>schedule</c>, <c>blockers</c>,
     /// <c>availability</c> or <c>addressbook</c> (#1122).
     /// </summary>
     /// <remarks>

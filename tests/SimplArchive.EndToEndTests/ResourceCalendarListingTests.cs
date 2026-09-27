@@ -4,11 +4,11 @@ using SimplArchive.Domain.Masks;
 namespace SimplArchive.EndToEndTests;
 
 // A bookable resource's three calendars in the app's own listing (ADRs 0744/0778/0780): the Schedule that
-// says when it is spoken for, the Maintenance collection that says when it is unavailable, and the
+// says when it is spoken for, the Blockers collection that says when it is unavailable, and the
 // Availability collection that says when it is offered.
 //
 // All three are calendars on the wire and all three belong in the Calendar tab. Only the Schedule got there:
-// the listing named its masks one by one, so Maintenance and Availability — added to DavCollectionKinds.All
+// the listing named its masks one by one, so Blockers and Availability — added to DavCollectionKinds.All
 // when their slices landed — never reached it. The collections existed, CalDAV served them, and BOTH clients
 // showed nothing. The same trap had already fired once in DavProtocol, which carries a comment saying so.
 //
@@ -48,7 +48,7 @@ public class ResourceCalendarListingTests
         // NOT created here any more (#1097): assigning a bookable mask provisions all three, so a calendar
         // client subscribing to a freshly created room finds something to PUT into without anybody booking
         // in the app first — which is what ADR 0744 claimed and what was not true.
-        var wanted = new[] { "Schedule", "Maintenance", "Availability" };
+        var wanted = new[] { "Schedule", "Blockers", "Availability" };
 
         var listed = (await TestJson.Get(api, "/api/dav-collections?kind=calendar"))
             .GetProperty("collections").EnumerateArray()

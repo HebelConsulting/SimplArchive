@@ -34,7 +34,7 @@ public class ResourceBlock : ITenantScoped, IConcurrencyTracked, IRecurringSlot
     public Guid ResourceDocumentId { get; set; }
 
     /// <summary>
-    /// The block document — the <c>.ics</c> in the resource's Maintenance collection. A plain column, not a
+    /// The block document — the <c>.ics</c> in the resource's Blockers collection. A plain column, not a
     /// FK, following <see cref="ResourceBooking.BookingDocumentId"/> and the <c>Document.CurrentVersionId</c>
     /// precedent (ADR 0503): a Cleared row deliberately outlives a purged document as the durable record of
     /// when the resource was unavailable.

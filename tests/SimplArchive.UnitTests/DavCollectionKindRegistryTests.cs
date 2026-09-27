@@ -155,7 +155,7 @@ public class DavCollectionKindRegistryTests
     [Fact]
     public void The_kind_list_still_carries_every_calendar_shaped_core_collection() =>
         // Anti-vacuous: the theory proves nothing if the kind list has shrunk back to the two masks that were
-        // once hardcoded. Four core .ics kinds exist — Calendar, Schedule, Maintenance, Availability.
+        // once hardcoded. Four core .ics kinds exist — Calendar, Schedule, Blockers, Availability.
         Assert.Equal(4, DavCollectionKinds.All.Count(k => k.Extension == ".ics"));
 
     [Fact]

@@ -383,7 +383,7 @@ internal sealed class ResourceCollectionWriter
         window.EndsAtUtc = endsAt.ToUniversalTime();
     }
 
-    /// <summary>Creates or moves the <see cref="ResourceBlock"/> behind a Maintenance collection's .ics (ADR 0778).</summary>
+    /// <summary>Creates or moves the <see cref="ResourceBlock"/> behind a Blockers collection's .ics (ADR 0778).</summary>
     /// <remarks>
     /// <para>
     /// The mirror of <see cref="UpsertBookingRowAsync"/>, and short for the reasons a block is simpler than a
@@ -412,8 +412,8 @@ internal sealed class ResourceCollectionWriter
 
         var endsAt = CalendarInstants.Instant(occurrence.DtEnd) ?? startsAt;
 
-        // The resource is the Maintenance collection's parent — containment guarantees the shape (a block
-        // lives only in a Maintenance collection, which lives only on a bookable resource).
+        // The resource is the Blockers collection's parent — containment guarantees the shape (a block
+        // lives only in a Blockers collection, which lives only on a bookable resource).
         var parentId = await _dbContext.Documents
             .Where(d => d.Id == document.ParentId)
             .Select(d => d.ParentId)
@@ -421,7 +421,7 @@ internal sealed class ResourceCollectionWriter
         if (parentId is not { } resourceId)
         {
             throw new ResourceNotBookableException(
-                $"The Maintenance collection holding document {document.Id} has no parent resource to block.");
+                $"The Blockers collection holding document {document.Id} has no parent resource to block.");
         }
 
         var block = await _dbContext.ResourceBlocks
@@ -460,7 +460,7 @@ internal sealed class ResourceCollectionWriter
             _dbContext.ResourceBlocks.Add(block);
         }
 
-        // A move between two resources' Maintenance collections re-points the block, exactly as a booking's
+        // A move between two resources' Blockers collections re-points the block, exactly as a booking's
         // holding claim follows its document. There is only ever one row, so no ambiguity arises.
         block.ResourceDocumentId = resourceId;
         block.RecurrenceRule = recurrence;

@@ -108,7 +108,7 @@ public sealed partial class AppointmentRowViewModel : ObservableObject
     public bool IsOccurrenceOfSeries => !string.IsNullOrWhiteSpace(RecurrenceId);
 
     /// <summary>
-    /// Which collection kind it is filed in — <c>calendar</c>, <c>schedule</c>, <c>maintenance</c>,
+    /// Which collection kind it is filed in — <c>calendar</c>, <c>schedule</c>, <c>blockers</c>,
     /// <c>availability</c> — so a move offers only collections that admit this entry (#1122).
     /// </summary>
     public string CollectionKind { get; init; } = string.Empty;
@@ -905,7 +905,7 @@ public sealed partial class CalendarTabViewModel : ObservableObject
             // once, and a demo of two personal calendars never shows whether three overlaid meanings can be
             // told apart. The colours are the shared per-kind fallbacks, not invented for the picture.
             ("HB-PHG / Schedule", SimplArchive.Presentation.CollectionKindColours.Schedule, false, true),
-            ("HB-PHG / Maintenance", SimplArchive.Presentation.CollectionKindColours.Maintenance, false, true),
+            ("HB-PHG / Blockers", SimplArchive.Presentation.CollectionKindColours.Blockers, false, true),
             ("HB-PHG / Availability", SimplArchive.Presentation.CollectionKindColours.Availability, false, true),
         };
 

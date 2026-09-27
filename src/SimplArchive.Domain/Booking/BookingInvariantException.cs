@@ -70,7 +70,7 @@ public sealed class BookingInvariantException : InvalidOperationException
     /// </remarks>
     public static BookingInvariantException ResourceBlocked(
         DateTimeOffset requestedStart, DateTimeOffset requestedEnd, DateTimeOffset blockStart, DateTimeOffset blockEnd) =>
-        new(BookingInvariantKind.ResourceBlocked, $"The requested slot {requestedStart:u}–{requestedEnd:u} falls in a maintenance "
+        new(BookingInvariantKind.ResourceBlocked, $"The requested slot {requestedStart:u}–{requestedEnd:u} falls in a "
             + $"block {blockStart:u}–{blockEnd:u}: the resource is out of service (ADR 0778).");
 
     /// <summary>A claim or a block repeats endlessly — it must carry <c>UNTIL</c> or <c>COUNT</c> (#1133).</summary>
@@ -81,7 +81,7 @@ public sealed class BookingInvariantException : InvalidOperationException
     /// commitment nobody can outlive.
     /// </remarks>
     public static BookingInvariantException EndlessRecurrence(string rule) =>
-        new(BookingInvariantKind.EndlessRecurrence, $"The repeat rule '{rule}' never ends. A booking or a maintenance "
+        new(BookingInvariantKind.EndlessRecurrence, $"The repeat rule '{rule}' never ends. A booking or a "
             + "block must say when it stops — add UNTIL or COUNT. (An availability window may repeat endlessly.)");
     /// <summary>
     /// The slot is not covered by any window the resource has offered, and the resource HAS offered some.

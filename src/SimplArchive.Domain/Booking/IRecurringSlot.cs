@@ -1,7 +1,7 @@
 namespace SimplArchive.Domain.Booking;
 
 /// <summary>
-/// A span of time that may repeat — an availability window, a booking claim or a maintenance block.
+/// A span of time that may repeat — an availability window, a booking claim or a block.
 /// </summary>
 /// <remarks>
 /// <para>

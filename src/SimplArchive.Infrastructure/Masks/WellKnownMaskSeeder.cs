@@ -223,7 +223,7 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         // Reason rather than Purpose — a booking says what the resource is FOR, a block what is wrong with it.
         // Repeats and Exceptions like its siblings (#1133): a recurring inspection slot is a real want, and
         // the same expansion answers for all three kinds.
-        await EnsureMaskAsync(tenantId, WellKnownMaskIds.MaintenanceBlock, "Maintenance block",
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.Block, "Block",
         [
             new FieldSpec("Event UID", FieldDataType.Text, IsRequired: true),
             new FieldSpec("Start", FieldDataType.DateTime, IsRequired: false),
@@ -242,9 +242,9 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
 
         // The resource's out-of-service calendar (ADR 0778): a calendar kind, so it carries the colour field
         // the other two do — a client that subscribes to both wants to tell them apart at a glance.
-        await EnsureMaskAsync(tenantId, WellKnownMaskIds.Maintenance, "Maintenance", [ColourField], cancellationToken);
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.Blockers, "Blockers", [ColourField], cancellationToken);
 
-        // The offered window (ADR 0780), shaped like Booking and Maintenance block so one classifier reads
+        // The offered window (ADR 0780), shaped like Booking and Block so one classifier reads
         // all three. Its domain field is Note — a booking says what the time is FOR and a block what is
         // wrong; an offer usually says nothing, and when it does it is a remark ("dual only").
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.AvailabilityWindow, "Availability window",

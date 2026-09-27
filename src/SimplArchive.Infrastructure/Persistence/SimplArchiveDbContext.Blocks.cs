@@ -45,7 +45,7 @@ public partial class SimplArchiveDbContext
             // IgnoreQueryFilters throughout: the write may come from a worker or protocol edge with no
             // ambient tenant, where the filter's TenantId == null predicate matches nothing silently.
             var isBlock = await MaskVersions.IgnoreQueryFilters()
-                .AnyAsync(v => v.Id == maskVersionId && v.MaskId == WellKnownMaskIds.MaintenanceBlock, cancellationToken);
+                .AnyAsync(v => v.Id == maskVersionId && v.MaskId == WellKnownMaskIds.Block, cancellationToken);
             if (!isBlock)
             {
                 continue;

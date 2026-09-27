@@ -580,7 +580,7 @@ rule for three jobs, and two of the three would be wrong.
   [*Calendar*], [*It says*], [*And the rule that makes it different*],
   [*Schedule*#idx("Schedule")], [This time is _claimed_],
   [Two reservations may *never* overlap. A slot that collides is refused, and the refusal says so.],
-  [*Maintenance*#idx("Maintenance")], [This time is _withdrawn_],
+  [*Blockers*#idx("Blockers")], [This time is _withdrawn_],
   [Blocks *may* overlap each other — two defects reported on one vehicle are two entries, and refusing the
    second would mean the second finding cannot be recorded.],
   [*Availability*#idx("Availability")], [This time is _offered_],
@@ -588,7 +588,7 @@ rule for three jobs, and two of the three would be wrong.
    conflict.],
 )
 
-*Out of service.*#idx("Block") A block filed in Maintenance ("projector broken, Tuesday to Thursday")
+*Out of service.*#idx("Block") A block filed in Blockers ("projector broken, Tuesday to Thursday")
 *suspends* every reservation it overlaps rather than deleting them; when the block is cleared, those
 reservations simply stand again. Nothing is stored as "suspended", so nothing can be left stale, and nobody can
 edit a reservation back into service — the only way out is clearing the block, which is a right of its own. A

@@ -30,7 +30,7 @@ public sealed record SystemRightsSet(
     // May write a Mailbox's address list, and delete or restore a mailbox (#703).
     bool CanManageMailRouting,
 
-    // Maintenance blocks (ADR 0778). Two rights, not one, and deliberately asymmetric: noticing a defect and
+    // Blockers (ADR 0778). Two rights, not one, and deliberately asymmetric: noticing a defect and
     // stopping a resource being used should be BROAD — you want that easy — while putting it back into
     // service is a certifying act. In aviation terms, grounding an aircraft and releasing it to service are
     // not the same authority, and one combined right could not express that.

@@ -63,7 +63,7 @@ public class ModuleDavCollectionTests
 
             // 1. THE LISTING both Calendar tabs read. A module's kind reaches it through the kind registry,
             //    keyed by extension — the list used to name its masks one by one, and that is precisely how
-            //    Maintenance and Availability once stayed invisible while being served over CalDAV.
+            //    Blockers and Availability once stayed invisible while being served over CalDAV.
             var calendars = await TestJson.Get(admin, "/api/dav-collections?kind=calendar");
             var listed = calendars.GetProperty("collections").EnumerateArray()
                 .Any(c => c.GetProperty("id").GetGuid() == logId);

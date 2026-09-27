@@ -94,7 +94,7 @@ public sealed class MaskContainmentRules
         // written for ADR 0744's proof, before modules made other masks bookable; without this, the first
         // booking of a bookable module resource (an aircraft) died on ItemBelongsElsewhere in SaveChanges.
         // Derivation needs no reconcile and heals with IsBookable itself, which both seeders already correct.
-        // ...and its Maintenance collection with it (ADR 0778). Derived from the same flag and in the same
+        // ...and its Blockers collection with it (ADR 0778). Derived from the same flag and in the same
         // loop deliberately: the two collections are what makes a resource bookable in practice — when it is
         // spoken for, and when it is unavailable — and deriving one while seeding the other as rows would mean
         // a module's aircraft could be booked but never grounded, failing on ItemBelongsElsewhere exactly as
@@ -103,8 +103,8 @@ public sealed class MaskContainmentRules
         {
             parents.Add(new { MaskId = WellKnownMaskIds.Schedule, ParentMaskId = bookable.Id });
             children.Add(new { FolderMaskId = bookable.Id, ChildMaskId = WellKnownMaskIds.Schedule });
-            parents.Add(new { MaskId = WellKnownMaskIds.Maintenance, ParentMaskId = bookable.Id });
-            children.Add(new { FolderMaskId = bookable.Id, ChildMaskId = WellKnownMaskIds.Maintenance });
+            parents.Add(new { MaskId = WellKnownMaskIds.Blockers, ParentMaskId = bookable.Id });
+            children.Add(new { FolderMaskId = bookable.Id, ChildMaskId = WellKnownMaskIds.Blockers });
             // ...and its Availability collection (ADR 0780) — the third question about one timeline. Derived
             // for EVERY bookable mask rather than only for person-representing ones: "offered time" is
             // meaningful for a rental aircraft as much as for an instructor, and one clean rule beats a

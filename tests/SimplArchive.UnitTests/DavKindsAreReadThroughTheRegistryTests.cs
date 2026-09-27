@@ -9,7 +9,7 @@ namespace SimplArchive.UnitTests;
 // three times, and each fix moved it one level up instead of ending it:
 //
 //   1. `DavProtocol` carried a hand-written list of masks — fixed by deriving from the table.
-//   2. `ChildCreationPolicy.AdmitsCalendarEntries` derived from the table, and still missed Maintenance
+//   2. `ChildCreationPolicy.AdmitsCalendarEntries` derived from the table, and still missed Blockers
 //      (ADR 0778) and Availability (ADR 0780) — so an Availability folder advertised no create ANYWHERE.
 //   3. The same predicate again (#1242): it derived from the CORE-ONLY table, so a module's Logbook was
 //      advertised without the one rel its entries live at — listed in the Calendar tab, tickable, and

@@ -250,9 +250,9 @@ public sealed class CalendarContactClassifier
             values.Add(("Note", Nonempty(occurrence.Description)));
             await _resources.UpsertAvailabilityRowAsync(document, version, occurrence, cancellationToken);
         }
-        else if (maskId == WellKnownMaskIds.MaintenanceBlock)
+        else if (maskId == WellKnownMaskIds.Block)
         {
-            // A block is written the same way a booking is (ADR 0778): the .ics in the resource's Maintenance
+            // A block is written the same way a booking is (ADR 0778): the .ics in the resource's Blockers
             // collection IS the block, and the same pass that indexes the fields moves the row. Same door,
             // same ordering — before ApplyAsync, so the row rides the save the invariants judge.
             values.Add(("Reason", Nonempty(occurrence.Description)));

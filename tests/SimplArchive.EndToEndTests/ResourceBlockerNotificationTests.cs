@@ -14,11 +14,11 @@ namespace SimplArchive.EndToEndTests;
 // they act on a fact that has since stopped being true.
 [Collection(E2ECollection.Name)]
 [Trait("Area", "e2e-2")]
-public class MaintenanceBlockNotificationTests
+public class ResourceBlockerNotificationTests
 {
     private readonly E2EApiFactory _factory;
 
-    public MaintenanceBlockNotificationTests(E2EApiFactory factory) => _factory = factory;
+    public ResourceBlockerNotificationTests(E2EApiFactory factory) => _factory = factory;
 
     private sealed record World(HttpClient Pilot, HttpClient Engineer, HttpClient Dav, AuthenticationHeaderValue Basic, Guid RoomId, string MaintenanceHref);
 
@@ -49,9 +49,9 @@ public class MaintenanceBlockNotificationTests
         await TestJson.Put(pilot, $"/api/documents/{roomId}/mask", new { maskId = WellKnownMaskIds.MeetingRoom });
 
         var scheduleId = await ProvisionedCollectionAsync(pilot, roomId, "Schedule");
-        var maintenanceId = await ProvisionedCollectionAsync(pilot, roomId, "Maintenance");
+        var blockersId = await ProvisionedCollectionAsync(pilot, roomId, "Blockers");
 
-        // The engineer needs to be able to WRITE into the Maintenance collection; the repository was made by
+        // The engineer needs to be able to WRITE into the Blockers collection; the repository was made by
         // the pilot, so a grant is required before the right is even reached.
         await TestJson.Put(pilot, $"/api/documents/{repositoryId}/acl-entries/users/{await UserIdAsync(engineer)}",
             new { canSee = true, canReadContent = true, canEditContent = true, canCreateSubItems = true });
@@ -75,7 +75,7 @@ public class MaintenanceBlockNotificationTests
         var body = await home.Content.ReadAsStringAsync();
         var block = System.Text.RegularExpressions.Regex
             .Split(body, "</[a-zA-Z]+:response>", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
-            .First(b => b.Contains($"{roomName} / Maintenance", StringComparison.Ordinal));
+            .First(b => b.Contains($"{roomName} / Blockers", StringComparison.Ordinal));
         return System.Text.RegularExpressions.Regex.Match(block, "<[^>]*href[^>]*>([^<]+)</").Groups[1].Value;
     }
 
@@ -153,7 +153,7 @@ public class MaintenanceBlockNotificationTests
 
     /// <summary>The collection a bookable resource was PROVISIONED with (#1097), found by name.</summary>
     /// <remarks>
-    /// These tests used to create Schedule and Maintenance themselves, because nothing did. Assigning a
+    /// These tests used to create Schedule and Blockers themselves, because nothing did. Assigning a
     /// bookable mask now provisions all three, so creating one here would collide with the provisioned
     /// folder on the sibling-name invariant — and, worse, a test that still made its own would be testing
     /// its fixture rather than what a real resource looks like.

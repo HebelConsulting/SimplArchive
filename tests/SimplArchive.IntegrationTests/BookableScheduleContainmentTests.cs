@@ -54,11 +54,11 @@ public class BookableScheduleContainmentTests
         }
 
         // The Schedule is no longer created by the first booking: making the mask bookable PROVISIONS it,
-        // along with Maintenance and Availability (#1097). That is a stronger proof of this test's point
+        // along with Blockers and Availability (#1097). That is a stronger proof of this test's point
         // than the write it replaces — the containment rule had to permit a Schedule under a module's own
         // bookable mask for the save above to succeed at all, and before ADR 0762 it did not.
         using var check = Ctx(connection, new CurrentTenantAccessor { TenantId = tenantId });
         var held = await check.Documents.Where(d => d.ParentId == aircraftId).Select(d => d.Name).ToListAsync();
-        Assert.Equal(["Availability", "Maintenance", "Schedule"], held.OrderBy(n => n, StringComparer.Ordinal));
+        Assert.Equal(["Availability", "Blockers", "Schedule"], held.OrderBy(n => n, StringComparer.Ordinal));
     }
 }

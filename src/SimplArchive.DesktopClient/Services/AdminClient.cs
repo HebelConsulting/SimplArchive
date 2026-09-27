@@ -33,7 +33,7 @@ public sealed class AdminClient(ApiCore core)
         bool CanAccessWithoutGrant = false,
         // Write a Mailbox's address list, delete/restore a mailbox (#703). Defaulted for the same reason.
         bool CanManageMailRouting = false,
-        // Maintenance blocks (ADR 0778) — two rights, asymmetric on purpose: stopping a resource being used
+        // Blockers (ADR 0778) — two rights, asymmetric on purpose: stopping a resource being used
         // should be broad, putting it back is a certifying act. Defaulted for the same reason as the rest.
         bool CanBlockResources = false,
         bool CanReleaseResources = false,

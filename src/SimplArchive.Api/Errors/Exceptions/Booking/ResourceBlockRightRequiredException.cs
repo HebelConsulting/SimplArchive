@@ -10,7 +10,7 @@ namespace SimplArchive.Api.Errors.Exceptions.Booking;
 /// maintenance's act, and gating it on <c>IsTenantAdmin</c> would force a maintenance organisation to hand
 /// out full tenant administration to grant it.
 ///
-/// 403 rather than 404: the caller may well see the resource and its Maintenance collection perfectly well.
+/// 403 rather than 404: the caller may well see the resource and its Blockers collection perfectly well.
 /// What they lack is the authority to withdraw it, and saying so is more useful than pretending the
 /// collection is not there.
 /// </remarks>
