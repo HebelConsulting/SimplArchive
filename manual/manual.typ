@@ -1088,16 +1088,43 @@ differ per vendor; everything from the certificate request onwards is the same f
 Two are needed, and a third is not.
 
 - *The card's own tool*, for generating the key and writing the certificate back. Card personalisation and
-  key generation are card-applet operations, not PKCS#11 ones. In this example that is `ykman`.
-- *The PKCS#11 module*, so the desktop client can reach the card at all. Install *OpenSC*; the client looks
+  key generation are card-applet operations, not PKCS\#11 ones. In this example that is `ykman`.
+- *The PKCS\#11 module*, so the desktop client can reach the card at all. Install *OpenSC*; the client looks
   for `opensc-pkcs11` in the usual places and offers a file picker if it is somewhere else.
 - *`caconsole`*, the certificate tool, if the certificate is issued by your own certificate authority. It
   installs from the public package feed and needs no credentials:
 
 ```sh
 dotnet tool install --global HebelConsulting.CAManagement.Cli
-caconsole list-slots --module /path/to/opensc-pkcs11.so
+
+# ONCE PER MACHINE: a global tool lands in ~/.dotnet/tools, which is not on PATH by default.
+# Without this the next line fails with "command not found: caconsole".
+export PATH="$PATH:$HOME/.dotnet/tools"   # add to ~/.zshrc to keep it
+
+caconsole list-slots --module <the PKCS#11 module>
 ```
+
+#note[
+  *"command not found: caconsole" does not mean the install failed.* It almost always means
+  `~/.dotnet/tools` is not on your PATH — the installer prints that warning once and it is easy to miss.
+  Check with `dotnet tool list --global`: if the table lists the package and the command `caconsole`, the
+  tool is there and only the PATH is missing. `~/.dotnet/tools/caconsole` will run it in the meantime.
+]
+
+*Where the module is.* `list-slots` needs the path to OpenSC's PKCS\#11 library, and it differs per system.
+These are the places the desktop client itself looks, so one of them is almost certainly right:
+
+/ macOS, Homebrew on Apple silicon: #linebreak() `/opt/homebrew/lib/opensc-pkcs11.so`
+/ macOS, Homebrew on Intel: #linebreak() `/usr/local/lib/opensc-pkcs11.so`
+/ macOS, the OpenSC installer package: #linebreak() `/Library/OpenSC/lib/opensc-pkcs11.so`
+/ Windows: #linebreak() `C:\Program Files\OpenSC Project\OpenSC\pkcs11\opensc-pkcs11.dll`
+/ Linux, Debian and Ubuntu: #linebreak() `/usr/lib/x86_64-linux-gnu/opensc-pkcs11.so`
+/ Linux, Fedora and RHEL: #linebreak() `/usr/lib64/opensc-pkcs11.so`
+
+A working run names the token rather than staying silent — with a card inserted it prints the Cryptoki
+version and a table with one row per slot, and the token column shows `PIV_II` for a personalised card. If the
+table is empty the module loaded but the reader sees no card; if the command fails on the module path, the path
+is wrong rather than the card.
 
 #note[
   *`saconsole` is not involved.* The archive's own command-line tool signs in, creates tenants and reports
@@ -1130,7 +1157,7 @@ ykman piv certificates request 9d public.pem holder.csr \
 
 #note[
   *Use the card's tool for this step, not the certificate tool.* `caconsole` can produce a request from a
-  key that lives on a token — but a PKCS#11 module only surfaces a PIV slot once that slot carries a
+  key that lives on a token — but a PKCS\#11 module only surfaces a PIV slot once that slot carries a
   *certificate*, and this one does not yet. Asking the certificate tool first fails with
   `No private key with label '…' found on the token`, which reads like a wrong label and is not one.
 ]
