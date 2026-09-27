@@ -452,7 +452,7 @@ SimplArchive.Infrastructure.Modules.ModuleReadModelWiring.AddModuleReadModels(bu
 // code the same caller/rights answers core controllers get.
 SimplArchive.Api.Modules.ModuleApiServices.AddModuleApiSeams(builder.Services);
 
-// The per-installation encryption service's client (SimplArchiveEncryption ADR 0007) — inert until
+// The per-installation encryption service's client (SimplArchiveEncryptionService ADR 0007) — inert until
 // Encryption:ServiceUrl is configured, at which point IMAP FETCH envelopes served messages to the
 // recipient's registered certificate.
 SimplArchive.Infrastructure.Encryption.MessageEnvelopeServices.AddMessageEnvelope(builder.Services);

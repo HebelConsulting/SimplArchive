@@ -5,7 +5,7 @@ namespace SimplArchive.Infrastructure.Storage;
 /// <summary>
 /// The at-rest blob cipher (ADR 0818): AES-256-GCM over the one wire format every encrypting party
 /// shares — <c>nonce(12) ‖ ciphertext ‖ tag(16)</c> — the same convention the encryption service and the
-/// future client-side upload leg use (SimplArchiveEncryption ADR 0011).
+/// future client-side upload leg use (SimplArchiveEncryptionService ADR 0011).
 /// </summary>
 public static class AtRestBlobCipher
 {

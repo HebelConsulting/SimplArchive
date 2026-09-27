@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 namespace SimplArchive.Infrastructure.Encryption;
 
 /// <summary>
-/// The core's client for the per-installation encryption service's download leg (SimplArchiveEncryption
+/// The core's client for the per-installation encryption service's download leg (SimplArchiveEncryptionService
 /// ADRs 0005/0007): hand it a built RFC-822 message and a recipient, get the message back with its body
 /// replaced by CMS <c>EnvelopedData</c> to that user's registered certificate.
 /// </summary>
@@ -24,7 +24,7 @@ namespace SimplArchive.Infrastructure.Encryption;
 /// </para>
 /// <para>
 /// <b>404 is a contract, not a failure</b>: the user has no registered certificate, and the POC serves
-/// plaintext then (SimplArchiveEncryption ADR 0007's stated boundary — production turns that into a policy
+/// plaintext then (SimplArchiveEncryptionService ADR 0007's stated boundary — production turns that into a policy
 /// decision). It is logged at Debug precisely because it is the expected state for most users.
 /// </para>
 /// <para>

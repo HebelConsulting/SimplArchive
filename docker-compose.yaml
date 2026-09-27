@@ -82,7 +82,7 @@ x-api-deps: &api-deps
 # configuration lives on ONE instance only (see `api` below).
 x-api-env: &api-env
   ASPNETCORE_ENVIRONMENT: Development
-  # The per-installation encryption service (SimplArchiveEncryption ADR 0007) — EMPTY by default, and empty
+  # The per-installation encryption service (SimplArchiveEncryptionService ADR 0007) — EMPTY by default, and empty
   # means inert: the core behaves exactly as if the service did not exist. Set for the POC demo to reach a
   # host-run service, e.g. ENCRYPTION_SERVICE_URL=http://host.docker.internal:5210. In the SHARED anchor on
   # purpose: an encryption setting present on one instance and not the other would envelope half a user's

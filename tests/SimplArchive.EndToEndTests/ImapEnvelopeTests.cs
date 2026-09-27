@@ -7,7 +7,7 @@ using SimplArchive.Api.Imap;
 
 namespace SimplArchive.EndToEndTests;
 
-// The IMAP envelope hook (SimplArchiveEncryption ADR 0007) and its per-tenant gate (ADR 0813): with an
+// The IMAP envelope hook (SimplArchiveEncryptionService ADR 0007) and its per-tenant gate (ADR 0813): with an
 // encryption service configured, a FETCH serves the message enveloped to the recipient's registered
 // certificate — but only for a tenant Encryption:Tenants lists. The factory lists exactly the seeded
 // CryptoDemo tenant (the kiosk's shape), so the seeded tenant carries the positive path and every

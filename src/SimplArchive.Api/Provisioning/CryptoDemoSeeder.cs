@@ -10,7 +10,7 @@ using SimplArchive.Infrastructure.Persistence;
 namespace SimplArchive.Api.Provisioning;
 
 // Env-driven idempotent seed of the ENCRYPTED demo tenant (ADR 0813) — the tenant the kiosk lists in
-// Encryption:Tenants so the encryption service (SimplArchiveEncryption ADR 0007) can be exercised on a live
+// Encryption:Tenants so the encryption service (SimplArchiveEncryptionService ADR 0007) can be exercised on a live
 // stack WITHOUT touching the public demo tenant: same shape as DemoDataSeeder (ADR 0214) and
 // InteropTenantSeeder (ADR 0585), a no-op unless the CryptoDemo:* config is present.
 //

@@ -5,7 +5,7 @@ using SimplArchive.Infrastructure.Encryption;
 
 namespace SimplArchive.UnitTests;
 
-// The core's client for the encryption service's download leg (SimplArchiveEncryption ADR 0007). What these
+// The core's client for the encryption service's download leg (SimplArchiveEncryptionService ADR 0007). What these
 // pin is the CONTRACT the IMAP funnel builds on: null always means "serve what you built", and the four
 // ways of reaching null — unconfigured, tenant not listed (ADR 0813), no certificate, service down — must
 // all resolve there, because the funnel has exactly one fallback and a throw anywhere in this class would

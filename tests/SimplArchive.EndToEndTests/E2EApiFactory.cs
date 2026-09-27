@@ -123,7 +123,7 @@ public sealed partial class E2EApiFactory : WebApplicationFactory<Program>, IAsy
 
     private string _storageUrl = "";
 
-    // A STUB encryption service for the IMAP envelope hook (SimplArchiveEncryption ADR 0007). Hosted for the
+    // A STUB encryption service for the IMAP envelope hook (SimplArchiveEncryptionService ADR 0007). Hosted for the
     // whole collection with 404 as its default answer, which means every existing IMAP test continuously
     // exercises the no-certificate → plaintext contract as a side effect of merely running. A test opts a
     // user in via RegisterEncryptionRecipient; the stub then returns a marker message rather than real CMS —
