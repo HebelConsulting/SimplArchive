@@ -32,6 +32,12 @@ public class InstanceParityTests
         { Path.Combine("tools", "kiosk", "docker-compose.yml"), "kiosk-api-env", "kiosk-api-build" },
     };
 
+    public static TheoryData<string> OverlayFiles() => new()
+    {
+        Path.Combine("tools", "kiosk", "docker-compose.encryption.yml"),
+        Path.Combine("tools", "kiosk", "docker-compose.flightschool.yml"),
+    };
+
     public static TheoryData<string> ComposeFileNames() => new()
     {
         "docker-compose.yaml",
@@ -213,6 +219,100 @@ public class InstanceParityTests
 
     // One service's block: from its key to the next key at the same indent. Compose keys under `services:` are
     // two-space indented, so a four-space line is inside the block and a two-space line starts the next one.
+    /// <summary>
+    /// The OVERLAY files — the add-ons — were outside this guard entirely, and the encryption overlay's own
+    /// comment claimed otherwise ("BOTH instances get the switch (the InstanceParityTests rule)") while citing
+    /// a guard that never read it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The anchor assertions above cannot cover an overlay, and that is by design rather than an oversight to
+    /// correct: an overlay MERGES keys on top of the base file's anchor per service, so it defines no anchor of
+    /// its own and asserting one would fail every overlay that is written correctly. What an overlay must
+    /// instead satisfy is the rule the anchor exists to produce — **both instances end up with the same
+    /// settings** — so this asks that directly, of the keys themselves.
+    /// </para>
+    /// <para>
+    /// Why it matters more here than in the base file: an overlay is where a per-tenant SWITCH lands
+    /// (<c>Encryption__Modes__&lt;tenant&gt;</c>), and a switch present on one instance of two behind one proxy
+    /// is the hardest defect this stack can produce — a visitor is served the encrypted answer or the plaintext
+    /// one depending on which container took the request, and both look correct in isolation.
+    /// </para>
+    /// <para>
+    /// <b>The seeding keys are the deliberate exception</b> (ADR 0808): seeding is config-gated and rides on
+    /// <c>api</c> alone, so a <c>CryptoDemo__</c> key on both instances would be a second seeder rather than
+    /// parity. An overlay with no <c>api</c> service at all — the flight school's, which configures a one-shot
+    /// <c>modules-init</c> — has no instances to keep in step and is not this rule's business.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(OverlayFiles))]
+    public void An_overlay_gives_BOTH_instances_every_setting_that_is_not_a_seed_key(string file)
+    {
+        if (Withheld(file))
+        {
+            return; // the public mirror has no tools/, by design
+        }
+
+        var text = Read(file);
+        if (!text.Contains("\n  api:\n", StringComparison.Ordinal))
+        {
+            return; // an overlay that configures no app instance (the flight school's modules-init)
+        }
+
+        var first = EnvironmentKeys(ServiceBlock(text, "api"));
+        var shared = first.Where(e => !SeedingOnly(e.Key)).ToDictionary(e => e.Key, e => e.Value);
+
+        Assert.True(text.Contains("\n  api-b:\n", StringComparison.Ordinal),
+            $"{file} configures `api` but not `api-b`. Every setting here reaches one instance of two behind the "
+            + $"proxy, so a visitor gets it or does not depending on which container answers: {string.Join(", ", shared.Keys)}");
+
+        var second = EnvironmentKeys(ServiceBlock(text, "api-b"));
+
+        foreach (var (key, value) in shared)
+        {
+            Assert.True(second.TryGetValue(key, out var other),
+                $"{file} sets {key} on `api` but not on `api-b`. Both instances must carry it, or it is served "
+                + "to a visitor at random. If it belongs to ONE instance on purpose, it is a seeding key and "
+                + "belongs to the exception list in this test with its reason.");
+
+            Assert.True(value == other,
+                $"{file} sets {key} to '{value}' on `api` and '{other}' on `api-b`. Two instances behind one "
+                + "proxy disagreeing about a setting is answered at random.");
+        }
+    }
+
+    /// <summary>The <c>KEY: value</c> pairs under a service block's <c>environment:</c>, values unquoted.</summary>
+    private static Dictionary<string, string> EnvironmentKeys(string block)
+    {
+        var found = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var raw in block.Split('\n'))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0 || line[0] == '#' || !line.Contains(':', StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var split = line.IndexOf(':', StringComparison.Ordinal);
+            var key = line[..split].Trim();
+            // Environment keys only: a nested mapping key ("environment", "volumes") carries no value on its line.
+            var value = line[(split + 1)..].Trim().Trim('"');
+            if (value.Length > 0 && key.Length > 0 && !key.Contains(' ', StringComparison.Ordinal))
+            {
+                found[key] = value;
+            }
+        }
+
+        return found;
+    }
+
+    // Seeding is config-gated and runs on `api` alone (ADR 0808), so these belong to one instance BY DESIGN.
+    private static bool SeedingOnly(string key) =>
+        key.StartsWith("CryptoDemo__", StringComparison.Ordinal)
+        || key.StartsWith("Demo__", StringComparison.Ordinal)
+        || key.StartsWith("Interop__", StringComparison.Ordinal);
+
     private static string ServiceBlock(string text, string name)
     {
         var marker = $"\n  {name}:\n";
