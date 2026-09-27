@@ -47,6 +47,17 @@ public sealed class StorageQuotaService : IStorageQuotaService
 
         // Atomic DB-level increment so concurrent adjustments don't race a read-modify-write. Clamp at 0 defensively
         // (a decrement can't drive the counter negative even if a blob was never counted at add time).
+        //
+        // TOKEN DELIBERATELY NOT MOVED. Tenant is IConcurrencyTracked and ExecuteUpdate skips the regeneration
+        // SaveChanges performs (#1444), so this leaves the ETag alone — and here that is not merely acceptable, it
+        // is required. This counter is bumped by EVERY upload and delete in the tenant, by anybody; moving the
+        // token would make an administrator's save of the Security tab fail with a 412 because an unrelated user
+        // uploaded a file, on a row the nine settings PUTs already share.
+        //
+        // It is also the case that sharpens the visibility rule at IConcurrencyTracked, which is why it is spelled
+        // out rather than waved at: StorageUsedBytes IS displayed, so "can the reader see it?" taken literally
+        // says move the token. The question is narrower — did what the EDITOR is editing change? A usage figure
+        // that drifts under them on its own is not their edit colliding with anybody's.
         await _dbContext.Tenants
             .Where(t => t.Id == tenantId)
             .ExecuteUpdateAsync(

@@ -104,6 +104,14 @@ public sealed class WorkflowEscalationService : IWorkflowEscalationService
     /// <c>ExecuteUpdateAsync</c> wearing a name, and the pattern is what is worth repeating, not the line.
     /// </para>
     /// </remarks>
+    // TOKEN DELIBERATELY NOT MOVED, for both branches below. WorkflowState is IConcurrencyTracked, and
+    // ExecuteUpdate skips the regeneration SaveChanges performs — so these claims leave the ETag where it was, on
+    // purpose (#1444, and the visibility rule at IConcurrencyTracked).
+    //
+    // This is the case the rule was written around. An approver has the task open; a reminder or an escalation
+    // fires underneath them; nothing they can SEE has changed. Moving the token would refuse their Approve with a
+    // 412 whose only remedy is to reload and press the same button — a conflict reported where there is no
+    // conflict of intent. The document-visible counterpart is the retention sweep, which moves it.
     private async Task<bool> ClaimAsync(
         WorkflowState state, bool escalating, DateTimeOffset now, CancellationToken cancellationToken)
     {

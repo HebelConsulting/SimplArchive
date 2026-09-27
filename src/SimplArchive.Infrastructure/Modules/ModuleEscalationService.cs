@@ -121,6 +121,12 @@ public sealed class ModuleEscalationService
     /// was not an accident but the arrangement.
     /// </para>
     /// </remarks>
+    // TOKEN DELIBERATELY NOT MOVED. ModuleActivation is IConcurrencyTracked, and ExecuteUpdate skips the
+    // regeneration SaveChanges performs — so this claim leaves the ETag where it was, on purpose (#1444, and the
+    // visibility rule at IConcurrencyTracked). EscalationLevel is invisible bookkeeping: an administrator with the
+    // module's settings form open sees nothing change, so a 412 here is one they could answer only by reloading
+    // and redoing the same edit. Where a claim DOES change something the reader can see — the retention sweep's
+    // DeletedAt — it moves the token instead.
     private async Task<bool> ClaimLevelAsync(
         ModuleActivation activation, int level, CancellationToken cancellationToken) =>
         await _dbContext.ModuleActivations
