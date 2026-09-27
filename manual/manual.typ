@@ -1211,6 +1211,57 @@ ykman piv certificates import 9d holder.crt
 *inserted*, so a card personalised in place is not yet visible to anything. Skipping this makes a correctly
 prepared card look broken.
 
+== Checking the card before you rely on it
+
+The desktop client carries two hooks that answer *"is this card actually going to work?"* without a server, an
+account, or a document. They are worth running before registering anything, and they are the first thing to
+reach for when a card misbehaves later.
+
+Both are the *installed desktop client*, run from a terminal with a flag — there is nothing extra to install
+and no source tree to build.
+
+```sh
+# The installed executable. This is the macOS path; the others are below.
+SA=/Applications/SimplArchive.app/Contents/MacOS/SimplArchive.DesktopClient
+```
+
+/ macOS: #linebreak() `/Applications/SimplArchive.app/Contents/MacOS/SimplArchive.DesktopClient`
+/ Windows, in the unpacked folder: #linebreak() `SimplArchive.DesktopClient.exe`
+/ Linux, in the unpacked folder: #linebreak() `./SimplArchive.DesktopClient`
+
+*What the client can see* — no PIN, because certificates are public:
+
+```sh
+$SA --card-test
+```
+
+It prints the PKCS\#11 module it found, then every certificate on every token in every reader, with the
+subject, the expiry and a *concern* — `KeyUsage` when the certificate does not mention key encipherment,
+`Expired`, or `None`. A card that shows nothing here will show nothing in the dialog either, and the cause is
+the module or the reader rather than the archive.
+
+*Whether it can actually decrypt* — this one needs the PIN:
+
+```sh
+CARD_PIN=<pin> $SA --card-open-test
+```
+
+It builds an envelope *the way the server builds one*, addressed to the certificate on the card, and opens it
+through the same code a real document goes through. `MATCHES: True` on the last line means the whole chain
+works: the certificate, the key behind it, the PIN, the module, and the client's own reading path.
+
+#note[
+  *This is the test that settles arguments, and it is the only one that can.* A certificate looks identical
+  whether or not a usable private key stands behind it — and on YubiKey firmware older than 5.3 `ykman piv info`
+  reports `Private key type: EMPTY` for a slot holding a perfectly good key, because key metadata did not exist
+  before that version. Reading that as "there is no key" and regenerating would destroy the real one. A
+  decryption is the only thing that proves the key is there.
+
+  It also tells a *wrong PIN* apart from a *broken card*: the failure names `CKR_PIN_INCORRECT` rather than
+  reporting that nothing could open the envelope. Mind the retry counter while trying — three wrong entries
+  block the PIN.
+]
+
 == Registering it with the archive
 
 In the desktop client, open *Encrypted mail (S/MIME)…* from the account menu and choose *Add a card or
@@ -1227,6 +1278,49 @@ what they see.
   card enforces that field — so the dialog says so and lets you continue rather than refusing a certificate
   that works.
 ]
+
+== When the certificate expires, and replacing a key
+
+*The key does not expire; the certificate does.* Validity dates are a property of the certificate, and the
+private key on the card outlives them — it keeps decrypting whatever was ever addressed to it.
+
+*Expiry is checked when a certificate is REGISTERED, and never again.* Both doors refuse one that has already
+lapsed: the archive's own registration answers `it expired <date>`, and so does the encryption service's
+registry. After that, nothing re-checks it. Content keeps being addressed to it, the card keeps opening it,
+and no warning appears — which is deliberate rather than an omission, because the alternative is worse: a
+reader whose renewal is a week late would stop receiving anything, and the key that opens their existing
+documents would still be in their pocket.
+
+#note[
+  *So an expired certificate is a LATENT problem, not an immediate one.* Everything works until the day it has
+  to be registered again — a new installation, a card re-issued after a reset, the same person added to a
+  second archive — and only then is it refused. The fix at that point is a new certificate, and if a new
+  *key* comes with it, every document already addressed to the old one stops opening. Renew before that day,
+  not after it.
+]
+
+=== Replacing a key without losing the past
+
+Content is addressed to a *certificate*, so the archive cannot re-address history for you — doing that would
+need the plaintext it deliberately never keeps. If you overwrite slot 9D with a fresh key, everything
+enveloped to the old one becomes unreadable, and there is no undo.
+
+*A PIV slot holds exactly one key and one certificate*, so 9D cannot hold both the old and the new. What a
+YubiKey adds is *twenty retired key-management slots* — `82` through `95` — meant for precisely this: the old
+key moves aside instead of being destroyed.
+
+#note[
+  *The archive needs no configuration for this, and there is nothing to register a second time.* The desktop
+  client enumerates *every* certificate on the token rather than looking in a particular slot, and an envelope
+  names the certificate it was sealed to — so an old key sitting in a retired slot is found and used
+  automatically when an old document is opened. New documents go to the new certificate, old ones keep
+  opening, and the reader sees no difference.
+]
+
+*Two practical cautions.* `ykman piv keys move` exists, but moving a key between slots depends on the card's
+firmware — try it on a spare card before relying on it, rather than discovering the limit on the card that
+holds the only copy of a key. And a card has twenty retired slots, not an unlimited number: they are room for
+a working lifetime of rotations, not a place to keep everything forever.
 
 == What a card covers, and what it may not
 
