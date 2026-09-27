@@ -1147,31 +1147,67 @@ ykman piv keys generate 9d public.pem \
     --algorithm rsa2048 --pin-policy once --touch-policy never
 ```
 
-*3 — Ask the card for a certificate request.* The card signs the request itself, which is what proves it
-holds the key.
+*3 — Put a certificate in the slot.* The slot needs one before anything can use the key at all: a PKCS\#11
+module does not surface a PIV slot that carries only a key. There are two routes, and *for this archive the
+simple one is enough* — so it is given first rather than as an afterthought.
+
+*3a — Self-signed, with no authority at all.* The card's own tool both makes the certificate and writes it to
+the slot, in one command.
+
+```sh
+ykman piv certificates generate 9d public.pem \
+    --subject "CN=Card Holder,O=Example,C=CH" --valid-days 730
+```
+
+#note[
+  *The archive accepts a self-signed certificate, and that is deliberate rather than an oversight.* Nothing on
+  the reading path validates a chain or an issuer: content is enveloped to a *public key*, and the only thing
+  that can open the envelope is the private key on the card. A certificate authority answers a different
+  question — *who vouches that this key belongs to that person* — which matters for an organisation issuing
+  identities and not at all for whether a document opens.
+
+  What the archive does check is that the file parses as X.509 and carries an *RSA* key. An elliptic-curve key
+  is refused, because content uses RSA key transport — the same requirement section 15.1 gives for the key itself.
+
+  *Mind the lifetime.* `--valid-days` defaults to *365*, and while the archive itself does not refuse an
+  expired certificate on the reading path, the encryption service *does* refuse to register one — so a
+  certificate that has already lapsed cannot be re-registered after a reset or a move to another installation.
+  Choose a lifetime you are willing to live with.
+]
+
+*3b — Or issued by your own authority,* if your organisation wants identities it controls — a common trust
+root, a name it owns, a register of who was issued what. Ask the card for a request, issue it, and write the
+result back.
 
 ```sh
 ykman piv certificates request 9d public.pem holder.csr \
     --subject "CN=Card Holder,O=Example,C=CH"
-```
 
-#note[
-  *Use the card's tool for this step, not the certificate tool.* `caconsole` can produce a request from a
-  key that lives on a token — but a PKCS\#11 module only surfaces a PIV slot once that slot carries a
-  *certificate*, and this one does not yet. Asking the certificate tool first fails with
-  `No private key with label '…' found on the token`, which reads like a wrong label and is not one.
-]
-
-*4 — Issue the certificate* from your own authority, and *5 — write it back to the card.*
-
-```sh
 caconsole issue --token-label ca --pin <ca-pin> \
     --ca-label root --ca-cert ca.crt --csr holder.csr --days 365 --out holder.crt
 
 ykman piv certificates import 9d holder.crt
 ```
 
-*6 — Remove the card and put it back in.* The operating system creates its view of a token when the card is
+#note[
+  *Use the card's tool for the request, not the certificate tool.* `caconsole` can produce a request from a
+  key that lives on a token — but a PKCS\#11 module only surfaces a PIV slot once that slot carries a
+  *certificate*, and this one does not yet. Asking the certificate tool first fails with
+  `No private key with label '…' found on the token`, which reads like a wrong label and is not one.
+]
+
+#note[
+  *An empty `ERROR:` with no message means the slot has no key.* Both commands in 3a and 3b sign with the
+  private key in slot 9D, so running either before step 2 fails — and the card's tool reports it as a bare
+  `ERROR:` with nothing after the colon, which says nothing at all about the cause. Check with
+  `ykman piv info`: if the output has no *Slot 9D* section, there is no key there yet.
+
+  This is also what a *reset* leaves behind. `ykman piv reset` — the way out of a blocked PIN when the PUK is
+  blocked too — erases every key and certificate on the card, so it puts you back at step 1 rather than where
+  you left off. Prefer `ykman piv access unblock-pin`, which takes the PUK and keeps the key.
+]
+
+*4 — Remove the card and put it back in.* The operating system creates its view of a token when the card is
 *inserted*, so a card personalised in place is not yet visible to anything. Skipping this makes a correctly
 prepared card look broken.
 
