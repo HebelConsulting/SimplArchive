@@ -22,8 +22,8 @@ public class EncryptionModesTests
     public void Nothing_configured_means_no_encryption()
     {
         Assert.Equal(EncryptionMode.None, Modes().ModeFor("Demo"));
-        Assert.False(Modes().Applies("Demo"));
-        Assert.False(Modes().IsStrict("Demo"));
+        Assert.False(Modes().WrapsAtRest("Demo"));
+        Assert.False(Modes().RefusesPlaintextDoors("Demo"));
     }
 
     // The installation default is what keeps a NEWLY PROVISIONED tenant encrypted. Without it, per-tenant
@@ -34,22 +34,22 @@ public class EncryptionModesTests
     {
         var modes = Modes(("Encryption:DefaultMode", "Storage"));
 
-        Assert.True(modes.Applies("Demo"));
-        Assert.True(modes.Applies("a-tenant-created-tomorrow"));
-        Assert.False(modes.IsStrict("Demo"));
+        Assert.True(modes.WrapsAtRest("Demo"));
+        Assert.True(modes.WrapsAtRest("a-tenant-created-tomorrow"));
+        Assert.False(modes.RefusesPlaintextDoors("Demo"));
     }
 
     [Fact]
     public void A_per_tenant_entry_overrides_the_default_in_both_directions()
     {
         var up = Modes(("Encryption:DefaultMode", "Storage"), ("Encryption:Modes:Ministry", "Strict"));
-        Assert.True(up.IsStrict("Ministry"));
-        Assert.False(up.IsStrict("Demo"));
+        Assert.True(up.RefusesPlaintextDoors("Ministry"));
+        Assert.False(up.RefusesPlaintextDoors("Demo"));
 
         // Downwards too: a named tenant can be taken OUT of an installation-wide mode.
         var down = Modes(("Encryption:DefaultMode", "Storage"), ("Encryption:Modes:Public", "None"));
-        Assert.False(down.Applies("Public"));
-        Assert.True(down.Applies("Demo"));
+        Assert.False(down.WrapsAtRest("Public"));
+        Assert.True(down.WrapsAtRest("Demo"));
     }
 
     // Strict IS at-rest-plus-envelope, so the incoherent state the two lists allowed — strict but not
@@ -59,15 +59,15 @@ public class EncryptionModesTests
     {
         var modes = Modes(("Encryption:Modes:Ministry", "Strict"));
 
-        Assert.True(modes.IsStrict("Ministry"));
-        Assert.True(modes.Applies("Ministry"));
+        Assert.True(modes.RefusesPlaintextDoors("Ministry"));
+        Assert.True(modes.WrapsAtRest("Ministry"));
     }
 
     [Fact]
     public void Tenant_names_match_case_insensitively()
     {
         var modes = Modes(("Encryption:Modes:CryptoDemo", "Storage"));
-        Assert.True(modes.Applies("cryptodemo"));
+        Assert.True(modes.WrapsAtRest("cryptodemo"));
     }
 
     // An unrecognised mode is refused, never silently treated as None — which would switch encryption off
@@ -219,8 +219,72 @@ public class EncryptionModesTests
         {
             var wrapsAtRest = mode is EncryptionMode.Storage or EncryptionMode.Strict;
 
-            Assert.Equal(wrapsAtRest, Modes((EncryptionModes.DefaultSection, mode.ToString())).Applies("Any"));
+            Assert.Equal(wrapsAtRest, Modes((EncryptionModes.DefaultSection, mode.ToString())).WrapsAtRest("Any"));
         }
+    }
+
+    // EVERY mode against EVERY question, in one table. The three questions were one ordered comparison and
+    // two predicates that happened to agree; #1411's fourth tier is stronger on delivery and weaker at rest,
+    // so they come apart, and the table is what stops a later reader re-merging them.
+    //
+    // Read down a column, not across: `Storage` wraps and envelopes mail but delivers no envelopes and shuts
+    // no doors; `DeliveryOnlyPermissive` is its exact opposite on all four.
+    [Theory]
+    //                                        wraps  doors  envelopes  mail
+    [InlineData(EncryptionMode.None, false, false, false, false)]
+    [InlineData(EncryptionMode.Storage, true, false, false, true)]
+    [InlineData(EncryptionMode.Strict, true, true, true, true)]
+    [InlineData(EncryptionMode.DeliveryOnlyPermissive, false, false, true, false)]
+    [InlineData(EncryptionMode.DeliveryOnlyStrict, false, true, true, false)]
+    public void Each_mode_answers_all_four_questions_explicitly(
+        EncryptionMode mode, bool wraps, bool shutsDoors, bool envelopes, bool mail)
+    {
+        var modes = Modes((EncryptionModes.Section + ":T", mode.ToString()));
+
+        Assert.Equal(wraps, modes.WrapsAtRest("T"));
+        Assert.Equal(shutsDoors, modes.RefusesPlaintextDoors("T"));
+        Assert.Equal(envelopes, modes.DeliversEnvelopes("T"));
+        Assert.Equal(mail, modes.EnvelopesMail("T"));
+    }
+
+    // A delivery tier needs no encryption SERVICE -- that is the whole point of the split (ADR 0834), and the
+    // refusal it must not trip is the one written as an ordering (`> None`), which would have caught it.
+    [Theory]
+    [InlineData(EncryptionMode.DeliveryOnlyPermissive)]
+    [InlineData(EncryptionMode.DeliveryOnlyStrict)]
+    public void A_delivery_tier_is_not_refused_for_lacking_an_encryption_service(EncryptionMode mode)
+    {
+        var configuration = Config((EncryptionModes.Section + ":T", mode.ToString()));
+
+        EncryptionModes.ThrowIfModeHasNoService(configuration);   // does not throw
+    }
+
+    // ...but it IS refused while nothing performs its delivery. Same failure as #1406 and refused the same
+    // way: a mode with nothing behind it does not misbehave, it silently has no guarantee.
+    [Theory]
+    [InlineData(EncryptionMode.DeliveryOnlyPermissive)]
+    [InlineData(EncryptionMode.DeliveryOnlyStrict)]
+    public void A_delivery_tier_is_refused_while_the_module_does_not_exist(EncryptionMode mode)
+    {
+        var configuration = Config((EncryptionModes.Section + ":T", mode.ToString()));
+
+        var error = Assert.Throws<InvalidOperationException>(
+            () => EncryptionModes.ThrowIfDeliveryOnlyHasNoModule(configuration));
+
+        Assert.Contains("Encryption Module", error.Message);
+        Assert.Contains($"{EncryptionModes.Section}:T", error.Message);
+    }
+
+    [Theory]
+    [InlineData(EncryptionMode.None)]
+    [InlineData(EncryptionMode.Storage)]
+    [InlineData(EncryptionMode.Strict)]
+    public void The_module_refusal_says_nothing_about_the_modes_that_do_not_need_one(EncryptionMode mode)
+    {
+        var configuration = Config((EncryptionModes.ServiceUrlKey, "http://enc"),
+                                   (EncryptionModes.Section + ":T", mode.ToString()));
+
+        EncryptionModes.ThrowIfDeliveryOnlyHasNoModule(configuration);   // does not throw
     }
 
     [Fact]
@@ -232,7 +296,7 @@ public class EncryptionModesTests
         var values = Enum.GetValues<EncryptionMode>();
 
         Assert.Equal(EncryptionMode.None, values.Min());
-        Assert.True(values.Length == 3,
+        Assert.True(values.Length == 5,
             "A mode was added. `Applies` lists the modes that wrap at rest and must be reviewed — NOT by "
             + "sorting the enum: these values are not a scale (Storage names what is protected, Strict names a "
             + "posture, a delivery-only tier is stronger on delivery and encrypts nothing at rest). Decide "

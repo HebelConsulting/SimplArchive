@@ -120,7 +120,7 @@ public sealed class MessageEnvelopeClient(
 
     // The answer lives in EncryptionModes — one map for both tiers, so they cannot drift into different
     // readings of the configuration, and a second copy of this lookup has nowhere to be born.
-    private bool TenantListed(string tenantName) => new EncryptionModes(configuration).Applies(tenantName);
+    private bool TenantListed(string tenantName) => new EncryptionModes(configuration).EnvelopesMail(tenantName);
 }
 
 /// <summary>Registration, kept out of Program.cs so the integration is one line there.</summary>

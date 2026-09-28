@@ -62,7 +62,7 @@ public sealed class StrictEnvelopeDelivery(
         }
 
         var name = await TenantNameAsync(cancellationToken);
-        return name is not null && modes.IsStrict(name);
+        return name is not null && modes.DeliversEnvelopes(name);
     }
 
     /// <summary>This request's tenant NAME, which is what the mode map and the registry are both keyed by.</summary>

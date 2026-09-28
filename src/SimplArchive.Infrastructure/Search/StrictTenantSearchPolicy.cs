@@ -55,6 +55,6 @@ public class StrictTenantSearchPolicy(SimplArchiveDbContext dbContext, Encryptio
             .Select(t => t.Name)
             .SingleOrDefaultAsync(cancellationToken);
 
-        return name is not null && modes.IsStrict(name);
+        return name is not null && modes.RefusesPlaintextDoors(name);
     }
 }

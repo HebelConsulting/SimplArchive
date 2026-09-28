@@ -59,7 +59,7 @@ public sealed class AtRestKeyService(
         // copy of the same list logic.
         var name = await TenantNameAsync(tenantId, cancellationToken);
         return name is not null
-            && new SimplArchive.Infrastructure.Encryption.EncryptionModes(configuration).Applies(name);
+            && new SimplArchive.Infrastructure.Encryption.EncryptionModes(configuration).WrapsAtRest(name);
     }
 
     /// <summary>True when this object belongs to a STRICT-tier tenant, which never serves plaintext.</summary>
@@ -77,7 +77,7 @@ public sealed class AtRestKeyService(
 
         var name = await TenantNameAsync(tenantId, cancellationToken);
         return name is not null
-            && new SimplArchive.Infrastructure.Encryption.EncryptionModes(configuration).IsStrict(name);
+            && new SimplArchive.Infrastructure.Encryption.EncryptionModes(configuration).RefusesPlaintextDoors(name);
     }
 
     /// <summary>The current KEK in the client-facing shape — for the initiate-upload response.</summary>

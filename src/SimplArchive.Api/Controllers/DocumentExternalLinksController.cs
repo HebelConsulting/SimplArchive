@@ -238,7 +238,7 @@ public class DocumentExternalLinksController : ControllerBase
                 ],
             }).ToList(),
             CanCreate = await CanCreateAsync(documentId, cancellationToken),
-            RequiresRecipientCertificate = _encryptionModes.IsStrict((await CurrentTenantAsync(cancellationToken)).Name),
+            RequiresRecipientCertificate = _encryptionModes.DeliversEnvelopes((await CurrentTenantAsync(cancellationToken)).Name),
             // describe-certificate: where a client turns a pasted PEM into "who is this?" before creating the
             // link (ADR 0827). Advertised HERE rather than left for a client to compose, because a client may
             // know no URL but the API root (ADR 0543) — and advertised on this listing because this is the
@@ -294,7 +294,7 @@ public class DocumentExternalLinksController : ControllerBase
         // a refusal that arrives after the sharer has sent the URL to somebody is not a refusal, it is a trap.
         var recipient = request.RecipientCertificatePem is { Length: > 0 } pem
             ? RecipientCertificate.Validate(pem)
-            : _encryptionModes.IsStrict(tenant.Name)
+            : _encryptionModes.DeliversEnvelopes(tenant.Name)
                 ? throw new ExternalLinkRequiresRecipientCertificateException()
                 : (RecipientCertificate.Described?)null;
 

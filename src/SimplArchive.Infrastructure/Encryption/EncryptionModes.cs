@@ -21,6 +21,25 @@ public enum EncryptionMode
     /// a client that cannot decrypt is refused rather than quietly served plaintext.
     /// </summary>
     Strict = 2,
+
+    /// <summary>
+    /// Delivery without at-rest (ADR 0834, #1411): content is stored <b>unwrapped</b>, and every read is
+    /// delivered as a CMS envelope addressed to the reader's certificates. The ordinary doors keep serving.
+    /// </summary>
+    /// <remarks>
+    /// The posture is part of the VALUE rather than a second setting (owner, 2026-09-28): a tenant's guarantee
+    /// must not be assemblable from two keys that can be edited apart, because a half-configured tenant looks
+    /// exactly like a configured one. Two members cost two lines; a pair of keys costs a class of silent
+    /// misconfiguration, and this file already carries the scar of one (see the two retired lists above).
+    /// </remarks>
+    DeliveryOnlyPermissive = 3,
+
+    /// <summary>
+    /// <see cref="DeliveryOnlyPermissive"/> with the doors shut: every other content door refuses rather than
+    /// serving readable bytes (ADR 0829), and search falls back to metadata-only — the same posture
+    /// <see cref="Strict"/> has, over storage that is not wrapped.
+    /// </summary>
+    DeliveryOnlyStrict = 4,
 }
 
 /// <summary>
@@ -80,28 +99,58 @@ public sealed class EncryptionModes(IConfiguration configuration)
 
     private EncryptionMode Default() => Parse(configuration[DefaultSection], DefaultSection);
 
-    /// <summary>True when content is encrypted at rest for this tenant.</summary>
+    /// <summary>True when content is wrapped in object storage for this tenant.</summary>
     /// <remarks>
     /// <para>
-    /// <b>Membership, not ordering.</b> This read <c>&gt;= Storage</c>, which is true of today's three values
-    /// and is a trap for the fourth: the modes are not a severity scale. <c>Storage</c> names what is
-    /// protected, <c>Strict</c> names a posture, and a delivery-only tier (#1411, ADR 0834) is *stronger* on
-    /// delivery while encrypting *nothing* at rest — so wherever such a value were inserted, one comparison
-    /// would be wrong.
+    /// <b>Membership, not ordering.</b> This read <c>&gt;= Storage</c>, which was true of three values and is a
+    /// trap for the fourth: the modes are not a severity scale. <c>Storage</c> names what is protected,
+    /// <c>Strict</c> names a posture, and the delivery-only tiers are *stronger* on delivery while wrapping
+    /// <b>nothing</b> at rest — so wherever such a value were inserted, one comparison would be wrong, and
+    /// wrong silently: above <c>Storage</c> it would turn at-rest wrapping ON for modes whose whole definition
+    /// is that content is not wrapped.
     /// </para>
     /// <para>
-    /// Wrong <b>silently</b>, which is what makes it worth a line of its own: as a value above
-    /// <c>Storage</c> it would turn at-rest wrapping ON for a mode whose whole definition is that content is
-    /// not wrapped, and only for tenants in that mode. Listing the modes that wrap means a new value is
-    /// simply not included until somebody decides it should be — and
-    /// <c>Only_the_modes_that_wrap_at_rest_apply</c> makes that decision compulsory by enumerating the enum.
+    /// <c>Only_the_modes_that_wrap_at_rest_apply</c> enumerates the enum, so a new value is simply not included
+    /// until somebody decides it should be.
     /// </para>
     /// </remarks>
-    public bool Applies(string tenantName) =>
+    public bool WrapsAtRest(string tenantName) =>
         ModeFor(tenantName) is EncryptionMode.Storage or EncryptionMode.Strict;
 
-    /// <summary>True when the strict tier applies.</summary>
-    public bool IsStrict(string tenantName) => ModeFor(tenantName) == EncryptionMode.Strict;
+    /// <summary>
+    /// True when no door may serve readable bytes for this tenant — previews, ranges, presigned URLs, search
+    /// snippets (ADRs 0825/0829).
+    /// </summary>
+    /// <remarks>
+    /// <b>Search follows this, not the mode</b> (owner, 2026-09-28). A snippet IS plaintext served through a
+    /// door, so a tenant that refuses plaintext refuses it everywhere — one sentence covering search, previews
+    /// and links. The consequence is that <see cref="EncryptionMode.DeliveryOnlyPermissive"/> keeps full-text
+    /// search: its content is not wrapped at rest, so an index exposes nothing the bucket does not already
+    /// hold, and withdrawing search there would cost a capability for no gain.
+    /// </remarks>
+    public bool RefusesPlaintextDoors(string tenantName) =>
+        ModeFor(tenantName) is EncryptionMode.Strict or EncryptionMode.DeliveryOnlyStrict;
+
+    /// <summary>True when a content read is delivered as an envelope addressed to the reader.</summary>
+    /// <remarks>
+    /// The third question, and the one that separates the delivery tiers from <see cref="EncryptionMode.Storage"/>:
+    /// at-rest wrapping is invisible to a reader, enveloping is the whole of what they see.
+    /// </remarks>
+    public bool DeliversEnvelopes(string tenantName) =>
+        ModeFor(tenantName) is EncryptionMode.Strict
+            or EncryptionMode.DeliveryOnlyStrict or EncryptionMode.DeliveryOnlyPermissive;
+
+    /// <summary>True when IMAP serves messages enveloped to the recipient's certificate (ADR 0813).</summary>
+    /// <remarks>
+    /// <b>This list is deliberately the AT-REST one, and that is wrong on purpose.</b> Enveloping mail is
+    /// delivery, so by ADR 0834 it belongs with the other delivery questions above — but it ships today gated
+    /// on the at-rest tiers, and moving it is a change to behaviour real installations use, tracked separately
+    /// as #1414 so it is not absorbed into a refactor. Naming it apart from <see cref="WrapsAtRest"/> is what
+    /// makes the discrepancy visible: the two happen to hold the same modes today and mean different things,
+    /// and a single predicate would have hidden that they are ever meant to differ.
+    /// </remarks>
+    public bool EnvelopesMail(string tenantName) =>
+        ModeFor(tenantName) is EncryptionMode.Storage or EncryptionMode.Strict;
 
     /// <summary>
     /// Refuses to start while a retired key is still present, naming what to write instead.
@@ -157,6 +206,7 @@ public sealed class EncryptionModes(IConfiguration configuration)
     {
         ThrowIfLegacyConfigured(configuration);
         ThrowIfModeHasNoService(configuration);
+        ThrowIfDeliveryOnlyHasNoModule(configuration);
     }
 
     /// <summary>
@@ -201,14 +251,17 @@ public sealed class EncryptionModes(IConfiguration configuration)
 
         var claimed = new List<string>();
 
-        if (Parse(configuration[DefaultSection], DefaultSection) > EncryptionMode.None)
+        // MEMBERSHIP, for the reason WrapsAtRest gives: this read `> None`, and the delivery tiers are
+        // above None while needing no service at all — so an ordering here would demand an encryption
+        // service from exactly the modes the split exists to free from one (ADR 0834).
+        if (NeedsService(Parse(configuration[DefaultSection], DefaultSection)))
         {
             claimed.Add($"{DefaultSection} = {configuration[DefaultSection]}");
         }
 
         claimed.AddRange(configuration.GetSection(Section).GetChildren()
             .Where(child => !string.IsNullOrWhiteSpace(child.Value)
-                && Parse(child.Value, $"{Section}:{child.Key}") > EncryptionMode.None)
+                && NeedsService(Parse(child.Value, $"{Section}:{child.Key}")))
             .Select(child => $"{Section}:{child.Key} = {child.Value}"));
 
         if (claimed.Count == 0)
@@ -222,6 +275,58 @@ public sealed class EncryptionModes(IConfiguration configuration)
             + "This is refused rather than ignored because it is invisible: content would be stored and "
             + "SERVED as plaintext while the configuration claims a tier, and no surface would report it.\n\n"
             + $"Either set {ServiceUrlKey} to the encryption service, or set the mode to None.");
+    }
+
+    /// <summary>Modes that cannot be performed without the encryption service: the ones that wrap at rest.</summary>
+    private static bool NeedsService(EncryptionMode mode) =>
+        mode is EncryptionMode.Storage or EncryptionMode.Strict;
+
+    /// <summary>Modes whose delivery is performed by the Encryption Module (ADR 0834).</summary>
+    private static bool NeedsModule(EncryptionMode mode) =>
+        mode is EncryptionMode.DeliveryOnlyPermissive or EncryptionMode.DeliveryOnlyStrict;
+
+    /// <summary>
+    /// Refuses a delivery-only mode while nothing can perform its delivery (#1411, ADR 0834).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The delivery tiers envelope every read to the reader's certificates, and the component that answers
+    /// <i>which certificates is this user addressed by?</i> is the <b>Encryption Module</b>, which does not
+    /// exist yet (owner, 2026-09-28: the mode waits for it rather than shipping an interim source that would
+    /// have to be retired). Until it does, the values are written down so the three questions above could be
+    /// answered for them — and refused, so nobody configures a tier nothing performs.
+    /// </para>
+    /// <para>
+    /// <b>The same failure as #1406, caught the same way.</b> A mode with nothing behind it does not misbehave:
+    /// every surface works and the guarantee is simply absent. That is why this is a refusal rather than a
+    /// warning, in Development too — a developer misled by it is exactly as misled as an administrator.
+    /// </para>
+    /// </remarks>
+    public static void ThrowIfDeliveryOnlyHasNoModule(IConfiguration configuration)
+    {
+        var claimed = new List<string>();
+
+        if (NeedsModule(Parse(configuration[DefaultSection], DefaultSection)))
+        {
+            claimed.Add($"{DefaultSection} = {configuration[DefaultSection]}");
+        }
+
+        claimed.AddRange(configuration.GetSection(Section).GetChildren()
+            .Where(child => !string.IsNullOrWhiteSpace(child.Value)
+                && NeedsModule(Parse(child.Value, $"{Section}:{child.Key}")))
+            .Select(child => $"{Section}:{child.Key} = {child.Value}"));
+
+        if (claimed.Count == 0)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"{string.Join(", ", claimed)} — but the delivery tiers are performed by the Encryption Module "
+            + "(ADR 0834), which is not available yet, so nothing would envelope those reads (#1411).\n\n"
+            + "This is refused rather than ignored because it is invisible: content would be stored and SERVED "
+            + "as plaintext while the configuration claims envelope delivery, and no surface would report it.\n\n"
+            + $"Use {nameof(EncryptionMode.Storage)} or {nameof(EncryptionMode.Strict)} until the module ships.");
     }
 
     private Dictionary<string, EncryptionMode> Map() =>
