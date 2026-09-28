@@ -3,7 +3,8 @@ using System.Timers;
 namespace SimplArchive.DesktopClient.Services;
 
 /// <summary>
-/// Notices when the card leaves the reader, so what it decrypted can be discarded (#1353, ADR 0832).
+/// Notices when the card leaves the reader, so what it decrypted can be discarded — and when it COMES BACK, so
+/// the reader gets their document again (#1353, ADR 0832; the return half is #1453).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -44,13 +45,18 @@ public sealed class CardPresenceWatcher : IDisposable
     public static int ConsecutiveAbsences { get; set; } = 2;
 
     private readonly Action _onRemoved;
+    private readonly Action _onReturned;
     private readonly System.Timers.Timer _timer;
     private bool _sawCard;
     private int _absences;
 
-    public CardPresenceWatcher(Action onRemoved)
+    /// <summary>Whether this watcher has closed content that a returning card should bring back.</summary>
+    private bool _closed;
+
+    public CardPresenceWatcher(Action onRemoved, Action? onReturned = null)
     {
         _onRemoved = onRemoved;
+        _onReturned = onReturned ?? (() => { });
         _timer = new System.Timers.Timer(Interval.TotalMilliseconds) { AutoReset = true };
         _timer.Elapsed += Tick;
     }
@@ -74,8 +80,23 @@ public sealed class CardPresenceWatcher : IDisposable
     {
         if (cardIsPresent())
         {
+            // BACK AGAIN, and only after a removal we actually acted on. The placeholder the discard leaves
+            // says "Put it back to read again", and until #1453 that was not true: the document stayed closed
+            // until the reader selected a DIFFERENT one, which is a worse state than not promising it —
+            // the client told them what to do and then ignored them doing it.
+            //
+            // Guarded by _closed rather than by _sawCard alone, so this never fires for a card that simply sat
+            // in the reader, nor on the first sighting of one.
+            var returning = _closed;
+            _closed = false;
             _sawCard = true;
             _absences = 0;
+
+            if (returning)
+            {
+                _onReturned();
+            }
+
             return;
         }
 
@@ -93,6 +114,7 @@ public sealed class CardPresenceWatcher : IDisposable
 
         _sawCard = false;
         _absences = 0;
+        _closed = true;
         CardSession.Close();
         _onRemoved();
     }

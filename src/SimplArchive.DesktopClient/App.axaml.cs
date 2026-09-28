@@ -84,10 +84,16 @@ public partial class App : Application
             // stays signed in — the owner's refinement of that decision — so this closes CONTENT, not the
             // session: an unattended screen stops showing a decrypted document, and metadata browsing is
             // unaffected because none of it was ever enveloped.
-            var cardWatcher = new Services.CardPresenceWatcher(() =>
-                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            var cardWatcher = new Services.CardPresenceWatcher(
+                () => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                     viewModel.DiscardDecryptedContent(
-                        SimplArchive.Localization.Strings.Get("CardRemovedContentClosed"))));
+                        SimplArchive.Localization.Strings.Get("CardRemovedContentClosed"))),
+                // …and PUT IT BACK when the card returns (#1453). The placeholder above says "Put it back to
+                // read again"; until this existed that was false — the document stayed closed until the reader
+                // selected a different one. Re-rendering asks for the PIN again, which is correct: the key left
+                // the machine and has to be presented again.
+                () => Avalonia.Threading.Dispatcher.UIThread.Post(
+                    () => Services.Safe.Fire(viewModel.RestoreContentClosedByCardRemovalAsync)));
             cardWatcher.Start();
 
             // Signing out drops the card session with everything else: the login it holds is a live capability

@@ -114,6 +114,24 @@ public sealed class ApiCore
     /// inside a catch that answers "no thumbnails" (ADR 0575's trade).
     /// </remarks>
     public static async Task<(byte[] Bytes, string ContentType)> GetContentAsync(
+        string url, CancellationToken cancellationToken = default) =>
+        (await ReadContentAsync(url, cancellationToken)) is var (bytes, type, _) ? (bytes, type) : default;
+
+    /// <summary>
+    /// The same read, also saying whether the bytes arrived as a CMS envelope and were decrypted here (#1450).
+    /// </summary>
+    /// <remarks>
+    /// A separate entry point rather than a third element on <see cref="GetContentAsync"/>'s tuple, because
+    /// eight call sites destructure that tuple as <c>var (bytes, _)</c> and none of them care — widening it would
+    /// edit eight indifferent places to serve one caller.
+    /// <para>
+    /// The caller that DOES care is the preview: when the card leaves the reader the client discards what the
+    /// card decrypted, and it can only do that honestly if it knows which surfaces are holding such content.
+    /// Before this it discarded ALL of them, so pulling a card blanked a plaintext document on a tenant with no
+    /// encryption at all.
+    /// </para>
+    /// </remarks>
+    public static async Task<(byte[] Bytes, string ContentType, bool WasEnveloped)> ReadContentAsync(
         string url, CancellationToken cancellationToken = default)
     {
         // WHICH CLIENT depends on WHERE this goes, never on how the href was spelled. Our own installation may
@@ -129,9 +147,13 @@ public sealed class ApiCore
         // opened HERE — the one funnel every read path in this client already passes through, which is why
         // rendering, opening in the real application, dragging out and thumbnailing all get it at once
         // instead of four times. An ordinary response is returned untouched.
-        return await EnvelopeOpener.OpenAsync(
-            await response.Content.ReadAsByteArrayAsync(cancellationToken),
-            response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream");
+        // Asked of the SERVED type, before opening: afterwards the content type is the decrypted payload's and no
+        // longer says how it arrived.
+        var served = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+        var (bytes, contentType) = await EnvelopeOpener.OpenAsync(
+            await response.Content.ReadAsByteArrayAsync(cancellationToken), served);
+
+        return (bytes, contentType, EnvelopeOpener.IsEnvelope(served));
     }
 
     /// <summary>The bytes alone, for a caller that already knows what it is decoding.</summary>

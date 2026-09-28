@@ -138,9 +138,16 @@ public sealed partial class MainWindowViewModel
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The user stays signed in (owner, 2026-09-26). What goes is the CONTENT: every preview surface is reset,
-    /// so no page rendered from a decrypted document is still on screen or still held as a bitmap. Metadata,
-    /// the tree, listings and search results are unaffected — none of them was enveloped.
+    /// The user stays signed in (owner, 2026-09-26). What goes is the CONTENT that the card decrypted: a preview
+    /// surface holding enveloped bytes is reset, so no page rendered from a decrypted document is still on screen
+    /// or still held as a bitmap. Metadata, the tree, listings and search results are unaffected — none of them
+    /// was enveloped.
+    /// </para>
+    /// <para>
+    /// <b>And neither is a preview that was never enveloped</b> (#1450). This said "every preview surface is
+    /// reset" and meant it, so on a tenant with no encryption mode — the public demo — taking a card out of the
+    /// reader blanked an ordinary plaintext document. The sentence after it already gave the right rule
+    /// ("unaffected — none of them was enveloped"); only the loop disagreed.
     /// </para>
     /// <para>
     /// Uses the one <see cref="PreviewSurfaces"/> list rather than naming panes, for the reason recorded there:
@@ -151,9 +158,60 @@ public sealed partial class MainWindowViewModel
     /// </remarks>
     public void DiscardDecryptedContent(string placeholder)
     {
-        foreach (var preview in PreviewSurfaces)
+        // ONLY what the card actually decrypted (#1450). This reset every surface unconditionally, so removing a
+        // card blanked a plaintext document on the public demo tenant — which has no encryption mode at all, and
+        // where nothing had ever been enveloped. The wiring's own comment already said this was the intent
+        // ("metadata browsing is unaffected because none of it was ever enveloped"); the code did not check it.
+        //
+        // Asked of each SURFACE rather than of the session, because the two differ in the case that matters: a
+        // reader on a strict tenant who opens an enveloped document and then a plaintext one would otherwise
+        // have the plaintext one blanked too — the same confusion, rarer, and no less wrong.
+        _closedByCardRemoval.Clear();
+
+        foreach (var preview in PreviewSurfaces.Where(p => p.ContentWasEnveloped))
         {
+            // Remembered BEFORE the reset, so the card coming back can put it on screen again (#1453).
+            if (preview.LastRendered is { } rendered)
+            {
+                _closedByCardRemoval.Add((preview, rendered));
+            }
+
             preview.Reset(placeholder);
+        }
+    }
+
+    private readonly List<(PreviewViewModel Surface, Services.Preview Rendered)> _closedByCardRemoval = [];
+
+    /// <summary>Test seam: how many surfaces are waiting for the card to come back.</summary>
+    internal int PendingCardRestoreCount => _closedByCardRemoval.Count;
+
+    /// <summary>
+    /// Puts back what the card's removal closed, when the card returns (#1453).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The placeholder left by the discard says "Put it back to read again", and it was not true: the document
+    /// stayed closed until the reader selected a DIFFERENT one, which re-prompted for the PIN. Promising an
+    /// action and then ignoring it is worse than not promising it.
+    /// </para>
+    /// <para>
+    /// <b>Only a surface that has rendered nothing since</b> — compared by identity against what it was showing
+    /// when it was closed. A reader who picked another document while the card was out has a current document,
+    /// and replacing it with the previous one would be its own defect. Re-rendering asks for the PIN again,
+    /// which is the point: the key left the machine and has to be presented again.
+    /// </para>
+    /// </remarks>
+    public async Task RestoreContentClosedByCardRemovalAsync()
+    {
+        var pending = _closedByCardRemoval.ToList();
+        _closedByCardRemoval.Clear();
+
+        foreach (var (surface, rendered) in pending)
+        {
+            if (ReferenceEquals(surface.LastRendered, rendered))
+            {
+                await surface.RenderAsync(rendered);
+            }
         }
     }
 

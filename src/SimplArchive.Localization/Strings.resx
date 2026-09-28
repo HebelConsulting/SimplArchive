@@ -1563,6 +1563,12 @@
   <data name="RbConvertedPreview" xml:space="preserve">
     <value>⧉ Converted preview</value>
   </data>
+  <data name="RbEnvelopedPreview" xml:space="preserve">
+    <value>Encrypted delivery</value>
+  </data>
+  <data name="RbEnvelopedPreviewTip" xml:space="preserve">
+    <value>This document was delivered as an encrypted envelope addressed to your certificate, and opened here with your key. The server could not have shown it to anyone else.</value>
+  </data>
   <data name="RbCommentsHeader" xml:space="preserve">
     <value>Chat (read-only)</value>
   </data>

@@ -82,6 +82,23 @@ public sealed class DocumentVersionResourceBuilder(
                 var enveloped = $"/api/documents/{version.DocumentId}/versions/{version.Id}/enveloped-content";
                 links.Add(new Link("download", enveloped, "GET"));
                 links.Add(new Link("preview", $"{enveloped}?inline=true", "GET"));
+
+                // AND SAY WHETHER THAT PREVIEW IS A CONVERSION (#1454). This branch used to leave
+                // previewConverted at its `false` default, because the only place it was ever assigned is the
+                // non-enveloped branch below — so on a strict tenant the "converted preview" badge could never
+                // appear for anybody, whatever the format.
+                //
+                // It is not that strict tenants serve originals: an inline enveloped read resolves the DISPLAY
+                // object (ADR 0828) exactly as the plaintext path does, so an office document or a TIFF is
+                // rendered server-side and the envelope carries the RENDITION. The reader was simply never told,
+                // and the badge's absence reads as "this is the original" — the one thing it exists to deny.
+                //
+                // Asked the same way the delivery asks it — GetDisplayObjectKeyAsync, the call
+                // DocumentVersionEnvelopedContentController makes for `inline` — so the badge and the bytes
+                // cannot disagree. A second way of deciding "is this converted?" would eventually say something
+                // the delivery does not.
+                var displayKey = await previews.GetDisplayObjectKeyAsync(version.ObjectKey, cancellationToken);
+                previewConverted = !string.Equals(displayKey, version.ObjectKey, StringComparison.Ordinal);
             }
             // No URL means the strict tier will not serve these bytes as plaintext (#1376), so the rel is
             // OMITTED rather than the resource failing — ADR 0543: a missing rel means "not available to you,

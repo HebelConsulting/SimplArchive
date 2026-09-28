@@ -166,6 +166,71 @@ public class StrictTierEnvelopedReadTests
         Assert.IsAssignableFrom<MimePart>(enveloped.Decrypt(context));
     }
 
+    /// <summary>
+    /// A strict tenant must say a preview is CONVERTED when it is — the same answer an ordinary tenant gives.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>previewConverted</c> was assigned in exactly one place, the non-enveloped branch, so for a reader with
+    /// a certificate it kept its <c>false</c> default and the "converted preview" badge could never appear on a
+    /// strict tenant, whatever the format (#1454).
+    /// </para>
+    /// <para>
+    /// That is not strict serving originals: an inline enveloped read resolves the DISPLAY object (ADR 0828)
+    /// exactly as the plaintext path does, so the envelope carries the rendition. The reader was simply never
+    /// told — and the badge's absence reads as "this is the original", the one thing it exists to deny.
+    /// </para>
+    /// <para>
+    /// Written as an AGREEMENT between the two tiers rather than as "strict says true", because the property
+    /// that matters is that the answer does not depend on the tier. Markdown is the subject because the server
+    /// renders it to PDF, so the display object genuinely differs from what was uploaded.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task A_converted_preview_is_reported_as_converted_on_both_tiers()
+    {
+        var strict = await ConvertedFlagAsync(E2EApiFactory.StrictTenantName, withCertificate: true);
+        var ordinary = await ConvertedFlagAsync(E2EApiFactory.CryptoTenantName, withCertificate: false);
+
+        Assert.True(ordinary, "the ordinary tenant should report a markdown preview as converted — if this "
+            + "fails the fixture is not converting at all and the strict assertion below would pass vacuously");
+        Assert.True(strict, "a strict tenant delivers the RENDITION for an inline read (ADR 0828) and must say "
+            + "so, or the reader is shown a converted document with nothing saying it is not the original");
+    }
+
+    /// <summary>Uploads a markdown document to a tenant and reports what its version says about conversion.</summary>
+    private async Task<bool> ConvertedFlagAsync(string tenantName, bool withCertificate)
+    {
+        var tenantId = await _factory.SeedTenantNamedAsync(tenantName);
+        var email = $"converted-reader-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, email, "cr-1234", "Converted Reader", canManageRepositories: true);
+        using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, "cr-1234"));
+
+        if (withCertificate)
+        {
+            // Planted on the user row for the reason the helper above records: self-service is CLOSED for the
+            // tenants the envelope client serves (ADR 0813), so the API would refuse it here.
+            var (pem, _) = NewReaderCertificate(email);
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+            var user = await db.Users.IgnoreQueryFilters(["TenantFilter"])
+                .SingleAsync(u => u.TenantId == tenantId && u.NormalizedEmail == email.ToUpperInvariant());
+            user.SmimeCertificatePem = pem;
+            await db.SaveChangesAsync();
+        }
+
+        var repository = (await TestJson.Post(api, "/api/repositories",
+            new { name = $"repo-{Guid.NewGuid():N}" })).GetProperty("id").GetGuid();
+        var documentId = (await TestJson.Post(api, $"/api/documents/{repository}/children",
+            new { name = $"doc-{Guid.NewGuid():N}" })).GetProperty("id").GetGuid();
+
+        var versionSelf = await UploadAsync(api, documentId,
+            Encoding.ASCII.GetBytes("# Heading\n\nA markdown document the server renders to PDF.\n"), ".md");
+
+        var version = await TestJson.Get(api, versionSelf);
+        return version.GetProperty("previewConverted").GetBoolean();
+    }
+
     private sealed record Reader(
         HttpClient Api, JsonElement Version, string? EnvelopeHrefOrNull, string ForcedEnvelopeHref, byte[] Pkcs12)
     {
@@ -259,10 +324,11 @@ public class StrictTierEnvelopedReadTests
     }
 
     /// <summary>Uploads content the way a client does, and returns the version's own address.</summary>
-    private static async Task<string> UploadAsync(HttpClient api, Guid documentId, byte[] plaintext)
+    private static async Task<string> UploadAsync(
+        HttpClient api, Guid documentId, byte[] plaintext, string fileExtension = ".txt")
     {
         var version = await TestJson.Post(api, $"/api/documents/{documentId}/versions",
-            new { fileExtension = ".txt" });
+            new { fileExtension });
 
         // A strict tenant is also an encrypted one, so the upload carries the client-side encryption
         // instruction (ADR 0818) and the bytes are wrapped before the PUT; an ordinary tenant gets no

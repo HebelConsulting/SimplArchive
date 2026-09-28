@@ -65,6 +65,19 @@ public partial class MainWindowViewModel
         IndexFields.Add(new IndexFieldViewModel { FieldName = "Keywords", Values = "invoice, reviewed" });
         Preview.PreviewConverted = false;
         Preview.Reset("Preview renders here (PDF/image/text).");
+
+        // `--enveloped`: draw the encrypted-delivery badge (#1452), which no screenshot can otherwise reach — it
+        // appears only for content that actually arrived as a CMS envelope, needing a strict tenant, a registered
+        // certificate and a card in a reader.
+        //
+        // HERE rather than in ScreenshotRenderer, and that is the whole point: Reset() on the line above clears
+        // the flag, and this demo fixture runs AFTER the renderer's own setup hooks. Setting it there looked
+        // right, printed the right value, and rendered nothing — the badge was switched on and then switched off
+        // again before the frame was captured. A hook that silently does nothing is worse than no hook.
+        if (Environment.GetCommandLineArgs().Contains("--enveloped"))
+        {
+            Preview.ContentWasEnveloped = true;
+        }
         // The thread mixes what the product records AUTOMATICALLY (ADR 0545) with what a person typed — which is
         // what a real feed looks like. The fixture previously held only the typed comment, so the manual showed a
         // chat pane that the product no longer produces.

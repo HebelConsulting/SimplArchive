@@ -63,9 +63,21 @@ public static class EnvelopeOpener
     /// <c>application/pkcs7-mime</c> describes the wrapper, and a PDF announced as pkcs7-mime would be
     /// sniffed, mis-rendered or refused by every consumer downstream.
     /// </remarks>
+    /// <summary>
+    /// Whether a served response IS a CMS envelope — the same test <see cref="OpenAsync"/> makes, exposed so a
+    /// caller can record that what it is holding came out of one (#1450).
+    /// </summary>
+    /// <remarks>
+    /// Defined once and used by both, because the alternative is a second copy of the content-type test that
+    /// agrees today: the card-removal path decides whether to discard content by asking this, so a drift between
+    /// the two would either blank plaintext documents or leave a decrypted one on an unattended screen.
+    /// </remarks>
+    public static bool IsEnvelope(string contentType) =>
+        contentType.Contains("pkcs7-mime", StringComparison.OrdinalIgnoreCase);
+
     public static async Task<(byte[] Bytes, string ContentType)> OpenAsync(byte[] served, string contentType)
     {
-        if (!contentType.Contains("pkcs7-mime", StringComparison.OrdinalIgnoreCase))
+        if (!IsEnvelope(contentType))
         {
             return (served, contentType);
         }

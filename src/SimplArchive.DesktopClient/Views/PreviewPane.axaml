@@ -192,11 +192,33 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <!-- Converted-preview badge -->
-            <Border IsVisible="{Binding PreviewConverted}" Background="#9e000000" CornerRadius="10"
-                    Padding="8,3" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="10">
-                <TextBlock Text="{loc:Tr RbConvertedPreview}" Foreground="White" FontSize="11" />
-            </Border>
+            <!-- Preview badges. OUTSIDE the ScrollViewer above, deliberately: they describe the DOCUMENT, not a
+                 place in it, so they stay put while the reader scrolls. A marker that scrolls away is one the
+                 reader stops seeing at exactly the moment they are deepest into the content.
+
+                 Stacked, so a document that is BOTH converted and envelope-delivered shows both rather than one
+                 drawn over the other. A StackPanel rather than two fixed margins because either badge can be
+                 absent, and a hard-coded offset would leave a gap where the hidden one used to be. -->
+            <StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="10" Spacing="4">
+                <!-- Encrypted delivery (#1452). Shown ONLY for content that actually arrived as a CMS envelope
+                     and was opened with the reader's key — never for at-rest encryption, which the server
+                     decrypts and serves over ordinary TLS. Blurring the two would make the badge mean "secure"
+                     in general and destroy the one distinction it exists to carry. -->
+                <Border IsVisible="{Binding ContentWasEnveloped}" Background="#9e1b5e20" CornerRadius="10"
+                        Padding="8,3" HorizontalAlignment="Right"
+                        ToolTip.Tip="{loc:Tr RbEnvelopedPreviewTip}">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <i:Icon Value="mdi-lock-outline" FontSize="12" Foreground="White" />
+                        <TextBlock Text="{loc:Tr RbEnvelopedPreview}" Foreground="White" FontSize="11" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Converted-preview badge -->
+                <Border IsVisible="{Binding PreviewConverted}" Background="#9e000000" CornerRadius="10"
+                        Padding="8,3" HorizontalAlignment="Right">
+                    <TextBlock Text="{loc:Tr RbConvertedPreview}" Foreground="White" FontSize="11" />
+                </Border>
+            </StackPanel>
         </Grid>
     </DockPanel>
 </UserControl>

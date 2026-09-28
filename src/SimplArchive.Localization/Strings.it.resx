@@ -1563,6 +1563,12 @@
   <data name="RbConvertedPreview" xml:space="preserve">
     <value>⧉ Anteprima generata</value>
   </data>
+  <data name="RbEnvelopedPreview" xml:space="preserve">
+    <value>Consegna cifrata</value>
+  </data>
+  <data name="RbEnvelopedPreviewTip" xml:space="preserve">
+    <value>Questo documento è stato consegnato come busta cifrata indirizzata al suo certificato e aperto qui con la sua chiave. Il server non avrebbe potuto mostrarlo a nessun altro.</value>
+  </data>
   <data name="RbCommentsHeader" xml:space="preserve">
     <value>Chat (sola lettura)</value>
   </data>

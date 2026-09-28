@@ -1563,6 +1563,12 @@
   <data name="RbConvertedPreview" xml:space="preserve">
     <value>⧉ Generierte Vorschau</value>
   </data>
+  <data name="RbEnvelopedPreview" xml:space="preserve">
+    <value>Verschlüsselt zugestellt</value>
+  </data>
+  <data name="RbEnvelopedPreviewTip" xml:space="preserve">
+    <value>Dieses Dokument wurde als verschlüsselter Umschlag an Ihr Zertifikat zugestellt und hier mit Ihrem Schlüssel geöffnet. Der Server hätte es niemandem sonst zeigen können.</value>
+  </data>
   <data name="RbCommentsHeader" xml:space="preserve">
     <value>Chat (schreibgeschützt)</value>
   </data>

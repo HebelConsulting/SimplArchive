@@ -381,6 +381,11 @@ public sealed class SimplArchiveApiClient
     public static Task<(byte[] Bytes, string ContentType)> DownloadAsync(string url, CancellationToken cancellationToken = default) =>
         ApiCore.GetContentAsync(url, cancellationToken);
 
+    /// <summary>The same download, also saying whether it arrived as a CMS envelope (#1450).</summary>
+    public static Task<(byte[] Bytes, string ContentType, bool WasEnveloped)> DownloadDetailedAsync(
+        string url, CancellationToken cancellationToken = default) =>
+        ApiCore.ReadContentAsync(url, cancellationToken);
+
     private Task<List<T>> LoadPagedAsync<T>(string url, string arrayProperty, Func<JsonElement, T> parse, CancellationToken cancellationToken,
         Action<JsonElement>? onPage = null) => Core.LoadPagedAsync(url, arrayProperty, parse, cancellationToken, onPage);
 

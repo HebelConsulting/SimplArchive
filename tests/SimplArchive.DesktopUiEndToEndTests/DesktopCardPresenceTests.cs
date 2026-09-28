@@ -80,17 +80,25 @@ public class DesktopCardPresenceTests
 public class DesktopDiscardDecryptedContentTests
 {
     [Fact]
-    public void Every_preview_surface_is_cleared_and_says_why()
+    public void Every_surface_holding_decrypted_content_is_cleared_and_says_why()
     {
         const string Because = "the card was removed";
         var vm = new SimplArchive.DesktopClient.ViewModels.MainWindowViewModel();
 
         // Put each surface into a state that must not survive: a placeholder that is not ours, and a page count
         // standing in for rendered bitmaps.
+        //
+        // ContentWasEnveloped is set AFTER the reset, and both halves of that matter (#1450). The discard now
+        // clears only what the card actually decrypted — this test asserts the THOROUGHNESS of that clearing,
+        // while DesktopCardRemovalScopeTests asserts its SCOPE, which is why this one marks every surface. And
+        // it is set after Reset() because Reset clears the flag: nothing on display means nothing enveloped on
+        // display. Setting it before would leave every surface unmarked, which is exactly how this test failed
+        // when the scoping landed.
         foreach (var preview in vm.PreviewSurfaces)
         {
             preview.Reset("something else entirely");
             preview.HasPreviewPages = true;
+            preview.ContentWasEnveloped = true;
         }
 
         vm.DiscardDecryptedContent(Because);
