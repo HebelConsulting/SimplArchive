@@ -92,9 +92,11 @@ public class ModuleIsolationTests
         Assert.False(ModuleLoader.MinorCompatible(ModuleAbiVersion.Minor + 1));
     }
 
+    // Only 0 while the major is fresh: the ABI moved to 1.0 (ADR 0847), so there is no older minor to
+    // present until 1.1 exists. The 20 that used to be here was older than 0.31 and is NEWER than 1.0, which
+    // is why the gate started refusing it -- correctly. Add the older values back as the minor grows.
     [Theory]
     [InlineData(0)]
-    [InlineData(20)]
     public void A_module_built_against_an_OLDER_minor_is_ACCEPTED(int moduleMinor)
     {
         // "Minor floats" (ADR 0741), and this direction is the one that must keep working — it is what the

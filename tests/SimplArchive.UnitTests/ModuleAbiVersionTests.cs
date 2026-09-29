@@ -22,7 +22,7 @@ namespace SimplArchive.UnitTests;
 // "someone deleted it".
 public partial class ModuleAbiVersionTests
 {
-    [GeneratedRegex(@"abi-0-(\d+)-")]
+    [GeneratedRegex(@"abi-(\d+)-(\d+)-")]
     private static partial Regex AbiSliceAdr();
 
     [GeneratedRegex(@"<Version>(?<version>[^<]+)</Version>")]
@@ -39,20 +39,24 @@ public partial class ModuleAbiVersionTests
         var adrDir = Path.Combine(root, "docs", "adr");
         Assert.True(Directory.Exists(adrDir), "docs/adr is missing — this guard has nothing to check.");
 
+        // (major, minor) pairs, so the guard survives an ABI MAJOR. It read only the minor and hard-coded
+        // "0." into the expected version, which would have made the 1.0 bump look like a version mismatch
+        // rather than the deliberate break it is.
         var slices = Directory.GetFiles(adrDir, "*.md")
             .Select(f => AbiSliceAdr().Match(Path.GetFileName(f)))
             .Where(m => m.Success)
-            .Select(m => int.Parse(m.Groups[1].Value))
+            .Select(m => (Major: int.Parse(m.Groups[1].Value), Minor: int.Parse(m.Groups[2].Value)))
             .ToList();
         Assert.True(slices.Count >= 5,
-            $"Only {slices.Count} ABI-slice ADRs matched `…-abi-0-N-…md` — the naming convention changed and this "
+            $"Only {slices.Count} ABI-slice ADRs matched `…-abi-M-N-…md` — the naming convention changed and this "
             + "guard stopped seeing them.");
 
         var csprojPath = Path.Combine(root, "src", "SimplArchive.ModuleAbi", "SimplArchive.ModuleAbi.csproj");
         var version = PackageVersion().Match(File.ReadAllText(csprojPath));
         Assert.True(version.Success, $"No <Version> element in {csprojPath} — the packaging shape changed.");
 
-        var expected = $"0.{slices.Max()}.0";
+        var newest = slices.Max();
+        var expected = $"{newest.Major}.{newest.Minor}.0";
         Assert.True(version.Groups["version"].Value == expected,
             $"SimplArchive.ModuleAbi is packaged as {version.Groups["version"].Value} but the newest ABI slice ADR "
             + $"declares {expected}.\nBump <Version> in SimplArchive.ModuleAbi.csproj — `abi-publish.yml` pushes "

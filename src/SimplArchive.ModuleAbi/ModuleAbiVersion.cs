@@ -10,7 +10,7 @@ public static class ModuleAbiVersion
     /// <summary>0 while the mechanism is being proven — semver's own convention that everything may
     /// change. Becomes 1 when the first module ships commercially, and changes thereafter only as a
     /// deliberate, rare, breaking act.</summary>
-    public const int Major = 0;
+    public const int Major = 1;
 
     /// <summary>
     /// The ABI's minor version — raised whenever anything is ADDED to this assembly's surface (#1147).
@@ -37,5 +37,5 @@ public static class ModuleAbiVersion
     /// only an additive ABI makes the promise itself true. 0.21 is best treated as withdrawn.
     /// </para>
     /// </remarks>
-    public const int Minor = 31;
+    public const int Minor = 0;
 }

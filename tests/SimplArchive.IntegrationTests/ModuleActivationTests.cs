@@ -76,7 +76,7 @@ public class ModuleActivationTests
 
     private static string LicenseJson(ECDsa key, Guid tenantId, DateOnly end)
     {
-        var license = new ModuleLicense("test-module", tenantId, end, ModuleAbiVersion.Major, string.Empty).Sign(key);
+        var license = new TenantLicense(["test-module"], tenantId, end, ModuleAbiVersion.Major, string.Empty).Sign(key);
         return System.Text.Json.JsonSerializer.Serialize(license, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
     }
 

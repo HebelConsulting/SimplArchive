@@ -406,7 +406,7 @@ public class ModuleSettingsTests
 
     private async Task ActivateAsync(Rig rig, ECDsa vendorKey)
     {
-        var license = new ModuleLicense("test-module", rig.TenantId,
+        var license = new TenantLicense(["test-module"], rig.TenantId,
                 DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)), ModuleAbiVersion.Major, string.Empty)
             .Sign(vendorKey);
         var json = JsonSerializer.Serialize(license, new JsonSerializerOptions(JsonSerializerDefaults.Web));

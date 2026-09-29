@@ -46,7 +46,7 @@ public class ModuleControllerTests
 
     private static async Task<Guid> FileLicenseAsync(Rig rig, DateOnly supportEnd, ECDsa vendorKey)
     {
-        var license = new ModuleLicense("test-module", rig.TenantId, supportEnd, ModuleAbiVersion.Major, string.Empty)
+        var license = new TenantLicense(["test-module"], rig.TenantId, supportEnd, ModuleAbiVersion.Major, string.Empty)
             .Sign(vendorKey);
         var json = JsonSerializer.Serialize(license, new JsonSerializerOptions(JsonSerializerDefaults.Web));
 

@@ -208,7 +208,7 @@ public class ModuleDavCollectionTests
 
     private async Task ActivateAsync(HttpClient owner, HttpClient admin, Guid tenantId, Guid repoId, ECDsa vendorKey)
     {
-        var license = new ModuleLicense("test-module", tenantId, DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)),
+        var license = new TenantLicense(["test-module"], tenantId, DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)),
             ModuleAbiVersion.Major, string.Empty).Sign(vendorKey);
         var json = JsonSerializer.Serialize(license, new JsonSerializerOptions(JsonSerializerDefaults.Web));
 

@@ -61,7 +61,7 @@ public interface IIndustryModule
     /// <summary>
     /// The vendor's license verify key as a PEM <c>SubjectPublicKeyInfo</c> (ECDsa P-256). Ships inside
     /// the module — no phone-home, air-gap-friendly (ADR 0743); the core verifies a tenant's
-    /// <see cref="ModuleLicense"/> against this at activation.
+    /// <see cref="TenantLicense"/> against this at activation.
     /// </summary>
     string LicenseVerifyKeyPem { get; }
 

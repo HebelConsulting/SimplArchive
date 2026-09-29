@@ -53,7 +53,7 @@ public class BookingAdmissionTests
             new { canSee = true, canReadContent = true, canCreateSubItems = true, canEditContent = true });
         var admin = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, password));
 
-        var license = new ModuleLicense("test-module", tenantId,
+        var license = new TenantLicense(["test-module"], tenantId,
             DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)), ModuleAbiVersion.Major, string.Empty).Sign(vendorKey);
         var json = JsonSerializer.Serialize(license, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         var docId = (await TestJson.Post(owner, $"/api/documents/{repoId}/children",

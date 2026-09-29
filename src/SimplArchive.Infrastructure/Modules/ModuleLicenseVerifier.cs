@@ -17,11 +17,11 @@ public static class ModuleLicenseVerifier
 
     /// <summary>Parses the filed document's content into the license record, refusing unreadable input
     /// with the reason rather than a bare parse failure.</summary>
-    public static ModuleLicense Parse(string licenseJson)
+    public static TenantLicense Parse(string licenseJson)
     {
         try
         {
-            return JsonSerializer.Deserialize<ModuleLicense>(licenseJson, JsonOptions)
+            return JsonSerializer.Deserialize<TenantLicense>(licenseJson, JsonOptions)
                 ?? throw ModuleLicenseException.Malformed("the document is empty.");
         }
         catch (JsonException exception)
@@ -40,7 +40,7 @@ public static class ModuleLicenseVerifier
     /// activation records it, so after a key compromise the affected activations are a query rather than an
     /// audit trawl.
     /// </returns>
-    public static string Verify(ModuleLicense license, IIndustryModule module, Guid tenantId)
+    public static string Verify(TenantLicense license, IIndustryModule module, Guid tenantId)
     {
         // ANY of the module's keys may have signed it — the list is the vendor's rotation overlap window
         // (ADR 0793). Tried in declaration order; the first that accepts wins, and its identity is returned.
@@ -49,9 +49,13 @@ public static class ModuleLicenseVerifier
             throw ModuleLicenseException.BadSignature(module.ModuleId);
         }
 
-        if (!string.Equals(license.ModuleId, module.ModuleId, StringComparison.Ordinal))
+        // ONE licence names EVERY module the tenant holds (ADR 0845), so the question is no longer "is this
+        // the right licence?" but "does this licence name me?". A tenant files one document; each module
+        // verifies the signature and then looks for itself in it.
+        if (!license.Entitles(module.ModuleId))
         {
-            throw ModuleLicenseException.WrongModule(license.ModuleId, module.ModuleId);
+            throw ModuleLicenseException.WrongModule(
+                string.Join(", ", license.ModuleIds), module.ModuleId);
         }
 
         if (license.TenantId != tenantId)
@@ -88,10 +92,10 @@ public static class ModuleLicenseVerifier
     }
 
     /// <summary>The first listed key whose signature check passes, or null when none does.</summary>
-    private static string? VerifyingKey(ModuleLicense license, IReadOnlyList<string> verifyKeysPem) =>
+    private static string? VerifyingKey(TenantLicense license, IReadOnlyList<string> verifyKeysPem) =>
         verifyKeysPem.FirstOrDefault(pem => SignatureVerifies(license, pem));
 
-    private static bool SignatureVerifies(ModuleLicense license, string verifyKeyPem)
+    private static bool SignatureVerifies(TenantLicense license, string verifyKeyPem)
     {
         byte[] signature;
         try

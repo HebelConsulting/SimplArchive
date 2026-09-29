@@ -95,7 +95,7 @@ public sealed class ModuleActivationService
     /// unstamped Basic Entry (found 2026-09-08). The projection must still not fight an administrator's
     /// own typing choice — a license typed as, say, an eMail stays what they made it.
     /// </summary>
-    private async Task StampLicenseDocumentAsync(Guid licenseDocumentId, ModuleLicense license, CancellationToken cancellationToken)
+    private async Task StampLicenseDocumentAsync(Guid licenseDocumentId, TenantLicense license, CancellationToken cancellationToken)
     {
         var document = await _dbContext.Documents.SingleAsync(d => d.Id == licenseDocumentId, cancellationToken);
         var wornMaskId = document.MaskVersionId is { } wornVersionId
@@ -127,7 +127,10 @@ public sealed class ModuleActivationService
 
         await _archive.SetFieldsAsync(licenseDocumentId, new Dictionary<string, string>
         {
-            ["Module"] = license.ModuleId,
+            // EVERY module the licence names, not the one being activated: the document describes the
+            // licence, and a reader opening it should see what the tenant bought rather than whichever
+            // activation happened to stamp it last (ADR 0845).
+            ["Module"] = string.Join(", ", license.ModuleIds.Order(StringComparer.Ordinal)),
             ["Valid until"] = license.SupportContractEnd.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
         }, cancellationToken);
     }

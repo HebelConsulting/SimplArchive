@@ -13,13 +13,13 @@ public class ModuleLicenseTests
 {
     private static readonly Guid TenantId = Guid.NewGuid();
 
-    private static (TestModule.TestModule Module, ModuleLicense License) SignedLicense(
-        Action<ECDsa>? plantKey = null, Func<ModuleLicense, ModuleLicense>? mutate = null)
+    private static (TestModule.TestModule Module, TenantLicense License) SignedLicense(
+        Action<ECDsa>? plantKey = null, Func<TenantLicense, TenantLicense>? mutate = null)
     {
         using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         TestModule.TestModule.VerifyKeyPem = key.ExportSubjectPublicKeyInfoPem();
         plantKey?.Invoke(key);
-        var license = new ModuleLicense("test-module", TenantId, new DateOnly(2027, 9, 3), ModuleAbiVersion.Major, string.Empty)
+        var license = new TenantLicense(["test-module"], TenantId, new DateOnly(2027, 9, 3), ModuleAbiVersion.Major, string.Empty)
             .Sign(key);
         if (mutate is not null)
         {
@@ -45,7 +45,12 @@ public class ModuleLicenseTests
 
         var parsed = ModuleLicenseVerifier.Parse(json);
 
-        Assert.Equal(license, parsed);
+        // NOT Assert.Equal(license, parsed): ModuleIds is a list, and a record compares one by REFERENCE, so
+        // a licence parsed from its own JSON never equals the original. The identity this artefact actually
+        // has is the signed payload and the signature -- which is also what a tamper would change.
+        Assert.Equal(license.SignedPayload(), parsed.SignedPayload());
+        Assert.Equal(license.Signature, parsed.Signature);
+        Assert.Equal(license.ModuleIds, parsed.ModuleIds);
         ModuleLicenseVerifier.Verify(parsed, module, TenantId);
     }
 
@@ -85,9 +90,18 @@ public class ModuleLicenseTests
         using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         TestModule.TestModule.VerifyKeyPem = key.ExportSubjectPublicKeyInfoPem();
 
-        var wrongModule = (license with { ModuleId = "other-module" }).Sign(key);
-        Assert.Contains("other-module", Assert.Throws<ModuleLicenseException>(
-            () => ModuleLicenseVerifier.Verify(wrongModule, module, TenantId)).Message);
+        // A licence that names OTHER modules but not this one. Under ADR 0845 the question changed from
+        // "is this my licence?" to "does my licence name me?", and the refusal names what it DID entitle so
+        // an administrator can see they filed the wrong tenant's licence rather than a corrupt one.
+        var doesNotNameMe = (license with { ModuleIds = ["other-module", "third-module"] }).Sign(key);
+        var refusal = Assert.Throws<ModuleLicenseException>(
+            () => ModuleLicenseVerifier.Verify(doesNotNameMe, module, TenantId)).Message;
+        Assert.Contains("other-module", refusal);
+        Assert.Contains("third-module", refusal);
+
+        // ...and one that names this module ALONGSIDE others verifies, which is the whole point of one file.
+        var namesMeAmongOthers = (license with { ModuleIds = ["other-module", module.ModuleId] }).Sign(key);
+        ModuleLicenseVerifier.Verify(namesMeAmongOthers, module, TenantId);   // no throw IS the assertion
 
         var wrongAbi = (license with { AbiMajorVersion = ModuleAbiVersion.Major + 1 }).Sign(key);
         Assert.Contains("ABI major", Assert.Throws<ModuleLicenseException>(

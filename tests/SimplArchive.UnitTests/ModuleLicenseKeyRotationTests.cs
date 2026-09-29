@@ -17,8 +17,8 @@ public class ModuleLicenseKeyRotationTests
 {
     private static readonly Guid TenantId = Guid.NewGuid();
 
-    private static ModuleLicense SignedBy(ECDsa key) =>
-        new ModuleLicense(KeyListModule.Id, TenantId, new DateOnly(2027, 9, 3), ModuleAbiVersion.Major, string.Empty)
+    private static TenantLicense SignedBy(ECDsa key) =>
+        new TenantLicense([KeyListModule.Id], TenantId, new DateOnly(2027, 9, 3), ModuleAbiVersion.Major, string.Empty)
             .Sign(key);
 
     [Fact]
