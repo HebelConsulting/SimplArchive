@@ -35,7 +35,7 @@ public class PublicMirrorBoundaryTests
     // name. Enumerating the tracked tree instead means a newly-added published path is in scope automatically.
     private static readonly string[] Withheld =
         ["docs/", "tools/", "publish/", ".idea/", "CLAUDE.md", "README.md", "=",
-         $".github/workflows/{Brand}xml-tool.yml", ".github/workflows/abi-publish.yml",
+         ".github/workflows/private-tools.yml", ".github/workflows/abi-publish.yml",
          ".github/workflows/auto-publish.yml", ".github/dependabot.yml"];
 
     private static readonly Regex Forbidden =
@@ -48,6 +48,42 @@ public class PublicMirrorBoundaryTests
     // would match "eloquent" and "Eloise". Character classes so this file still never contains the literal.
     private static readonly Regex ForbiddenIdentifier =
         new(@"\b[Ee][Ll][Oo][A-Z_]", RegexOptions.Compiled);
+
+    // The two lists are HAND-SYNCED, and until this test existed nothing said so out loud. `Withheld` above
+    // claims to mirror the script "verbatim", which is a property no one was checking — and the way it broke is
+    // instructive: renaming the private tools' workflow left this copy naming a file that no longer exists, so
+    // the renamed file counted as PUBLISHED and the scan above failed. That worked only by luck, because the
+    // renamed file happened to contain the brand. Rename `abi-publish.yml` instead and the drift is silent: the
+    // script withholds it, this copy withholds a ghost, and the guard shrugs.
+    //
+    // A drift here is not a test problem, it is a LEAK: this list decides what the scan looks at, so an entry
+    // this copy has and the script does not means a genuinely published file is never scanned at all.
+    [Fact]
+    public void The_withheld_list_matches_the_publish_script()
+    {
+        var script = File.ReadAllText(Path.Combine(RepoPaths.Root(), "publish", "publish-public.sh"));
+
+        // The array literal, not the comments above it: the comment block names the same paths in prose, so a
+        // whole-file scan would "agree" with itself no matter what the array said.
+        var block = Regex.Match(script, @"^WITHHELD=\(([^)]*)\)", RegexOptions.Multiline);
+        Assert.True(block.Success, "publish-public.sh no longer declares a WITHHELD=( … ) array — find where the "
+            + "withheld set moved and point this guard at it, rather than deleting the guard.");
+
+        var inScript = block.Groups[1].Value
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(line => !line.StartsWith('#'))
+            .Select(line => line.Trim('"').TrimEnd('/'))
+            .Where(entry => entry.Length > 0)
+            .OrderBy(entry => entry, StringComparer.Ordinal)
+            .ToList();
+
+        var inTest = Withheld
+            .Select(entry => entry.TrimEnd('/'))
+            .OrderBy(entry => entry, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Equal(inScript, inTest);
+    }
 
     [Fact]
     public void No_published_file_names_the_commercial_dms()
