@@ -395,7 +395,19 @@ public sealed class DocumentResourceLinks
 
         // Check-out affordances (ADR "Document check-out / check-in"): offer check-out when it's free and the
         // caller can edit content; offer check-in when the caller holds the lock or can override someone else's.
-        if (checkedOut is null && rights.CanEditContent)
+        //
+        // ...AND NOT AT ALL ON A SINGLE-VERSION MASK (#1466, ADR 0848). Check-in promotes the working copy to a
+        // NEW VERSION, which SaveChanges refuses for those masks — so offering check-out here would invite a
+        // user to check out an email, edit it, and be refused at check-in, after the work. A rel means
+        // "available to you, here, now" (ADR 0543), so the honest answer is to withhold it: both clients
+        // already gate the affordance on its presence, and neither needs changing.
+        //
+        // Reusing maskFacts from above rather than asking again — the mask is already resolved for the
+        // bookings and machine gates, so this costs no query.
+        var takesOneVersionOnly = maskFacts is not null
+            && WellKnownMaskIds.SingleVersionMasks.Contains(maskFacts.MaskId);
+
+        if (checkedOut is null && rights.CanEditContent && !takesOneVersionOnly)
         {
             links.Add(new Link("checkout", $"/api/documents/{documentId}/checkout", "PUT"));
         }

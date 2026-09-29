@@ -1,3 +1,4 @@
+using SimplArchive.Api.Documents;
 using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -544,7 +545,13 @@ public class CheckoutsController : ControllerBase
         await using var transaction = owned;
 
         _dbContext.DocumentVersions.Add(version);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // TRANSLATING, for the same reason as the versions endpoint (#1466, ADR 0848): a single-version mask
+        // refuses a second version here too, and an untranslated save answers 500 for a policy the caller
+        // could act on. The `checkout` rel is withheld for such a document, so a client following rels never
+        // reaches this — but a scripted caller that composes URLs does, and it deserves the 409 rather than
+        // the bare failure.
+        await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
         await _finalizer.FinalizeAsync(version, cancellationToken); // no staged draft — the existing document keeps its mask
 
         // Release the lock + clear the stash (it became the new version).

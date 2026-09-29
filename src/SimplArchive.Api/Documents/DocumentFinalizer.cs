@@ -507,6 +507,7 @@ public class DocumentFinalizer
         if (!await FolderMask.IsGenericMaskAsync(_dbContext, document.MaskVersionId, cancellationToken))
         {
             await _calendarContactClassifier.TryRefreshAsync(document, version, cancellationToken);
+            await TryRefreshEmailAsync(document, version, cancellationToken);
             return false;
         }
 
@@ -701,6 +702,146 @@ public class DocumentFinalizer
 
         await AutoClassifyAsync(version, cancellationToken); // one level — don't recurse into its attachments
         await _queue.EnqueueAsync(childId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Re-extracts an already-classified e-mail's index fields from a NEW version's bytes (#1466, ADR 0850).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The gap this closes.</b> ADR 0744 gave the edit paths a refresh, but derived its refreshable set
+    /// from <c>DavCollectionKinds.All</c> — so it covered <c>.ics</c> and <c>.vcf</c> and structurally
+    /// excluded everything else. An e-mail therefore SERVED a new version while INDEXING the first one's From,
+    /// Subject and Date. Nothing failed; the document simply described a different message than it delivered.
+    /// </para>
+    /// <para>
+    /// <b>A second version of an e-mail is a FEATURE, not an accident</b>, which is why this is the fix rather
+    /// than refusing the version: an IMAP re-append of the same Message-ID in the same folder deliberately
+    /// files a new version instead of a duplicate document (#782), and version comparison of an <c>.eml</c>
+    /// pair is a tested surface. Refusing was tried and broke both.
+    /// </para>
+    /// <para>
+    /// <b>REPLACE, never add.</b> The fields this owns are cleared before they are rewritten, so a header that
+    /// disappeared between versions — a <c>Cc</c> removed — does not linger, and two versions' values do not
+    /// accumulate on one document. It touches ONLY the fields the extractor produces; anything a person typed
+    /// into another field of the mask is theirs and is left alone.
+    /// </para>
+    /// </remarks>
+    private async Task TryRefreshEmailAsync(Document document, DocumentVersion version, CancellationToken cancellationToken)
+    {
+        var extension = Path.GetExtension(version.ObjectKey).ToLowerInvariant();
+        if (extension is not (".eml" or ".msg"))
+        {
+            return;
+        }
+
+        // The document's OWN mask must be eMail. A .eml filed somewhere that gave it another mask — a module's,
+        // or Basic Entry — is not an e-mail as far as the archive is concerned, and stamping mail headers onto
+        // it would invent index data for fields that mask may not even have.
+        var maskId = await _dbContext.MaskVersions
+            .Where(v => v.Id == document.MaskVersionId)
+            .Select(v => (Guid?)v.MaskId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (maskId != WellKnownMaskIds.EMail)
+        {
+            return;
+        }
+
+        EmailMetadata? metadata;
+        try
+        {
+            await using var stream = await _objectStorageClient.GetObjectAsync(version.ObjectKey, cancellationToken);
+            metadata = await _emailMetadataExtractor.ExtractAsync(stream, extension, cancellationToken);
+        }
+        catch (Exception)
+        {
+            // Unreadable or unparseable: leave the existing values ALONE rather than clearing them. A version
+            // whose bytes cannot be read is a worse reason to lose an index than to keep a stale one, and the
+            // classification path takes the same view by falling through to the default mask.
+            return;
+        }
+
+        if (metadata is null)
+        {
+            return;
+        }
+
+        await ReplaceEmailFieldsAsync(document, version, metadata, cancellationToken);
+    }
+
+    /// <summary>The owned fields, cleared and rewritten from <paramref name="metadata"/>.</summary>
+    private async Task ReplaceEmailFieldsAsync(
+        Document document, DocumentVersion version, EmailMetadata metadata, CancellationToken cancellationToken)
+    {
+        string[] owned = ["From", "To", "Subject", "Cc", "Entry ID", "Date"];
+
+        var fieldIdsByName = await _dbContext.FieldDefinitions
+            .Where(f => f.MaskVersionId == document.MaskVersionId)
+            .Select(f => new { f.Name, f.Id })
+            .ToDictionaryAsync(f => f.Name, f => f.Id, cancellationToken);
+
+        var ownedIds = owned
+            .Where(fieldIdsByName.ContainsKey)
+            .Select(name => fieldIdsByName[name])
+            .ToList();
+
+        var existing = await _dbContext.FieldValues
+            .Where(v => v.DocumentId == document.Id && ownedIds.Contains(v.FieldDefinitionId))
+            .ToListAsync(cancellationToken);
+        _dbContext.FieldValues.RemoveRange(existing);
+
+        void AddValue(string fieldName, string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || !fieldIdsByName.TryGetValue(fieldName, out var fieldDefinitionId))
+            {
+                return;
+            }
+
+            _dbContext.FieldValues.Add(new FieldValue
+            {
+                Id = Guid.NewGuid(),
+                TenantId = document.TenantId,
+                DocumentId = document.Id,
+                FieldDefinitionId = fieldDefinitionId,
+                Value = value,
+            });
+        }
+
+        // "(unknown)" for the three REQUIRED fields, exactly as the classification does: a mask assignment
+        // validates them, so clearing one and writing nothing back would refuse the save (ADR 0176).
+        AddValue("From", string.IsNullOrWhiteSpace(metadata.From) ? "(unknown)" : metadata.From);
+        AddValue("To", string.IsNullOrWhiteSpace(metadata.To) ? "(unknown)" : metadata.To);
+        AddValue("Subject", string.IsNullOrWhiteSpace(metadata.Subject) ? "(unknown)" : metadata.Subject);
+        AddValue("Cc", metadata.Cc);
+        AddValue("Entry ID", metadata.MessageId);
+
+        if (metadata.Date is { } date)
+        {
+            AddValue("Date", date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+
+            // On the NEW version, which is the one being finalized — the document's date is resolved from its
+            // current version (ADR 0503), so writing it to the old one would leave the pane showing the old
+            // message's time for the new bytes.
+            version.DocumentDate = DateOnly.FromDateTime(date.UtcDateTime);
+            version.DocumentTime = TimeOnly.FromDateTime(date.UtcDateTime);
+        }
+
+        // The NAME follows the subject, as it does for an appointment's refresh (ADR 0744) — and for the same
+        // reason: a document whose name describes the previous message is the visible half of the same defect.
+        // Guarded against a collision exactly as the classification is, because a rename that clashes would
+        // refuse the whole save rather than declining the rename.
+        if (!string.IsNullOrWhiteSpace(metadata.Subject))
+        {
+            var subject = metadata.Subject.Trim();
+            var collides = await _dbContext.Documents
+                .AnyAsync(d => d.Id != document.Id && d.ParentId == document.ParentId && d.Name == subject, cancellationToken);
+            if (!collides)
+            {
+                document.Name = subject;
+            }
+        }
+
+        await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
     }
 
     private async Task ClassifyAsEmailAsync(Document document, DocumentVersion version, EmailMetadata metadata, CancellationToken cancellationToken)

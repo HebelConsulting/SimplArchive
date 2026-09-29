@@ -472,10 +472,23 @@ public static class WellKnownMaskIds
     /// <para>
     /// <b>It is also what stops a stale index.</b> The finalizer re-extracts a new version's index fields for
     /// the DAV kinds only (ADR 0744), so a second version of a typed document generally leaves its fields
-    /// describing the first — the open <c>.eml</c> case (#1466) is the same defect. Here that would mean a
-    /// projected certificate whose <c>Valid until</c> belongs to the one it replaced. Refusing the version
-    /// removes the question rather than answering it, which is why this is a short list and not a mechanism:
-    /// a second member should be argued for on its own terms.
+    /// describing the first. Here that would mean a projected certificate whose <c>Valid until</c> belongs to
+    /// the one it replaced. Refusing the version removes the question rather than answering it.
+    /// </para>
+    /// <para>
+    /// <b><c>EMail</c> WAS ADDED HERE AND TAKEN BACK OUT (#1466), which is worth recording so nobody re-adds
+    /// it.</b> The stale-index argument fits — nothing re-extracts an e-mail's index fields on a new version —
+    /// but a second version of an e-mail is a DOCUMENTED FEATURE, not an edge case: an IMAP re-append of the
+    /// same Message-ID in the same folder deliberately files a new version rather than a duplicate document
+    /// (#782, so that a document exported over IMAP and filed back is recognised as ours), and two named tests
+    /// assert it — <c>Re_appending_the_same_message_adds_a_version_instead_of_a_second_document</c> and
+    /// <c>An_eml_pair_compares_as_prose_not_mime</c>. Refusing it broke both. The stale index is fixed by
+    /// RE-EXTRACTING instead (ADR 0850), which was #1466's other option.
+    /// </para>
+    /// <para>
+    /// <b>One member is a list, not a mechanism.</b> A second should be argued for on its own terms — and the
+    /// test asserting that an ordinary document still takes many versions is what keeps this from quietly
+    /// becoming a default.
     /// </para>
     /// </remarks>
     public static readonly IReadOnlySet<Guid> SingleVersionMasks = new HashSet<Guid> { Certificate };

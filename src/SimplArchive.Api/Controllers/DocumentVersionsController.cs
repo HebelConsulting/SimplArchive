@@ -245,7 +245,12 @@ public class DocumentVersionsController : ControllerBase
         };
 
         _dbContext.DocumentVersions.Add(version);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // TRANSLATING, not a bare save: a single-version mask refuses a second version here (#1466, ADR 0848),
+        // and the refusal is an InvalidOperationException subclass like every other DbContext invariant — so
+        // an untranslated save answers 500 for a policy the caller could act on. Measured: it did, and the
+        // E2E test asserting 409 was what said so.
+        await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
 
         return CreatedAtAction(nameof(Get), new { documentId, versionId = version.Id }, new CreateVersionResponse
         {
