@@ -32,14 +32,14 @@ public enum EncryptionMode
     /// exactly like a configured one. Two members cost two lines; a pair of keys costs a class of silent
     /// misconfiguration, and this file already carries the scar of one (see the two retired lists above).
     /// </remarks>
-    DeliveryOnlyPermissive = 3,
+    SealedDeliveryPermissive = 3,
 
     /// <summary>
-    /// <see cref="DeliveryOnlyPermissive"/> with the doors shut: every other content door refuses rather than
+    /// <see cref="SealedDeliveryPermissive"/> with the doors shut: every other content door refuses rather than
     /// serving readable bytes (ADR 0829), and search falls back to metadata-only — the same posture
     /// <see cref="Strict"/> has, over storage that is not wrapped.
     /// </summary>
-    DeliveryOnlyStrict = 4,
+    SealedDeliveryStrict = 4,
 }
 
 /// <summary>
@@ -124,12 +124,12 @@ public sealed class EncryptionModes(IConfiguration configuration)
     /// <remarks>
     /// <b>Search follows this, not the mode</b> (owner, 2026-09-28). A snippet IS plaintext served through a
     /// door, so a tenant that refuses plaintext refuses it everywhere — one sentence covering search, previews
-    /// and links. The consequence is that <see cref="EncryptionMode.DeliveryOnlyPermissive"/> keeps full-text
+    /// and links. The consequence is that <see cref="EncryptionMode.SealedDeliveryPermissive"/> keeps full-text
     /// search: its content is not wrapped at rest, so an index exposes nothing the bucket does not already
     /// hold, and withdrawing search there would cost a capability for no gain.
     /// </remarks>
     public bool RefusesPlaintextDoors(string tenantName) =>
-        ModeFor(tenantName) is EncryptionMode.Strict or EncryptionMode.DeliveryOnlyStrict;
+        ModeFor(tenantName) is EncryptionMode.Strict or EncryptionMode.SealedDeliveryStrict;
 
     /// <summary>True when a content read is delivered as an envelope addressed to the reader.</summary>
     /// <remarks>
@@ -138,7 +138,7 @@ public sealed class EncryptionModes(IConfiguration configuration)
     /// </remarks>
     public bool DeliversEnvelopes(string tenantName) =>
         ModeFor(tenantName) is EncryptionMode.Strict
-            or EncryptionMode.DeliveryOnlyStrict or EncryptionMode.DeliveryOnlyPermissive;
+            or EncryptionMode.SealedDeliveryStrict or EncryptionMode.SealedDeliveryPermissive;
 
     /// <summary>True when IMAP serves messages enveloped to the recipient's certificate (ADR 0813).</summary>
     /// <remarks>
@@ -206,7 +206,7 @@ public sealed class EncryptionModes(IConfiguration configuration)
     {
         ThrowIfLegacyConfigured(configuration);
         ThrowIfModeHasNoService(configuration);
-        ThrowIfDeliveryOnlyHasNoModule(configuration);
+        ThrowIfSealedDeliveryHasNoModule(configuration);
     }
 
     /// <summary>
@@ -283,7 +283,7 @@ public sealed class EncryptionModes(IConfiguration configuration)
 
     /// <summary>Modes whose delivery is performed by the Encryption Module (ADR 0834).</summary>
     private static bool NeedsModule(EncryptionMode mode) =>
-        mode is EncryptionMode.DeliveryOnlyPermissive or EncryptionMode.DeliveryOnlyStrict;
+        mode is EncryptionMode.SealedDeliveryPermissive or EncryptionMode.SealedDeliveryStrict;
 
     /// <summary>
     /// Refuses a delivery-only mode while nothing can perform its delivery (#1411, ADR 0834).
@@ -302,7 +302,7 @@ public sealed class EncryptionModes(IConfiguration configuration)
     /// warning, in Development too — a developer misled by it is exactly as misled as an administrator.
     /// </para>
     /// </remarks>
-    public static void ThrowIfDeliveryOnlyHasNoModule(IConfiguration configuration)
+    public static void ThrowIfSealedDeliveryHasNoModule(IConfiguration configuration)
     {
         var claimed = new List<string>();
 

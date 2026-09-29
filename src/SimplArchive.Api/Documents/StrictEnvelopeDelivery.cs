@@ -57,7 +57,7 @@ public sealed class StrictEnvelopeDelivery(
     /// <summary>True when this tenant DELIVERS content as an envelope.</summary>
     /// <remarks>
     /// Deliberately not the same question as <see cref="RefusesPlaintextDoorsAsync"/>, and they came apart with
-    /// the delivery tiers (#1411): <c>DeliveryOnlyPermissive</c> envelopes for readers who have a certificate
+    /// the delivery tiers (#1411): <c>SealedDeliveryPermissive</c> envelopes for readers who have a certificate
     /// while every other door goes on serving as before. One predicate answering both is what this whole
     /// refactor existed to end, and it survived here for one caller until the owner asked what a permissive
     /// tenant serves a reader with no certificate.
@@ -110,7 +110,7 @@ public sealed class StrictEnvelopeDelivery(
     public async Task RefuseIfStrictAsync(string door, CancellationToken cancellationToken)
     {
         // The DOOR question, not the delivery one. Asking AppliesAsync refused this door on a
-        // DeliveryOnlyPermissive tenant while every other door served — the posture inverted for exactly the
+        // SealedDeliveryPermissive tenant while every other door served — the posture inverted for exactly the
         // door that most needs to follow it, since the overlay's word coordinates reconstruct the document.
         if (await RefusesPlaintextDoorsAsync(cancellationToken))
         {

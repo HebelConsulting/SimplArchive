@@ -228,14 +228,14 @@ public class EncryptionModesTests
     // so they come apart, and the table is what stops a later reader re-merging them.
     //
     // Read down a column, not across: `Storage` wraps and envelopes mail but delivers no envelopes and shuts
-    // no doors; `DeliveryOnlyPermissive` is its exact opposite on all four.
+    // no doors; `SealedDeliveryPermissive` is its exact opposite on all four.
     [Theory]
     //                                        wraps  doors  envelopes  mail
     [InlineData(EncryptionMode.None, false, false, false, false)]
     [InlineData(EncryptionMode.Storage, true, false, false, true)]
     [InlineData(EncryptionMode.Strict, true, true, true, true)]
-    [InlineData(EncryptionMode.DeliveryOnlyPermissive, false, false, true, false)]
-    [InlineData(EncryptionMode.DeliveryOnlyStrict, false, true, true, false)]
+    [InlineData(EncryptionMode.SealedDeliveryPermissive, false, false, true, false)]
+    [InlineData(EncryptionMode.SealedDeliveryStrict, false, true, true, false)]
     public void Each_mode_answers_all_four_questions_explicitly(
         EncryptionMode mode, bool wraps, bool shutsDoors, bool envelopes, bool mail)
     {
@@ -261,8 +261,8 @@ public class EncryptionModesTests
     public void Delivering_envelopes_and_refusing_plaintext_doors_are_different_questions()
     {
         var modes = Modes(
-            (EncryptionModes.Section + ":Permissive", nameof(EncryptionMode.DeliveryOnlyPermissive)),
-            (EncryptionModes.Section + ":Shut", nameof(EncryptionMode.DeliveryOnlyStrict)));
+            (EncryptionModes.Section + ":Permissive", nameof(EncryptionMode.SealedDeliveryPermissive)),
+            (EncryptionModes.Section + ":Shut", nameof(EncryptionMode.SealedDeliveryStrict)));
 
         // The permissive tier envelopes for whoever has a certificate AND keeps serving every other door,
         // which is what "permissive" means and why a reader without one is served plaintext there.
@@ -277,8 +277,8 @@ public class EncryptionModesTests
     // A delivery tier needs no encryption SERVICE -- that is the whole point of the split (ADR 0834), and the
     // refusal it must not trip is the one written as an ordering (`> None`), which would have caught it.
     [Theory]
-    [InlineData(EncryptionMode.DeliveryOnlyPermissive)]
-    [InlineData(EncryptionMode.DeliveryOnlyStrict)]
+    [InlineData(EncryptionMode.SealedDeliveryPermissive)]
+    [InlineData(EncryptionMode.SealedDeliveryStrict)]
     public void A_delivery_tier_is_not_refused_for_lacking_an_encryption_service(EncryptionMode mode)
     {
         var configuration = Config((EncryptionModes.Section + ":T", mode.ToString()));
@@ -289,14 +289,14 @@ public class EncryptionModesTests
     // ...but it IS refused while nothing performs its delivery. Same failure as #1406 and refused the same
     // way: a mode with nothing behind it does not misbehave, it silently has no guarantee.
     [Theory]
-    [InlineData(EncryptionMode.DeliveryOnlyPermissive)]
-    [InlineData(EncryptionMode.DeliveryOnlyStrict)]
+    [InlineData(EncryptionMode.SealedDeliveryPermissive)]
+    [InlineData(EncryptionMode.SealedDeliveryStrict)]
     public void A_delivery_tier_is_refused_while_the_module_does_not_exist(EncryptionMode mode)
     {
         var configuration = Config((EncryptionModes.Section + ":T", mode.ToString()));
 
         var error = Assert.Throws<InvalidOperationException>(
-            () => EncryptionModes.ThrowIfDeliveryOnlyHasNoModule(configuration));
+            () => EncryptionModes.ThrowIfSealedDeliveryHasNoModule(configuration));
 
         Assert.Contains("Encryption Module", error.Message);
         Assert.Contains($"{EncryptionModes.Section}:T", error.Message);
@@ -311,7 +311,7 @@ public class EncryptionModesTests
         var configuration = Config((EncryptionModes.ServiceUrlKey, "http://enc"),
                                    (EncryptionModes.Section + ":T", mode.ToString()));
 
-        EncryptionModes.ThrowIfDeliveryOnlyHasNoModule(configuration);   // does not throw
+        EncryptionModes.ThrowIfSealedDeliveryHasNoModule(configuration);   // does not throw
     }
 
     [Fact]
