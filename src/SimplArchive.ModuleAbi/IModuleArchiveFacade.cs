@@ -242,4 +242,33 @@ public sealed record ModuleDocument(
     /// </summary>
     public IReadOnlyDictionary<string, IReadOnlyList<string>> FieldLists { get; init; } =
         System.Collections.ObjectModel.ReadOnlyDictionary<string, IReadOnlyList<string>>.Empty;
+
+    /// <summary>
+    /// Whom this document represents (ABI 1.2, ADR 0851) — resolved by the CORE from the field its mask
+    /// declares, so a module never resolves an address itself.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The point is that an address is not a key. A certificate's <c>Holder</c> is an e-mail because a person
+    /// files it and reads it, but an address CHANGES — and <c>User.Email</c>'s setter rewrites the normalized
+    /// form with nothing downstream noticing (core ADR 0150) — so a module keying on one would silently orphan
+    /// everything its owner holds. The core keeps the mapping current for every write path, including when
+    /// somebody corrects the address later, and hands the result over here.
+    /// </para>
+    /// <para>
+    /// <b>It is also what keeps a module read model DERIVABLE.</b> A projection needing a user id could
+    /// otherwise only get one at write time and store it — making the row unrebuildable from documents, which
+    /// is the contract ADR 0738's rebuild command exists to prove.
+    /// </para>
+    /// <para>
+    /// <b>Null has two causes and they are worth telling apart</b>: the mask declares no principal field, or
+    /// it does and the value resolved to nobody — a certificate filed for somebody who is not a user of this
+    /// tenant, which core ADR 0844 keeps legitimate. Neither is an error; both mean "addressed to nobody".
+    /// </para>
+    /// <para>
+    /// <c>init</c>-only, so this addition is binary-additive (ADR 0789) and every module built against 1.1 or
+    /// earlier is untouched.
+    /// </para>
+    /// </remarks>
+    public Guid? RepresentsUserId { get; init; }
 }

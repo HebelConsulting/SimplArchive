@@ -303,6 +303,38 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         await BackfillRepositoryMaskAsync(tenantId, cancellationToken);
     }
 
+    /// <summary>
+    /// Heals the mask's principal-field declaration (ADR 0851), for tenants seeded before it existed.
+    /// </summary>
+    /// <remarks>
+    /// Masks heal on startup (ADR 0757) precisely because activation-only seeding stranded upgrades, and this
+    /// is one of those: a tenant whose <c>Certificate</c> mask predates the declaration would resolve no
+    /// holder at all — and a document representing nobody looks exactly like a document nobody has claimed,
+    /// which is how ABI 0.13's own feature stayed inert unnoticed.
+    /// </remarks>
+    private async Task EnsurePrincipalFieldAsync(Guid tenantId, Guid maskId, CancellationToken cancellationToken)
+    {
+        if (!WellKnownMaskIds.PrincipalFields.TryGetValue(maskId, out var fieldName))
+        {
+            return;
+        }
+
+        var mask = await _dbContext.Masks
+            .IgnoreQueryFilters(["TenantFilter"])
+            .FirstOrDefaultAsync(m => m.TenantId == tenantId && m.Id == maskId, cancellationToken);
+
+        if (mask is null || mask.RepresentsPrincipalField == fieldName)
+        {
+            return;
+        }
+
+        mask.RepresentsPrincipalField = fieldName;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation(
+            "Healed mask {MaskId} for tenant {TenantId}: it now represents its principal by {Field}.",
+            maskId, tenantId, fieldName);
+    }
+
     private async Task EnsureMaskAsync(Guid tenantId, Guid maskId, string name, IReadOnlyList<FieldSpec> fields, CancellationToken cancellationToken)
     {
         // IgnoreQueryFilters(["TenantFilter"]) — this Where clause is already explicitly scoped by the
@@ -316,6 +348,7 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             await RenameIfNeededAsync(tenantId, maskId, name, cancellationToken);
             await AddMissingFieldsAsync(tenantId, maskId, fields, cancellationToken);
             await EnsureAssignabilityAsync(tenantId, maskId, cancellationToken);
+            await EnsurePrincipalFieldAsync(tenantId, maskId, cancellationToken);
             return;
         }
 
@@ -327,6 +360,7 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             IsFolderMask = WellKnownMaskIds.FolderMasks.Contains(maskId),
             Icon = WellKnownMaskIds.IconTokens.GetValueOrDefault(maskId),
             UserCreatable = !WellKnownMaskIds.NotUserCreatable.Contains(maskId),
+            RepresentsPrincipalField = WellKnownMaskIds.PrincipalFields.GetValueOrDefault(maskId),
         });
 
         var maskVersion = new MaskVersion { Id = Guid.NewGuid(), TenantId = tenantId, MaskId = maskId, Name = name, CreatedAt = DateTimeOffset.UtcNow };

@@ -107,7 +107,59 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
             fields.Joined)
         {
             FieldLists = fields.Lists,
+            RepresentsUserId = await RepresentsUserIdAsync(document.Id, cancellationToken),
         };
+    }
+
+    /// <summary>
+    /// Whom a document represents (ABI 1.2, ADR 0851) — READ from the mapping the core maintains, never
+    /// resolved here.
+    /// </summary>
+    /// <remarks>
+    /// <c>SyncResourcePrincipalsAsync</c> keeps <c>ResourcePrincipals</c> current from the field a mask
+    /// declares, at the one save point every write path goes through. Resolving the address here instead would
+    /// be a second answer to a question the core already answers — and the two would drift, because that one
+    /// follows an address being corrected later and a fresh lookup would not know it had been.
+    /// </remarks>
+    private async Task<Guid?> RepresentsUserIdAsync(Guid documentId, CancellationToken cancellationToken) =>
+        await _dbContext.ResourcePrincipals
+            .Where(p => p.ResourceDocumentId == documentId)
+            .Select(p => (Guid?)p.UserId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    /// <summary>The same answer for a page of documents, in ONE query rather than one per row.</summary>
+    /// <remarks>
+    /// The listing reads are already a field query per row; adding a principal query per row would make a
+    /// rebuild over a tenant's certificates two round trips per document. A rebuild enumerates everything, so
+    /// this is the read where an N+1 is actually felt.
+    /// </remarks>
+    private async Task<Dictionary<Guid, Guid>> RepresentsUserIdsAsync(
+        IReadOnlyCollection<Guid> documentIds, CancellationToken cancellationToken)
+    {
+        if (documentIds.Count == 0)
+        {
+            return [];
+        }
+
+        // PROJECTED, then grouped IN MEMORY — never `GroupBy(...).Min(p => p.UserId)` in SQL.
+        //
+        // PostgreSQL has no `min(uuid)` aggregate, so that translation fails at RUN TIME with
+        // `42883: function min(uuid) does not exist`, taking the whole request to a 500. It compiles, and it
+        // passes the unit and integration suites, because those run on SQLite — which aggregates a GUID
+        // happily. This is the provider-parity trap the model rules warn about, met on a facade read rather
+        // than in an entity configuration: PostgreSQL in production, SQLite in tests, and only one of them
+        // objected.
+        //
+        // The grouping is defensive anyway: the mapping holds at most one row per document, so this collapses
+        // nothing in practice and exists so a duplicate cannot throw.
+        var rows = await _dbContext.ResourcePrincipals
+            .Where(p => documentIds.Contains(p.ResourceDocumentId))
+            .Select(p => new { p.ResourceDocumentId, p.UserId })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .GroupBy(r => r.ResourceDocumentId)
+            .ToDictionary(g => g.Key, g => g.First().UserId);
     }
 
     public async Task<byte[]?> GetDocumentContentAsync(Guid documentId, CancellationToken cancellationToken = default)
@@ -197,6 +249,7 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
             .ToList();
 
         var visibility = await ModuleVisibilityAsync(rows.Select(r => r.Id).ToList(), cancellationToken);
+        var principals = await RepresentsUserIdsAsync(rows.Select(r => r.Id).ToList(), cancellationToken);
         var children = new List<ModuleDocument>(rows.Count);
         foreach (var row in rows)
         {
@@ -206,7 +259,11 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
             }
 
             var childFields = await FieldsOfAsync(row.Id, cancellationToken);
-            children.Add(new ModuleDocument(row.Id, row.ParentId, row.Name, maskId, childFields.Joined) { FieldLists = childFields.Lists });
+            children.Add(new ModuleDocument(row.Id, row.ParentId, row.Name, maskId, childFields.Joined)
+            {
+                FieldLists = childFields.Lists,
+                RepresentsUserId = principals.TryGetValue(row.Id, out var childPrincipal) ? childPrincipal : null,
+            });
         }
 
         return children;
@@ -225,6 +282,7 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
             .ToList();
 
         var visibility = await ModuleVisibilityAsync(rows.Select(r => r.Id).ToList(), cancellationToken);
+        var principals = await RepresentsUserIdsAsync(rows.Select(r => r.Id).ToList(), cancellationToken);
         var documents = new List<ModuleDocument>(rows.Count);
         foreach (var row in rows)
         {
@@ -234,7 +292,11 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
             }
 
             var documentFields = await FieldsOfAsync(row.Id, cancellationToken);
-            documents.Add(new ModuleDocument(row.Id, row.ParentId, row.Name, maskId, documentFields.Joined) { FieldLists = documentFields.Lists });
+            documents.Add(new ModuleDocument(row.Id, row.ParentId, row.Name, maskId, documentFields.Joined)
+            {
+                FieldLists = documentFields.Lists,
+                RepresentsUserId = principals.TryGetValue(row.Id, out var principal) ? principal : null,
+            });
         }
 
         return documents;

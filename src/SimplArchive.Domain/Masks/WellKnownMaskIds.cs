@@ -493,6 +493,26 @@ public static class WellKnownMaskIds
     /// </remarks>
     public static readonly IReadOnlySet<Guid> SingleVersionMasks = new HashSet<Guid> { Certificate };
 
+    /// <summary>
+    /// The field that says WHOSE a document is, per mask (ADR 0779's mechanism, ADR 0851).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Declared here beside the other per-mask facts rather than at the seed site, so the seeder and the heal
+    /// read one list — the same shape as <see cref="IconTokens"/> and <see cref="NotUserCreatable"/>.
+    /// </para>
+    /// <para>
+    /// <b><c>Certificate</c> → <c>Holder</c> is the only entry, and it is not a new mechanism.</b>
+    /// <c>SyncResourcePrincipalsAsync</c> already maintains the mapping from whatever field a mask declares,
+    /// at <c>SaveChanges</c> and for every write path — it keys on the declaration, NOT on
+    /// <c>IsBookable</c>, so nothing about it was ever booking-specific but its first caller. Declaring the
+    /// field is what lets a module ask whose certificate a document is without resolving an address itself,
+    /// and without the read model having to store an answer it could not rebuild (ADR 0851).
+    /// </para>
+    /// </remarks>
+    public static readonly IReadOnlyDictionary<Guid, string> PrincipalFields =
+        new Dictionary<Guid, string> { [Certificate] = "Holder" };
+
     /// <summary>The well-known masks an ITEM wears — the complement of <see cref="FolderMasks"/>.</summary>
     /// <remarks>Stated rather than derived, so the partition guard has two sides to compare instead of one.</remarks>
     public static readonly IReadOnlySet<Guid> ItemMasks =
