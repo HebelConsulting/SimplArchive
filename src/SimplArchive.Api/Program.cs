@@ -403,34 +403,13 @@ var machineCatalog = new SimplArchive.Infrastructure.Modules.StateMachineCatalog
 // could see, and these two calls ran unguarded on the host's construction path — so a module that loaded
 // fine and then threw terminated the API, which then crash-looped. That is how the public kiosk spent 94
 // minutes down, and it is what any customer would meet on upgrading the core with an older module build.
-var moduleStartupLogger = LoggerFactory.Create(logging => logging.AddSerilog()).CreateLogger("ModuleStartup");
-var healthyModules = new List<SimplArchive.Infrastructure.Modules.ModuleLoader.LoadedModule>();
-foreach (var loaded in modules)
-{
-    if (!SimplArchive.Infrastructure.Modules.ModuleStartup.TryRun(
-            loaded, "ConfigureServices", moduleStartupLogger, () => loaded.Module.ConfigureServices(builder.Services)))
-    {
-        continue;
-    }
-
-    // The enumerable definitions (ADR 0742) — declared once, held for the process's life; the scoped
-    // engine evaluates against them per request.
-    // Through the module scope, so every machine carries its declaring module's id — what the wire
-    // surface gates activation on (ADR 0737).
-    if (!SimplArchive.Infrastructure.Modules.ModuleStartup.TryRun(
-            loaded, "DefineStateMachines", moduleStartupLogger,
-            () => loaded.Module.DefineStateMachines(machineCatalog.ForModule(loaded.Module.ModuleId))))
-    {
-        continue;
-    }
-
-    healthyModules.Add(loaded);
-}
-
-// Only the modules that survived their own startup are published. A module that threw must not reach the
-// activation surface, the ApplicationParts, or the read-model wiring: it would advertise features whose
-// registration never happened.
-modules = healthyModules;
+// Each module's two startup seams, with only the survivors published: a module that threw must not reach the
+// activation surface, the ApplicationParts, or the read-model wiring (ModuleStartup.RunAll says why).
+modules = SimplArchive.Infrastructure.Modules.ModuleStartup.RunAll(
+    modules,
+    builder.Services,
+    machineCatalog,
+    LoggerFactory.Create(logging => logging.AddSerilog()).CreateLogger("ModuleStartup"));
 
 builder.Services.AddSingleton(machineCatalog);
 builder.Services.AddSingleton<IReadOnlyList<SimplArchive.Infrastructure.Modules.ModuleLoader.LoadedModule>>(modules);
@@ -442,8 +421,11 @@ builder.Services.AddSingleton<SimplArchive.Application.Abstractions.IDavCollecti
 
 // Module-owned read models (ADR 0738): each declared context registered on the CORE context's own
 // connection — one connection, one transaction, one commit — with its own migrations history. Migration
-// happens beside the core's (below), through the same owner-connection discipline.
+// happens beside the core's (below), through the same owner-connection discipline. The projection dispatch
+// beside it is what keeps them CURRENT when a document they project changes by a route the module cannot
+// see — the pencil in the workbench, WebDAV, a new confirmed version (ABI 1.1, ADR 0848).
 SimplArchive.Infrastructure.Modules.ModuleReadModelWiring.AddModuleReadModels(builder.Services, modules);
+SimplArchive.Infrastructure.Modules.ModuleProjectionWiring.AddModuleProjections(builder.Services, modules);
 
 // Module CONTROLLERS (ADR 0737): each module assembly joins MVC as an application part — full native
 // controllers, same conventions, module-private routes — and the gate convention pins the per-tenant

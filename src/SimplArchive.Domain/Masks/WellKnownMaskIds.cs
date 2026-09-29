@@ -457,6 +457,29 @@ public static class WellKnownMaskIds
         // anybody, rather than being a hole.
         new HashSet<Guid> { Repository, UserFolder, MyDocuments, ImapSpecial, Notebook, Booking, Schedule, Blockers, Block, Availability, AvailabilityWindow };
 
+    /// <summary>
+    /// Masks whose documents take exactly ONE version, for their whole life (ADR 0848).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b><c>Certificate</c> only, and it is a policy rather than a technical limit.</b> Its module's ADR 0002
+    /// says one document per certificate for its whole life: the document is the evidence of an enrolment —
+    /// who filed it, when, and when it was revoked — and a second version replaces the subject of that
+    /// evidence while keeping its history, which is the one thing the arrangement exists to prevent.
+    /// Replacing a certificate is a NEW ENROLMENT, filed as its own document; the old one is revoked and
+    /// stays as the record that it once applied.
+    /// </para>
+    /// <para>
+    /// <b>It is also what stops a stale index.</b> The finalizer re-extracts a new version's index fields for
+    /// the DAV kinds only (ADR 0744), so a second version of a typed document generally leaves its fields
+    /// describing the first — the open <c>.eml</c> case (#1466) is the same defect. Here that would mean a
+    /// projected certificate whose <c>Valid until</c> belongs to the one it replaced. Refusing the version
+    /// removes the question rather than answering it, which is why this is a short list and not a mechanism:
+    /// a second member should be argued for on its own terms.
+    /// </para>
+    /// </remarks>
+    public static readonly IReadOnlySet<Guid> SingleVersionMasks = new HashSet<Guid> { Certificate };
+
     /// <summary>The well-known masks an ITEM wears — the complement of <see cref="FolderMasks"/>.</summary>
     /// <remarks>Stated rather than derived, so the partition guard has two sides to compare instead of one.</remarks>
     public static readonly IReadOnlySet<Guid> ItemMasks =

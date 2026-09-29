@@ -218,6 +218,50 @@ public interface IIndustryModule
     Func<ReaderCertificateContext, Task<IReadOnlyList<ReaderCertificate>>>? ReaderCertificates => null;
 
     /// <summary>
+    /// The masks whose documents this module PROJECTS into a read model (ABI 1.1, ADR 0848) — declared so the
+    /// host can tell it when one changes by a route the module cannot see.
+    /// </summary>
+    /// <remarks>
+    /// Empty for a module whose projections are written only by its own transition handlers, which is every
+    /// module before 1.1: it is exclusively the writer, so there is nothing it can miss. Declare a mask only
+    /// when something OTHER than this module can change the documents — a core well-known mask above all,
+    /// since a tenant administrator reaches those with the pencil in the workbench.
+    ///
+    /// <para><b>Declaring a mask is a commitment to be correct about it.</b> A throw from
+    /// <see cref="DocumentProjected"/> fails the write that triggered it (ADR 0848), so a module that wants
+    /// best-effort projection should declare nothing here and rebuild on a schedule instead.</para>
+    /// </remarks>
+    IReadOnlyList<Guid> ProjectedMasks => [];
+
+    /// <summary>
+    /// A document wearing one of <see cref="ProjectedMasks"/> has changed; re-derive its row (ABI 1.1, ADR 0848).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Called ONCE per document per save, however many rows changed — a save can touch the document, several
+    /// of its index-field values and a version, and that is one fact, not five. It fires for an index-field
+    /// edit and for a new CONFIRMED version as well as for a write to the document row itself, because
+    /// neither of the first two touches that row and both are how a certificate is really revoked or
+    /// replaced.
+    /// </para>
+    /// <para>
+    /// <b>It runs INSIDE the core's save and inside its transaction</b>, so the projection commits with the
+    /// document or not at all. Two obligations follow, and they are the price of that guarantee. Do not WRITE
+    /// through <see cref="ProjectedDocumentContext.Archive"/> — that re-enters <c>SaveChanges</c>; read the
+    /// committed document and project into the module's own context. And do not be SLOW: the core's
+    /// transaction is open and its locks are held for every other writer while this runs, so no outbound
+    /// call, no retry loop, no waiting on anything.
+    /// </para>
+    /// <para>
+    /// <b>A throw fails the write</b>, deliberately unlike every other module hook, which the core tolerates
+    /// (see <see cref="ReaderCertificates"/>, whose failure merely refuses a read). The asymmetry is the
+    /// DIRECTION of the failure: a refused read is safe and visible, whereas a projection that silently did
+    /// not happen leaves a revoked certificate addressed for as long as nobody rebuilds.
+    /// </para>
+    /// </remarks>
+    Func<ProjectedDocumentContext, Task>? DocumentProjected => null;
+
+    /// <summary>
     /// The masks whose documents this module may offer actions on (ABI 0.20, core ADR 0786). The core asks
     /// <see cref="DocumentActions"/> only for these, so a module is not consulted on every document read in
     /// the tenant. Default: none.

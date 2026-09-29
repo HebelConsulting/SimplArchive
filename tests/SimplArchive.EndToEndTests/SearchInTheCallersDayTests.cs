@@ -93,13 +93,30 @@ public class SearchInTheCallersDayTests
         var repoId = (await TestJson.Post(api, "/api/repositories", new { name = $"tzpref-{term}" })).GetProperty("id").GetGuid();
         var timed = await CreateDocAsync(api, repoId, "timed", term, StoredDate, StoredTime);
 
-        await PollAsync(async () => (await SearchIdsAsync(api, term, zone: null)).Contains(timed), "the document is indexed");
-
         (await api.PutAsJsonAsync("/api/me/time-zone", new { timeZoneId = Zurich })).EnsureSuccessStatusCode();
 
-        // The header says UTC, the preference says Zurich. Zurich wins, so the document is on the 16th.
-        var hits = await SearchIdsAsync(api, term, zone: "UTC", $"system[documentDate][eq]={LocalDate}");
-        Assert.Contains(timed, hits);
+        // THE POLL ASKS THE QUESTION THE ASSERTION ASKS, and it did not before: it waited for the term to be
+        // findable with NO date filter, then asserted a DATE-FILTERED query. Readiness was certified for one
+        // query and relied upon for another, which is a race by construction rather than by timing luck —
+        // invisible locally (this test passed 10/10 alone and inside the full 675-test suite) and a real
+        // failure on a 2-core CI runner, where OpenSearch has not caught up. Same shape as the Playwright
+        // assertion-timeout case: correct everywhere except where it is slow.
+        //
+        // The preference is set FIRST because the filtered query depends on it — Zurich is what puts the
+        // document on the 16th — so polling before it would wait for something that cannot yet be true.
+        //
+        // This does NOT make the assertion vacuous. If the zone logic is wrong the document never appears on
+        // the 16th at all, and the poll fails by timeout naming exactly what never arrived, which is a better
+        // failure than the bare "item not found in set" this used to give.
+        await PollAsync(
+            async () => (await SearchIdsAsync(api, term, zone: "UTC", $"system[documentDate][eq]={LocalDate}"))
+                .Contains(timed),
+            $"the document is indexed and dated {LocalDate} in the STORED zone, not the header's UTC");
+
+        // The header says UTC, the preference says Zurich. Zurich wins, so the document is on the 16th — and
+        // it must NOT be on the 15th, which is the half no poll can satisfy and therefore the load-bearing
+        // assertion: a server that ignored the preference would answer the 15th.
+        Assert.DoesNotContain(timed, await SearchIdsAsync(api, term, zone: "UTC", $"system[documentDate][eq]={StoredDate}"));
     }
 
     // ---- helpers -------------------------------------------------------------------------------------------

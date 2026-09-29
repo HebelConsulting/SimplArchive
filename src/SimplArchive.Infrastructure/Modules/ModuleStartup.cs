@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace SimplArchive.Infrastructure.Modules;
@@ -37,6 +38,50 @@ public static class ModuleStartup
     /// arbitrary third-party code runs here and the host must survive whatever it does. A narrower catch
     /// would be a list of the failures somebody already thought of, which is what left this unguarded.
     /// </remarks>
+    /// <summary>
+    /// Runs every loaded module's two startup seams and returns only those that survived both.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A module that threw must not reach anything downstream</b> — not the activation surface, not the
+    /// ApplicationParts, not the read-model or projection wiring — because it would advertise features whose
+    /// registration never happened. Filtering here rather than at each of those sites is what makes that one
+    /// decision instead of four.
+    /// </para>
+    /// <para>
+    /// Lived in the host's <c>Program.cs</c> until ABI 1.1: module-startup logic in the composition root, in a
+    /// file that had reached 999 lines. Moving it changed where it lives and nothing about what it does.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<ModuleLoader.LoadedModule> RunAll(
+        IReadOnlyList<ModuleLoader.LoadedModule> modules,
+        IServiceCollection services,
+        StateMachineCatalog machineCatalog,
+        ILogger logger)
+    {
+        var healthy = new List<ModuleLoader.LoadedModule>();
+        foreach (var loaded in modules)
+        {
+            if (!TryRun(loaded, "ConfigureServices", logger, () => loaded.Module.ConfigureServices(services)))
+            {
+                continue;
+            }
+
+            // The enumerable definitions (ADR 0742) — declared once, held for the process's life; the scoped
+            // engine evaluates against them per request. Through the module scope, so every machine carries
+            // its declaring module's id, which is what the wire surface gates activation on (ADR 0737).
+            if (!TryRun(loaded, "DefineStateMachines", logger,
+                    () => loaded.Module.DefineStateMachines(machineCatalog.ForModule(loaded.Module.ModuleId))))
+            {
+                continue;
+            }
+
+            healthy.Add(loaded);
+        }
+
+        return healthy;
+    }
+
     public static bool TryRun(ModuleLoader.LoadedModule loaded, string seamName, ILogger logger, Action seam)
     {
         try

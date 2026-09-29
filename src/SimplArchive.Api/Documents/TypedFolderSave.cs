@@ -61,6 +61,13 @@ public static class TypedFolderSave
         Domain.Documents.PersonalSpaceStructureException x =>
             new Errors.Exceptions.Documents.PersonalSpaceStructureException(x.Message),
 
+        // Fourth time, and the cheapest one to have got wrong: the upload paths catch
+        // InvalidOperationException and report a name clash, so refusing a second version of a certificate
+        // would have told the caller to rename a document whose name is not the problem — and would have
+        // hidden the one sentence that says what to do instead (file a new enrolment).
+        Domain.Documents.SingleVersionMaskException x =>
+            new Errors.Exceptions.Documents.SingleVersionMaskException(x.Message),
+
         _ => null,
     };
 }

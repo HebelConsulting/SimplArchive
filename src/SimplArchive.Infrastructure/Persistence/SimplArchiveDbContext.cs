@@ -56,13 +56,18 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
     // module-aware registry, so a module's Logbook entries generate change-log rows there.
     private readonly IDavCollectionKindRegistry? _davCollectionKinds;
 
+    // Which masks loaded modules project, and the dispatch that re-derives them (ABI 1.1, ADR 0848). Optional
+    // like the three above, so the design-time factory and the DI-less tests keep working.
+    private readonly IModuleProjectionDispatcher? _moduleProjections;
+
     public SimplArchiveDbContext(
         DbContextOptions<SimplArchiveDbContext> options,
         ICurrentTenantAccessor currentTenantAccessor,
         IRealtimeNotifier? realtimeNotifier = null,
         IMaskContainmentProvider? containmentProvider = null,
         IDavChangeNotifier? davChangeNotifier = null,
-        IDavCollectionKindRegistry? davCollectionKinds = null)
+        IDavCollectionKindRegistry? davCollectionKinds = null,
+        IModuleProjectionDispatcher? moduleProjections = null)
         : base(options)
     {
         _currentTenantAccessor = currentTenantAccessor;
@@ -70,6 +75,7 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
         _containmentProvider = containmentProvider ?? new MaskContainmentProvider();
         _davChangeNotifier = davChangeNotifier;
         _davCollectionKinds = davCollectionKinds;
+        _moduleProjections = moduleProjections;
     }
 
     /// <summary>The kinds the change recorder records against — the registry's when present, else the core set.</summary>
@@ -299,10 +305,11 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
 
     public override int SaveChanges()
     {
-        ValidateGroupsAsync(CancellationToken.None).GetAwaiter().GetResult();
+        GroupInvariants.ValidateAsync(this, CancellationToken.None).GetAwaiter().GetResult();
         PersonalRootName.FollowDisplayNameAsync(this, CancellationToken.None).GetAwaiter().GetResult();
         ProvisionBookableCollectionsAsync(CancellationToken.None).GetAwaiter().GetResult();
         ValidateDocumentsAsync(CancellationToken.None).GetAwaiter().GetResult();
+        SingleVersionMaskRule.ValidateAsync(this, CancellationToken.None).GetAwaiter().GetResult();
         ValidateFieldValuesAsync(CancellationToken.None).GetAwaiter().GetResult();
         ValidateRequiredFieldsAsync(CancellationToken.None).GetAwaiter().GetResult();
         SyncBookingDocumentsAsync(CancellationToken.None).GetAwaiter().GetResult();
@@ -323,12 +330,13 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        await ValidateGroupsAsync(cancellationToken);
+        await GroupInvariants.ValidateAsync(this, cancellationToken);
         await PersonalRootName.FollowDisplayNameAsync(this, cancellationToken);
         // BEFORE the document validations, so the collections it adds are judged by them like any other
         // write — sibling names, containment, cycles (#1097).
         await ProvisionBookableCollectionsAsync(cancellationToken);
         await ValidateDocumentsAsync(cancellationToken);
+        await SingleVersionMaskRule.ValidateAsync(this, cancellationToken);
         await ValidateFieldValuesAsync(cancellationToken);
         await ValidateRequiredFieldsAsync(cancellationToken);
         await SyncBookingDocumentsAsync(cancellationToken);
@@ -354,7 +362,12 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
         // Snapshot the notifications being inserted BEFORE the save (so the state is still Added), then push them
         // live AFTER the commit — a single choke point covering every write path (ADR "Real-time notifications").
         var pushes = RealtimeChangePusher.Collect(_realtimeNotifier, ChangeTracker);
-        var saved = await base.SaveChangesAsync(cancellationToken);
+
+        // Saves, and re-derives any module read model over the documents this save touched, in ONE transaction
+        // (ABI 1.1, ADR 0848). A plain base.SaveChangesAsync when no module projects anything, which is most.
+        var saved = await ModuleProjectionSave.SaveAsync(
+            this, base.SaveChangesAsync, _moduleProjections, cancellationToken);
+
         await RealtimeChangePusher.PushAsync(_realtimeNotifier, pushes, cancellationToken);
         await DavChangeRecorder.NotifyAsync(_davChangeNotifier, davChanges, cancellationToken);
         return saved;
@@ -374,115 +387,6 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
         }
     }
 
-    // Single enforcement point for three invariants about Group: a group cannot contain itself, directly
-    // or transitively (see ADR: Group cycle detection mechanism); a group's parent must belong to the same
-    // tenant (see ADR: Cross-tenant group parent enforcement); and sibling groups (same tenant + parent,
-    // including root-level groups sharing a null parent) can't share a name (see ADR: Group name uniqueness
-    // scope). Every write path goes through SaveChanges regardless of which handler triggered it, so none
-    // of these checks can be bypassed the way a per-handler check could be.
-    private async Task ValidateGroupsAsync(CancellationToken cancellationToken)
-    {
-        var changedGroups = ChangeTracker.Entries<Group>()
-            .Where(e => e.State is EntityState.Added or EntityState.Modified)
-            .Select(e => e.Entity)
-            .ToList();
-
-        if (changedGroups.Count == 0)
-        {
-            return;
-        }
-
-        var trackedGroups = ChangeTracker.Entries<Group>().ToDictionary(e => e.Entity.Id, e => e.Entity);
-
-        foreach (var group in changedGroups)
-        {
-            if (group.ParentGroupId.HasValue)
-            {
-                await DetectCycleAndCrossTenantParentAsync(group, trackedGroups, cancellationToken);
-            }
-
-            await EnsureUniqueSiblingNameAsync(group, trackedGroups.Values, cancellationToken);
-        }
-    }
-
-    private async Task DetectCycleAndCrossTenantParentAsync(
-        Group group, Dictionary<Guid, Group> trackedGroups, CancellationToken cancellationToken)
-    {
-        var visited = new HashSet<Guid> { group.Id };
-        var currentId = group.ParentGroupId;
-
-        while (currentId.HasValue)
-        {
-            if (!visited.Add(currentId.Value))
-            {
-                throw new InvalidOperationException(
-                    $"Group '{group.Id}' cannot be its own ancestor — assigning parent '{group.ParentGroupId}' would create a cycle.");
-            }
-
-            Guid parentTenantId;
-            Guid? parentId;
-
-            if (trackedGroups.TryGetValue(currentId.Value, out var trackedParent))
-            {
-                parentTenantId = trackedParent.TenantId;
-                parentId = trackedParent.ParentGroupId;
-            }
-            else
-            {
-                // Ignores the tenant query filter deliberately, so a cross-tenant parent is caught by
-                // the explicit check below with a clear message, rather than failing opaquely because
-                // the filtered query found no matching row.
-                var parent = await Groups
-                    .IgnoreQueryFilters()
-                    .Where(g => g.Id == currentId.Value)
-                    .Select(g => new { g.TenantId, g.ParentGroupId })
-                    .SingleAsync(cancellationToken);
-                parentTenantId = parent.TenantId;
-                parentId = parent.ParentGroupId;
-            }
-
-            if (parentTenantId != group.TenantId)
-            {
-                throw new InvalidOperationException(
-                    $"Group '{group.Id}' (tenant '{group.TenantId}') cannot have a parent belonging to a different tenant ('{parentTenantId}').");
-            }
-
-            currentId = parentId;
-        }
-    }
-
-    private async Task EnsureUniqueSiblingNameAsync(
-        Group group, IEnumerable<Group> trackedGroups, CancellationToken cancellationToken)
-    {
-        var conflictsWithinBatch = trackedGroups.Any(other =>
-            other.Id != group.Id
-            && other.TenantId == group.TenantId
-            && other.ParentGroupId == group.ParentGroupId
-            && other.Name == group.Name);
-
-        if (conflictsWithinBatch)
-        {
-            throw new InvalidOperationException(
-                $"Group '{group.Id}' cannot share the name '{group.Name}' with another group under the same parent.");
-        }
-
-        // Nullable-vs-nullable equality here (g.ParentGroupId == group.ParentGroupId) is translated by EF
-        // Core as a null-safe comparison (true when both sides are null), unlike a raw SQL "=" operator —
-        // this is exactly why this check lives here rather than in a database unique index, which would
-        // treat every NULL ParentGroupId as distinct and silently miss root-level name collisions.
-        var conflictsWithPersisted = await Groups
-            .Where(g => g.Id != group.Id
-                && g.TenantId == group.TenantId
-                && g.ParentGroupId == group.ParentGroupId
-                && g.Name == group.Name)
-            .AnyAsync(cancellationToken);
-
-        if (conflictsWithPersisted)
-        {
-            throw new InvalidOperationException(
-                $"Group '{group.Id}' cannot share the name '{group.Name}' with another group under the same parent.");
-        }
-    }
 
     // Single enforcement point for two invariants about Document, mirroring the Group precedent exactly
     // (see ADR: Document parent integrity and sibling name uniqueness): a document cannot contain itself,

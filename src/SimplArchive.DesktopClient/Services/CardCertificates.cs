@@ -55,12 +55,28 @@ public static class CardCertificates
     public static Func<string, IReadOnlyList<Found>> Reader { get; set; } = ReadFromToken;
 
     /// <summary>
-    /// Where OpenSC puts its module on each platform, in probe order.
+    /// Where a PKCS#11 module lives on each platform, in probe order — Yubico's own first, then OpenSC.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Probing rather than asking, because a file picker as the FIRST step means a user has to know what
     /// <c>opensc-pkcs11</c> is and where their platform put it — which for a showcase feature is most of the
     /// reason nobody would try it. The Browse fallback keeps the case where probing fails answerable.
+    /// </para>
+    /// <para>
+    /// <b><c>libykcs11</c> IS PROBED FIRST, and it is not a preference — it is the only one that can do
+    /// X25519.</b> Measured on a YubiKey 5.7.4 with an X25519 key in slot 9D: <c>libykcs11</c> derives the
+    /// shared secret correctly, and <c>opensc-pkcs11</c> refuses the identical call with
+    /// <c>CKR_KEY_TYPE_INCONSISTENT</c> — while enumerating the key perfectly happily as
+    /// <c>EC_MONTGOMERY</c> with <c>Usage: derive</c>. So an OpenSC-first order means a modern card's
+    /// key-agreement certificate is visible, registrable, and unusable.
+    /// </para>
+    /// <para>
+    /// Ordering it first is safe for everyone else because it only EXISTS where Yubico's tooling was
+    /// installed, and a module that finds no token it understands yields no certificates — which is the same
+    /// answer as not being there. It is NOT a replacement: OpenSC serves every other card, so it stays, and
+    /// stays for YubiKeys too as the fallback when Yubico's tooling is absent.
+    /// </para>
     /// </remarks>
     public static IReadOnlyList<string> ModuleCandidates()
     {
@@ -68,6 +84,8 @@ public static class CardCertificates
         {
             return
             [
+                "/opt/homebrew/lib/libykcs11.dylib",    // yubico-piv-tool, Homebrew on Apple silicon
+                "/usr/local/lib/libykcs11.dylib",       // yubico-piv-tool, Homebrew on Intel
                 "/opt/homebrew/lib/opensc-pkcs11.so",   // Homebrew on Apple silicon
                 "/usr/local/lib/opensc-pkcs11.so",      // Homebrew on Intel
                 "/Library/OpenSC/lib/opensc-pkcs11.so", // the OpenSC .pkg installer
@@ -78,6 +96,8 @@ public static class CardCertificates
         {
             return
             [
+                @"C:\Program Files\Yubico\Yubico PIV Tool\bin\libykcs11.dll",
+                @"C:\Program Files (x86)\Yubico\Yubico PIV Tool\bin\libykcs11.dll",
                 @"C:\Program Files\OpenSC Project\OpenSC\pkcs11\opensc-pkcs11.dll",
                 @"C:\Program Files (x86)\OpenSC Project\OpenSC\pkcs11\opensc-pkcs11.dll",
             ];
@@ -85,6 +105,8 @@ public static class CardCertificates
 
         return
         [
+            "/usr/lib/x86_64-linux-gnu/libykcs11.so",     // yubico-piv-tool, Debian/Ubuntu
+            "/usr/lib64/libykcs11.so",                    // yubico-piv-tool, Fedora/RHEL
             "/usr/lib/x86_64-linux-gnu/opensc-pkcs11.so", // Debian/Ubuntu
             "/usr/lib64/opensc-pkcs11.so",                // Fedora/RHEL
             "/usr/lib/opensc-pkcs11.so",
@@ -113,7 +135,7 @@ public static class CardCertificates
         /// <summary>Not yet valid.</summary>
         NotYetValid,
 
-        /// <summary>Its stated key usage does not mention key encipherment.</summary>
+        /// <summary>Its stated key usage does not permit receiving an envelope.</summary>
         KeyUsage,
     }
 
@@ -138,7 +160,13 @@ public static class CardCertificates
         certificate.NotAfter.ToUniversalTime() < now.UtcDateTime ? Concerns.Expired
         : certificate.NotBefore.ToUniversalTime() > now.UtcDateTime ? Concerns.NotYetValid
         : certificate.Extensions.OfType<X509KeyUsageExtension>().FirstOrDefault() is { } usage
+            // KeyAGREEMENT counts, and leaving it out was the same RSA-era assumption that nearly shipped in
+            // the module's enrolment policy: an RSA recipient has the content key WRAPPED to it
+            // (keyEncipherment), an EC recipient reaches it through ECDH AGREEMENT (keyAgreement). A card
+            // issues the second, so warning on it told the holder of a perfectly good EC certificate that
+            // their card was unsuitable.
             && !usage.KeyUsages.HasFlag(X509KeyUsageFlags.KeyEncipherment)
+            && !usage.KeyUsages.HasFlag(X509KeyUsageFlags.KeyAgreement)
             && !usage.KeyUsages.HasFlag(X509KeyUsageFlags.DataEncipherment)
                 ? Concerns.KeyUsage
                 : Concerns.None;

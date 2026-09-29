@@ -89,8 +89,20 @@ public class DesktopCardCertificateTests : IDisposable
         Assert.NotEmpty(candidates);
         Assert.All(candidates, path => Assert.True(Path.IsPathRooted(path), $"not an absolute path: {path}"));
 
-        var expected = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ".dll" : ".so";
-        Assert.All(candidates, path => Assert.Equal(expected, Path.GetExtension(path)));
+        // macOS carries BOTH, which looks like sloppiness and is not: OpenSC ships `opensc-pkcs11.so` even
+        // there, while Yubico's own module is a proper `libykcs11.dylib`. Pinning one extension per platform
+        // was right while OpenSC was the only candidate and became wrong the moment libykcs11 joined.
+        string[] expected = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? [".dll"]
+            : RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? [".so", ".dylib"]
+            : [".so"];
+
+        Assert.All(candidates, path => Assert.Contains(Path.GetExtension(path), expected));
+
+        // Yubico's module comes FIRST, and this is the assertion that matters rather than a tidiness check:
+        // it is the ONLY one that can derive an X25519 shared secret (opensc-pkcs11 refuses the identical
+        // call with CKR_KEY_TYPE_INCONSISTENT), so an OpenSC-first order makes a modern card's certificate
+        // visible, registrable and unusable.
+        Assert.Contains("ykcs11", candidates[0]);
     }
 
     [Fact]
@@ -131,6 +143,19 @@ public class DesktopCardCertificateTests : IDisposable
         // The PEM is what gets registered, so it has to round-trip back to the same certificate — a wrong
         // encoding here would register something the server parses into a different key.
         Assert.Equal(certificate.RawData, X509Certificate2.CreateFromPem(found.Pem).RawData);
+    }
+
+    [Fact]
+    public void A_KEY_AGREEMENT_certificate_raises_no_concern()
+    {
+        // The certificate an EC card issues, and it used to be flagged as unsuitable. The predicate knew
+        // keyEncipherment and dataEncipherment only — both RSA notions — so a card whose key AGREES rather
+        // than receives a wrapped key was reported to its holder as unusable. Proven against real hardware
+        // since: a P-256 key in PIV slot 9D derives correctly.
+        var certificate = NewCertificate(X509KeyUsageFlags.KeyAgreement);
+
+        Assert.Equal(CardCertificates.Concerns.None,
+            CardCertificates.Concern(certificate, DateTimeOffset.UtcNow));
     }
 
     private static X509Certificate2 NewCertificate(
