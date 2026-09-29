@@ -247,6 +247,33 @@ public class EncryptionModesTests
         Assert.Equal(mail, modes.EnvelopesMail("T"));
     }
 
+    // THE TWO QUESTIONS DISAGREE, and exactly one tier is where they do.
+    //
+    // This is not a curiosity: `StrictEnvelopeDelivery` had ONE predicate answering both, and the find-in-
+    // document overlay asked it. On a permissive tenant that refused the overlay — the door whose word
+    // coordinates reconstruct the whole document — while download, preview and presigned URLs all served.
+    // The posture inverted for the one door that most needs to follow it.
+    //
+    // Found by the owner asking what a permissive tenant serves a reader with NO certificate. Pinned here
+    // because the mistake is invisible: both predicates are bools, both read true of Strict, and a call site
+    // that picks the wrong one compiles and passes every test written before the delivery tiers existed.
+    [Fact]
+    public void Delivering_envelopes_and_refusing_plaintext_doors_are_different_questions()
+    {
+        var modes = Modes(
+            (EncryptionModes.Section + ":Permissive", nameof(EncryptionMode.DeliveryOnlyPermissive)),
+            (EncryptionModes.Section + ":Shut", nameof(EncryptionMode.DeliveryOnlyStrict)));
+
+        // The permissive tier envelopes for whoever has a certificate AND keeps serving every other door,
+        // which is what "permissive" means and why a reader without one is served plaintext there.
+        Assert.True(modes.DeliversEnvelopes("Permissive"));
+        Assert.False(modes.RefusesPlaintextDoors("Permissive"));
+
+        // Its strict sibling answers the same first question and the opposite second one.
+        Assert.True(modes.DeliversEnvelopes("Shut"));
+        Assert.True(modes.RefusesPlaintextDoors("Shut"));
+    }
+
     // A delivery tier needs no encryption SERVICE -- that is the whole point of the split (ADR 0834), and the
     // refusal it must not trip is the one written as an ordering (`> None`), which would have caught it.
     [Theory]

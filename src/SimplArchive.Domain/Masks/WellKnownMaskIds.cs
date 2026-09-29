@@ -200,6 +200,32 @@ public static class WellKnownMaskIds
     /// </remarks>
     public static readonly Guid License = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E44");
 
+    /// <summary>
+    /// A certificate filed as a document (ADR 0844) — generic on purpose, exactly as <see cref="License"/> is:
+    /// a certificate filed here is a certificate, and a later kind should not need a second mask whose only
+    /// difference is the word in front.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Core owns it although core does not yet write to it</b> (owner, 2026-09-28). The alternative was a
+    /// mask per module, and that ends with a tenant holding three vendors' "Certificate" masks — permanent
+    /// tenant data (ADR 0740), so the mistake is not undoable. The first filer is the Encryption Module
+    /// (its ADR 0002); a signing or device-identity module would wear the same mask rather than invent one.
+    /// </para>
+    /// <para>
+    /// <b>The fields are only what any X.509 certificate has</b>, deliberately: the moment they are shaped by
+    /// one module's needs, core ownership has bought nothing and the second module inherits fields that mean
+    /// nothing to it. Anything module-specific belongs in that module's own read model.
+    /// </para>
+    /// <para>
+    /// <b>The content may be a CHAIN</b>, and every field here describes the LEAF. A bundle's order is
+    /// conventional, so whoever files it resolves the end-entity structurally — the certificate that issues
+    /// none of the others — rather than by position: picking wrong means addressing the ISSUER, and a CA that
+    /// can open the document while the reader cannot.
+    /// </para>
+    /// </remarks>
+    public static readonly Guid Certificate = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E4A");
+
     /// <summary>A section INSIDE a notebook: a folder that holds notes and further sections (#564).</summary>
     /// <remarks>
     /// Fieldless, like the Notebook it lives in — it types the folder, and the fields live on the notes.
@@ -424,12 +450,21 @@ public static class WellKnownMaskIds
         // is filed — a hand-made second one would break the cardinality that makes "the schedule" singular.
         // Booking stays here for the PLAIN create paths only — any .ics WRITE into a Schedule is the
         // real creation path and is gated by rights on the Schedule, not by this set.
+        // Certificate is deliberately NOT here (ADR 0844), for the same reason License is not: both are
+        // artefacts a person FILES. Enrolment is the path that validates a PEM and resolves its leaf, but a
+        // certificate filed by hand — a CA's own certificate, kept for reference — is a legitimate document.
+        // What the module projects is what the module ENROLLED, so a hand-filed one is simply not addressed to
+        // anybody, rather than being a hole.
         new HashSet<Guid> { Repository, UserFolder, MyDocuments, ImapSpecial, Notebook, Booking, Schedule, Blockers, Block, Availability, AvailabilityWindow };
 
     /// <summary>The well-known masks an ITEM wears — the complement of <see cref="FolderMasks"/>.</summary>
     /// <remarks>Stated rather than derived, so the partition guard has two sides to compare instead of one.</remarks>
     public static readonly IReadOnlySet<Guid> ItemMasks =
-        new HashSet<Guid> { BasicEntry, EMail, Note, Contact, Appointment, Booking, License, Block, AvailabilityWindow };
+        new HashSet<Guid>
+        {
+            BasicEntry, EMail, Note, Contact, Appointment, Booking, License, Block, AvailabilityWindow,
+            Certificate,
+        };
 
     /// <summary>
     /// Typed folders that ALSO admit a plain <see cref="Folder"/>, so a user can make folders of their own

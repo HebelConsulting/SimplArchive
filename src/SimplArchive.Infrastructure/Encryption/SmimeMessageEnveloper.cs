@@ -20,7 +20,7 @@ public sealed class SmimeMessageEnveloper(ILogger<SmimeMessageEnveloper> logger)
     /// (milestone 1's stated boundary). The Warning names the switch: PUT a fresh certificate, or delete it.
     /// </summary>
     public byte[]? TryEnvelope(byte[] rfc822, string certificatePem, string email) =>
-        TryEnvelope(MimeMessage.Load(new MemoryStream(rfc822)), certificatePem, email);
+        TryEnvelope(MimeMessage.Load(new MemoryStream(rfc822)), [certificatePem], email);
 
     /// <summary>
     /// Envelopes a document's bytes as an S/MIME message addressed to a certificate (#1377, ADR 0827) — what a
@@ -41,12 +41,17 @@ public sealed class SmimeMessageEnveloper(ILogger<SmimeMessageEnveloper> logger)
     /// </para>
     /// </remarks>
     public byte[]? TryEnvelopeDocument(
-        byte[] content, string contentType, string fileName, string? from, string certificatePem)
+        byte[] content, string contentType, string fileName, string? from, IReadOnlyList<string> certificatePems)
     {
+        if (certificatePems.Count == 0)
+        {
+            return null;   // no reader to address; the CALLER decides what that means (see TryEnvelope)
+        }
+
         MimeMessage message;
         try
         {
-            using var certificate = X509Certificate2.CreateFromPem(certificatePem);
+            var certificates = certificatePems.Select(pem => X509Certificate2.CreateFromPem(pem)).ToList();
             message = new MimeMessage
             {
                 Subject = Path.GetFileNameWithoutExtension(fileName),
@@ -66,9 +71,19 @@ public sealed class SmimeMessageEnveloper(ILogger<SmimeMessageEnveloper> logger)
                 message.From.Add(new MailboxAddress(from, from));
             }
 
-            if (certificate.GetNameInfo(X509NameType.EmailName, forIssuer: false) is { Length: > 0 } recipient)
+            // One To per DISTINCT address, not one per certificate: a reader holding a card and a laptop
+            // certificate is one person, and listing them twice would say otherwise to their mail client.
+            foreach (var recipient in certificates
+                .Select(c => c.GetNameInfo(X509NameType.EmailName, forIssuer: false))
+                .Where(r => r is { Length: > 0 })
+                .Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 message.To.Add(new MailboxAddress(recipient, recipient));
+            }
+
+            foreach (var certificate in certificates)
+            {
+                certificate.Dispose();
             }
         }
         catch (Exception exception) when (exception is System.Security.Cryptography.CryptographicException
@@ -78,7 +93,7 @@ public sealed class SmimeMessageEnveloper(ILogger<SmimeMessageEnveloper> logger)
             return null;
         }
 
-        return TryEnvelope(message, certificatePem, fileName);
+        return TryEnvelope(message, certificatePems, fileName);
     }
 
     /// <summary>
@@ -90,11 +105,12 @@ public sealed class SmimeMessageEnveloper(ILogger<SmimeMessageEnveloper> logger)
     /// REFUSES, because falling back to plaintext there is exactly what ADR 0825 forbids. Both read the same
     /// null and answer differently, which is why this stays neutral rather than throwing or defaulting.
     /// </remarks>
-    private byte[]? TryEnvelope(MimeMessage message, string certificatePem, string describedAs)
+    private byte[]? TryEnvelope(MimeMessage message, IReadOnlyList<string> certificatePems, string describedAs)
     {
+        var certificates = new List<X509Certificate2>();
         try
         {
-            using var certificate = X509Certificate2.CreateFromPem(certificatePem);
+            certificates.AddRange(certificatePems.Select(pem => X509Certificate2.CreateFromPem(pem)));
             if (message.Body is not { } body)
             {
                 return null; // a degenerate message with no body — nothing to envelope
@@ -103,8 +119,18 @@ public sealed class SmimeMessageEnveloper(ILogger<SmimeMessageEnveloper> logger)
             using var context = new TemporarySecureMimeContext();
             // SmimeRecipient, not `new CmsRecipient(certificate)`: the latter states no cipher preference, and
             // MimeKit then falls back to 3DES because a bare certificate advertises no S/MIME capabilities.
-            message.Body = ApplicationPkcs7Mime.Encrypt(
-                context, new CmsRecipientCollection { SmimeRecipient.For(certificate) }, body);
+            //
+            // SEVERAL recipients over ONE ciphertext (core ADR 0842). A CMS EnvelopedData wraps the same
+            // content-encryption key to each recipient's public key, so addressing a reader's card AND their
+            // laptop certificate costs one key-wrap each and not a second copy of the document -- which is
+            // why there is no precedence to decide between them.
+            var recipients = new CmsRecipientCollection();
+            foreach (var certificate in certificates)
+            {
+                recipients.Add(SmimeRecipient.For(certificate));
+            }
+
+            message.Body = ApplicationPkcs7Mime.Encrypt(context, recipients, body);
 
             using var output = new MemoryStream();
             message.WriteTo(output);
@@ -117,6 +143,13 @@ public sealed class SmimeMessageEnveloper(ILogger<SmimeMessageEnveloper> logger)
                 "The S/MIME certificate for {DescribedAs} could not envelope a message. " +
                 "Re-upload or delete the certificate.", describedAs);
             return null;
+        }
+        finally
+        {
+            foreach (var certificate in certificates)
+            {
+                certificate.Dispose();
+            }
         }
     }
 }

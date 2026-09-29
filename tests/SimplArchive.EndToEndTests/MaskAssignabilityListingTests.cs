@@ -65,14 +65,24 @@ public class MaskAssignabilityListingTests
             .Order()
             .ToList();
 
-        // Today that is Basic Entry plus License: every other well-known mask either types a folder or
-        // is claimed by an extension. License MUST be freely assignable — the Activate dialog's dropdown
+        // Today that is Basic Entry, Certificate and License: every other well-known mask either types a
+        // folder or is claimed by an extension.
+        //
+        // Certificate joined with ADR 0844 and is freely assignable for the same reason License is — both are
+        // artefacts a person FILES. Enrolment is what normally creates one (it parses the PEM and resolves the
+        // leaf), but a certificate filed by hand, a CA's own kept for reference, is a legitimate document; what
+        // a module projects is what that module ENROLLED, so a hand-filed one is addressed to nobody rather
+        // than being a hole. It carries no file extensions deliberately: declaring them without a classifier
+        // that assigns them makes a mask unreachable, and a classifier stamping every uploaded .pem would mint
+        // certificates nobody enrolled.
+        //
+        // License MUST be freely assignable — the Activate dialog's dropdown
         // lists documents wearing it, so before a tenant's first activation the administrator has to be able to
         // dress the filed .json by hand or the dropdown starts empty (ADRs 0740/0743; the server re-stamps its
         // fields from the verified claims at activation). Asserted as the whole SET rather than as "contains",
         // because the bug being guarded is one of over-offering — a test that only checks what is present
         // cannot see it.
-        Assert.Equal(["Basic Entry", "License"], assignable);
+        Assert.Equal(["Basic Entry", "Certificate", "License"], assignable);
 
         // And the ones that must never be offered, named individually so a regression says which.
         // Meeting room types a folder; the Booking mask is placement-constrained to rooms AND created by the

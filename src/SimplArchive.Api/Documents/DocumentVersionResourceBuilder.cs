@@ -73,11 +73,10 @@ public sealed class DocumentVersionResourceBuilder(
             // present and sometimes fails is the lying affordance 0543 exists to prevent; absent, it means
             // exactly "not available to you, here, now", and the client offers enrolment instead of a button.
             enveloping = await envelopes.AppliesAsync(cancellationToken);
-            var envelopeCertificate = enveloping
-                ? await envelopes.ReaderCertificateAsync(cancellationToken)
-                : null;
+            var canEnvelope = enveloping
+                && (await envelopes.ReaderCertificatePemsAsync(cancellationToken)).Count > 0;
 
-            if (envelopeCertificate is not null)
+            if (canEnvelope)
             {
                 var enveloped = $"/api/documents/{version.DocumentId}/versions/{version.Id}/enveloped-content";
                 links.Add(new Link("download", enveloped, "GET"));
@@ -118,7 +117,7 @@ public sealed class DocumentVersionResourceBuilder(
             // The preview rel was already added above for an enveloped reader — pointing at the same route with
             // an inline disposition, because what differs between "open it" and "save it" is the disposition
             // and not the bytes.
-            if (envelopeCertificate is null
+            if (!canEnvelope
                 && await previews.GetPreviewUrlAsync(version.ObjectKey, PresignedUrlExpiry, downloadFileName, cancellationToken) is { } preview)
             {
                 links.Add(new Link("preview", preview.Url.ToString(), "GET"));

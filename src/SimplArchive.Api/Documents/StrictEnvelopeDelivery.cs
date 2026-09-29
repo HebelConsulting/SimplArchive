@@ -41,7 +41,8 @@ public sealed class StrictEnvelopeDelivery(
     EncryptionModes modes,
     IObjectStorageClient storage,
     SmimeMessageEnveloper enveloper,
-    SimplArchive.Infrastructure.Encryption.MessageEnvelopeClient registry)
+    SimplArchive.Infrastructure.Encryption.MessageEnvelopeClient registry,
+    SimplArchive.Infrastructure.Modules.ModuleReaderCertificates moduleCertificates)
 {
     // MEMOISED FOR THE REQUEST, which is all this class lives for (registered scoped). The resource builder
     // asks ReaderCertificateAsync once per version, so a versions dialog asks several times — and since #1433
@@ -51,9 +52,16 @@ public sealed class StrictEnvelopeDelivery(
     //
     // Null is a real answer here ("no usable certificate"), so the fact of having asked is its own flag.
     private bool _asked;
-    private string? _certificate;
+    private IReadOnlyList<string> _certificates = [];
 
-    /// <summary>True when this tenant serves content only as an envelope.</summary>
+    /// <summary>True when this tenant DELIVERS content as an envelope.</summary>
+    /// <remarks>
+    /// Deliberately not the same question as <see cref="RefusesPlaintextDoorsAsync"/>, and they came apart with
+    /// the delivery tiers (#1411): <c>DeliveryOnlyPermissive</c> envelopes for readers who have a certificate
+    /// while every other door goes on serving as before. One predicate answering both is what this whole
+    /// refactor existed to end, and it survived here for one caller until the owner asked what a permissive
+    /// tenant serves a reader with no certificate.
+    /// </remarks>
     public async Task<bool> AppliesAsync(CancellationToken cancellationToken)
     {
         if (tenant.TenantId is not { } tenantId)
@@ -63,6 +71,18 @@ public sealed class StrictEnvelopeDelivery(
 
         var name = await TenantNameAsync(cancellationToken);
         return name is not null && modes.DeliversEnvelopes(name);
+    }
+
+    /// <summary>True when no door of this tenant's may serve readable bytes.</summary>
+    public async Task<bool> RefusesPlaintextDoorsAsync(CancellationToken cancellationToken)
+    {
+        if (tenant.TenantId is not { } tenantId)
+        {
+            return false;
+        }
+
+        var name = await TenantNameAsync(cancellationToken);
+        return name is not null && modes.RefusesPlaintextDoors(name);
     }
 
     /// <summary>This request's tenant NAME, which is what the mode map and the registry are both keyed by.</summary>
@@ -89,7 +109,10 @@ public sealed class StrictEnvelopeDelivery(
     /// </remarks>
     public async Task RefuseIfStrictAsync(string door, CancellationToken cancellationToken)
     {
-        if (await AppliesAsync(cancellationToken))
+        // The DOOR question, not the delivery one. Asking AppliesAsync refused this door on a
+        // DeliveryOnlyPermissive tenant while every other door served — the posture inverted for exactly the
+        // door that most needs to follow it, since the overlay's word coordinates reconstruct the document.
+        if (await RefusesPlaintextDoorsAsync(cancellationToken))
         {
             throw new SimplArchive.Application.Abstractions.PlaintextContentRefusedException(door);
         }
@@ -118,25 +141,34 @@ public sealed class StrictEnvelopeDelivery(
     /// certificate came from — otherwise the rel's presence would depend on which source answered.
     /// </para>
     /// </remarks>
-    public async Task<string?> ReaderCertificateAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<string>> ReaderCertificatePemsAsync(CancellationToken cancellationToken)
     {
         if (_asked)
         {
-            return _certificate;
+            return _certificates;
         }
 
         _asked = true;
-        _certificate = await FindCertificateAsync(cancellationToken);
-        return _certificate;
+        _certificates = await FindCertificatesAsync(cancellationToken);
+        return _certificates;
     }
 
-    private async Task<string?> FindCertificateAsync(CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<string>> FindCertificatesAsync(CancellationToken cancellationToken)
     {
         if (currentUser.UserId is not { } userId)
         {
             // A service account has no certificate and no card. It is refused rather than served plaintext —
             // machine-to-machine access to a strict tenant's content is its own decision, not a default.
-            return null;
+            return [];
+        }
+
+        // THE MODULE, where one answers, is the ONLY source (ADR 0842). Not a fallback chain and not a union:
+        // a union means a certificate REVOKED in the module still opens documents while a copy lingers in the
+        // column, which is a revocation that does not revoke. Null here means no module declared the
+        // capability at all — empty means one did and this reader has none, and the read is refused.
+        if (await moduleCertificates.ForAsync(userId, cancellationToken) is { } fromModule)
+        {
+            return [.. fromModule.Select(c => c.CertificatePem)];
         }
 
         var reader = await dbContext.Users
@@ -146,7 +178,7 @@ public sealed class StrictEnvelopeDelivery(
 
         if (Usable(reader?.SmimeCertificatePem) is { } own)
         {
-            return own;
+            return [own];
         }
 
         // The registry, for the tenants whose identities are provisioned centrally — which is precisely the
@@ -154,10 +186,12 @@ public sealed class StrictEnvelopeDelivery(
         // registers into the core pays nothing for this.
         if (reader?.Email is not { Length: > 0 } email || await TenantNameAsync(cancellationToken) is not { } name)
         {
-            return null;
+            return [];
         }
 
-        return Usable(await registry.TryGetCertificatePemAsync(name, email, cancellationToken));
+        return Usable(await registry.TryGetCertificatePemAsync(name, email, cancellationToken)) is { } registered
+            ? [registered]
+            : [];
     }
 
     /// <summary>The certificate if it parses, else null — the same judgement for both sources.</summary>
@@ -195,7 +229,7 @@ public sealed class StrictEnvelopeDelivery(
     /// </para>
     /// </remarks>
     public async Task<byte[]> EnvelopeAsync(
-        string objectKey, string fileName, string certificatePem, CancellationToken cancellationToken)
+        string objectKey, string fileName, IReadOnlyList<string> certificatePems, CancellationToken cancellationToken)
     {
         await using var content = await storage.GetObjectAsync(objectKey, cancellationToken);
         using var buffer = new MemoryStream();
@@ -206,7 +240,7 @@ public sealed class StrictEnvelopeDelivery(
             WebDav.ContentTypes.ForExtension(Path.GetExtension(objectKey)),
             fileName,
             from: null,
-            certificatePem)
+            certificatePems)
             // Never the plaintext instead. An unreachable branch that refuses costs nothing; one that degrades
             // is where a guarantee goes silently.
             ?? throw new Errors.Exceptions.Encryption.ContentCannotBeEnvelopedException();

@@ -185,6 +185,39 @@ public interface IIndustryModule
     Func<BookingAdmissionContext, Task>? ReviewBooking => null;
 
     /// <summary>
+    /// Answers which certificates a reader is addressed by, for a tenant whose content is delivered as
+    /// envelopes (core ADR 0842, ABI 0.31). Default null — a module that enrols no certificates declares
+    /// nothing, and the core resolves them as it did before.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Where this answers, it is the ONLY source.</b> The core does not consult
+    /// <c>User.SmimeCertificatePem</c> or the encryption service's registry as well. Not a fallback chain and
+    /// not a union: a union means a certificate REVOKED here still opens documents while a copy lingers
+    /// elsewhere, which is a revocation that does not revoke.
+    /// </para>
+    /// <para>
+    /// <b>Answer with the whole set; there is no precedence to apply.</b> A CMS <c>EnvelopedData</c> addresses
+    /// as many recipients as you like — each gets the content-encryption key wrapped to their own public key
+    /// over ONE copy of the ciphertext — so the core addresses all of them and the reader opens it with
+    /// whichever key is to hand. That is what lets the same document open on the desk with a card and on a
+    /// laptop with a software certificate, with nothing guessing which one they are at.
+    /// </para>
+    /// <para>
+    /// <b>Filter here.</b> Expired, revoked, wrong key usage, wrong issuer — all of it is certificate policy,
+    /// which is the module's product and its per-tenant setting. The core envelopes what it is handed and
+    /// forms no opinion, so the two cannot disagree. An empty list is a real answer meaning "this reader has
+    /// no usable certificate", and the core refuses the read rather than serving plaintext.
+    /// </para>
+    /// <para>
+    /// Called on the CONTENT PATH, once per request rather than per door (core ADR 0557's rule applied to
+    /// reads), and — like every other module hook — only while the module is ACTIVE for the tenant. A lapsed
+    /// licence therefore stops the answer, which is how the tier refuses rather than quietly degrading.
+    /// </para>
+    /// </remarks>
+    Func<ReaderCertificateContext, Task<IReadOnlyList<ReaderCertificate>>>? ReaderCertificates => null;
+
+    /// <summary>
     /// The masks whose documents this module may offer actions on (ABI 0.20, core ADR 0786). The core asks
     /// <see cref="DocumentActions"/> only for these, so a module is not consulted on every document read in
     /// the tenant. Default: none.

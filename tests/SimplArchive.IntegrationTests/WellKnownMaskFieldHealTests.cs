@@ -134,8 +134,11 @@ public class WellKnownMaskFieldHealTests
             // booking pair is two: the collection types the folder, the item carries the window.
             // 22 → 24 with Availability + Availability window (ADR 0780) — the third question a resource's
             // timeline answers: when it is OFFERED, as against spoken for or withdrawn.
+            // 24 → 25 with Certificate (ADR 0844) — core-owned and GENERIC, so a module that enrols
+            // certificates wears it rather than declaring its own and leaving a tenant holding one
+            // "Certificate" mask per vendor. Core seeds it and does not yet write to it.
             var maskCount = await db.Masks.IgnoreQueryFilters().CountAsync(m => m.TenantId == _tenantId);
-            Assert.Equal(24, maskCount); // + Availability, Availability window (ADR 0780)
+            Assert.Equal(25, maskCount); // + Certificate (ADR 0844)
             Assert.Equal(maskCount, await db.MaskVersions.IgnoreQueryFilters().CountAsync(v => v.TenantId == _tenantId));
         }
     }
@@ -158,7 +161,9 @@ public class WellKnownMaskFieldHealTests
         // declares as required, so the next probe finds it missing.
         using (var db = Ctx(connection, accessor))
         {
-            var subject = await db.FieldDefinitions.IgnoreQueryFilters().SingleAsync(f => f.Name == "Subject");
+            var subject = await db.FieldDefinitions.IgnoreQueryFilters()
+                .Where(f => db.MaskVersions.Any(v => v.Id == f.MaskVersionId && v.MaskId == WellKnownMaskIds.EMail))
+                .SingleAsync(f => f.Name == "Subject");
             db.FieldDefinitions.Remove(subject);
             await db.SaveChangesAsync();
         }
@@ -174,7 +179,9 @@ public class WellKnownMaskFieldHealTests
 
         using (var db = Ctx(connection, accessor))
         {
-            var healed = await db.FieldDefinitions.IgnoreQueryFilters().SingleAsync(f => f.Name == "Subject");
+            var healed = await db.FieldDefinitions.IgnoreQueryFilters()
+                .Where(f => db.MaskVersions.Any(v => v.Id == f.MaskVersionId && v.MaskId == WellKnownMaskIds.EMail))
+                .SingleAsync(f => f.Name == "Subject");
             Assert.True(healed.IsRequired); // spec'd requiredness arrives with the heal, not a demotion
         }
     }
@@ -255,7 +262,9 @@ public class WellKnownMaskFieldHealTests
         // advantage of being a real regression test the moment one does.
         using (var db = Ctx(connection, accessor))
         {
-            var subject = await db.FieldDefinitions.IgnoreQueryFilters().SingleAsync(f => f.Name == "Subject");
+            var subject = await db.FieldDefinitions.IgnoreQueryFilters()
+                .Where(f => db.MaskVersions.Any(v => v.Id == f.MaskVersionId && v.MaskId == WellKnownMaskIds.EMail))
+                .SingleAsync(f => f.Name == "Subject");
             subject.IsList = true;
             await db.SaveChangesAsync();
         }
@@ -268,7 +277,9 @@ public class WellKnownMaskFieldHealTests
         using (var db = Ctx(connection, accessor))
         {
             Assert.False(await db.FieldDefinitions.IgnoreQueryFilters()
-                .Where(f => f.Name == "Subject").Select(f => f.IsList).SingleAsync());
+                .Where(f => f.Name == "Subject"
+                    && db.MaskVersions.Any(v => v.Id == f.MaskVersionId && v.MaskId == WellKnownMaskIds.EMail))
+                .Select(f => f.IsList).SingleAsync());
         }
     }
 

@@ -76,7 +76,7 @@ public class DocumentVersionEnvelopedContentController(
             return NotFound();
         }
 
-        if (await envelopes.ReaderCertificateAsync(cancellationToken) is not { } certificate)
+        if (await envelopes.ReaderCertificatePemsAsync(cancellationToken) is not { Count: > 0 } certificates)
         {
             throw new Errors.Exceptions.Encryption.ContentCannotBeEnvelopedException();
         }
@@ -99,7 +99,7 @@ public class DocumentVersionEnvelopedContentController(
             ? documentName
             : Path.GetFileNameWithoutExtension(documentName) + extension;
 
-        var enveloped = await envelopes.EnvelopeAsync(objectKey, fileName, certificate, cancellationToken);
+        var enveloped = await envelopes.EnvelopeAsync(objectKey, fileName, certificates, cancellationToken);
 
         // .p7m and application/pkcs7-mime: what an S/MIME-capable reader opens. The desktop client decrypts it
         // with the card and renders the bytes it gets back (#1353).
@@ -134,7 +134,7 @@ public class DocumentVersionEnvelopedContentController(
             return NotFound();
         }
 
-        return await envelopes.ReaderCertificateAsync(cancellationToken) is null
+        return (await envelopes.ReaderCertificatePemsAsync(cancellationToken)).Count == 0
             ? throw new Errors.Exceptions.Encryption.ContentCannotBeEnvelopedException()
             : NoContent();
     }

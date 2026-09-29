@@ -276,7 +276,7 @@ public class ExternalLinksController : ControllerBase
             WebDav.ContentTypes.ForExtension(Path.GetExtension(objectKey)),
             fileName,
             from: null,
-            certificatePem)
+            [certificatePem])
             ?? throw new Errors.Exceptions.ExternalLinks.ExternalLinkEnvelopeFailedException();
 
         // .p7m and application/pkcs7-mime: what S/MIME-capable mail software opens by double-click. The name

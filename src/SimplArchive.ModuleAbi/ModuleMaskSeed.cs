@@ -194,6 +194,13 @@ public static class CoreMaskIds
     /// vertical offers actions on bookings it recognises, while deciding per document so it does not speak
     /// for every booking in the product.</summary>
     public static readonly Guid Booking = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E43");
+
+    /// <summary>
+    /// The core's generic <c>Certificate</c> mask (core ADR 0844) — a certificate filed as a document, with
+    /// only the fields any X.509 certificate has. A module that enrols certificates wears THIS rather than
+    /// declaring its own, so a tenant does not end up holding one "Certificate" mask per vendor.
+    /// </summary>
+    public static readonly Guid Certificate = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E4A");
 }
 
 /// <summary>One field of a module mask. The type vocabulary mirrors the core's field catalog.</summary>

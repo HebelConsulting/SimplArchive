@@ -278,6 +278,20 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             new FieldSpec("Valid until", FieldDataType.Date, IsRequired: false),
         ], cancellationToken);
 
+        // Only what any X.509 certificate has (ADR 0844). The content may be a chain; every field here
+        // describes the LEAF, resolved by whoever files it.
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.Certificate, "Certificate",
+        [
+            new FieldSpec("Holder", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Label", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Subject", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Issuer", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Thumbprint", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Valid from", FieldDataType.Date, IsRequired: false),
+            new FieldSpec("Valid until", FieldDataType.Date, IsRequired: false),
+            new FieldSpec("Revoked on", FieldDataType.Date, IsRequired: false),
+        ], cancellationToken);
+
         // After every mask exists, because containment is a relation BETWEEN masks: a Notebook's allowed parent
         // is the Mailbox, which is seeded eight lines below it, so doing this per-mask inside the loop above
         // would write a foreign key to a row that does not exist yet.

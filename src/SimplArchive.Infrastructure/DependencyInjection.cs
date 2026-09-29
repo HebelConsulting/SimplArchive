@@ -149,6 +149,7 @@ public static class DependencyInjection
         // The booking-admission seam (ADR 0781): asked on every booking write, answering instantly when no
         // module vets bookings — which is every tenant without one, and every test.
         services.AddScoped<Application.Abstractions.IBookingAdmissionReviewer, Modules.ModuleBookingAdmissionReviewer>();
+        services.AddScoped<Modules.ModuleReaderCertificates>();
         services.AddScoped<Modules.ModuleMaskSeeder>();
         services.AddScoped<Modules.StateMachineEngine>();
         services.AddScoped<Modules.ModuleActivationService>();
