@@ -725,6 +725,23 @@ internal static class Program
             return;
         }
 
+        // Opens a real CMS envelope with the card in the reader: `--card-envelope-test <envelope.der>`.
+        //
+        // A verification HOOK rather than a test, for the same reason the screenshot flags are: it needs
+        // hardware CI does not have. And the thing it proves cannot be proved without hardware — an
+        // elliptic-curve recipient's content key is AGREED, so the private half happens inside the card, and
+        // a software stand-in would only confirm that the managed arithmetic agrees with itself.
+        //
+        // The envelope is expected to come from an INDEPENDENT producer (openssl cms -encrypt -recip), which
+        // is what makes a success meaningful: every step — the nested key-wrap OID, the KDF hash the sender
+        // chose, the ECC-CMS-SharedInfo, the unwrap — has to match what a standard implementation did.
+        var cardEnvelopeIndex = Array.IndexOf(args, "--card-envelope-test");
+        if (cardEnvelopeIndex >= 0 && cardEnvelopeIndex + 1 < args.Length)
+        {
+            Services.CardEnvelopeCheck.Run(args[cardEnvelopeIndex + 1]);
+            return;
+        }
+
         // Headless test of the upload flow against a running Api: `--upload-test <token> <filePath>`.
         var uploadIndex = Array.IndexOf(args, "--upload-test");
         if (uploadIndex >= 0 && uploadIndex + 2 < args.Length)

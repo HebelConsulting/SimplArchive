@@ -54,7 +54,7 @@
     <!-- Reads the certificates a PKCS#11 device carries, so one can be registered as the caller's own
          (#1398, ADR 0831). The package ships one assembly per ABI, which is why this project multi-targets —
          see the TargetFrameworks comment above. -->
-    <PackageReference Include="HebelConsulting.CAManagement.Pkcs11" Version="0.7.0" />
+    <PackageReference Include="HebelConsulting.CAManagement.Pkcs11" Version="0.8.0" />
     <!-- The client's own log (ADR 0613): a rolling text file beside its settings, because stderr goes nowhere in
          a packaged build. Same Serilog the server uses, so the levels mean one thing across the product. -->
     <PackageReference Include="Serilog" Version="4.2.0" />
