@@ -83,6 +83,51 @@ public sealed class SimplArchiveApi(HttpClient http)
     }
 
     /// <summary>
+    /// A JSON <c>PUT</c> — the API's mutation verb (ADR: no PATCH; a PUT states the full intended value).
+    /// </summary>
+    /// <remarks>
+    /// An EMPTY body is a normal answer here and not a failure: confirming a document version answers 204,
+    /// and so does more than one mutation on this API. Parsing unconditionally would turn a success into a
+    /// <c>JsonException</c> that reads like a protocol error.
+    /// </remarks>
+    public async Task<JsonElement> PutAsync<TRequest>(string path, TRequest payload, CancellationToken cancellationToken)
+    {
+        using var response = await http.PutAsJsonAsync(path, payload, Json, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new CliException(Describe(response.StatusCode, body, path));
+        }
+
+        return string.IsNullOrWhiteSpace(body) ? default : JsonDocument.Parse(body).RootElement.Clone();
+    }
+
+    /// <summary>
+    /// Sends bytes to an address OUTSIDE the API — a presigned object-storage upload.
+    /// </summary>
+    /// <remarks>
+    /// Its own client, with NO Authorization header, and that is the point rather than an economy. The
+    /// upload URL is signed and points at object storage on a possibly different host
+    /// (<c>PublicServiceUrl</c>, ADR 0213); forwarding the API bearer token to it would hand our credential
+    /// to another service, and some stores reject a request carrying both a signature and an Authorization
+    /// header — a 403 that reads as a signing bug. The address is used EXACTLY as the server returned it.
+    /// </remarks>
+    public static async Task UploadAsync(Uri presignedUrl, byte[] payload, CancellationToken cancellationToken)
+    {
+        using var anonymous = new HttpClient();
+        using var content = new ByteArrayContent(payload);
+        using var response = await anonymous.PutAsync(presignedUrl, content, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new CliException(
+                $"Object storage refused the upload ({(int)response.StatusCode}). The presigned URL may have "
+                + "expired, or this host cannot reach the storage endpoint the installation advertises.");
+        }
+    }
+
+    /// <summary>
     /// Sends raw bytes — a certificate is a FILE, not a JSON field.
     /// </summary>
     /// <remarks>

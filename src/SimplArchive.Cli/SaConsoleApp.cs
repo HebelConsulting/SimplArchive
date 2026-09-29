@@ -99,6 +99,16 @@ public static class SaConsoleApp
                 });
             });
 
+            // Modules, and for now the one act a script needs that no client covers: filing a signed licence
+            // and pointing the modules it names at it. Both clients already let a HUMAN do this; nothing let
+            // a script, which is why the flight-school demo seeder grew its own inline copy (#1474).
+            config.AddBranch("module", module =>
+            {
+                module.SetDescription("Per-tenant module activation (tenant administrator).");
+                module.AddCommand<ModuleActivateCommand>("activate")
+                    .WithDescription("File a vendor-signed licence and activate every module it names.");
+            });
+
             config.AddBranch("tenant", tenant =>
             {
                 tenant.SetDescription("Installation-level tenant administration (platform administrator).");
