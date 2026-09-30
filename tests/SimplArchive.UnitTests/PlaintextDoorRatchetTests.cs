@@ -24,8 +24,7 @@ public partial class PlaintextDoorRatchetTests
     {
         ["Documents/DocumentFinalizer.cs"] = "Hashes and classifies what was just uploaded; the bytes are compared and discarded.",
         ["Documents/CalendarContactClassifier.cs"] = "Reads an .ics/.vcf to decide what the document IS. Index fields, not content.",
-        ["Documents/StrictEnvelopeDelivery.cs"] = "THE envelope path — it reads plaintext precisely so the reader never does (ADR 0828).",
-        ["Controllers/ExternalLinksController.cs"] = "Reads plaintext to ENVELOPE it to the link's recipient certificate (ADR 0827) — the same shape as StrictEnvelopeDelivery. Its other path hands out a presigned URL, which the seam already refuses for a strict tenant.",
+        ["Documents/StrictEnvelopeDelivery.cs"] = "THE envelope path — it reads plaintext precisely so the reader never does (ADR 0828). And only for an object that is NOT wrapped at rest: where one is, the encryption service decrypts and envelopes it, so this reads nothing (ADR 0862).",
         ["Imap/ImapFetch.cs"] = "Envelopes to the recipient's certificate before serving (#1332), which is the precedent the tier is modelled on.",
         ["Controllers/CheckoutsController.cs"] = "Hashes the stash to answer 'is it modified'; no bytes are served.",
         ["Controllers/IntrayController.cs"] = "Reads the mask SIDECAR, which is metadata the tier serves anyway — not the item's content.",

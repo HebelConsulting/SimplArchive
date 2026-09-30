@@ -24,6 +24,17 @@ public sealed class AtRestKeyService(
 {
     public const string HttpClientName = "at-rest-keys";
 
+    /// <summary>
+    /// The decrypt-and-envelope call's own client (ADR 0862) — a far longer timeout than the key calls.
+    /// </summary>
+    /// <remarks>
+    /// Separate because the two operations differ by orders of magnitude in what crosses the wire: the
+    /// oracle exchanges 32 bytes, while this waits for the service to fetch a whole document from storage,
+    /// decrypt it and envelope it. On one client, the key calls' modest timeout would fail every large
+    /// document — as a cancellation naming neither the size nor the limit it hit.
+    /// </remarks>
+    public const string EnvelopeHttpClientName = "at-rest-envelope";
+
     private sealed record Kek(string Generation, RSA PublicKey, string PublicKeyPem, string OaepHash,
         RSAEncryptionPadding Padding, DateTimeOffset FetchedAt);
 
@@ -167,6 +178,61 @@ public sealed class AtRestKeyService(
 
         _deks[wrappedDekBase64] = (dek, DateTimeOffset.UtcNow);
         return dek;
+    }
+
+    /// <summary>
+    /// The whole decrypt-and-envelope, performed INSIDE the service (ADR 0862): the wrapped DEK, a ciphertext
+    /// address the service fetches itself, and every certificate the reader is addressed by.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The point is what this method does NOT return.</b> <see cref="UnwrapDekAsync"/> hands this process
+    /// a raw data key, and the caller then holds both the key and the cleartext for the length of a request.
+    /// This returns a CMS envelope: the key never leaves the service's process and the plaintext never
+    /// enters ours. Same service, same HSM — a different division of labour.
+    /// </para>
+    /// <para>
+    /// <b>Nothing is cached here, deliberately.</b> The DEK cache above is keyed on the wrapped DEK and is
+    /// safe because a data key is the same for every reader of that object; an envelope is addressed to a
+    /// PARTICULAR set of certificates, so caching it by object key would serve one reader's envelope to
+    /// another — who could not open it, and whose failure would look like a broken certificate.
+    /// </para>
+    /// <para>
+    /// The inner-part headers are optional and describe the enveloped entity rather than this request
+    /// (service ADR 0017): with them, the service wraps the plaintext as a named MIME part before
+    /// enveloping, which is what lets a fabricated mail message carry a filename it never held in clear
+    /// here.
+    /// </para>
+    /// </remarks>
+    public async Task<byte[]> DecryptedEnvelopeAsync(
+        string wrappedDekBase64,
+        string generation,
+        Uri ciphertextUrl,
+        IReadOnlyList<string> recipientCertificatePems,
+        string? innerContentType,
+        string? innerContentDisposition,
+        CancellationToken cancellationToken)
+    {
+        var client = httpClientFactory.CreateClient(EnvelopeHttpClientName);
+        using var response = await client.PostAsJsonAsync(
+            $"{ServiceUrl}/api/decrypted-envelope",
+            new
+            {
+                wrappedDek = wrappedDekBase64,
+                kekGeneration = generation,
+                ciphertextUrl = ciphertextUrl.ToString(),
+                recipientCertificatePems,
+                innerContentType,
+                innerContentDisposition,
+            },
+            cancellationToken);
+
+        // No fail-open branch, and that is the tier's whole contract: this path exists because the caller
+        // must not be able to serve plaintext, so a service that will not envelope means the read REFUSES.
+        // EnsureSuccessStatusCode is the right bluntness here — the status is the diagnosis (400 our data,
+        // 502 the ciphertext fetch, 503 the service) and the Api's handler turns the throw into a refusal.
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsByteArrayAsync(cancellationToken);
     }
 
     private async Task<Kek> CurrentKekAsync(CancellationToken cancellationToken)

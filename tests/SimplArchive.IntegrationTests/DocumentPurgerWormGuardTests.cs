@@ -151,6 +151,9 @@ public class DocumentPurgerWormGuardTests
         public Task SetBucketLifecycleAsync(Guid tenantId, int incompleteUploadCleanupDays, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<Uri> GetPresignedUploadUrlAsync(string objectKey, TimeSpan expiry, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<Uri?> GetPresignedDownloadUrlAsync(string objectKey, TimeSpan expiry, string? downloadFileName = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<Uri> GetPresignedCiphertextUrlAsync(string objectKey, TimeSpan expiry, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("No test through this fake presigns ciphertext (ADR 0862).");
         public Task<Uri?> GetPresignedPreviewUrlAsync(string objectKey, TimeSpan expiry, string? fileName = null, string? contentType = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<Stream> GetObjectAsync(string objectKey, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<bool> ExistsAsync(string objectKey, CancellationToken cancellationToken = default) => throw new NotSupportedException();

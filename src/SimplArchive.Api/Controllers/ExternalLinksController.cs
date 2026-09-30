@@ -34,7 +34,7 @@ public class ExternalLinksController : ControllerBase
     private readonly CurrentTenantAccessor _tenant;
     private readonly IAuditRecorder _audit;
     private readonly IDocumentThumbnailService _thumbnails;
-    private readonly SimplArchive.Infrastructure.Encryption.SmimeMessageEnveloper _enveloper;
+    private readonly Documents.StrictEnvelopeDelivery _strictEnvelopes;
     private readonly TimeProvider _clock;
 
     public ExternalLinksController(
@@ -43,7 +43,7 @@ public class ExternalLinksController : ControllerBase
         CurrentTenantAccessor tenant,
         IAuditRecorder audit,
         IDocumentThumbnailService thumbnails,
-        SimplArchive.Infrastructure.Encryption.SmimeMessageEnveloper enveloper,
+        Documents.StrictEnvelopeDelivery strictEnvelopes,
         TimeProvider clock)
     {
         _dbContext = dbContext;
@@ -51,7 +51,7 @@ public class ExternalLinksController : ControllerBase
         _tenant = tenant;
         _audit = audit;
         _thumbnails = thumbnails;
-        _enveloper = enveloper;
+        _strictEnvelopes = strictEnvelopes;
         _clock = clock;
     }
 
@@ -265,18 +265,16 @@ public class ExternalLinksController : ControllerBase
     private async Task<IActionResult> EnvelopedAsync(
         string objectKey, string fileName, string certificatePem, CancellationToken cancellationToken)
     {
-        // Through the storage seam, so an at-rest-encrypted object arrives decrypted (ADR 0818) — the envelope
-        // is built over the document, never over its ciphertext.
-        await using var content = await _objectStorage.GetObjectAsync(objectKey, cancellationToken);
-        using var buffer = new MemoryStream();
-        await content.CopyToAsync(buffer, cancellationToken);
-
-        var enveloped = _enveloper.TryEnvelopeDocument(
-            buffer.ToArray(),
-            WebDav.ContentTypes.ForExtension(Path.GetExtension(objectKey)),
-            fileName,
-            from: null,
-            [certificatePem])
+        // ONE funnel with the signed-in reader's door (ADR 0862). It reads through the storage seam for a
+        // plaintext object, and for one wrapped at rest it hands the ciphertext's address to the encryption
+        // service so this process never holds the document — the same treatment either way, which is the
+        // point: two enveloping paths on one tier would be two places for the guarantee to differ, and the
+        // difference would be invisible in the code.
+        //
+        // The RECIPIENT differs and that changes nothing here: an outsider's pasted certificate is out of
+        // the Module's scope (core #1390) while a reader's set comes from it, and the service envelopes to
+        // whatever it is given.
+        var enveloped = await _strictEnvelopes.TryEnvelopeAsync(objectKey, fileName, [certificatePem], cancellationToken)
             ?? throw new Errors.Exceptions.ExternalLinks.ExternalLinkEnvelopeFailedException();
 
         // .p7m and application/pkcs7-mime: what S/MIME-capable mail software opens by double-click. The name

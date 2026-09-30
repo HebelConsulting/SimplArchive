@@ -42,6 +42,7 @@ public sealed class StrictEnvelopeDelivery(
     IObjectStorageClient storage,
     SmimeMessageEnveloper enveloper,
     SimplArchive.Infrastructure.Encryption.MessageEnvelopeClient registry,
+    SimplArchive.Infrastructure.Storage.AtRestKeyService atRestKeys,
     SimplArchive.Infrastructure.Modules.ModuleReaderCertificates moduleCertificates)
 {
     // MEMOISED FOR THE REQUEST, which is all this class lives for (registered scoped). The resource builder
@@ -287,18 +288,139 @@ public sealed class StrictEnvelopeDelivery(
     public async Task<byte[]> EnvelopeAsync(
         string objectKey, string fileName, IReadOnlyList<string> certificatePems, CancellationToken cancellationToken)
     {
+        return await TryEnvelopeAsync(objectKey, fileName, certificatePems, cancellationToken)
+            // Never the plaintext instead. An unreachable branch that refuses costs nothing; one that degrades
+            // is where a guarantee goes silently.
+            ?? throw new Errors.Exceptions.Encryption.ContentCannotBeEnvelopedException();
+    }
+
+    /// <summary>
+    /// The same envelope, answering null where it could not be built — for a caller with its own refusal.
+    /// </summary>
+    /// <remarks>
+    /// The split exists because the external-link door refuses in its own words (an outsider is told
+    /// something different from a signed-in reader), and the alternative was a second copy of the reroute —
+    /// which is how one path would come to consult the service and the other not. Null means "could not"; a
+    /// service that is DOWN throws instead, because those are different facts and ADR 0859 is the standing
+    /// argument for keeping such refusals distinguishable.
+    /// </remarks>
+    public async Task<byte[]?> TryEnvelopeAsync(
+        string objectKey, string fileName, IReadOnlyList<string> certificatePems, CancellationToken cancellationToken)
+    {
+        var contentType = WebDav.ContentTypes.ForExtension(Path.GetExtension(objectKey));
+
+        // WHERE THE OBJECT IS WRAPPED AT REST, THE SERVICE DOES BOTH HALVES (ADR 0862) — it already holds
+        // the KEK, and enveloping a DECRYPTED blob is the last step of a decryption rather than separate
+        // work. This process then never sees the data key or the cleartext on a read.
+        //
+        // Asked per OBJECT, not per tenant: storage is mixed state (ADR 0818), so a strict tenant filed
+        // before encryption was configured still has plaintext objects, and those take the local path below
+        // exactly as they always did.
+        if (await CiphertextOf(objectKey, cancellationToken) is { } wrapped)
+        {
+            return await EnvelopeInTheServiceAsync(
+                objectKey, fileName, contentType, wrapped, certificatePems, cancellationToken);
+        }
+
         await using var content = await storage.GetObjectAsync(objectKey, cancellationToken);
         using var buffer = new MemoryStream();
         await content.CopyToAsync(buffer, cancellationToken);
 
         return enveloper.TryEnvelopeDocument(
-            buffer.ToArray(),
-            WebDav.ContentTypes.ForExtension(Path.GetExtension(objectKey)),
-            fileName,
-            from: null,
-            certificatePems)
-            // Never the plaintext instead. An unreachable branch that refuses costs nothing; one that degrades
-            // is where a guarantee goes silently.
-            ?? throw new Errors.Exceptions.Encryption.ContentCannotBeEnvelopedException();
+            buffer.ToArray(), contentType, fileName, from: null, certificatePems);
     }
+
+    /// <summary>
+    /// The object's wrapped DEK and KEK generation, or null when it is not encrypted at rest.
+    /// </summary>
+    /// <remarks>
+    /// Read from the object's own METADATA, which is where at-rest encryption keeps them (ADR 0818) — so
+    /// this asks the object what it is rather than asking configuration what it ought to be. That
+    /// distinction is the whole reason mixed state is safe.
+    /// </remarks>
+    private async Task<(string WrappedDek, string Generation)?> CiphertextOf(
+        string objectKey, CancellationToken cancellationToken)
+    {
+        if (!atRestKeys.Enabled)
+        {
+            return null;
+        }
+
+        var info = await storage.GetObjectInfoAsync(objectKey, cancellationToken);
+        return info.Metadata.TryGetValue(
+                SimplArchive.Infrastructure.Storage.EncryptingObjectStorageClient.WrappedDekKey, out var wrapped)
+            && info.Metadata.TryGetValue(
+                SimplArchive.Infrastructure.Storage.EncryptingObjectStorageClient.KekGenerationKey, out var generation)
+            ? (wrapped, generation)
+            : null;
+    }
+
+    /// <summary>
+    /// Hands the ciphertext's ADDRESS to the encryption service and wraps the envelope it returns.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The bytes go storage → service directly; this process passes a short-lived presigned URL and never
+    /// touches them, which also keeps the standing rule that the Api does not proxy file bytes. The presign
+    /// is the ciphertext one, which refuses outright for an unencrypted object — so it cannot become the
+    /// plaintext door this tier closes.
+    /// </para>
+    /// <para>
+    /// The INNER headers describe the entity inside the envelope, and they are what the local path puts on
+    /// its attachment part: a reader who opens either artefact finds a part with the same type and filename.
+    /// Sending them is necessary rather than cosmetic — without them the service envelopes bare bytes, and
+    /// the reader's client shows an anonymous blob with the filename surviving only in the outer subject.
+    /// </para>
+    /// <para>
+    /// <b>No transfer encoding is declared on that inner part</b>, so its content is the raw bytes. MimeKit
+    /// reads it back byte-identically (there is a test), and the alternative would be a third header the
+    /// service does not accept. Worth knowing if a strict third-party client ever objects: the fix is a
+    /// <c>binary</c> encoding declared alongside the other two, which is a service-side parameter.
+    /// </para>
+    /// </remarks>
+    private async Task<byte[]?> EnvelopeInTheServiceAsync(
+        string objectKey,
+        string fileName,
+        string contentType,
+        (string WrappedDek, string Generation) wrapped,
+        IReadOnlyList<string> certificatePems,
+        CancellationToken cancellationToken)
+    {
+        var ciphertextUrl = await storage.GetPresignedCiphertextUrlAsync(
+            objectKey, CiphertextFetchWindow, cancellationToken);
+
+        byte[] envelope;
+        try
+        {
+            envelope = await atRestKeys.DecryptedEnvelopeAsync(
+                wrapped.WrappedDek,
+                wrapped.Generation,
+                ciphertextUrl,
+                certificatePems,
+                innerContentType: contentType,
+                innerContentDisposition: $"attachment; filename=\"{fileName.Replace("\"", string.Empty)}\"",
+                cancellationToken);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        {
+            // NOT null, and not a plaintext fall-back. Null here would reach the caller's "could not
+            // envelope" refusal, which tells a reader to re-register a certificate that is perfectly
+            // fine — the mistaken advice ADR 0859 was written to stop. This says the SERVICE is down,
+            // and there is no plaintext available to fall back to even if that were wanted (ADR 0862).
+            throw new Errors.Exceptions.Encryption.EnvelopeServiceUnavailableException();
+        }
+
+        return enveloper.TryWrapEnvelope(envelope, fileName, from: null, certificatePems);
+    }
+
+    /// <summary>
+    /// How long the ciphertext's address stays valid — long enough for one fetch by a sidecar, no longer.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately much shorter than a browser download's window: this URL is handed to a process on the
+    /// same network which fetches immediately, so a generous expiry would only widen the period in which a
+    /// leaked address is useful — and it addresses ciphertext, not a document, which is why minutes rather
+    /// than seconds is still a reasonable floor for a slow store.
+    /// </remarks>
+    private static readonly TimeSpan CiphertextFetchWindow = TimeSpan.FromMinutes(2);
 }

@@ -162,6 +162,49 @@ public class StrictEnvelopedReadTests
         Assert.DoesNotContain(Marker, body, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task The_SERVICE_decrypts_and_envelopes_so_the_core_never_holds_the_plaintext()
+    {
+        // ADR 0862's whole property, and the only assertion that can see it: both the old path and the new
+        // one serve an envelope the reader's key opens, so decrypting the response proves nothing about
+        // WHERE the plaintext appeared. The service's call count is what distinguishes them.
+        var before = _factory.DecryptedEnvelopeCalls;
+
+        var reader = await StrictReaderAsync(withCertificate: true);
+        var (api, documentId, pkcs12) = (reader.Api, reader.DocumentId, reader.Pkcs12);
+
+        var download = Rel(await CurrentVersionAsync(api, documentId), "download");
+        Assert.NotNull(download);
+
+        using var response = await api.GetAsync(download);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        // The core asked the service to do both halves. Without this, the test passes on a core that
+        // unwrapped the DEK and decrypted locally — which is exactly the arrangement ADR 0862 replaced.
+        Assert.True(_factory.DecryptedEnvelopeCalls > before,
+            "The core served an envelope without asking the encryption service to build it, so it decrypted "
+            + "the document in its own process (ADR 0862).");
+
+        // ...and the artefact is still what a recipient can open and name. The inner part carries the
+        // filename, which is the half that needs the service to assemble a MIME entity (service ADR 0017) —
+        // enveloping bare bytes would open to an anonymous blob.
+        var message = await MimeMessage.LoadAsync(new MemoryStream(await response.Content.ReadAsByteArrayAsync()));
+        using var context = new TemporarySecureMimeContext();
+        await context.ImportAsync(new MemoryStream(pkcs12!), "reader");
+        var enveloped = Assert.IsAssignableFrom<ApplicationPkcs7Mime>(message.Body);
+        var decrypted = Assert.IsAssignableFrom<MimePart>(enveloped.Decrypt(context));
+
+        Assert.EndsWith(".txt", decrypted.ContentDisposition?.FileName, StringComparison.Ordinal);
+
+        using var opened = new MemoryStream();
+        Assert.NotNull(decrypted.Content);
+        await decrypted.Content!.DecodeToAsync(opened);
+
+        // The bytes survive the round trip with NO transfer encoding declared on the inner part — the one
+        // thing that could have gone wrong in assembling the entity outside this process.
+        Assert.Contains(Marker, Encoding.ASCII.GetString(opened.ToArray()), StringComparison.Ordinal);
+    }
+
     // ---- Comparing versions (#1485, ADR 0861) --------------------------------------------------------
     //
     // The sibling of the text-layout case above, and a worse disclosure: a comparison answers with both

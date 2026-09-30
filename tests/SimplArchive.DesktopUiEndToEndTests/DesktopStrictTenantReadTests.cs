@@ -165,16 +165,41 @@ public class DesktopStrictTenantReadTests
                 $"api/documents/{documentId}/versions", new { fileExtension = ".txt" }))
             .Content.ReadFromJsonAsync<JsonElement>();
 
-        // Straight to object storage, with no bearer — the same rule the funnel follows on the way out, and
-        // on a strict tenant these bytes are wrapped by the encrypting decorator against the stub's KEK.
+        // ENCRYPTED CLIENT-SIDE, which is how an upload to a gated tenant actually works (ADR 0818): the
+        // presign stays a presign and the CLIENT wraps the bytes, attaching the wrapped DEK at finalize. The
+        // comment here used to say the encrypting decorator wrapped them on the way in — it does not, it
+        // never sees them, and the object was landing as PLAINTEXT. Which made this test exercise the
+        // mixed-state path while claiming to exercise encryption.
+        //
+        // It matters now beyond tidiness: only an object carrying a wrapped DEK takes the route where the
+        // encryption service decrypts and envelopes (ADR 0862), so without this the desktop client would be
+        // opening an envelope the core built from plaintext it read itself.
+        var plaintext = Encoding.UTF8.GetBytes(Marker);
+        var encryption = version.GetProperty("encryption");
+
+        var dek = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
+        var blob = new byte[12 + plaintext.Length + 16];
+        System.Security.Cryptography.RandomNumberGenerator.Fill(blob.AsSpan(0, 12));
+        using (var aes = new System.Security.Cryptography.AesGcm(dek, 16))
+        {
+            aes.Encrypt(blob.AsSpan(0, 12), plaintext, blob.AsSpan(12, plaintext.Length), blob.AsSpan(^16..));
+        }
+
+        using var kek = System.Security.Cryptography.RSA.Create();
+        kek.ImportFromPem(encryption.GetProperty("publicKeyPem").GetString()!);
+        var wrappedDek = Convert.ToBase64String(
+            kek.Encrypt(dek, System.Security.Cryptography.RSAEncryptionPadding.OaepSHA256));
+
+        // Straight to object storage, with no bearer — the same rule the funnel follows on the way out.
         using (var storage = new HttpClient())
         {
             (await storage.PutAsync(version.GetProperty("uploadUrl").GetString()!,
-                new ByteArrayContent(Encoding.UTF8.GetBytes(Marker)))).EnsureSuccessStatusCode();
+                new ByteArrayContent(blob))).EnsureSuccessStatusCode();
         }
 
         var versionId = version.GetProperty("id").GetGuid();
-        (await api.PutAsJsonAsync($"api/documents/{documentId}/versions/{versionId}", new { }))
+        (await api.PutAsJsonAsync($"api/documents/{documentId}/versions/{versionId}",
+            new { wrappedDek, kekGeneration = encryption.GetProperty("kekGeneration").GetString() }))
             .EnsureSuccessStatusCode();
 
         // The DOWNLOAD rel, followed rather than composed: on a strict tenant it is the enveloped-content

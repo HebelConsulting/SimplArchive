@@ -18,6 +18,10 @@
     <PackageReference Include="NetVips.Native.osx-arm64" Version="8.18.4" />
     <PackageReference Include="NetVips.Native.osx-x64" Version="8.18.4" />
     <PackageReference Include="AWSSDK.S3" Version="4.0.100.3" />
+    <!-- CMS EnvelopedData, for the encryption-service stub's decrypt-and-envelope leg (core ADR 0862).
+         Referenced here rather than reached through the product: this stub stands in for a separate
+         product, and borrowing the core's own enveloper would make the two agree by construction. -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.0" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.0.0" />
     <!-- Boot-time readiness only: the engine waits for the seed's search-index backlog to drain before it hands
          the app over, and the outbox table is the one place that says so (#660). Same version the two UI test

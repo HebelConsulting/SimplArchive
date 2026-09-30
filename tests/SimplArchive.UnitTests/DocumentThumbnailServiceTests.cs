@@ -189,6 +189,11 @@ public class DocumentThumbnailServiceTests
         public Task<Uri?> GetPresignedDownloadUrlAsync(string objectKey, TimeSpan expiry, string? fileName = null, CancellationToken cancellationToken = default) =>
             Task.FromResult<Uri?>(new Uri($"http://storage.test/{objectKey}"));
 
+
+        public Task<Uri> GetPresignedCiphertextUrlAsync(string objectKey, TimeSpan expiry, CancellationToken cancellationToken = default) =>
+
+            throw new NotSupportedException("No test through this fake presigns ciphertext (ADR 0862).");
+
         public Task<Uri> GetPresignedUploadUrlAsync(string objectKey, TimeSpan expiry, CancellationToken cancellationToken = default) =>
             Task.FromResult(new Uri($"http://storage.test/{objectKey}"));
 

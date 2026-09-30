@@ -143,6 +143,18 @@ public sealed partial class E2EApiFactory : WebApplicationFactory<Program>, IAsy
     // configuration, which is built once at startup — a test cannot switch a tenant into the tier afterwards.
     // The tenant itself is created by whichever test wants it, under exactly this name.
     public const string StrictTenantName = "StrictTier";
+
+    private int _decryptedEnvelopeCalls;
+
+    /// <summary>
+    /// How many times the core asked the encryption service to decrypt-and-envelope (ADR 0862).
+    /// </summary>
+    /// <remarks>
+    /// The one assertion that distinguishes the rerouted path from the old one. Both serve an openable
+    /// envelope, so a test that only decrypts the response passes either way — and the whole point of ADR
+    /// 0862 is WHERE the plaintext appeared, which is invisible in the bytes.
+    /// </remarks>
+    public int DecryptedEnvelopeCalls => Volatile.Read(ref _decryptedEnvelopeCalls);
     public const string CryptoAdminEmail = "crypt@crypto.e2e.local";
     public const string CryptoPassword = "CryptoDemo-1234!";
 
@@ -258,6 +270,71 @@ public sealed partial class E2EApiFactory : WebApplicationFactory<Program>, IAsy
                 kek.Decrypt(wrapped, System.Security.Cryptography.RSAEncryptionPadding.OaepSHA256),
                 "application/octet-stream");
         });
+        // DECRYPT-AND-ENVELOPE (ADR 0862), with the same real crypto as its neighbours: unwrap, fetch the
+        // ciphertext from the address the core signed, decrypt, and envelope to EVERY certificate named.
+        //
+        // Faithful rather than convenient, because what this proves is the property itself — the core hands
+        // over an address and gets back an envelope, so a test can assert that the reader's own key opens
+        // what was served. A stub answering a canned blob would green a core that still decrypted locally.
+        app.MapPost("/api/decrypted-envelope", async (HttpRequest request) =>
+        {
+            var body = await System.Text.Json.JsonSerializer.DeserializeAsync<System.Text.Json.JsonElement>(request.Body);
+            var generation = body.GetProperty("kekGeneration").GetString()!;
+            if (!keks.TryGetValue(generation, out var kek))
+            {
+                return Results.Problem(statusCode: 400, title: "Unknown generation.");
+            }
+
+            var pems = body.GetProperty("recipientCertificatePems").EnumerateArray()
+                .Select(p => p.GetString()!).ToList();
+            if (pems.Count == 0)
+            {
+                return Results.Problem(statusCode: 400, title: "No recipient certificate was supplied.");
+            }
+
+            var dek = kek.Decrypt(
+                Convert.FromBase64String(body.GetProperty("wrappedDek").GetString()!),
+                System.Security.Cryptography.RSAEncryptionPadding.OaepSHA256);
+
+            using var fetcher = new HttpClient();
+            var blob = await fetcher.GetByteArrayAsync(body.GetProperty("ciphertextUrl").GetString()!);
+            var plaintext = SimplArchive.Infrastructure.Storage.AtRestBlobCipher.Decrypt(dek, blob);
+
+            // The inner part, when the caller named one (service ADR 0017) — the same assembly the real
+            // service performs: headers, a blank line, then the bytes.
+            var contentType = body.TryGetProperty("innerContentType", out var ct) ? ct.GetString() : null;
+            var disposition = body.TryGetProperty("innerContentDisposition", out var cd) ? cd.GetString() : null;
+            if (contentType is { Length: > 0 } || disposition is { Length: > 0 })
+            {
+                var headers = new System.Text.StringBuilder();
+                if (contentType is { Length: > 0 })
+                {
+                    headers.Append("Content-Type: ").Append(contentType).Append("\r\n");
+                }
+
+                if (disposition is { Length: > 0 })
+                {
+                    headers.Append("Content-Disposition: ").Append(disposition).Append("\r\n");
+                }
+
+                headers.Append("\r\n");
+                plaintext = [.. System.Text.Encoding.ASCII.GetBytes(headers.ToString()), .. plaintext];
+            }
+
+            var envelope = new System.Security.Cryptography.Pkcs.EnvelopedCms(
+                new System.Security.Cryptography.Pkcs.ContentInfo(plaintext));
+            var recipients = new System.Security.Cryptography.Pkcs.CmsRecipientCollection();
+            foreach (var pem in pems)
+            {
+                recipients.Add(new System.Security.Cryptography.Pkcs.CmsRecipient(
+                    System.Security.Cryptography.X509Certificates.X509Certificate2.CreateFromPem(pem)));
+            }
+
+            envelope.Encrypt(recipients);
+            Interlocked.Increment(ref _decryptedEnvelopeCalls);
+            return Results.Bytes(envelope.Encode(), "application/pkcs7-mime");
+        });
+
         app.MapPost("/api/rewrapped-dek", async (HttpRequest request) =>
         {
             var body = await System.Text.Json.JsonSerializer.DeserializeAsync<System.Text.Json.JsonElement>(request.Body);

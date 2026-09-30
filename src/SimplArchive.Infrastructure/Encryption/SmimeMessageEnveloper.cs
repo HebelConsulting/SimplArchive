@@ -63,40 +63,13 @@ public sealed class SmimeMessageEnveloper(ILogger<SmimeMessageEnveloper> logger)
         MimeMessage message;
         try
         {
-            var certificates = certificatePems.Select(pem => X509Certificate2.CreateFromPem(pem)).ToList();
-            message = new MimeMessage
+            message = Skeleton(fileName, from, certificatePems);
+            message.Body = new MimePart(ContentType.Parse(contentType))
             {
-                Subject = Path.GetFileNameWithoutExtension(fileName),
-                Body = new MimePart(ContentType.Parse(contentType))
-                {
-                    Content = new MimeContent(new MemoryStream(content)),
-                    ContentDisposition = new ContentDisposition(ContentDisposition.Attachment) { FileName = fileName },
-                    ContentTransferEncoding = ContentEncoding.Base64,
-                },
+                Content = new MimeContent(new MemoryStream(content)),
+                ContentDisposition = new ContentDisposition(ContentDisposition.Attachment) { FileName = fileName },
+                ContentTransferEncoding = ContentEncoding.Base64,
             };
-
-            // Addresses are a courtesy to the reader's mail client, not part of the security story — the
-            // envelope is what addresses this, and it addresses a KEY. Both are omitted rather than invented
-            // when unknown: a From nobody sent from, or a To nobody can reply to, is worse than a blank field.
-            if (from is { Length: > 0 })
-            {
-                message.From.Add(new MailboxAddress(from, from));
-            }
-
-            // One To per DISTINCT address, not one per certificate: a reader holding a card and a laptop
-            // certificate is one person, and listing them twice would say otherwise to their mail client.
-            foreach (var recipient in certificates
-                .Select(c => c.GetNameInfo(X509NameType.EmailName, forIssuer: false))
-                .Where(r => r is { Length: > 0 })
-                .Distinct(StringComparer.OrdinalIgnoreCase))
-            {
-                message.To.Add(new MailboxAddress(recipient, recipient));
-            }
-
-            foreach (var certificate in certificates)
-            {
-                certificate.Dispose();
-            }
         }
         catch (Exception exception) when (exception is System.Security.Cryptography.CryptographicException
             or ArgumentException or FormatException)
@@ -106,6 +79,88 @@ public sealed class SmimeMessageEnveloper(ILogger<SmimeMessageEnveloper> logger)
         }
 
         return TryEnvelope(message, certificatePems, fileName);
+    }
+
+    /// <summary>
+    /// The same message, wrapped around an envelope somebody ELSE built (ADR 0862).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// What the encryption service returns is a bare CMS <c>EnvelopedData</c>, and ADR 0827 decided the
+    /// artefact a recipient receives is a <b>message</b> — a <c>.p7m</c> that opens by double-click rather
+    /// than a blob needing <c>openssl cms -decrypt</c>. So the headers are still ours to build; only the
+    /// encryption moved. The message this produces is byte-comparable in SHAPE to the local path's: same
+    /// subject, same addresses, an <c>application/pkcs7-mime</c> body either way.
+    /// </para>
+    /// <para>
+    /// <b>The inner entity's headers are inside the envelope and therefore not ours to add here</b> — they
+    /// were sent to the service with the ciphertext, because the whole point of that path is that this
+    /// process never holds the content they describe (service ADR 0017).
+    /// </para>
+    /// </remarks>
+    public byte[]? TryWrapEnvelope(
+        byte[] cmsEnvelope, string fileName, string? from, IReadOnlyList<string> certificatePems)
+    {
+        try
+        {
+            var message = Skeleton(fileName, from, certificatePems);
+            message.Body = new ApplicationPkcs7Mime(SecureMimeType.EnvelopedData, new MemoryStream(cmsEnvelope));
+
+            using var output = new MemoryStream();
+            message.WriteTo(output);
+            return output.ToArray();
+        }
+        catch (Exception exception) when (exception is System.Security.Cryptography.CryptographicException
+            or ArgumentException or FormatException)
+        {
+            logger.LogWarning(exception,
+                "The envelope for {FileName} could not be wrapped as a message.", fileName);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The message's headers — everything except the body, which the two paths above supply differently.
+    /// </summary>
+    /// <remarks>
+    /// Extracted so the enveloping and the pre-enveloped paths cannot drift into describing the same
+    /// document differently: a recipient comparing two artefacts of one document should see one set of
+    /// headers, whichever side built the envelope.
+    /// </remarks>
+    private static MimeMessage Skeleton(string fileName, string? from, IReadOnlyList<string> certificatePems)
+    {
+        var message = new MimeMessage { Subject = Path.GetFileNameWithoutExtension(fileName) };
+
+        // Addresses are a courtesy to the reader's mail client, not part of the security story — the
+        // envelope is what addresses this, and it addresses a KEY. Both are omitted rather than invented
+        // when unknown: a From nobody sent from, or a To nobody can reply to, is worse than a blank field.
+        if (from is { Length: > 0 })
+        {
+            message.From.Add(new MailboxAddress(from, from));
+        }
+
+        var certificates = certificatePems.Select(pem => X509Certificate2.CreateFromPem(pem)).ToList();
+        try
+        {
+            // One To per DISTINCT address, not one per certificate: a reader holding a card and a laptop
+            // certificate is one person, and listing them twice would say otherwise to their mail client.
+            foreach (var recipient in certificates
+                .Select(c => c.GetNameInfo(X509NameType.EmailName, forIssuer: false))
+                .Where(r => r is { Length: > 0 })
+                .Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                message.To.Add(new MailboxAddress(recipient, recipient));
+            }
+        }
+        finally
+        {
+            foreach (var certificate in certificates)
+            {
+                certificate.Dispose();
+            }
+        }
+
+        return message;
     }
 
     /// <summary>

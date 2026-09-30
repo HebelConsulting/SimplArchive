@@ -66,6 +66,35 @@ public interface IObjectStorageClient
     /// </remarks>
     Task<Uri?> GetPresignedDownloadUrlAsync(string objectKey, TimeSpan expiry, string? downloadFileName = null, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// A short-lived URL to an object's STORED bytes — its ciphertext — for the encryption service to fetch
+    /// (ADR 0862). Refuses when the object is not encrypted.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This is not a door, and the refusal is what keeps it from becoming one.</b> Storage is mixed state
+    /// by design (ADR 0818) — an object either carries a wrapped DEK or is plaintext — so a method named for
+    /// ciphertext, called on a plaintext object, would hand out exactly the plaintext URL the strict tier
+    /// refuses. It therefore <b>throws</b> for an unencrypted object rather than presigning it: the caller
+    /// asked for ciphertext and there is none, which is a programming error and not a degraded case.
+    /// </para>
+    /// <para>
+    /// <b>Why it is on the seam at all.</b> CLAUDE.md forbids a storage path that bypasses this interface,
+    /// and the one consumer needs a URL the encryption service can fetch while the client-facing presign
+    /// stays refused. Handing out ciphertext is safe in a way handing out plaintext is not: whoever holds
+    /// this URL without the HSM holds a blob they cannot read, which is the whole premise of at-rest
+    /// encryption.
+    /// </para>
+    /// <para>
+    /// Signed against the INTERNAL endpoint, not the public one: the fetcher is a sidecar on the same
+    /// network, and a URL signed for the browser's hostname is one it cannot resolve (ADR 0213's split
+    /// endpoints).
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">The object carries no wrapped DEK, so it has no
+    /// ciphertext to serve.</exception>
+    Task<Uri> GetPresignedCiphertextUrlAsync(string objectKey, TimeSpan expiry, CancellationToken cancellationToken = default);
+
     // Like the download URL but with Content-Disposition: inline so the browser renders the content in place
     // (used by the document preview) rather than forcing a download — see ADR "Repositories workbench UI".
     // contentType (optional) overrides the response Content-Type via the S3 response-content-type parameter

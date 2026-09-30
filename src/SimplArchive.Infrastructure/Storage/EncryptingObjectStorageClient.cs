@@ -144,6 +144,35 @@ public sealed class EncryptingObjectStorageClient(
         // reads fine by the mixed-state contract. Server-side writers are already covered above.
         inner.GetPresignedUploadUrlAsync(objectKey, expiry, cancellationToken);
 
+    /// <summary>
+    /// The ciphertext address for the encryption service (ADR 0862) — and the ONE guard that keeps it from
+    /// becoming a plaintext door.
+    /// </summary>
+    /// <remarks>
+    /// Storage is mixed state by design (ADR 0818): an object either carries a wrapped DEK or is plaintext,
+    /// and the two live side by side in the same bucket. So a method named for ciphertext, called on a
+    /// plaintext object, would presign exactly what the strict tier refuses — and it would do so through the
+    /// one presign this decorator deliberately does NOT refuse.
+    /// <para>
+    /// It therefore throws rather than answering null. Null would be a shape the caller might "handle" by
+    /// falling back to a download URL; a throw says the caller asked for something that does not exist here.
+    /// The only consumer is the strict delivery path, which reaches this method having already read the
+    /// metadata that says the object IS encrypted, so a throw here means a real programming error.
+    /// </para>
+    /// </remarks>
+    public async Task<Uri> GetPresignedCiphertextUrlAsync(string objectKey, TimeSpan expiry, CancellationToken cancellationToken = default)
+    {
+        var info = await inner.GetObjectInfoAsync(objectKey, cancellationToken);
+        if (!info.Metadata.ContainsKey(WrappedDekKey))
+        {
+            throw new InvalidOperationException(
+                $"'{objectKey}' carries no {WrappedDekKey}, so it has no ciphertext to serve. Presigning it "
+                + "would hand out the plaintext this tier refuses (ADRs 0825/0862).");
+        }
+
+        return await inner.GetPresignedCiphertextUrlAsync(objectKey, expiry, cancellationToken);
+    }
+
     public async Task<Uri?> GetPresignedDownloadUrlAsync(string objectKey, TimeSpan expiry, string? downloadFileName = null, CancellationToken cancellationToken = default) =>
         await RefusedByStrictTierAsync(objectKey, cancellationToken) ? null
         : await SwapIfEncryptedAsync(objectKey, expiry, downloadFileName, contentType: null, inline: false, cancellationToken)

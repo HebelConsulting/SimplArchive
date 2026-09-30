@@ -24,6 +24,7 @@ public class S3ObjectStorageClient : IObjectStorageClient
     private readonly IAmazonS3 _presignClient;
     private readonly string _bucketPrefix;
     private readonly bool _presignUseHttp;
+    private readonly bool _internalPresignUseHttp;
     private readonly ILogger<S3ObjectStorageClient> _logger;
 
     public S3ObjectStorageClient(IOptions<ObjectStorageOptions> options, ILogger<S3ObjectStorageClient> logger)
@@ -52,6 +53,11 @@ public class S3ObjectStorageClient : IObjectStorageClient
 
         var publicServiceUrl = string.IsNullOrWhiteSpace(value.PublicServiceUrl) ? value.ServiceUrl : value.PublicServiceUrl;
         _presignUseHttp = publicServiceUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
+
+        // The INTERNAL scheme, kept separately: a ciphertext address is fetched by a sidecar on this network
+        // (ADR 0862), so it is signed for the internal endpoint — whose scheme can differ from the public
+        // one, which is exactly the split ADR 0213 exists for.
+        _internalPresignUseHttp = value.ServiceUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
 
         _internalClient = CreateClient(value.ServiceUrl, value, logger);
         _presignClient = ReferenceEquals(publicServiceUrl, value.ServiceUrl) || publicServiceUrl == value.ServiceUrl
@@ -212,6 +218,14 @@ public class S3ObjectStorageClient : IObjectStorageClient
     public async Task<Uri?> GetPresignedPreviewUrlAsync(string objectKey, TimeSpan expiry, string? fileName = null, string? contentType = null, CancellationToken cancellationToken = default)
         => await GetPresignedUrlAsync(objectKey, HttpVerb.GET, expiry, Disposition("inline", fileName), contentType, cancellationToken);
 
+    // The ciphertext address (ADR 0862). Signed INTERNALLY — the fetcher is a sidecar, and a URL signed for
+    // the browser's hostname is one it cannot resolve. This implementation cannot tell ciphertext from
+    // plaintext (it does not read the at-rest metadata); the DECORATOR enforces that, which is where the
+    // wrapped-DEK metadata is already understood.
+    public Task<Uri> GetPresignedCiphertextUrlAsync(string objectKey, TimeSpan expiry, CancellationToken cancellationToken = default)
+        => GetPresignedUrlAsync(objectKey, HttpVerb.GET, expiry, contentDisposition: null, contentType: null,
+            cancellationToken, signInternally: true);
+
     // Content-Disposition value for the response-content-disposition override. RFC 5987 filename* handles
     // spaces/unicode; NO space after the ';' — the SDK leaves a literal space unencoded in the query string,
     // producing a malformed URL (RFC 6266 allows it omitted). See ADR "Download filename from Short
@@ -219,7 +233,9 @@ public class S3ObjectStorageClient : IObjectStorageClient
     private static string Disposition(string type, string? fileName)
         => string.IsNullOrWhiteSpace(fileName) ? type : $"{type};filename*=UTF-8''{Uri.EscapeDataString(fileName)}";
 
-    private async Task<Uri> GetPresignedUrlAsync(string objectKey, HttpVerb verb, TimeSpan expiry, string? contentDisposition, string? contentType, CancellationToken cancellationToken)
+    private async Task<Uri> GetPresignedUrlAsync(
+        string objectKey, HttpVerb verb, TimeSpan expiry, string? contentDisposition, string? contentType,
+        CancellationToken cancellationToken, bool signInternally = false)
     {
         var request = new GetPreSignedUrlRequest
         {
@@ -230,7 +246,9 @@ public class S3ObjectStorageClient : IObjectStorageClient
             // GetPreSignedUrlRequest.Protocol defaults to HTTPS regardless of AmazonS3Config.UseHttp/
             // ServiceURL's own scheme — without setting it explicitly, a plain "http://" endpoint (e.g.
             // MinIO without TLS) still gets an "https://" presigned URL and fails to connect.
-            Protocol = _presignUseHttp ? Protocol.HTTP : Protocol.HTTPS,
+            Protocol = (signInternally ? _internalPresignUseHttp : _presignUseHttp)
+                ? Protocol.HTTP
+                : Protocol.HTTPS,
         };
 
         if (!string.IsNullOrWhiteSpace(contentDisposition))
@@ -243,7 +261,7 @@ public class S3ObjectStorageClient : IObjectStorageClient
             request.ResponseHeaderOverrides.ContentType = contentType;
         }
 
-        var url = await _presignClient.GetPreSignedURLAsync(request);
+        var url = await (signInternally ? _internalClient : _presignClient).GetPreSignedURLAsync(request);
         var uri = new Uri(url);
 
         // The one seam whose far side we NEVER see. Every other storage call goes through this process, so the

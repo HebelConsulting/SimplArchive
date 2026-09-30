@@ -98,6 +98,29 @@ public sealed class EncryptionServiceStub : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// The at-rest blob format both sides share — <c>nonce(12) ‖ ciphertext ‖ tag(16)</c>, AES-256-GCM.
+    /// </summary>
+    /// <remarks>
+    /// Written out here rather than referenced from Infrastructure on purpose: this stub stands in for a
+    /// SEPARATE product, and a stub that shared the core's own cipher helper would agree with it by
+    /// construction — including about a mistake. The format is three lines; an independent reading of it is
+    /// what makes the round trip mean something.
+    /// </remarks>
+    private static byte[] Decrypt(byte[] dek, byte[] blob)
+    {
+        const int nonce = 12;
+        const int tag = 16;
+        var plaintext = new byte[blob.Length - nonce - tag];
+        using var aes = new AesGcm(dek, tag);
+        aes.Decrypt(
+            nonce: blob.AsSpan(0, nonce),
+            ciphertext: blob.AsSpan(nonce, plaintext.Length),
+            tag: blob.AsSpan(blob.Length - tag),
+            plaintext: plaintext);
+        return plaintext;
+    }
+
     private async Task RespondAsync(HttpListenerContext context)
     {
         var path = context.Request.Url?.AbsolutePath ?? string.Empty;
@@ -127,6 +150,70 @@ public sealed class EncryptionServiceStub : IAsyncDisposable
             context.Response.StatusCode = (int)HttpStatusCode.OK;
             context.Response.ContentType = "application/octet-stream";
             await context.Response.OutputStream.WriteAsync(dek);
+            return;
+        }
+
+        if (path == "/api/decrypted-envelope" && context.Request.HttpMethod == "POST")
+        {
+            // DECRYPT-AND-ENVELOPE (core ADR 0862), done for real: unwrap, fetch the ciphertext from the
+            // address the core signed, decrypt, and envelope to every certificate named.
+            //
+            // It has to be real, because the desktop suite's point is that the CLIENT opens what the server
+            // served (ADR 0860) — a canned answer would prove the card can open a blob this stub invented.
+            using var reader = new StreamReader(context.Request.InputStream);
+            var body = JsonDocument.Parse(await reader.ReadToEndAsync()).RootElement;
+
+            var pems = body.GetProperty("recipientCertificatePems").EnumerateArray()
+                .Select(p => p.GetString()!).ToList();
+            if (pems.Count == 0)
+            {
+                context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+                return;
+            }
+
+            var dek = _kek.Decrypt(
+                Convert.FromBase64String(body.GetProperty("wrappedDek").GetString()!),
+                RSAEncryptionPadding.OaepSHA256);
+
+            using var fetcher = new HttpClient();
+            var blob = await fetcher.GetByteArrayAsync(body.GetProperty("ciphertextUrl").GetString()!);
+            var plaintext = Decrypt(dek, blob);
+
+            // The inner part, when named — the same assembly the real service performs (service ADR 0017).
+            var contentType = body.TryGetProperty("innerContentType", out var ct) ? ct.GetString() : null;
+            var disposition = body.TryGetProperty("innerContentDisposition", out var cd) ? cd.GetString() : null;
+            if (contentType is { Length: > 0 } || disposition is { Length: > 0 })
+            {
+                var headers = new System.Text.StringBuilder();
+                if (contentType is { Length: > 0 })
+                {
+                    headers.Append("Content-Type: ").Append(contentType).Append("\r\n");
+                }
+
+                if (disposition is { Length: > 0 })
+                {
+                    headers.Append("Content-Disposition: ").Append(disposition).Append("\r\n");
+                }
+
+                headers.Append("\r\n");
+                plaintext = [.. System.Text.Encoding.ASCII.GetBytes(headers.ToString()), .. plaintext];
+            }
+
+            var envelope = new System.Security.Cryptography.Pkcs.EnvelopedCms(
+                new System.Security.Cryptography.Pkcs.ContentInfo(plaintext));
+            var recipients = new System.Security.Cryptography.Pkcs.CmsRecipientCollection();
+            foreach (var pem in pems)
+            {
+                recipients.Add(new System.Security.Cryptography.Pkcs.CmsRecipient(
+                    System.Security.Cryptography.X509Certificates.X509Certificate2.CreateFromPem(pem)));
+            }
+
+            envelope.Encrypt(recipients);
+            var encoded = envelope.Encode();
+
+            context.Response.StatusCode = (int)HttpStatusCode.OK;
+            context.Response.ContentType = "application/pkcs7-mime";
+            await context.Response.OutputStream.WriteAsync(encoded);
             return;
         }
 

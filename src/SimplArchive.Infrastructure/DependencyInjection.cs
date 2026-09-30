@@ -342,6 +342,13 @@ public static class DependencyInjection
         // Registered unconditionally so controllers can inject it and ask (Enabled/GatedAsync answer
         // honestly either way); only the DECORATOR below is conditional.
         services.AddHttpClient(AtRestKeyService.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(10));
+        // A SEPARATE client for decrypt-and-envelope (ADR 0862), and the timeout is the whole reason it
+        // exists. The 10 seconds above is right for the oracle — 32 bytes in, 32 out — and far too short for
+        // an operation where the service fetches a whole document from storage, decrypts it and wraps a CMS
+        // envelope round it. Sharing the client would make every large document fail at ten seconds with a
+        // cancellation that names neither the size nor the timeout.
+        services.AddHttpClient(AtRestKeyService.EnvelopeHttpClientName,
+            client => client.Timeout = TimeSpan.FromMinutes(5));
         services.AddSingleton<AtRestKeyService>();
         // Singleton: it owns the one-sweep-at-a-time gate and the progress counters a status read reports.
         services.AddSingleton<KekRotationSweep>();

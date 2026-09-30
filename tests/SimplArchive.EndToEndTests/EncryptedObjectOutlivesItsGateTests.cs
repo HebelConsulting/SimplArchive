@@ -66,6 +66,44 @@ public class EncryptedObjectOutlivesItsGateTests
     }
 
     [Fact]
+    public async Task The_ciphertext_presign_REFUSES_a_plaintext_object_and_serves_an_encrypted_one()
+    {
+        // The one presign this decorator deliberately does NOT refuse (ADR 0862) — so it is the one that
+        // could reopen the door the tier closes. Storage is mixed state, so "the tenant is strict" says
+        // nothing about whether a given object is encrypted: a method named for ciphertext, called on
+        // plaintext, would hand out exactly what must never leave.
+        var tenantId = await _factory.SeedTenantNamedAsync($"Cipher{Guid.NewGuid():N}"[..24]);
+
+        using var scope = _factory.Services.CreateScope();
+        var storage = scope.ServiceProvider.GetRequiredService<IObjectStorageClient>();
+
+        var key = ObjectKeyBuilder.Build(tenantId, DateTimeOffset.UtcNow, Guid.NewGuid(), Guid.NewGuid(), ".txt");
+        await storage.PutObjectAsync(key, new MemoryStream(Encoding.ASCII.GetBytes("plaintext, no wrapped DEK\n")), "text/plain");
+
+        // Plaintext: REFUSED, and loudly. Not null — a null would be a shape the caller might "handle" by
+        // falling back to a download URL, which is how this becomes a door.
+        var refused = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => storage.GetPresignedCiphertextUrlAsync(key, TimeSpan.FromMinutes(2)));
+        Assert.Contains(EncryptingObjectStorageClient.WrappedDekKey, refused.Message, StringComparison.Ordinal);
+
+        // Now the same object as one written while the tenant encrypted — the anti-vacuous half, since a
+        // method that threw for everything would satisfy the assertion above.
+        await storage.SetObjectMetadataAsync(key, new Dictionary<string, string>
+        {
+            [EncryptingObjectStorageClient.WrappedDekKey] = Convert.ToBase64String(new byte[256]),
+            [EncryptingObjectStorageClient.KekGenerationKey] = "kek-v1",
+        });
+
+        var ciphertext = await storage.GetPresignedCiphertextUrlAsync(key, TimeSpan.FromMinutes(2));
+
+        // An ABSOLUTE storage address, unlike the download presign above, which swaps to the token door.
+        // That is the difference in one line: this one is for a sidecar to fetch the stored bytes, and the
+        // stored bytes are ciphertext.
+        Assert.True(ciphertext.IsAbsoluteUri, $"the service needs a fetchable address, got {ciphertext}");
+        Assert.DoesNotContain("/api/encrypted-content", ciphertext.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task The_same_holds_for_the_preview_url()
     {
         // Both presign methods short-circuited on the gate, and a fix applied to one of them would look
