@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text;
 using MailKit;
 using MailKit.Net.Imap;
@@ -62,6 +63,58 @@ public class ImapEnvelopeTests
         return (email, imapPassword, repoName);
     }
 
+    /// <summary>
+    /// A reader on the mail-enveloping tenant, with IMAP access and one document to fetch.
+    /// </summary>
+    /// <remarks>
+    /// The tenant is created here under the factory's declared name, which is the pattern that name exists
+    /// for — a MODE is read from configuration at startup, so it must be declared there, while the tenant
+    /// itself belongs to whichever test wants it. Several suites create `StrictTier`; each brings its own
+    /// users and documents, so they share only the name and the mode.
+    /// </remarks>
+    private async Task<(string Email, string ImapPassword, string Folder)> MailEnvelopingReaderAsync()
+    {
+        var tenantId = await _factory.SeedTenantNamedAsync(E2EApiFactory.StrictTenantName);
+        var email = $"imap-envelope-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, email, "ie-1234", "Envelope Reader", canManageRepositories: true);
+        using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, "ie-1234"));
+
+        var imapPassword = (await TestJson.Post(api, "/api/me/imap-access", new { }))
+            .GetProperty("password").GetString()!;
+
+        // SHOW ALL DOCUMENTS, or the mailbox is empty and this test fails for a reason that has nothing to
+        // do with envelopes. IMAP lists only e-mail documents by default (#562); everything else appears as
+        // a synthetic message carrying the file as an attachment, and it is that synthetic message the
+        // envelope hook wraps. The CryptoDemo seed this test used to borrow had already opted in, so moving
+        // off it made the choice this test's own — measured, not guessed: without it the fetch found 0
+        // messages in a folder that certainly had a document.
+        Assert.Equal(System.Net.HttpStatusCode.NoContent,
+            (await api.PutAsJsonAsync("/api/me/imap-access/settings", new { showAllDocuments = true })).StatusCode);
+
+        // A repository becomes a mailbox (ADR 0509's tree mirroring), so its NAME is the folder the client
+        // opens. Unique per run: the suite shares one installation, and a fixed name would make two runs of
+        // this test fetch each other's message.
+        var folder = $"EnvelopeMail-{Guid.NewGuid():N}"[..24];
+        var repoId = (await TestJson.Post(api, "/api/repositories", new { name = folder }))
+            .GetProperty("id").GetGuid();
+
+        // Content, not just a document row: the plaintext synthetic message carries the document as an
+        // attachment part, and the negative assertion below is that none of it survives the envelope. A
+        // contentless document would make that assertion pass for the wrong reason.
+        var docId = (await TestJson.Post(api, $"/api/documents/{repoId}/children", new { name = "sealed.txt" }))
+            .GetProperty("id").GetGuid();
+        var created = await TestJson.Post(api, $"/api/documents/{docId}/versions", new { fileExtension = ".txt" });
+        using (var storage = new HttpClient())
+        {
+            (await storage.PutAsync(created.GetProperty("uploadUrl").GetString()!,
+                new ByteArrayContent(Encoding.UTF8.GetBytes("the strict tenant's mail body")))).EnsureSuccessStatusCode();
+        }
+
+        await TestJson.Put(api, $"/api/documents/{docId}/versions/{created.GetProperty("id").GetGuid()}", new { });
+
+        return (email, imapPassword, folder);
+    }
+
     private async Task<string> FetchRawMessageAsync(string email, string imapPassword, string folderName)
     {
         var port = ((ImapServer)_factory.Services.GetService(typeof(ImapServer))!).BoundPort!.Value;
@@ -80,14 +133,25 @@ public class ImapEnvelopeTests
     }
 
     [Fact]
-    public async Task A_registered_recipient_in_the_listed_tenant_gets_the_enveloped_message()
+    public async Task A_registered_recipient_on_a_mail_enveloping_tenant_gets_the_enveloped_message()
     {
-        // florian is seeded by CryptoDemoSeeder with IMAP enabled and read rights on the tenant's root
-        // repository, which the seed also filled with documents — the kiosk's exact arrangement.
-        var email = CryptoUserEmail("florian");
+        // MOVED OFF THE `Storage` TENANT BY #1414 (ADR 0858). This used to run as florian on the seeded
+        // CryptoDemo tenant — `Storage` — because that was a mode which enveloped mail. It no longer is:
+        // enveloping mail is delivery, and `Storage` protects content at rest and nothing more. So the
+        // positive path moves to a tenant whose mode still envelopes mail.
+        //
+        // `StrictTier` rather than a third tenant name: it is already declared `Strict` in the factory for
+        // the strict-tier suites, `Strict` envelopes mail, and its shut plaintext doors are irrelevant here —
+        // IMAP is its own funnel, not one of those doors. Changing the CryptoDemo tenant's mode instead was
+        // measured and rejected: `AtRestEncryptionTests` asserts plaintext WebDAV reads and an
+        // `/api/encrypted-content` door on that tenant, and `Strict` refuses both.
+        //
+        // And this test SEEDS WHAT IT NEEDS rather than leaning on a shared seed, which is the house rule for
+        // anything that mutates — the CryptoDemo arrangement it used to borrow was somebody else's fixture.
+        var (email, imapPassword, folder) = await MailEnvelopingReaderAsync();
         _factory.RegisterEncryptionRecipient(email);
 
-        var raw = await FetchRawMessageAsync(email, E2EApiFactory.CryptoPassword, E2EApiFactory.CryptoTenantName);
+        var raw = await FetchRawMessageAsync(email, imapPassword, folder);
 
         // The stub's marker proves the served bytes came THROUGH the envelope hook — and nothing of the
         // plaintext may remain, because a hook that enveloped the body while some other FETCH view leaked

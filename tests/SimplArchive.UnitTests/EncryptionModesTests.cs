@@ -232,10 +232,13 @@ public class EncryptionModesTests
     [Theory]
     //                                        wraps  doors  envelopes  mail
     [InlineData(EncryptionMode.None, false, false, false, false)]
-    [InlineData(EncryptionMode.Storage, true, false, false, true)]
+    // mail FALSE since #1414: enveloping mail is delivery, and Storage protects content at rest and
+    // nothing more. This row used to read `true` — a Storage tenant received enveloped IMAP mail — and
+    // flipping it WITHDRAWS that (owner, 2026-09-30). The behaviour change is the point of the row.
+    [InlineData(EncryptionMode.Storage, true, false, false, false)]
     [InlineData(EncryptionMode.Strict, true, true, true, true)]
-    [InlineData(EncryptionMode.SealedDeliveryPermissive, false, false, true, false)]
-    [InlineData(EncryptionMode.SealedDeliveryStrict, false, true, true, false)]
+    [InlineData(EncryptionMode.SealedDeliveryPermissive, false, false, true, true)]
+    [InlineData(EncryptionMode.SealedDeliveryStrict, false, true, true, true)]
     public void Each_mode_answers_all_four_questions_explicitly(
         EncryptionMode mode, bool wraps, bool shutsDoors, bool envelopes, bool mail)
     {

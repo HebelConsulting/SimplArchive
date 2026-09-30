@@ -142,15 +142,22 @@ public sealed class EncryptionModes(IConfiguration configuration)
 
     /// <summary>True when IMAP serves messages enveloped to the recipient's certificate (ADR 0813).</summary>
     /// <remarks>
-    /// <b>This list is deliberately the AT-REST one, and that is wrong on purpose.</b> Enveloping mail is
-    /// delivery, so by ADR 0834 it belongs with the other delivery questions above — but it ships today gated
-    /// on the at-rest tiers, and moving it is a change to behaviour real installations use, tracked separately
-    /// as #1414 so it is not absorbed into a refactor. Naming it apart from <see cref="WrapsAtRest"/> is what
-    /// makes the discrepancy visible: the two happen to hold the same modes today and mean different things,
-    /// and a single predicate would have hidden that they are ever meant to differ.
+    /// <b>The DELIVERY set since #1414 — it used to be the at-rest one, and that was wrong on purpose.</b>
+    /// Enveloping mail is delivery, so by ADR 0834 it belongs with the other delivery questions above; it
+    /// shipped gated on the at-rest tiers, and moving it withdraws a capability real installations use, so it
+    /// waited for its own decision (owner, 2026-09-30: <c>Storage</c> tenants do not keep enveloped IMAP
+    /// mail). <c>Storage</c> protects content at rest and nothing more; a tenant that wants sealed mail asks
+    /// for a delivery tier.
+    /// </para>
+    /// <para>
+    /// <b>Still its own predicate, now that it holds the same modes as <see cref="DeliversEnvelopes"/>.</b>
+    /// Kept apart deliberately (owner, 2026-09-30): they answer different questions — mail versus documents —
+    /// and could legitimately diverge again, and it was precisely this predicate being visibly separate that
+    /// surfaced the discrepancy #1414 existed to settle. Collapsing them into one would hide the next one.
     /// </remarks>
     public bool EnvelopesMail(string tenantName) =>
-        ModeFor(tenantName) is EncryptionMode.Storage or EncryptionMode.Strict;
+        ModeFor(tenantName) is EncryptionMode.Strict
+            or EncryptionMode.SealedDeliveryPermissive or EncryptionMode.SealedDeliveryStrict;
 
     /// <summary>
     /// Refuses to start while a retired key is still present, naming what to write instead.

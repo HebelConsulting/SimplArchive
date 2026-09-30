@@ -33,15 +33,22 @@ public class MessageEnvelopeClientTests
     {
         // ADR 0825: a mode per tenant. No named tenants means the installation default covers everything,
         // which is the successor to the old "empty list means every tenant".
+        //
+        // `Strict` rather than `Storage` since #1414 (ADR 0858). These tests are about the CLIENT — route
+        // escaping, the registry miss, the case-insensitive tenant match — and only needed *a mode that
+        // envelopes mail*. `Storage` was that mode and is not any more: enveloping mail is delivery, so
+        // Storage protects content at rest and nothing else. Picking the mode by what these tests actually
+        // require keeps them testing the client rather than quietly re-asserting the mode table, which
+        // `Each_mode_answers_all_four_questions_explicitly` owns.
         var settings = new Dictionary<string, string?> { ["Encryption:ServiceUrl"] = serviceUrl };
         if (tenants.Length == 0)
         {
-            settings["Encryption:DefaultMode"] = "Storage";
+            settings["Encryption:DefaultMode"] = "Strict";
         }
 
         foreach (var tenant in tenants)
         {
-            settings[$"Encryption:Modes:{tenant}"] = "Storage";
+            settings[$"Encryption:Modes:{tenant}"] = "Strict";
         }
 
         return new(new StubFactory(handler),
