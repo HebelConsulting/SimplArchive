@@ -37,5 +37,10 @@ public static class ModuleAbiVersion
     /// only an additive ABI makes the promise itself true. 0.21 is best treated as withdrawn.
     /// </para>
     /// </remarks>
-    public const int Minor = 2;
+    /// <para>
+    /// 1.3 adds <see cref="IIndustryModule.PerUserCertificateEnrolment"/> — a DEFAULT-IMPLEMENTED property
+    /// returning null, which is the additive shape this doc demands: every module built against 1.2 or
+    /// earlier compiles and runs unchanged, and one that wants the surface opts in (core #1502).
+    /// </para>
+    public const int Minor = 3;
 }

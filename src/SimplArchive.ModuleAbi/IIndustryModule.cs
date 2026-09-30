@@ -129,6 +129,23 @@ public interface IIndustryModule
     IReadOnlyList<ModuleRootLink> RootLinks => [];
 
     /// <summary>
+    /// Whether a PERSON may enrol their own credential through this module, and where (ABI 1.3, core #1502).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Null — the default — means the module offers no such surface, which is every module today. A module
+    /// that declares one gets a dialog in BOTH clients, rendered by the core: the module cannot contribute UI
+    /// (ADR 0737), so without this its endpoint is reachable only by a hand-written request, and a tenant
+    /// switching the gating setting ON enables something no client can find.
+    /// </para>
+    /// <para>
+    /// A DEFAULT-IMPLEMENTED property, so every module built against an earlier ABI compiles and runs
+    /// unchanged — which is what makes this a minor rather than a major (see <see cref="ModuleAbiVersion"/>).
+    /// </para>
+    /// </remarks>
+    PerUserEnrolment? PerUserCertificateEnrolment => null;
+
+    /// <summary>
     /// The external hosts this module's <see cref="IModuleHttpClient"/> may reach (ABI 0.6) — the allowlist
     /// the core's SSRF policy (ADR 0717) enforces on every request the module makes. A host not named here
     /// is refused before any request leaves the process, so a module's network egress is declared up front
