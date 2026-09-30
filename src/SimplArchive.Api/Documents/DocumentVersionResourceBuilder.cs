@@ -72,11 +72,20 @@ public sealed class DocumentVersionResourceBuilder(
             // And they are emitted ONLY when this reader has a usable certificate. A rel that is always
             // present and sometimes fails is the lying affordance 0543 exists to prevent; absent, it means
             // exactly "not available to you, here, now", and the client offers enrolment instead of a button.
+            // BOTH QUESTIONS, ASKED SEPARATELY (#1512, ADR 0865). Delivery says what an ADDITIONAL door
+            // offers; only the DOOR posture closes one. Reading `enveloping` as "and therefore no plaintext"
+            // made SealedDeliveryPermissive indistinguishable from Strict for a browser — which cannot follow
+            // the enveloped route at all (it authorizes by header, and the content funnel sends no bearer), so
+            // the measured symptom was five 401s and no preview, on the one tier whose definition is that its
+            // ordinary doors keep serving.
             enveloping = await envelopes.AppliesAsync(cancellationToken);
-            var canEnvelope = enveloping
-                && (await envelopes.ReaderCertificatePemsAsync(cancellationToken)).Count > 0;
+            var doors = ContentDoors.For(
+                deliversEnvelopes: enveloping,
+                hasReaderCertificate: enveloping
+                    && (await envelopes.ReaderCertificatePemsAsync(cancellationToken)).Count > 0,
+                refusesPlaintextDoors: await envelopes.RefusesPlaintextDoorsAsync(cancellationToken));
 
-            if (canEnvelope)
+            if (doors.Enveloped)
             {
                 var enveloped = $"/api/documents/{version.DocumentId}/versions/{version.Id}/enveloped-content";
                 links.Add(new Link("download", enveloped, "GET"));
@@ -99,13 +108,25 @@ public sealed class DocumentVersionResourceBuilder(
                 var displayKey = await previews.GetDisplayObjectKeyAsync(version.ObjectKey, cancellationToken);
                 previewConverted = !string.Equals(displayKey, version.ObjectKey, StringComparison.Ordinal);
             }
-            // No URL means the strict tier will not serve these bytes as plaintext (#1376), so the rel is
-            // OMITTED rather than the resource failing — ADR 0543: a missing rel means "not available to you,
-            // here, now", and the client disables the affordance instead of trying. The document's metadata
-            // still renders, which is the whole reason the seam answers null rather than throwing.
-            else if (await storage.GetPresignedDownloadUrlAsync(version.ObjectKey, PresignedUrlExpiry, downloadFileName, cancellationToken) is { } downloadUrl)
+            // THE PLAINTEXT DOOR, wherever this tenant's doors serve — which is every tier but the two that
+            // refuse, and on a permissive tenant that means BESIDE the enveloped pair above rather than
+            // instead of it (`plain-download`, ADR 0865). A client that cannot open a CMS envelope follows
+            // this one; the desktop keeps following `download`.
+            //
+            // GATED ON THE DOOR QUESTION, not on `!doors.Enveloped`, and that is not merely tidier: the
+            // presign refusal lives in EncryptingObjectStorageClient, which is registered ONLY when
+            // `Encryption:ServiceUrl` is set — while SealedDeliveryStrict needs no service at all. So a
+            // strict-delivery tenant configured without one was handed a real presigned PLAINTEXT rel, with
+            // this layer's predicate as the only guard and nothing asking it.
+            //
+            // A null URL still means the seam refused (#1376), so the rel is OMITTED rather than the resource
+            // failing — ADR 0543: a missing rel means "not available to you, here, now", and the client
+            // disables the affordance instead of trying. The document's metadata still renders, which is the
+            // whole reason the seam answers null rather than throwing.
+            if (doors.Plaintext
+                && await storage.GetPresignedDownloadUrlAsync(version.ObjectKey, PresignedUrlExpiry, downloadFileName, cancellationToken) is { } downloadUrl)
             {
-                links.Add(new Link("download", downloadUrl.ToString(), "GET"));
+                links.Add(new Link(doors.DownloadRel, downloadUrl.ToString(), "GET"));
             }
 
             // Inline-disposition URL the workbench preview renders in place — see ADR "Repositories
@@ -116,12 +137,17 @@ public sealed class DocumentVersionResourceBuilder(
             // than a blank pane (ADR "Preview fallback when a rendition can't be produced").
             // The preview rel was already added above for an enveloped reader — pointing at the same route with
             // an inline disposition, because what differs between "open it" and "save it" is the disposition
-            // and not the bytes.
-            if (!canEnvelope
+            // and not the bytes. On a permissive tenant BOTH are advertised, so this one becomes
+            // `plain-preview` and the two resolutions are both paid; they ask the same display-object
+            // question, so the badge cannot disagree between them.
+            if (doors.Plaintext
                 && await previews.GetPreviewUrlAsync(version.ObjectKey, PresignedUrlExpiry, downloadFileName, cancellationToken) is { } preview)
             {
-                links.Add(new Link("preview", preview.Url.ToString(), "GET"));
-                previewConverted = preview.IsConverted;
+                links.Add(new Link(doors.PreviewRel, preview.Url.ToString(), "GET"));
+                if (!doors.Enveloped)
+                {
+                    previewConverted = preview.IsConverted;
+                }
             }
 
             // Per-page word boxes for search hit-overlay (ADR "Search hit overlay"). A static link — the
@@ -138,11 +164,15 @@ public sealed class DocumentVersionResourceBuilder(
             // layout from the bytes it already decrypted (ADR 0830).
             //
             // The DOOR question, not the delivery one, and the same predicate the endpoint refuses on —
-            // `RefuseIfStrictAsync` asks `RefusesPlaintextDoorsAsync`. Gating on `canEnvelope` instead would
+            // `RefuseIfStrictAsync` asks `RefusesPlaintextDoorsAsync`. Gating on the ENVELOPE instead would
             // withhold it on a SealedDeliveryPermissive tenant whose other doors serve, and keep it on a
             // reader with no certificate whose request still refuses: advertising and accepting have to be
             // the same list, or fixing one half is worse than fixing neither.
-            if (!await envelopes.RefusesPlaintextDoorsAsync(cancellationToken))
+            //
+            // Read from `doors` rather than asked again (ADR 0865): this overlay IS a plaintext door, so it
+            // is the same predicate as the pair above, and one answer serving both is what stops the two
+            // drifting into disagreement about the same tenant.
+            if (doors.Plaintext)
             {
                 links.Add(new Link("text-layout", $"/api/documents/{version.DocumentId}/versions/{version.Id}/text-layout", "GET"));
             }

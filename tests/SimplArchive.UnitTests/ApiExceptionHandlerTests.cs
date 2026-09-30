@@ -87,6 +87,56 @@ public class ApiExceptionHandlerTests
         Assert.Equal(StatusCodes.Status500InternalServerError, context.Response.StatusCode);
     }
 
+    [Fact]
+    public async Task A_data_key_the_service_cannot_unwrap_is_NAMED_rather_than_reported_as_unexpected()
+    {
+        // #1511, measured live: the token door answered `500 INTERNAL_ERROR` / "An unexpected error occurred."
+        // while the encryption service had already said `400 "The wrapped DEK is not usable." —
+        // CKR_ENCRYPTED_DATA_INVALID`, which is a complete diagnosis of a re-minted KEK (#1510). Recovering it
+        // afterwards cost a full scan of the object store and a hand-built oracle round trip.
+        //
+        // It stays a 500 — nothing the caller did is wrong and there is nothing for them to correct, so
+        // passing the service's 4xx through would blame the reader. What changes is that the reader now has a
+        // code to quote and the log carries the service's own words.
+        var (handler, context, body) = Build(aborted: false);
+
+        var handled = await handler.TryHandleAsync(
+            context,
+            new SimplArchive.Infrastructure.Storage.AtRestKeyRefusedException(
+                "unwrap a data key wrapped under kek-v1", 400, "The wrapped DEK is not usable."),
+            default);
+
+        Assert.True(handled);
+        Assert.Equal(StatusCodes.Status500InternalServerError, context.Response.StatusCode);
+
+        var written = ReadBody(body);
+        Assert.Contains("AT_REST_KEY_UNUSABLE", written);
+        Assert.DoesNotContain("INTERNAL_ERROR", written);
+
+        // And never the service's internals on the wire: a PKCS#11 return code is an administrator's
+        // diagnostic, it is not localized, and a reader can do nothing with it.
+        Assert.DoesNotContain("CKR_", written);
+    }
+
+    [Fact]
+    public async Task A_key_service_that_is_DOWN_stays_a_retryable_503()
+    {
+        // The distinction the single bare EnsureSuccessStatusCode destroyed, and the reason this exception
+        // splits on 4xx/5xx at all: one of these is permanent and one recovers, and telling a reader to "try
+        // again shortly" is right for exactly one of them.
+        var (handler, context, body) = Build(aborted: false);
+
+        var handled = await handler.TryHandleAsync(
+            context,
+            new SimplArchive.Infrastructure.Storage.AtRestKeyRefusedException(
+                "unwrap a data key wrapped under kek-v1", 503, "upstream unavailable"),
+            default);
+
+        Assert.True(handled);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, context.Response.StatusCode);
+        Assert.Contains("AT_REST_KEY_SERVICE_UNAVAILABLE", ReadBody(body));
+    }
+
     private static string ReadBody(MemoryStream body)
     {
         body.Position = 0;

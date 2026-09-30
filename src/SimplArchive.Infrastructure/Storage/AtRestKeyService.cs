@@ -36,7 +36,7 @@ public sealed class AtRestKeyService(
     public const string EnvelopeHttpClientName = "at-rest-envelope";
 
     private sealed record Kek(string Generation, RSA PublicKey, string PublicKeyPem, string OaepHash,
-        RSAEncryptionPadding Padding, DateTimeOffset FetchedAt);
+        RSAEncryptionPadding Padding, string Thumbprint, DateTimeOffset FetchedAt);
 
     /// <summary>What an encrypting CLIENT needs to wrap against (ADR 0818/B2): generation, SPKI PEM, and
     /// the OAEP hash both sides must use — the initiate-upload response carries this on gated tenants.</summary>
@@ -111,8 +111,13 @@ public sealed class AtRestKeyService(
     public async Task<(string Current, IReadOnlyList<string> All)> GenerationsAsync(CancellationToken cancellationToken)
     {
         var client = httpClientFactory.CreateClient(HttpClientName);
-        var json = await client.GetFromJsonAsync<JsonElement>(
-            $"{ServiceUrl}/api/kek/generations", cancellationToken);
+
+        // Read explicitly rather than with GetFromJsonAsync, which throws on a non-success status while
+        // discarding the body — the same loss the key calls below used to take (#1511), and worse here
+        // because this is the first thing the rotation runbook asks.
+        using var response = await client.GetAsync($"{ServiceUrl}/api/kek/generations", cancellationToken);
+        await RefuseAsync(response, "list the KEK generations", cancellationToken);
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
         return (json.GetProperty("current").GetString()!,
             [.. json.GetProperty("generations").EnumerateArray().Select(g => g.GetString()!)]);
     }
@@ -122,7 +127,7 @@ public sealed class AtRestKeyService(
     {
         var client = httpClientFactory.CreateClient(HttpClientName);
         using var response = await client.PostAsync($"{ServiceUrl}/api/kek/rotate", null, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await RefuseAsync(response, "mint the next KEK generation", cancellationToken);
         var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
 
         // The cached KEK is now stale by construction — drop it so the very next write wraps against the
@@ -141,7 +146,7 @@ public sealed class AtRestKeyService(
         var client = httpClientFactory.CreateClient(HttpClientName);
         using var response = await client.PostAsJsonAsync($"{ServiceUrl}/api/rewrapped-dek",
             new { wrappedDek = wrappedDekBase64, fromGeneration }, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await RefuseAsync(response, $"re-wrap a data key out of {fromGeneration}", cancellationToken);
         var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
         return (json.GetProperty("wrappedDek").GetString()!, json.GetProperty("kekGeneration").GetString()!);
     }
@@ -151,7 +156,7 @@ public sealed class AtRestKeyService(
     {
         var client = httpClientFactory.CreateClient(HttpClientName);
         using var response = await client.DeleteAsync($"{ServiceUrl}/api/kek/{generation}", cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await RefuseAsync(response, $"retire KEK generation {generation}", cancellationToken);
     }
 
     private string ServiceUrl => configuration["Encryption:ServiceUrl"]!.TrimEnd('/');
@@ -168,7 +173,25 @@ public sealed class AtRestKeyService(
         using var response = await client.PostAsJsonAsync(
             $"{ServiceUrl}/api/unwrapped-dek",
             new { wrappedDek = wrappedDekBase64, kekGeneration = generation }, cancellationToken);
-        response.EnsureSuccessStatusCode();
+
+        // THE SERVICE'S OWN DIAGNOSIS, KEPT (#1511). `EnsureSuccessStatusCode()` stood here and discarded
+        // both the status and the body, so the token door answered `500 INTERNAL_ERROR` / "An unexpected
+        // error occurred." while the service had said, precisely, `400 "The wrapped DEK is not usable." —
+        // CKR_ENCRYPTED_DATA_INVALID`. That is a complete diagnosis of a re-minted KEK (#1510), and
+        // recovering it afterwards cost a full scan of the object store.
+        //
+        // The generation is named because it is the one thing that makes the line actionable: the label is
+        // all a generation HAS for an identity, so "kek-v1 refused this object" is the sentence that says a
+        // second key has worn that name.
+        // NAMING THE KEY WE HOLD FOR THAT LABEL, from the cache only — never a fresh fetch, which would add
+        // an outbound call inside a failure path and could fail in its own right. When it is warm this is the
+        // line that identifies the fault outright: "kek-v1 refused this object, and the key we hold for
+        // kek-v1 is <thumbprint>" is a re-minted token, said in one sentence (#1510).
+        var held = _kek is { } current && current.Generation == generation
+            ? $"{generation} (the key we hold for it is {current.Thumbprint})"
+            : generation;
+
+        await RefuseAsync(response, $"unwrap a data key wrapped under {held}", cancellationToken);
         var dek = await response.Content.ReadAsByteArrayAsync(cancellationToken);
 
         if (_deks.Count >= DekCacheCap)
@@ -250,6 +273,40 @@ public sealed class AtRestKeyService(
     }
 
     /// <summary>
+    /// Logs and throws when the service refused a KEY call; a no-op on success (#1511).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// One helper rather than five copies, because five copies is how one of them keeps the bare
+    /// <c>EnsureSuccessStatusCode()</c> — which is exactly what happened: ADR 0862 removed the discard from
+    /// <see cref="DecryptedEnvelopeAsync"/> and left it in the four key calls and the oracle beside it.
+    /// </para>
+    /// <para>
+    /// The envelope call deliberately does <b>not</b> route through here: its refusal is caught and
+    /// translated by <c>StrictEnvelopeDelivery</c>, which needs a different exception type, and its log line
+    /// says something this one cannot (which recipient certificate could not be addressed).
+    /// </para>
+    /// </remarks>
+    private async Task RefuseAsync(
+        HttpResponseMessage response, string operation, CancellationToken cancellationToken)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var detail = await ProblemDetailAsync(response, cancellationToken);
+        logger.LogError(
+            "The encryption service refused to {Operation}: {Status} {Detail}. This is {Whose} — a 4xx names "
+            + "something about the request or about what we stored (a data key that does not match the key "
+            + "its generation now holds) and retrying will answer the same way.",
+            operation, (int)response.StatusCode, detail,
+            (int)response.StatusCode < 500 ? "OURS" : "the service's");
+
+        throw new AtRestKeyRefusedException(operation, (int)response.StatusCode, detail);
+    }
+
+    /// <summary>
     /// The service's own words for a refusal — the problem document's <c>detail</c>, else its whole body.
     /// </summary>
     /// <remarks>
@@ -294,6 +351,18 @@ public sealed class AtRestKeyService(
     private static string Truncated(string text) =>
         text.Length <= 500 ? text : $"{text[..500]}…";
 
+    /// <summary>
+    /// Which KEY a generation is — SHA-256 over its SPKI DER, hex (#1510, Service ADR 0019).
+    /// </summary>
+    /// <remarks>
+    /// The same derivation the service publishes as <c>thumbprint</c>, over the same SubjectPublicKeyInfo, so
+    /// the two sides' log lines are comparable by eye. A public key's fingerprint is derived from material the
+    /// service hands out on request, so it is safe to log — which is the point, since comparing two of them
+    /// across restarts is the whole mechanism.
+    /// </remarks>
+    private static string ThumbprintOf(RSA publicKey) =>
+        Convert.ToHexStringLower(SHA256.HashData(publicKey.ExportSubjectPublicKeyInfo()));
+
     private async Task<Kek> CurrentKekAsync(CancellationToken cancellationToken)
     {
         if (_kek is { } kek && DateTimeOffset.UtcNow - kek.FetchedAt < KekTtl)
@@ -310,8 +379,9 @@ public sealed class AtRestKeyService(
             }
 
             var client = httpClientFactory.CreateClient(HttpClientName);
-            var json = await client.GetFromJsonAsync<JsonElement>(
-                $"{ServiceUrl}/api/kek/current", cancellationToken);
+            using var response = await client.GetAsync($"{ServiceUrl}/api/kek/current", cancellationToken);
+            await RefuseAsync(response, "fetch the current KEK", cancellationToken);
+            var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
             var publicKey = RSA.Create();
             publicKey.ImportFromPem(json.GetProperty("publicKeyPem").GetString()!);
             // The service publishes the OAEP hash BOTH sides must use (SimplArchiveEncryptionService ADR 0011):
@@ -321,10 +391,21 @@ public sealed class AtRestKeyService(
                 : RSAEncryptionPadding.OaepSHA256;
             var loaded = new Kek(json.GetProperty("generation").GetString()!, publicKey,
                 json.GetProperty("publicKeyPem").GetString()!, json.GetProperty("oaepHash").GetString()!,
-                padding, DateTimeOffset.UtcNow);
+                padding, ThumbprintOf(publicKey), DateTimeOffset.UtcNow);
             _kek = loaded;
-            logger.LogInformation("At-rest KEK loaded: generation {Generation}, OAEP {Hash}.",
-                loaded.Generation, loaded.OaepHash);
+
+            // THE KEY, NOT JUST ITS LABEL (#1510, Service ADR 0019). A generation's label is all an object
+            // records, and a re-provisioned token mints a fresh `kek-v1` that is locally correct and orphans
+            // everything the previous one wrapped — measured: five objects unreadable, two of them WORM audit
+            // segments, discovered only as CKR_ENCRYPTED_DATA_INVALID on a read. This line is where the swap
+            // becomes a grep across two restarts instead of a scan of the whole store.
+            //
+            // Derived here rather than read from the response's `thumbprint`, deliberately: computing it from
+            // the PEM we actually wrap against means the value describes the key THIS process will use. A
+            // field taken on trust would still match while we wrapped with something else.
+            logger.LogInformation(
+                "At-rest KEK loaded: generation {Generation}, key {Thumbprint}, OAEP {Hash}.",
+                loaded.Generation, loaded.Thumbprint, loaded.OaepHash);
             return loaded;
         }
         finally

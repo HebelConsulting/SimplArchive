@@ -58,6 +58,13 @@ public class ApiExceptionHandler : IExceptionHandler
             // module case above exists, and the same wire shape.
             SimplArchive.Application.Abstractions.PlaintextContentRefusedException plaintext =>
                 (plaintext.ErrorCode, plaintext.StatusCode, plaintext.Message),
+            // The encryption service refusing a KEY call (#1511, ADR 0865). Same reason as the two cases
+            // above — thrown from the storage seam, which cannot reference this project's exception types —
+            // and reachable from every controller that reads through that seam, so there is no one place a
+            // translation could sit. Without this the at-rest read path answered INTERNAL_ERROR while the
+            // service had already named the cause, and the log line below is what carries its words.
+            SimplArchive.Infrastructure.Storage.AtRestKeyRefusedException key =>
+                (key.ErrorCode, key.ApiStatusCode, key.ApiDetail),
             _ => ("INTERNAL_ERROR", StatusCodes.Status500InternalServerError, "An unexpected error occurred."),
         };
 

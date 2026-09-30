@@ -29,6 +29,33 @@ public static class Links
     }
 
     /// <summary>
+    /// The PLAINTEXT content address where the server offers one, else whatever <paramref name="rel"/> is
+    /// (ADR 0865) — this client's fixed preference between the two doors an enveloping tenant advertises.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A browser cannot open a CMS envelope by construction (ADR 0830), so on a tenant that delivers
+    /// envelopes <c>download</c>/<c>preview</c> point at an address this client can do nothing with — and
+    /// cannot even fetch, since that route authorizes by header while the content path carries no bearer.
+    /// Measured live on a <c>SealedDeliveryPermissive</c> tenant: five 401s and no preview, on the one tier
+    /// whose definition is that its ordinary doors keep serving. So the server advertises
+    /// <c>plain-download</c>/<c>plain-preview</c> beside them there, and this client always prefers those,
+    /// while the desktop always prefers the envelope.
+    /// </para>
+    /// <para>
+    /// Falling back to the bare rel is the <c>Strict</c> case, where no plaintext pair exists and the honest
+    /// answer really is "use the desktop client" — which the caller then produces, because no URL arrived. So
+    /// the fallback is not a safety net, it is the other tier.
+    /// </para>
+    /// <para>
+    /// Here rather than at the call site so the chain is read ONCE: a preference evaluated in two places is
+    /// one that drifts, and the drift shows up as a pane that previews but cannot download.
+    /// </para>
+    /// </remarks>
+    public static string? PlaintextFirst(List<LinkResponse>? links, string rel) =>
+        Href(links, $"plain-{rel}") ?? Href(links, rel);
+
+    /// <summary>
     /// A rel → href map for a resource's advertised links, so a caller can carry a row's ADDRESSES rather than
     /// its id alone (ADR 0555). Returns <c>null</c> when the resource advertised nothing, which is meaningful:
     /// it means no action is available here, not that the map is empty by accident.

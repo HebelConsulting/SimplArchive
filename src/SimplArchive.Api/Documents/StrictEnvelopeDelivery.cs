@@ -56,6 +56,11 @@ public sealed class StrictEnvelopeDelivery(
     private bool _asked;
     private IReadOnlyList<string> _certificates = [];
 
+    // Null is a real answer here too (no tenant, or a tenant row that is gone), so the fact of having asked
+    // is again its own flag rather than being inferred from the value.
+    private bool _namedTenant;
+    private string? _tenantName;
+
     // WHY the set is what it is, remembered beside it (#1411, ADR 0859). The rel decision only needs the
     // set — absent is absent, whatever the cause — but the REFUSAL needs the cause, or a reader whose
     // installation is broken is told to register a certificate they already have.
@@ -95,17 +100,34 @@ public sealed class StrictEnvelopeDelivery(
 
     /// <summary>This request's tenant NAME, which is what the mode map and the registry are both keyed by.</summary>
     /// <remarks>
+    /// <para>
     /// One query rather than two spellings of it: the mode lookup and the certificate registry ask the same
     /// question, and a second copy is how they would come to disagree about which tenant this is.
+    /// </para>
+    /// <para>
+    /// MEMOISED FOR THE REQUEST, like the certificate set above and for the same reason — this class is
+    /// registered scoped and a request's tenant cannot change underneath it. It matters now that both
+    /// membership questions are asked PER VERSION (ADR 0865): a versions dialog would otherwise spend two
+    /// indexed reads per row re-learning the name of the tenant it is already scoped to.
+    /// </para>
     /// </remarks>
-    private async Task<string?> TenantNameAsync(CancellationToken cancellationToken) =>
-        tenant.TenantId is not { } tenantId
+    private async Task<string?> TenantNameAsync(CancellationToken cancellationToken)
+    {
+        if (_namedTenant)
+        {
+            return _tenantName;
+        }
+
+        _tenantName = tenant.TenantId is not { } tenantId
             ? null
             : await dbContext.Tenants
                 .IgnoreQueryFilters(["TenantFilter"])
                 .Where(t => t.Id == tenantId)
                 .Select(t => t.Name)
                 .FirstOrDefaultAsync(cancellationToken);
+        _namedTenant = true;
+        return _tenantName;
+    }
 
     /// <summary>
     /// Refuses when this tenant serves no readable content and the door cannot carry an envelope.
