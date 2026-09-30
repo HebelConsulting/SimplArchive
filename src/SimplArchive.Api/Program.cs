@@ -270,6 +270,7 @@ builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentPurger>();
 // The caller-facing access questions every Document-scope controller asks (issue #466) — one implementation
 // where each controller used to carry its own copy of GetCallerRightsAsync.
 builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentAccessService>();
+builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentVersionAccess>();
 
 // One named verb contract per concurrency-tracked entity (ADR 0795). They are what a controller TAKES in order
 // to mutate that entity, so a mutation that writes one without taking its contract is visible here and

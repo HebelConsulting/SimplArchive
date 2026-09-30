@@ -38,6 +38,7 @@ public class CheckoutsController : ControllerBase
     private readonly IUserSystemRightsResolver _userSystemRights;
     private readonly IDocumentVersionComparer _comparer;
     private readonly IDocumentPreviewService _documentPreviewService;
+    private readonly Documents.StrictEnvelopeDelivery _strictEnvelopes;
 
     public CheckoutsController(
         SimplArchiveDbContext dbContext,
@@ -50,6 +51,7 @@ public class CheckoutsController : ControllerBase
         IUserSystemRightsResolver userSystemRights,
         IDocumentVersionComparer comparer,
         IDocumentPreviewService documentPreviewService,
+        Documents.StrictEnvelopeDelivery strictEnvelopes,
         Concurrency.DocumentVerbs documents)
     {
         _dbContext = dbContext;
@@ -63,6 +65,7 @@ public class CheckoutsController : ControllerBase
         _userSystemRights = userSystemRights;
         _comparer = comparer;
         _documentPreviewService = documentPreviewService;
+        _strictEnvelopes = strictEnvelopes;
     }
 
     // The per-user working-copy stash key (ADR "Check-out working-copy stash + exit guard"): a durable home for
@@ -194,6 +197,15 @@ public class CheckoutsController : ControllerBase
             return Ok(new CheckoutComparisonResource { Available = false, Links = [selfLink] });
         }
 
+        // Refused where the tenant's doors refuse plaintext (#1485, ADR 0861). The same disclosure as the
+        // version comparison and by the same code — both sides' full plain text — with the working copy in
+        // place of the second version, which makes no difference to what leaves the building.
+        //
+        // AFTER the no-stash answer above on purpose: "you have saved nothing to compare" is true regardless
+        // of the tier and costs nothing to say, while refusing first would answer a question the caller did
+        // not ask.
+        await _strictEnvelopes.RefuseIfStrictAsync("comparing the working copy", cancellationToken);
+
         // The stash key is extensionless (ADR 0517) — hint the current version's extension so a text-file working
         // copy decodes directly rather than depending on Tika.
         var comparison = await _comparer.CompareAsync(version.ObjectKey, stashKey, System.IO.Path.GetExtension(version.ObjectKey), cancellationToken);
@@ -215,9 +227,21 @@ public class CheckoutsController : ControllerBase
         }
 
         var document = await _dbContext.Documents.SingleOrDefaultAsync(d => d.Id == documentId, cancellationToken);
-        return document is null ? NotFound()
-            : document.CheckedOutByUserId == userId ? NoContent()
-            : Forbid();
+        if (document is null)
+        {
+            return NotFound();
+        }
+
+        if (document.CheckedOutByUserId != userId)
+        {
+            return Forbid();
+        }
+
+        // Refuses where the GET refuses, so the companion cannot report a comparison as available that the
+        // GET will not hand over.
+        await _strictEnvelopes.RefuseIfStrictAsync("comparing the working copy", cancellationToken);
+
+        return NoContent();
     }
 
     private async Task<List<CheckoutResource>> BuildAsync(CancellationToken cancellationToken)
@@ -226,6 +250,10 @@ public class CheckoutsController : ControllerBase
         {
             return [];
         }
+
+        // Asked ONCE for the page, not per row: it is a tenant-wide question, and the tenant is the same for
+        // every row in a listing of the caller's own check-outs.
+        var refusesPlaintextDoors = await _strictEnvelopes.RefusesPlaintextDoorsAsync(cancellationToken);
 
         var docs = await _dbContext.Documents
             .Where(d => d.CheckedOutByUserId == userId)
@@ -303,7 +331,13 @@ public class CheckoutsController : ControllerBase
                     new Link("extend", $"/api/documents/{d.Id}/checkout/extend", "POST"),
                     // The working copy against the current version (ADR 0517) — a rel, so the compare dialog
                     // stops rebuilding /checkouts/{id}/compare from an id it was handed (issue #416).
-                    new Link("compare", $"/api/documents/{d.Id}/checkout/compare", "GET"),
+                    //
+                    // Withheld where that endpoint refuses (#1485, ADR 0861) — a comparison is both sides'
+                    // full plain text, so the rel has to be absent on a tenant whose doors refuse it rather
+                    // than advertise a Compare button that answers 409.
+                    .. refusesPlaintextDoors
+                        ? []
+                        : new[] { new Link("compare", $"/api/documents/{d.Id}/checkout/compare", "GET") },
                     // An inline preview of the WORKING COPY — what you are about to check in, not what is
                     // archived. Advertised only when a stash exists, because a check-out with nothing saved
                     // to it has no working copy to show and a rel that 404s is worse than no rel (ADR 0543).

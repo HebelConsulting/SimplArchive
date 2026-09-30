@@ -162,6 +162,86 @@ public class StrictEnvelopedReadTests
         Assert.DoesNotContain(Marker, body, StringComparison.Ordinal);
     }
 
+    // ---- Comparing versions (#1485, ADR 0861) --------------------------------------------------------
+    //
+    // The sibling of the text-layout case above, and a worse disclosure: a comparison answers with both
+    // sides' full PLAIN TEXT for a client-side diff (ADR 0712). The overlay at least required a reader to
+    // reassemble words from coordinates.
+
+    [Fact]
+    public async Task Comparing_two_versions_is_REFUSED_on_a_strict_tenant()
+    {
+        var reader = await StrictReaderAsync(withCertificate: true);
+        var (api, documentId) = (reader.Api, reader.DocumentId);
+        var versionId = (await CurrentVersionAsync(api, documentId)).GetProperty("id").GetString();
+
+        // The URL is COMPOSED here on purpose, and it is the point of the test: the rel is withheld on this
+        // tier (below), so following it is impossible — and a door is only closed if the ROUTE refuses rather
+        // than merely going unadvertised. A caller who kept yesterday's address must meet the refusal too.
+        using var response = await api.GetAsync(
+            $"/api/documents/{documentId}/versions/compare?from={versionId}&to={versionId}");
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("PLAINTEXT_CONTENT_REFUSED",
+            JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement
+                .GetProperty("errorCode").GetString());
+    }
+
+    [Fact]
+    public async Task The_HEAD_companion_refuses_where_the_GET_refuses()
+    {
+        // A HEAD answering 204 while the GET answers 409 would tell a client the comparison is there to be
+        // had — the same lie as an advertised rel, in the one place the convention makes it easy to forget
+        // (every GET here has a hand-written HEAD beside it).
+        var reader = await StrictReaderAsync(withCertificate: true);
+        var (api, documentId) = (reader.Api, reader.DocumentId);
+        var versionId = (await CurrentVersionAsync(api, documentId)).GetProperty("id").GetString();
+
+        using var request = new HttpRequestMessage(HttpMethod.Head,
+            $"/api/documents/{documentId}/versions/compare?from={versionId}&to={versionId}");
+        using var response = await api.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_strict_tenant_is_not_OFFERED_the_comparison_and_an_ordinary_encrypted_one_is()
+    {
+        // Both halves in one test, because each alone proves nothing: an absent rel could mean the feature is
+        // broken everywhere, and a present one could mean the tier is not in force. The contrast is what says
+        // the withholding is this tier's doing (ADR 0543 — absence means "not available to you, here, now").
+        var strict = await StrictReaderAsync(withCertificate: true);
+        var ordinary = await ReaderAsync(E2EApiFactory.CryptoTenantName, withCertificate: true);
+
+        Assert.DoesNotContain("compare", await ListingRelsAsync(strict.Api, strict.DocumentId));
+        Assert.Contains("compare", await ListingRelsAsync(ordinary.Api, ordinary.DocumentId));
+    }
+
+    [Fact]
+    public async Task An_ordinary_encrypted_tenant_can_still_compare()
+    {
+        // The refusal must be the TIER's, not a comparison that stopped working for everyone. This tenant
+        // encrypts at rest too — so the bytes are unwrapped, extracted and answered, which is exactly what
+        // the strict tenant refuses.
+        var reader = await ReaderAsync(E2EApiFactory.CryptoTenantName, withCertificate: true);
+        var (api, documentId) = (reader.Api, reader.DocumentId);
+        var versionId = (await CurrentVersionAsync(api, documentId)).GetProperty("id").GetString();
+
+        using var response = await api.GetAsync(
+            $"/api/documents/{documentId}/versions/compare?from={versionId}&to={versionId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    /// <summary>The rels on the version LISTING, which is where the comparison is advertised.</summary>
+    private static async Task<IReadOnlyList<string>> ListingRelsAsync(HttpClient api, Guid documentId)
+    {
+        var listing = await TestJson.Get(api, $"/api/documents/{documentId}/versions");
+        return listing.GetProperty("links").EnumerateArray()
+            .Select(l => l.GetProperty("rel").GetString()!)
+            .ToList();
+    }
+
     private static string? Rel(JsonElement version, string rel) =>
         version.TryGetProperty("links", out var links)
             ? links.EnumerateArray()

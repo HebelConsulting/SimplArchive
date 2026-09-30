@@ -56,6 +56,11 @@ public sealed partial class CompareVersionsViewModel : ObservableObject
         Versions.Clear();
         var (versions, compareHref) = await api.Versions.GetVersionsWithLinksAsync(versionsHref);
         _compareHref = compareHref;
+
+        // The href arrives from an ASYNC load, so the command's CanExecute was evaluated before it existed —
+        // notify here rather than relying on a picker change to re-ask, which is the trap of gating on one
+        // value and raising the change for another.
+        CompareCommand.NotifyCanExecuteChanged();
         foreach (var v in versions)
         {
             Versions.Add(new VersionOption(v.Id, v.VersionNumber ?? 0, v.FileExtension, v.DownloadUrl));
@@ -78,7 +83,13 @@ public sealed partial class CompareVersionsViewModel : ObservableObject
 
     // Two DIFFERENT versions are needed for a diff — until then the button stays disabled rather than failing
     // silently on click.
-    private bool CanCompare() => FromVersion is not null && ToVersion is not null && FromVersion.Id != ToVersion.Id;
+    //
+    // ...and an ADVERTISED comparison, which is the half that was missing (ADR 0861). A tenant whose doors
+    // refuse plaintext withholds the rel, and the command's body then returned early on a null href — so the
+    // button was enabled and the click did NOTHING, which is the worst of the three available behaviours: no
+    // diff, no refusal, no explanation.
+    private bool CanCompare() =>
+        _compareHref is not null && FromVersion is not null && ToVersion is not null && FromVersion.Id != ToVersion.Id;
 
     // Changing either picker discards the rendered diff: it belongs to the old pair, and leaving it up would
     // misattribute it to the new selection.

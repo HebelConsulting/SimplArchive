@@ -47,6 +47,7 @@ public class DocumentVersionsController : ControllerBase
     private readonly IDocumentTextLayoutService _textLayoutService;
     private readonly Documents.StrictEnvelopeDelivery _strictEnvelopes;
     private readonly ICurrentUserAccessor _currentUserAccessor;
+    private readonly Documents.DocumentVersionAccess _versionAccess;
 
     public DocumentVersionsController(
         SimplArchiveDbContext dbContext,
@@ -61,8 +62,8 @@ public class DocumentVersionsController : ControllerBase
         IWormLockService wormLock,
         IStorageQuotaService storageQuota,
         IAuditRecorder audit,
-        IDocumentVersionComparer comparer,
         Documents.DocumentAccessService access,
+        Documents.DocumentVersionAccess versionAccess,
         SimplArchive.Infrastructure.Storage.AtRestKeyService atRestKeys,
         Concurrency.DocumentVerbs documents,
         Documents.DocumentVersionResourceBuilder versionResources)
@@ -82,8 +83,8 @@ public class DocumentVersionsController : ControllerBase
         _wormLock = wormLock;
         _storageQuota = storageQuota;
         _audit = audit;
-        _comparer = comparer;
         _access = access;
+        _versionAccess = versionAccess;
     }
 
 
@@ -93,7 +94,6 @@ public class DocumentVersionsController : ControllerBase
     private Task<bool> HasImportRightAsync(CancellationToken cancellationToken) =>
         _access.HasImportRightAsync(cancellationToken);
 
-    private readonly IDocumentVersionComparer _comparer;
     private readonly Documents.DocumentAccessService _access;
     private readonly IAuditRecorder _audit;
     private readonly IDocumentIndexQueue _queue;
@@ -343,9 +343,15 @@ public class DocumentVersionsController : ControllerBase
         var links = new List<Link>
         {
             new("self", Url.Action(nameof(List), new { documentId, cursor, limit = pageSize })!, "GET"),
-            // Comparing two of these versions — the client appends ?from=&to= to this advertised address.
-            new("compare", $"/api/documents/{documentId}/versions/compare", "GET"),
         };
+
+        // Comparing two of these versions — the client appends ?from=&to= to this advertised address.
+        // WITHHELD where that endpoint refuses, exactly as `text-layout` is: a comparison IS both versions'
+        // plain text (#1485, ADR 0861; ADRs 0857/0543).
+        if (!await _strictEnvelopes.RefusesPlaintextDoorsAsync(cancellationToken))
+        {
+            links.Add(new Link("compare", $"/api/documents/{documentId}/versions/compare", "GET"));
+        }
 
         if (hasMore)
         {
@@ -424,65 +430,6 @@ public class DocumentVersionsController : ControllerBase
         }
 
         return NoContent();
-    }
-
-    // The two versions' extracted texts, for the client-side side-by-side diff (ADR 0712 — the server used
-    // to diff here itself; now both clients compute identical rows from these texts via the shared
-    // SimplArchive.Presentation.TextDiff, so word-level emphasis needs no wire shape of its own).
-    // Requires CanReadContent on both (via CanAccessVersionContentAsync, which also enforces workflow gating).
-    // Available is false when either version has no extractable text (a binary/image format, or Tika unavailable
-    // for office/PDF) — the client then shows "comparison not available for this format".
-    // The PAIR is expressed as a query, not as path segments (issue #416). A link names ONE resource, so
-    // "/versions/{from}/compare/{to}" could never be advertised — the client had to build it, which is exactly
-    // what ADR 0543 removes. As "/versions/compare?from=&to=" the collection advertises a single `compare`
-    // address and the client supplies its two operands as parameters, the same shape as any other filter.
-    [HttpGet("compare")]
-    public async Task<IActionResult> Compare(Guid documentId, [FromQuery] Guid from, [FromQuery] Guid to, CancellationToken cancellationToken)
-    {
-        var fromVersionId = from;
-        var toVersionId = to;
-        var fromVersion = await LoadForReadAsync(documentId, fromVersionId, cancellationToken);
-        var toVersion = await LoadForReadAsync(documentId, toVersionId, cancellationToken);
-        if (fromVersion is null || toVersion is null)
-        {
-            return NotFound();
-        }
-
-        if (!await CanAccessVersionContentAsync(fromVersion.Id, documentId, cancellationToken)
-            || !await CanAccessVersionContentAsync(toVersion.Id, documentId, cancellationToken))
-        {
-            return Forbid();
-        }
-
-        var comparison = await _comparer.CompareAsync(fromVersion.ObjectKey, toVersion.ObjectKey, cancellationToken: cancellationToken);
-
-        return Ok(new VersionComparisonResource
-        {
-            FromVersionId = fromVersion.Id,
-            FromVersionNumber = fromVersion.VersionNumber,
-            ToVersionId = toVersion.Id,
-            ToVersionNumber = toVersion.VersionNumber,
-            Available = comparison.Available,
-            FromText = comparison.FromText,
-            ToText = comparison.ToText,
-            Links = [new Link("self", $"/api/documents/{documentId}/versions/compare?from={fromVersionId}&to={toVersionId}", "GET")],
-        });
-    }
-
-    [HttpHead("compare")]
-    public async Task<IActionResult> CompareHead(Guid documentId, [FromQuery] Guid from, [FromQuery] Guid to, CancellationToken cancellationToken)
-    {
-        var fromVersion = await LoadForReadAsync(documentId, from, cancellationToken);
-        var toVersion = await LoadForReadAsync(documentId, to, cancellationToken);
-        if (fromVersion is null || toVersion is null)
-        {
-            return NotFound();
-        }
-
-        return await CanAccessVersionContentAsync(fromVersion.Id, documentId, cancellationToken)
-            && await CanAccessVersionContentAsync(toVersion.Id, documentId, cancellationToken)
-            ? NoContent()
-            : Forbid();
     }
 
     // Per-page word boxes for search hit-overlay (ADR "Search hit overlay"). Computed/cached on demand:
@@ -614,19 +561,6 @@ public class DocumentVersionsController : ControllerBase
     public class TextLayoutResource : HypermediaResource
     {
         public List<TextLayoutPageResource> Pages { get; set; } = [];
-    }
-
-    // Inline unified diff between two versions (ADR "Document version comparison"). Available == false → neither
-    // side had extractable text (a binary/image format, or Tika unavailable) and Lines is empty.
-    public class VersionComparisonResource : HypermediaResource
-    {
-        public Guid FromVersionId { get; set; }
-        public int? FromVersionNumber { get; set; }
-        public Guid ToVersionId { get; set; }
-        public int? ToVersionNumber { get; set; }
-        public bool Available { get; set; }
-        public string FromText { get; set; } = string.Empty;
-        public string ToText { get; set; } = string.Empty;
     }
 
     public class TextLayoutPageResource
@@ -904,26 +838,10 @@ public class DocumentVersionsController : ControllerBase
         return time;
     }
 
-    private async Task<VersionRow?> LoadForReadAsync(Guid documentId, Guid versionId, CancellationToken cancellationToken)
-    {
-        // Serve soft-deleted (recycle-bin) documents' versions too (ADR "Recycle bin tab").
-        if (!await _dbContext.Documents.IgnoreQueryFilters(["SoftDeleteFilter"]).AnyAsync(d => d.Id == documentId, cancellationToken))
-        {
-            return null;
-        }
-
-        var version = await _dbContext.DocumentVersions
-            .Where(v => v.Id == versionId && v.DocumentId == documentId)
-            .Select(v => new { v.Status, v.VersionNumber, v.ObjectKey, v.Sha256Hash, v.CreatedAt, v.DocumentDate, v.DocumentTime, v.CreatedByUserId, v.CreatedByServiceAccountId, v.OcrLanguages, v.Comment, v.OcrVerdict, v.IsSigned })
-            .SingleOrDefaultAsync(cancellationToken);
-
-        if (version is null)
-        {
-            return null;
-        }
-
-        return new VersionRow(versionId, documentId, version.Status, version.VersionNumber, version.ObjectKey, version.Sha256Hash, version.CreatedAt, version.DocumentDate, version.DocumentTime, version.CreatedByUserId, version.CreatedByServiceAccountId, version.OcrLanguages, version.Comment, version.OcrVerdict, version.IsSigned);
-    }
+    // Forwarded to DocumentVersionAccess (ADR 0861) — extracted so the comparison controller on these same
+    // routes can ask the same two questions rather than carrying copies of them.
+    private Task<VersionRow?> LoadForReadAsync(Guid documentId, Guid versionId, CancellationToken cancellationToken) =>
+        _versionAccess.LoadForReadAsync(documentId, versionId, cancellationToken);
 
     // The document's Name — used as the download filename (never the opaque object key). Loaded once per
     // request and shared across a document's versions. Was previously the "Short Description" index field,
@@ -954,31 +872,8 @@ public class DocumentVersionsController : ControllerBase
     private Task<EffectiveRights> GetCallerRightsAsync(Guid documentId, CancellationToken cancellationToken) =>
         _access.GetCallerRightsAsync(documentId, cancellationToken);
 
-    // Content access for a specific version (ADR "Workflow status-gating"): requires CanReadContent, and — if
-    // the version is "gated" (it entered a workflow and isn't yet Released) — also CanEditContent (editors /
-    // tenant admins) or being that version's assigned reviewer. A never-submitted version (no WorkflowState)
-    // and a Released version are ungated, so only in-workflow, not-yet-Released versions are restricted.
-    private async Task<bool> CanAccessVersionContentAsync(Guid versionId, Guid documentId, CancellationToken cancellationToken)
-    {
-        var rights = await GetCallerRightsAsync(documentId, cancellationToken);
-        if (!rights.CanReadContent)
-        {
-            return false;
-        }
-
-        if (rights.CanEditContent)
-        {
-            return true; // editors / admins see every version
-        }
-
-        var state = await _dbContext.WorkflowStates.FirstOrDefaultAsync(w => w.DocumentVersionId == versionId, cancellationToken);
-        if (state is null || state.Status == WorkflowStatus.Released)
-        {
-            return true; // ungated
-        }
-
-        return _currentUserAccessor.UserId is { } userId && state.AssignedToUserId == userId; // the assigned reviewer
-    }
+    private Task<bool> CanAccessVersionContentAsync(Guid versionId, Guid documentId, CancellationToken cancellationToken) =>
+        _versionAccess.CanAccessVersionContentAsync(versionId, documentId, cancellationToken);
 
     private async Task<bool> CanEditIndexDataAsync(Guid documentId, CancellationToken cancellationToken)
     {

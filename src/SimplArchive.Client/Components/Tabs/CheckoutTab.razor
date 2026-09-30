@@ -66,7 +66,10 @@
                 </MudButton>
             </CustomContent>
         </MudFileUpload>
-        <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_selected?.IsModified != true || _selectedIds.Count > 1)"
+        @* Also gated on the `compare` rel: a tenant whose doors refuse plaintext withholds it (ADR 0861), and
+           an enabled button that can only answer 409 is the lying affordance ADR 0543 exists to prevent. *@
+        <MudButton Class="wb-rib-btn ml-1" Size="Size.Small"
+                   Disabled="@(_selected?.IsModified != true || _selectedIds.Count > 1 || Links.Href(_selected?.Links, "compare") is null)"
                    OnClick="@(() => OpenCompareCheckoutAsync(_selected!))"
                    title="@Strings.Get("CoCompare")" aria-label="@Strings.Get("CoCompare")">
             <MudIcon Icon="@Icons.Material.Filled.Difference" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CoCompare")</span>
@@ -155,7 +158,10 @@
                             <MudMenuItem Icon="@Icons.Material.Filled.CloudDownload" OnClick="() => DownloadFromStashAsync(c)">@Strings.Get("CoDownloadStash")</MudMenuItem>
                             @if (c.IsModified)
                             {
-                                <MudMenuItem Icon="@Icons.Material.Filled.Difference" OnClick="() => OpenCompareCheckoutAsync(c)">@Strings.Get("CoCompare")</MudMenuItem>
+                                @if (Links.Href(c.Links, "compare") is not null)
+                                {
+                                    <MudMenuItem Icon="@Icons.Material.Filled.Difference" OnClick="() => OpenCompareCheckoutAsync(c)">@Strings.Get("CoCompare")</MudMenuItem>
+                                }
                                 <MudMenuItem Icon="@Icons.Material.Filled.Check" OnClick="() => CheckInFromStashAsync(c)">@Strings.Get("CoCheckIn")</MudMenuItem>
                             }
                             @if (Links.Href(c.Links, "pages") is not null)

@@ -100,6 +100,16 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
     public bool SelectedIsSingleModified => Selection.Count == 1 && SelectedRow?.CanCheckIn == true;
 
     /// <summary>
+    /// The inline diff is offered only where the row ADVERTISED it (ADR 0861).
+    /// </summary>
+    /// <remarks>
+    /// A comparison is both sides' full plain text, so a tenant whose doors refuse plaintext withholds the
+    /// rel — and an enabled button that can only answer 409 is the lying affordance ADR 0543 exists to
+    /// prevent. The modified-and-single condition still applies: one diff has one document.
+    /// </remarks>
+    public bool SelectedCanCompare => SelectedIsSingleModified && SelectedRow?.CanCompare == true;
+
+    /// <summary>
     /// What the selected row's WORKING COPY offers (ADR 0593) — the pages resource's own answer, loaded with
     /// the detail. The listing's `pages` rel only says the extension might have pages; this says what can
     /// actually be done (a signed or empty working copy withholds `sort`).
@@ -129,6 +139,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedCanUnlock));
         OnPropertyChanged(nameof(SelectedCanExtend));
         OnPropertyChanged(nameof(SelectedIsSingleModified));
+        OnPropertyChanged(nameof(SelectedCanCompare));
         OnPropertyChanged(nameof(SelectedCanSortPages));
     }
 
@@ -615,6 +626,10 @@ public sealed class CheckoutRowViewModel
     // The row advertised a pages resource (extension-based, ADR 0593) — what Rotate/Sort in the row menu keys
     // on; the definitive can-sort answer is the resource's own, read at click time.
     public bool CanSortPages => Item?.Href("pages") is not null;
+
+    // The row advertised a comparison (ADR 0861). Withheld where the tenant's doors refuse plaintext, since
+    // a comparison answers with both sides' text — so the button greys out rather than 409ing on click.
+    public bool CanCompare => Item?.Href("compare") is not null;
 
     // The current version's content carries a digital signature (#491), examined at finalize. TRI-STATE: null
     // means the version was never examined — every version filed before this shipped — so the badge shows only
