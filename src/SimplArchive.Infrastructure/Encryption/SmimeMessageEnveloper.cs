@@ -20,7 +20,19 @@ public sealed class SmimeMessageEnveloper(ILogger<SmimeMessageEnveloper> logger)
     /// (milestone 1's stated boundary). The Warning names the switch: PUT a fresh certificate, or delete it.
     /// </summary>
     public byte[]? TryEnvelope(byte[] rfc822, string certificatePem, string email) =>
-        TryEnvelope(MimeMessage.Load(new MemoryStream(rfc822)), [certificatePem], email);
+        TryEnvelope(rfc822, [certificatePem], email);
+
+    /// <summary>
+    /// Envelopes a message to SEVERAL of the reader's certificates (#1411's remainder, ADR 0855).
+    /// </summary>
+    /// <remarks>
+    /// The single-certificate overload above is this one with a list of one, kept because the self-service
+    /// column holds exactly one (#1332). A module answers a SET (ADR 0842) — the same person's card and
+    /// laptop — and a CMS <c>EnvelopedData</c> addresses all of them over one copy of the ciphertext, so the
+    /// reader opens it with whichever key is to hand.
+    /// </remarks>
+    public byte[]? TryEnvelope(byte[] rfc822, IReadOnlyList<string> certificatePems, string email) =>
+        TryEnvelope(MimeMessage.Load(new MemoryStream(rfc822)), certificatePems, email);
 
     /// <summary>
     /// Envelopes a document's bytes as an S/MIME message addressed to a certificate (#1377, ADR 0827) — what a

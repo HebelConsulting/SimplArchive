@@ -70,11 +70,26 @@ public sealed class ImapSession
     /// against <c>Encryption:Tenants</c> (ADR 0813). Empty before LOGIN, but FETCH is unreachable then.</summary>
     internal string TenantName => _tenantName;
 
-    /// <summary>The user's self-service S/MIME certificate (#1332), cached at LOGIN like the view choice:
-    /// when set, FETCH envelopes in-process and RFC822.SIZE must measure served bytes. A certificate set
-    /// or deleted mid-session takes effect on the next connection — the same freshness every other
-    /// login-cached fact here has, and mail clients reconnect constantly.</summary>
-    internal string? SmimeCertificatePem { get; private set; }
+    /// <summary>
+    /// The certificates this reader is addressed by (#1332; ADR 0855), cached at LOGIN like the view choice:
+    /// when non-empty, FETCH envelopes in-process and RFC822.SIZE must measure served bytes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A LIST since ADR 0855, because a module answers a SET (ADR 0842) — the same person's card and their
+    /// laptop — and one CMS envelope addresses all of them over one copy of the ciphertext. The self-service
+    /// column contributes at most one, so an installation with no module sees a list of nothing or of one and
+    /// behaves exactly as before.
+    /// </para>
+    /// <para>
+    /// <b>Login-cached, which is weaker than the content path and deliberately so.</b> A certificate set,
+    /// deleted or REVOKED mid-session takes effect on the next connection — the same freshness every other
+    /// login-cached fact here has, and mail clients reconnect constantly. The content read asks per request
+    /// instead (<c>StrictEnvelopeDelivery</c>), because there a request IS the boundary; IMAP has no
+    /// equivalent, and asking per fetched message would cost a module query per message.
+    /// </para>
+    /// </remarks>
+    internal ReaderCertificateSource ReaderCertificates { get; private set; } = ReaderCertificateSource.None;
     // The peer's address, for the sign-in throttle's per-address spray counter (ADR 0716). Read once at
     // accept: a socket that has been closed no longer has a remote endpoint to ask.
     private string? _address;
@@ -586,7 +601,24 @@ public sealed class ImapSession
         _authenticated = true;
         _email = user.Email;
         ShowAllDocuments = user.ImapShowAllDocuments;
-        SmimeCertificatePem = user.SmimeCertificatePem;
+
+        // THE MODULE FIRST, and where it answers it is the ONLY source (ADR 0842) — not a fallback chain and
+        // not a union, because a union means a certificate revoked in the module still opens mail while a
+        // copy lingers in the column. This path asked the module not at all until ADR 0855, which made IMAP
+        // serve PLAINTEXT to a reader whose only certificate is enrolled in a module: the column is empty by
+        // ADR 0813's design on exactly those tenants, the registry is not the module, and the fetch falls
+        // open. A Warning, and mail that should have been sealed.
+        //
+        // The scope's tenant must be set before asking: the login query above deliberately ignores the
+        // tenant filter (the tenant is unknown until the user is found), while the activation check the
+        // module gate performs reads a tenant-scoped table.
+        ((CurrentTenantAccessor)scope.ServiceProvider
+            .GetRequiredService<SimplArchive.Application.Abstractions.ICurrentTenantAccessor>()).TenantId = user.TenantId;
+        var fromModule = await scope.ServiceProvider
+            .GetRequiredService<SimplArchive.Infrastructure.Modules.ModuleReaderCertificates>()
+            .ForAsync(user.Id);
+
+        ReaderCertificates = ReaderCertificateSource.Resolve(fromModule, user.SmimeCertificatePem);
 
         // A sign-in is a security-relevant SUCCESS, which is Information by the logging convention — the
         // counterpart of the Warning a failure already emits, so a SIEM sees both sides. ShowAllDocuments

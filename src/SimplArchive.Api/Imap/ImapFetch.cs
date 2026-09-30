@@ -151,9 +151,15 @@ internal static class ImapFetch
         // sidecar hook — where both exist, the self-service certificate is the more specific claim about
         // what this user's devices can open. Both fail open to plaintext, each with its own Warning.
         async Task<byte[]> BytesAsync() => bytes ??=
-            (session.SmimeCertificatePem is { } pem
-                ? selfEnveloper.TryEnvelope(await MessageBytesAsync(storage, message), pem, session.Email)
-                : await envelope.TryEnvelopeAsync(session.TenantName, session.Email, await MessageBytesAsync(storage, message), CancellationToken.None))
+            (session.ReaderCertificates.Envelopes
+                ? selfEnveloper.TryEnvelope(
+                    await MessageBytesAsync(storage, message), session.ReaderCertificates.Pems, session.Email)
+                // The registry only where NO module answered (ADR 0842/0855). A module that answered "this
+                // reader holds none" has spoken, and asking the registry next would let a certificate the
+                // module revoked go on opening mail — the union ADR 0842 forbids.
+                : session.ReaderCertificates.MayConsultRegistry
+                    ? await envelope.TryEnvelopeAsync(session.TenantName, session.Email, await MessageBytesAsync(storage, message), CancellationToken.None)
+                    : null)
             ?? bytes ?? await MessageBytesAsync(storage, message);
 
         async Task<MimeMessage> MimeAsync() => mime ??= MimeMessage.Load(new MemoryStream(await BytesAsync()));
@@ -183,7 +189,7 @@ internal static class ImapFetch
                     // about every enveloped message — measure the served bytes instead, unconditionally there,
                     // because whether THIS user's message envelopes depends on a cert lookup the shortcut
                     // cannot see.
-                    parts.Add(!envelope.EnabledFor(session.TenantName) && session.SmimeCertificatePem is null
+                    parts.Add(!envelope.EnabledFor(session.TenantName) && !session.ReaderCertificates.Envelopes
                         && message.Extension.Equals(".eml", StringComparison.OrdinalIgnoreCase) && message.SizeBytes is { } size
                         ? $"RFC822.SIZE {size}"
                         : $"RFC822.SIZE {(await BytesAsync()).Length}");

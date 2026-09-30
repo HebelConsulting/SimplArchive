@@ -198,15 +198,26 @@ public sealed class EncryptionModes(IConfiguration configuration)
     /// Refuses every configuration that claims encryption the installation will not perform.
     /// </summary>
     /// <remarks>
-    /// One call site, two rules, because they are the same failure wearing different clothes: a retired key
-    /// silently means "off", and a mode with no service silently means "off". Neither reports anything, and
-    /// both leave an installation believing it has a tier it does not have.
+    /// <para>
+    /// One call site for the rules answerable from CONFIGURATION alone, because they are the same failure
+    /// wearing different clothes: a retired key silently means "off", and a mode with no service silently
+    /// means "off". Neither reports anything, and both leave an installation believing it has a tier it does
+    /// not have.
+    /// </para>
+    /// <para>
+    /// <b>The delivery-tier rule used to be here and is not any more</b>, and the reason is worth stating
+    /// because this comment previously claimed one call site was deliberate. That rule now needs a fact
+    /// configuration cannot supply — whether a LOADED module answers
+    /// <see cref="ModuleAbi.IIndustryModule.ReaderCertificates"/> — and modules are loaded long after this
+    /// runs (`Program.cs` line ~66 versus ~400). Keeping it here meant it could only ever refuse, which is
+    /// what it did: it said the module "is not available yet" after the module existed. So
+    /// <see cref="ThrowIfSealedDeliveryHasNoModule"/> is called separately, once the answer exists.
+    /// </para>
     /// </remarks>
     public static void ThrowIfMisconfigured(IConfiguration configuration)
     {
         ThrowIfLegacyConfigured(configuration);
         ThrowIfModeHasNoService(configuration);
-        ThrowIfSealedDeliveryHasNoModule(configuration);
     }
 
     /// <summary>
@@ -302,8 +313,17 @@ public sealed class EncryptionModes(IConfiguration configuration)
     /// warning, in Development too — a developer misled by it is exactly as misled as an administrator.
     /// </para>
     /// </remarks>
-    public static void ThrowIfSealedDeliveryHasNoModule(IConfiguration configuration)
+    public static void ThrowIfSealedDeliveryHasNoModule(
+        IConfiguration configuration, IEnumerable<ModuleAbi.IIndustryModule> modules)
     {
+        // The question is about a LOADED module, which is why this no longer rides in
+        // ThrowIfMisconfigured: an installation carrying a module that answers the capability can perform
+        // these tiers, and one carrying none cannot, and configuration alone cannot tell them apart.
+        if (modules.Any(module => module.ReaderCertificates is not null))
+        {
+            return;
+        }
+
         var claimed = new List<string>();
 
         if (NeedsModule(Parse(configuration[DefaultSection], DefaultSection)))
@@ -323,10 +343,12 @@ public sealed class EncryptionModes(IConfiguration configuration)
 
         throw new InvalidOperationException(
             $"{string.Join(", ", claimed)} — but the delivery tiers are performed by the Encryption Module "
-            + "(ADR 0834), which is not available yet, so nothing would envelope those reads (#1411).\n\n"
+            + "(ADR 0834), and no module on this installation answers the reader-certificate capability, so "
+            + "nothing would envelope those reads (#1411).\n\n"
             + "This is refused rather than ignored because it is invisible: content would be stored and SERVED "
             + "as plaintext while the configuration claims envelope delivery, and no surface would report it.\n\n"
-            + $"Use {nameof(EncryptionMode.Storage)} or {nameof(EncryptionMode.Strict)} until the module ships.");
+            + "Either mount the Encryption Module (it declares ReaderCertificates), or use "
+            + $"{nameof(EncryptionMode.Storage)} or {nameof(EncryptionMode.Strict)}.");
     }
 
     private Dictionary<string, EncryptionMode> Map() =>

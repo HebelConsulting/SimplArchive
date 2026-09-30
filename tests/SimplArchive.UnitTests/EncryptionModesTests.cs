@@ -291,15 +291,77 @@ public class EncryptionModesTests
     [Theory]
     [InlineData(EncryptionMode.SealedDeliveryPermissive)]
     [InlineData(EncryptionMode.SealedDeliveryStrict)]
-    public void A_delivery_tier_is_refused_while_the_module_does_not_exist(EncryptionMode mode)
+    public void A_delivery_tier_is_refused_when_no_module_answers_the_capability(EncryptionMode mode)
     {
         var configuration = Config((EncryptionModes.Section + ":T", mode.ToString()));
 
         var error = Assert.Throws<InvalidOperationException>(
-            () => EncryptionModes.ThrowIfSealedDeliveryHasNoModule(configuration));
+            () => EncryptionModes.ThrowIfSealedDeliveryHasNoModule(configuration, [Module(answers: false)]));
 
         Assert.Contains("Encryption Module", error.Message);
         Assert.Contains($"{EncryptionModes.Section}:T", error.Message);
+    }
+
+    // The half that matters now that a module exists: the gate must OPEN. Until this test, the refusal was
+    // unconditional and told an installation the module "is not available yet" after it was mounted, loaded
+    // and answering — a refusal nothing could satisfy.
+    [Theory]
+    [InlineData(EncryptionMode.SealedDeliveryPermissive)]
+    [InlineData(EncryptionMode.SealedDeliveryStrict)]
+    public void A_delivery_tier_is_permitted_once_a_module_answers_the_capability(EncryptionMode mode)
+    {
+        var configuration = Config((EncryptionModes.Section + ":T", mode.ToString()));
+
+        // does not throw
+        EncryptionModes.ThrowIfSealedDeliveryHasNoModule(configuration, [Module(answers: true)]);
+    }
+
+    [Theory]
+    [InlineData(EncryptionMode.SealedDeliveryPermissive)]
+    [InlineData(EncryptionMode.SealedDeliveryStrict)]
+    public void A_module_that_answers_NOTHING_does_not_open_the_gate_for_another_that_does_not_either(EncryptionMode mode)
+    {
+        // Several modules may be mounted; the question is whether ANY answers, so a host carrying two
+        // modules that both answer nothing must still refuse. Written because `Any` over an empty-ish set is
+        // exactly where an off-by-one reading of the predicate would hide.
+        var configuration = Config((EncryptionModes.Section + ":T", mode.ToString()));
+
+        Assert.Throws<InvalidOperationException>(() => EncryptionModes.ThrowIfSealedDeliveryHasNoModule(
+            configuration, [Module(answers: false), Module(answers: false)]));
+    }
+
+    [Theory]
+    [InlineData(EncryptionMode.SealedDeliveryPermissive)]
+    [InlineData(EncryptionMode.SealedDeliveryStrict)]
+    public void One_answering_module_among_several_is_enough(EncryptionMode mode)
+    {
+        var configuration = Config((EncryptionModes.Section + ":T", mode.ToString()));
+
+        // does not throw
+        EncryptionModes.ThrowIfSealedDeliveryHasNoModule(
+            configuration, [Module(answers: false), Module(answers: true), Module(answers: false)]);
+    }
+
+    /// <summary>A module that either answers the reader-certificate capability or does not.</summary>
+    private static SimplArchive.ModuleAbi.IIndustryModule Module(bool answers) => new CapabilityModule(answers);
+
+    private sealed class CapabilityModule(bool answers) : SimplArchive.ModuleAbi.IIndustryModule
+    {
+        // The capability under test. Returning an EMPTY list when it answers is deliberate: this gate asks
+        // whether the capability EXISTS, never what it would return — a module that answers "no certificates
+        // for this reader" is still a module that performs the tier, and the read refuses at that point
+        // rather than at startup.
+        public Func<SimplArchive.ModuleAbi.ReaderCertificateContext,
+            Task<IReadOnlyList<SimplArchive.ModuleAbi.ReaderCertificate>>>? ReaderCertificates =>
+            answers ? (_ => Task.FromResult<IReadOnlyList<SimplArchive.ModuleAbi.ReaderCertificate>>([])) : null;
+
+        public string ModuleId => answers ? "answers" : "silent";
+        public string DisplayName => ModuleId;
+        public int AbiMajorVersion => SimplArchive.ModuleAbi.ModuleAbiVersion.Major;
+        public int AbiMinorVersion => SimplArchive.ModuleAbi.ModuleAbiVersion.Minor;
+        public string LicenseVerifyKeyPem => string.Empty;
+        public IReadOnlyList<SimplArchive.ModuleAbi.ModuleMaskSeed> Masks => [];
+        public void ConfigureServices(Microsoft.Extensions.DependencyInjection.IServiceCollection services) { }
     }
 
     [Theory]
@@ -311,7 +373,8 @@ public class EncryptionModesTests
         var configuration = Config((EncryptionModes.ServiceUrlKey, "http://enc"),
                                    (EncryptionModes.Section + ":T", mode.ToString()));
 
-        EncryptionModes.ThrowIfSealedDeliveryHasNoModule(configuration);   // does not throw
+        // No module at all, because these modes do not need one — which is the point of the case.
+        EncryptionModes.ThrowIfSealedDeliveryHasNoModule(configuration, []);   // does not throw
     }
 
     [Fact]
