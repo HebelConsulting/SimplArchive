@@ -106,6 +106,12 @@ public static class SaConsoleApp
             config.AddBranch("certificates", certificates =>
             {
                 certificates.SetDescription("Reader certificates, for a tenant administrator.");
+                certificates.AddCommand<CertificateListCommand>("list")
+                    .WithDescription("Report what is enrolled, including what is no longer usable and why.");
+                certificates.AddCommand<CertificateEnrolCommand>("enrol")
+                    .WithDescription("Enrol one certificate, for a named holder or the caller.");
+                certificates.AddCommand<CertificateRevokeCommand>("revoke")
+                    .WithDescription("Revoke one, by serial or thumbprint.");
                 certificates.AddCommand<CertificateImportCommand>("import")
                     .WithDescription("Enrol and revoke in bulk from a CA manifest. Safe to re-run.");
             });
@@ -116,6 +122,8 @@ public static class SaConsoleApp
             config.AddBranch("module", module =>
             {
                 module.SetDescription("Per-tenant module activation (tenant administrator).");
+                module.AddCommand<ModuleRebuildCommand>("rebuild")
+                    .WithDescription("Re-derive a module's read model from documents. One projection, or all.");
                 module.AddCommand<ModuleActivateCommand>("activate")
                     .WithDescription("File a vendor-signed licence and activate every module it names.");
             });

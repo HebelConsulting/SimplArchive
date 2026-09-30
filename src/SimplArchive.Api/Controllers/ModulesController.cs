@@ -211,7 +211,15 @@ public class ModulesController : ControllerBase
             throw new ModuleNotActiveException(moduleId);
         }
 
-        var rebuilder = rebuilders.FirstOrDefault(r => r.ProjectionNames.Contains(projectionName, StringComparer.Ordinal));
+        // THIS MODULE'S rebuilder, not the first in the container that happens to know the name (#1507).
+        // `rebuilders` is every loaded module's, from one container, so matching on the projection name alone
+        // meant `moduleId` decided the activation check and the module IDENTITY while deciding nothing about
+        // which code ran: two modules declaring a same-named projection collided silently, a rebuild
+        // addressed to one running the other's rebuilder under the first one's identity, with
+        // FirstOrDefault over DI registration order picking the winner. Latent rather than live — only the
+        // encryption module declares a projection today — but the names are module-declared strings and
+        // nothing says they must be globally unique.
+        var rebuilder = RebuilderFor(moduleId, projectionName, rebuilders);
         if (rebuilder is null)
         {
             return NotFound();
@@ -425,6 +433,92 @@ public class ModulesController : ControllerBase
     /// the answer back on a PROPFIND. A module declaring its own key would leave the host guessing the name.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The projections one module can rebuild — the address a client needs to find the button (#1507).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A listing rather than a rel per projection, for two reasons. A rel whose NAME carried the projection
+    /// (<c>rebuild:reader-certificates</c>) could not be followed by a client that does not already know the
+    /// name — which is the composed-knowledge problem in a different costume. And a client is entitled to ask
+    /// *what can be rebuilt here* without being told; nothing exposed that at all.
+    /// </para>
+    /// <para>
+    /// Tenant-admin and active-only, the same gate the rebuild itself uses: a projection that cannot be
+    /// rebuilt must not be advertised (ADR 0543 — a missing rel means "not available to you, here, now").
+    /// </para>
+    /// </remarks>
+    [HttpGet("{moduleId}/projections")]
+    public async Task<IActionResult> GetProjections(
+        string moduleId,
+        [FromServices] IEnumerable<SimplArchive.ModuleAbi.IModuleProjectionRebuilder> rebuilders,
+        CancellationToken cancellationToken)
+    {
+        if (!await IsTenantAdminAsync(cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (!await ModuleActivationCheck.IsActiveAsync(_dbContext, moduleId, DateTimeOffset.UtcNow, cancellationToken))
+        {
+            throw new ModuleNotActiveException(moduleId);
+        }
+
+        var names = OwnRebuilders(moduleId, rebuilders)
+            .SelectMany(r => r.ProjectionNames)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
+
+        return Ok(new ProjectionsResource
+        {
+            Projections =
+            [
+                .. names.Select(name => new ProjectionResource
+                {
+                    Name = name,
+                    Links = [new Link("rebuild", $"/api/modules/{moduleId}/rebuild/{name}", "POST")],
+                }),
+            ],
+            Links = [new Link("self", $"/api/modules/{moduleId}/projections", "GET")],
+        });
+    }
+
+    [HttpHead("{moduleId}/projections")]
+    public IActionResult HeadProjections(string moduleId) => NoContent();
+
+    private SimplArchive.ModuleAbi.IModuleProjectionRebuilder? RebuilderFor(
+        string moduleId,
+        string projectionName,
+        IEnumerable<SimplArchive.ModuleAbi.IModuleProjectionRebuilder> rebuilders) =>
+        OwnRebuilders(moduleId, rebuilders)
+            .FirstOrDefault(r => r.ProjectionNames.Contains(projectionName, StringComparer.Ordinal));
+
+    /// <summary>
+    /// The rebuilders declared by THIS module's assembly.
+    /// </summary>
+    /// <remarks>
+    /// Attributed by the assembly that declares the type, which is the same attribution the module identity
+    /// and the assembly-keyed controller gate already rest on (ADR 0736) — and the only key available, since
+    /// a rebuilder is registered by the module's own <c>ConfigureServices</c> into one shared container and
+    /// carries no module id of its own.
+    /// <para>
+    /// A module whose assembly cannot be matched contributes nothing rather than everything: the safe
+    /// direction, since the alternative is running somebody else's rebuilder under this module's identity.
+    /// </para>
+    /// </remarks>
+    private IEnumerable<SimplArchive.ModuleAbi.IModuleProjectionRebuilder> OwnRebuilders(
+        string moduleId, IEnumerable<SimplArchive.ModuleAbi.IModuleProjectionRebuilder> rebuilders)
+    {
+        var assembly = _modules
+            .FirstOrDefault(m => string.Equals(m.Module.ModuleId, moduleId, StringComparison.Ordinal))
+            ?.Module.GetType().Assembly;
+
+        return assembly is null
+            ? []
+            : rebuilders.Where(r => r.GetType().Assembly == assembly);
+    }
+
     private IReadOnlyList<ModuleAbi.ModuleSetting> DeclaredSettings(string moduleId)
     {
         var module = _modules.FirstOrDefault(m => string.Equals(m.Module.ModuleId, moduleId, StringComparison.Ordinal))?.Module
@@ -475,6 +569,24 @@ public class ModulesController : ControllerBase
             }).ToList(),
             Links = [new Link("self", $"/api/modules/{moduleId}/settings", "GET")],
         };
+    }
+
+    /// <summary>What this module can rebuild, each row carrying the address that rebuilds it (#1507).</summary>
+    public class ProjectionsResource : HypermediaResource
+    {
+        public List<ProjectionResource> Projections { get; set; } = [];
+    }
+
+    /// <summary>
+    /// One projection. The NAME is the module's own; the rel is how it is rebuilt.
+    /// </summary>
+    /// <remarks>
+    /// Plain settable properties with a parameterless constructor, like every DTO here, because the
+    /// <c>XmlSerializer</c> needs that shape for content negotiation (ADR 0190).
+    /// </remarks>
+    public class ProjectionResource : HypermediaResource
+    {
+        public string Name { get; set; } = string.Empty;
     }
 
     public class ModuleSettingsResource : HypermediaResource
@@ -658,6 +770,16 @@ public class ModulesController : ControllerBase
                     new Link("license", $"/api/modules/{moduleId}/license", "PUT"),
                     .. hasSettings
                         ? new[] { new Link("settings", $"/api/modules/{moduleId}/settings", "GET") }
+                        : [],
+
+                    // THE REBUILD, which had no address at all (#1507) — its own documentation calls it
+                    // "the operator guarantee that a read model is never the only copy of anything, as a
+                    // button-press: the support case's first answer", and no conforming client could find
+                    // the button. Emitted only where the module is ACTIVE, because that is the same gate the
+                    // endpoint applies; a rel that is present and always refuses is the lying affordance
+                    // ADR 0543 exists to prevent.
+                    .. installed && activation is not null && ModuleActivationPolicy.IsActive(activation, now)
+                        ? new[] { new Link("projections", $"/api/modules/{moduleId}/projections", "GET") }
                         : [],
                 ]
                 : [],
