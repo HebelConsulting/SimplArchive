@@ -27,6 +27,32 @@ public class S3ObjectStorageClient : IObjectStorageClient
     private readonly bool _internalPresignUseHttp;
     private readonly ILogger<S3ObjectStorageClient> _logger;
 
+    /// <summary>
+    /// Whether to REFUSE an object that is encrypted at rest — set when no encryption service is configured.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// ADR 0818 makes a null <c>Encryption:ServiceUrl</c> "fully inert", and inert is right for a store
+    /// holding plaintext. An installation whose store already holds CIPHERTEXT and then loses that setting is
+    /// a different case: the encrypting decorator is never installed, so nothing looks at an object's
+    /// <c>sa-wrapped-dek</c>, and the bytes are handed on as though they were the document.
+    /// </para>
+    /// <para>
+    /// <b>Measured, and the symptom named nothing</b> (#1499). On 2026-09-30 three rolls of the dev stack
+    /// without <c>SA_COMPOSE</c> recreated the api from the base compose file alone, dropping the overlay
+    /// carrying <c>Encryption__ServiceUrl</c>. For forty minutes a <c>Strict</c> tenant's documents were
+    /// served as raw ciphertext at <b>200</b>, and the client said "Preview not supported" — which reads as a
+    /// broken converter or a bad file, never as a setting that had vanished. Same shape as the retired
+    /// <c>Encryption:Tenants</c> keys, which refuse to start for this reason; here the evidence is in the
+    /// storage rather than the configuration.
+    /// </para>
+    /// <para>
+    /// <b>Set to FALSE when the decorator is installed</b>, because the decorator legitimately reads
+    /// ciphertext through this client — that is how it gets the bytes it decrypts.
+    /// </para>
+    /// </remarks>
+    public bool RefuseEncryptedObjects { get; init; }
+
     public S3ObjectStorageClient(IOptions<ObjectStorageOptions> options, ILogger<S3ObjectStorageClient> logger)
     {
         _logger = logger;
@@ -296,6 +322,12 @@ public class S3ObjectStorageClient : IObjectStorageClient
         _logger.LogDebug("Getting object {ObjectKey} from storage.", objectKey);
         var response = await _internalClient.GetObjectAsync(BucketFor(objectKey), objectKey, cancellationToken);
 
+        // FREE, because the response already carries the metadata — no second request. This is also the
+        // DAMAGING direction: a server-side read feeds the finalizer's hash, the rendition, the text layout
+        // and the search index, so ciphertext here becomes wrong data that persists, rather than a client
+        // that merely cannot render what it was sent.
+        RefuseEncrypted(objectKey, UserMetadata(response.Metadata));
+
         return response.ResponseStream;
     }
 
@@ -309,7 +341,50 @@ public class S3ObjectStorageClient : IObjectStorageClient
     public async Task<StoredObjectInfo> GetObjectInfoAsync(string objectKey, CancellationToken cancellationToken = default)
     {
         var response = await _internalClient.GetObjectMetadataAsync(BucketFor(objectKey), objectKey, cancellationToken);
-        return new StoredObjectInfo(response.ContentLength, response.Headers.ContentType, UserMetadata(response.Metadata));
+        var metadata = UserMetadata(response.Metadata);
+        RefuseEncrypted(objectKey, metadata);
+        return new StoredObjectInfo(response.ContentLength, response.Headers.ContentType, metadata);
+    }
+
+    /// <summary>
+    /// Refuses an at-rest-encrypted object when nothing in this process can unwrap its data key (#1499).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Asked only where the metadata is ALREADY in hand — the two reads above — so it costs nothing. A
+    /// PRESIGNED URL is deliberately not guarded: presigning makes no request to the store at all (it is a
+    /// local signature), so a check there would add a HEAD per URL issued, and the version resource builder
+    /// issues one per row. That is a real cost on every healthy installation to insure against a
+    /// misconfiguration, and the free guards catch the same fault at the first server-side touch — of which
+    /// every document gets several. <b>This narrows the window; it does not close it</b>, and saying so is
+    /// part of the decision.
+    /// </para>
+    /// <para>
+    /// A WRITE is not refused either. An installation in this state must keep operating on the objects it can
+    /// read, and refusing every write turns a misconfiguration into an outage. What it must not do is pretend
+    /// an unreadable object is fine.
+    /// </para>
+    /// </remarks>
+    private void RefuseEncrypted(string objectKey, IReadOnlyDictionary<string, string> metadata)
+    {
+        if (!RefuseEncryptedObjects
+            || !metadata.ContainsKey(EncryptingObjectStorageClient.WrappedDekKey))
+        {
+            return;
+        }
+
+        // Error, not Warning: nothing here recovers on its own, and every read of this object until somebody
+        // restores the setting is either refused or wrong. The message names the SETTING rather than the
+        // object, because the object is not the problem and a message about it sends an administrator to the
+        // store.
+        _logger.LogError(
+            "Object {ObjectKey} is encrypted at rest ({Metadata} is present) but this installation has no "
+            + "Encryption:ServiceUrl, so its data key cannot be unwrapped. The read is REFUSED rather than "
+            + "served as ciphertext. Restore the encryption service configuration this store was written "
+            + "under — reading or re-writing these objects without it corrupts them.",
+            objectKey, EncryptingObjectStorageClient.WrappedDekKey);
+
+        throw new EncryptedObjectWithoutEncryptionServiceException(objectKey);
     }
 
     // The SDK's MetadataCollection reports keys WITH the x-amz-meta- wire prefix; strip it so callers

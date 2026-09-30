@@ -8,6 +8,12 @@
         <!-- Says WHY it is being asked. A PIN prompt with no reason is the shape every credential-phishing
              dialog also has, and this one appears in the middle of opening a document rather than at sign-in. -->
         <TextBlock TextWrapping="Wrap" Text="{loc:Tr CardPinBody}" />
+        <!-- WHICH card, when there is more than one it could be. Not decoration: the PIN is per card, and a
+             wrong one decrements the named card's retry counter. Hidden when nothing was named, so a
+             single-card installation reads exactly as it did. -->
+        <TextBlock x:Name="CardLine" FontWeight="SemiBold" TextWrapping="Wrap" IsVisible="False" />
+        <TextBlock x:Name="CertificateLine" Foreground="{DynamicResource WbMuted}" FontSize="12"
+                   TextWrapping="Wrap" IsVisible="False" />
         <TextBox x:Name="PinBox" PasswordChar="•" KeyDown="OnKeyDown" />
         <TextBlock Foreground="{DynamicResource WbMuted}" FontSize="12" TextWrapping="Wrap"
                    Text="{loc:Tr CardPinOnce}" />

@@ -54,6 +54,10 @@ public sealed class ModuleReaderCertificates(
             return ReaderCertificateAnswer.NoModule;
         }
 
+        logger.LogDebug(
+            "{Count} loaded module(s) can answer which certificates a reader is addressed by: {Modules}.",
+            modules.Count, string.Join(", ", modules.Select(m => m.Module.ModuleId)));
+
         var now = DateTimeOffset.UtcNow;
         var identity = services.GetService(typeof(ModuleIdentityAccessor)) as ModuleIdentityAccessor;
 
@@ -75,8 +79,18 @@ public sealed class ModuleReaderCertificates(
 
             try
             {
-                return ReaderCertificateAnswer.Answered(await loaded.Module.ReaderCertificates!(
-                    new ReaderCertificateContext(userId, archive, services)));
+                var answer = await loaded.Module.ReaderCertificates!(
+                    new ReaderCertificateContext(userId, archive, services));
+
+                // WHICH MODULE ANSWERED, AND WITH HOW MANY. A module that answers is the ONLY source
+                // (ADR 0842), so this one number decides whether a strict tenant can serve the reader
+                // anything at all — and an empty answer is indistinguishable, from outside, from a module
+                // that was never asked (#1498).
+                logger.LogDebug(
+                    "Module {ModuleId} answered with {Count} certificate(s) for user {UserId}.",
+                    loaded.Module.ModuleId, answer.Count, userId);
+
+                return ReaderCertificateAnswer.Answered(answer);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
@@ -104,6 +118,14 @@ public sealed class ModuleReaderCertificates(
         // Installed but not active for this tenant — the licence has lapsed or was never filed. That is NOT
         // "no module": the tenant is in an enveloping mode and nothing can envelope, so it must refuse — and
         // it is not "no certificate" either, which is why it has its own outcome (ADR 0842's four refusals).
+        //
+        // Warning, not Debug: the tenant is in a mode that needs a module and has none active, so every
+        // enveloped read refuses until an administrator files a licence. Nothing else in the system says so.
+        logger.LogWarning(
+            "No module that answers reader certificates is ACTIVE for this tenant, so an enveloped read for "
+            + "user {UserId} must refuse. Installed and able to answer: {Modules}. File or renew the licence.",
+            userId, string.Join(", ", modules.Select(m => m.Module.ModuleId)));
+
         return ReaderCertificateAnswer.LicenceLapsed;
     }
 }

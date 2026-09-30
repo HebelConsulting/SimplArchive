@@ -99,6 +99,37 @@ public sealed class TestModuleController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Files a content document with its mask and its fields in ONE save, the way a module enrols something.
+    /// </summary>
+    /// <remarks>
+    /// The shape that matters is the SINGLE save: mask, fields and the document row all go in together, which
+    /// is what <c>CreateContentDocumentAsync</c> does and what every real enrolment surface uses. The core's
+    /// own <c>/children</c> route cannot stand in for it — it creates a FOLDER, refusing any mask that is not
+    /// a folder type — and a create-then-assign-mask pair is two saves over a committed row, which is exactly
+    /// the shape that never reproduced the projection defect (ADR 0848, #1495).
+    /// </remarks>
+    [HttpPost("certificates")]
+    public async Task<IActionResult> FileCertificate(
+        [FromQuery] Guid parentId,
+        [FromQuery] string name,
+        [FromServices] IModuleArchiveFacade facade,
+        CancellationToken cancellationToken)
+    {
+        var documentId = await facade.CreateContentDocumentAsync(
+            parentId,
+            TestModule.CertificateMaskId,
+            name,
+            System.Text.Encoding.UTF8.GetBytes("a fixture certificate"),
+            ".txt",
+            cancellationToken: cancellationToken);
+
+        return Ok(new { id = documentId });
+    }
+
+    [HttpHead("certificates")]
+    public IActionResult HeadCertificates() => NoContent();
+
     [HttpHead("settings-seen")]
     public IActionResult HeadSettingsSeen() => NoContent();
 

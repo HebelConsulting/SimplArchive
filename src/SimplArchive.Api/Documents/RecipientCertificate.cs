@@ -33,6 +33,22 @@ public static class RecipientCertificate
     /// envelope can be built against this key, and the only honest way to ask it is to try.
     /// </para>
     /// <para>
+    /// <b>RSA or EC, and the RSA-only version of this was a real outage (#1498).</b> This asked only for an
+    /// RSA key, refusing anything else with <i>"S/MIME key transport needs an RSA key"</i> — a premise that
+    /// stopped being true: CMS addresses an EC recipient by <b>key agreement</b>, the encryption service
+    /// produces such an envelope (its ADR 0018) and the desktop client has opened one since ADR 0830, with
+    /// the agreement performed on the card. A PIV card's key-management slot normally holds an EC key, so
+    /// the one certificate kind the product exists to serve was the one this refused.
+    /// </para>
+    /// <para>
+    /// And it failed in the worst available direction. The refusal is swallowed by
+    /// <c>StrictEnvelopeDelivery.Usable</c> — deliberately, so an unreadable certificate makes the rel
+    /// disappear rather than fail on click — so the reader's certificate set came back EMPTY, the strict
+    /// tier's <c>download</c>/<c>preview</c> rels fell back to a presigned storage URL, and the client
+    /// fetched bytes it could not recognise. Measured: the desktop said <i>"Preview not supported"</i> and
+    /// never asked for the card's PIN, because no envelope was ever built.
+    /// </para>
+    /// <para>
     /// Deliberately NOT checked: expiry. A certificate that expires next week still encrypts today, and the
     /// private key outlives its certificate — refusing on expiry would break the case where somebody shares
     /// with a long-standing holder whose certificate is due for renewal. Expiry is the recipient's business.
@@ -52,13 +68,19 @@ public static class RecipientCertificate
 
         using (certificate)
         {
-            if (certificate.GetRSAPublicKey() is not { } key)
+            // Both recipient kinds CMS can address, asked in the same way — load the key or refuse. RSA is
+            // key transport, EC is key agreement; which one this is decides how the envelope is built, and
+            // neither this method nor its callers have to know, because the enveloper asks the same question
+            // of the same certificate.
+            using var rsa = certificate.GetRSAPublicKey();
+            using var ecdsa = certificate.GetECDsaPublicKey();
+            using var ecdh = certificate.GetECDiffieHellmanPublicKey();
+            if (rsa is null && ecdsa is null && ecdh is null)
             {
                 throw new InvalidRecipientCertificateException(
-                    "its public key is not RSA, and S/MIME key transport needs an RSA key");
+                    "its public key is neither RSA nor elliptic-curve, so no CMS envelope can be addressed "
+                    + "to it");
             }
-
-            key.Dispose();
 
             return new Described(
                 certificate.GetCertHashString(HashAlgorithmName.SHA256),

@@ -71,8 +71,14 @@ public class KeyAgreementEnvelopeTests
     {
         using var stranger = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
 
-        Assert.Throws<CryptographicException>(
+        // EXHAUSTION, not one failed unwrap. The opener tries both encodings of `keyInfo` since #1498 —
+        // producers disagree about whether the key-wrap AlgorithmIdentifier carries an explicit NULL — so a
+        // wrong key must fail BOTH and refuse, never return one attempt's bytes. The message says which,
+        // so a reader is not sent hunting an encoding problem when the answer is that it is not their key.
+        var refusal = Assert.Throws<EnvelopeNotOpenedException>(
             () => CardEnvelopeOpener.OpenWithAgreement(Envelope(), point => Agree(stranger, point)));
+
+        Assert.Contains("either encoding", refusal.Message, StringComparison.Ordinal);
     }
 
     [Fact]

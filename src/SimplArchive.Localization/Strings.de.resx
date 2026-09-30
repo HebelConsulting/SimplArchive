@@ -5035,7 +5035,7 @@
     <value>Mit hinterlegtem Zertifikat werden über IMAP abgerufene Nachrichten verschlüsselt, sodass nur Ihre Geräte sie lesen können. Laden Sie Ihr Zertifikat hoch oder erzeugen Sie eine vollständige Identität für Ihre Geräte.</value>
   </data>
   <data name="SmimeProvisioned" xml:space="preserve">
-    <value>Zertifikate werden auf dieser Installation zentral bereitgestellt — hier ist nichts einzurichten.</value>
+    <value>E-Mail-Zertifikate werden auf dieser Installation zentral bereitgestellt — hier ist nichts einzurichten. Zertifikate zum Lesen von Dokumenten werden separat hinterlegt.</value>
   </data>
   <data name="SmimeNone" xml:space="preserve">
     <value>Kein Zertifikat hinterlegt — E-Mail wird unverschlüsselt ausgeliefert.</value>

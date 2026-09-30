@@ -72,10 +72,13 @@ public partial class App : Application
             // Dispatched to the UI thread rather than assumed to be on it: the funnel's await usually resumes
             // there, but "usually" is not a property to build a modal on, and InvokeAsync is a no-op when we
             // are already there.
-            Services.CardSession.PinPrompt = async () => await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(
+            Services.CardSession.PinPrompt = async card => await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(
                 async () =>
                 {
-                    var pinDialog = new CardPinDialog();
+                    // WHICH card, because the PIN is per card (#1500): with two tokens in the reader, asking
+                    // for "the PIN" is asking a question the reader cannot answer, and a wrong answer
+                    // decrements the named card's retry counter.
+                    var pinDialog = new CardPinDialog(card);
                     await pinDialog.ShowDialog(window);
                     return pinDialog.Pin;
                 });

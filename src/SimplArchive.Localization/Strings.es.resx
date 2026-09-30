@@ -5035,7 +5035,7 @@
     <value>Con un certificado configurado, los mensajes descargados por IMAP se cifran para que solo sus dispositivos puedan leerlos. Suba su certificado o genere una identidad completa para sus dispositivos.</value>
   </data>
   <data name="SmimeProvisioned" xml:space="preserve">
-    <value>En esta instalación los certificados se proporcionan de forma centralizada — aquí no hay nada que configurar.</value>
+    <value>En esta instalación los certificados de correo se proporcionan de forma centralizada — aquí no hay nada que configurar. Los certificados para leer documentos se registran por separado.</value>
   </data>
   <data name="SmimeNone" xml:space="preserve">
     <value>No hay certificado configurado — el correo se sirve sin cifrar.</value>

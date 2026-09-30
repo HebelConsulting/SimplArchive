@@ -69,6 +69,68 @@ public sealed class SimplArchiveApi(HttpClient http)
         return JsonDocument.Parse(body).RootElement.Clone();
     }
 
+    /// <summary>
+    /// A <c>GET</c> that also hands back the resource's <c>ETag</c> — for a caller about to mutate it.
+    /// </summary>
+    /// <remarks>
+    /// <b>The tag from the read that produced the value is the only honest precondition</b> (ADR 0794). A tag
+    /// re-read immediately before writing asserts "I edited what was there a millisecond ago", which is
+    /// always true and can essentially never fail; this one says "I edited what I read", which is what
+    /// detects the case the mechanism exists for. Every mutation on this API requires it — a missing
+    /// <c>If-Match</c> answers 428, not 200.
+    /// </remarks>
+    public async Task<(JsonElement Resource, string? ETag)> GetWithETagAsync(
+        string path, CancellationToken cancellationToken)
+    {
+        using var response = await http.GetAsync(path, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new CliException(Describe(response.StatusCode, body, path));
+        }
+
+        return (JsonDocument.Parse(body).RootElement.Clone(), response.Headers.ETag?.ToString());
+    }
+
+    /// <summary>A <c>PUT</c> carrying the <c>If-Match</c> the resource was read with.</summary>
+    /// <remarks>
+    /// A <b>412</b> is a real case rather than a generic failure: somebody else changed the document between
+    /// the read and this write, and the answer is to read it again — which for a bulk import means re-running
+    /// it, since it is safe to. Named here so the message says that instead of leaving an operator to
+    /// interpret a status code.
+    /// </remarks>
+    public async Task<JsonElement> PutWithETagAsync<TRequest>(
+        string path, TRequest payload, string? etag, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Put, path)
+        {
+            Content = JsonContent.Create(payload, options: Json),
+        };
+
+        if (!string.IsNullOrWhiteSpace(etag))
+        {
+            request.Headers.TryAddWithoutValidation("If-Match", etag);
+        }
+
+        using var response = await http.SendAsync(request, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (response.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+        {
+            throw new CliException(
+                $"{path} was changed by somebody else between reading it and writing it. Re-run the import — "
+                + "it is safe to, and it will skip everything already done.");
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new CliException(Describe(response.StatusCode, body, path));
+        }
+
+        return string.IsNullOrWhiteSpace(body) ? default : JsonDocument.Parse(body).RootElement.Clone();
+    }
+
     public async Task<JsonElement> PostAsync<TRequest>(string path, TRequest payload, CancellationToken cancellationToken)
     {
         using var response = await http.PostAsJsonAsync(path, payload, Json, cancellationToken);

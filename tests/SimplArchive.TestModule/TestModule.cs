@@ -188,6 +188,50 @@ public sealed class TestModule : IIndustryModule
 
     public IReadOnlyList<ModuleReadModelSet> ReadModels { get; } = [new ModuleReadModelSet(typeof(TestReadModelContext))];
 
+    /// <summary>The mask this fixture projects (ABI 1.1, ADR 0848) — its own certificate mask.</summary>
+    /// <remarks>
+    /// Its OWN mask rather than a core one, so declaring it cannot change what any other test asserts: every
+    /// save in the suite now walks the collector (the empty-set gate no longer short-circuits, which is
+    /// itself worth exercising), but only a Test Certificate reaches the hook below.
+    /// </remarks>
+    public IReadOnlyList<Guid> ProjectedMasks { get; } = [CertificateMaskId];
+
+    /// <summary>
+    /// Records what the hook could SEE of the document it was called about (ABI 1.1, ADR 0848).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The fixture's whole job is to read the subject back and say whether it was there.</b> The hook runs
+    /// inside the core's save, before its commit, so it can only see the row if it was lent the connection and
+    /// transaction that save is running on. When it was not, <c>GetDocumentAsync</c> answered null and a real
+    /// module's hook took its own "nothing to derive" branch — no row, no exception, no log line — and the
+    /// read model was filled only by a later rebuild. That is what <see cref="TestProjectionProbe.SawName"/>
+    /// makes visible, and why a test must assert the NAME rather than the row's existence.
+    /// </para>
+    /// <para>
+    /// It deliberately does NOT throw when the document is invisible. Throwing would fail the write and turn
+    /// the defect into a loud one, which is exactly what the real defect was not: the fixture has to be able
+    /// to reproduce the silence.
+    /// </para>
+    /// </remarks>
+    public Func<ProjectedDocumentContext, Task>? DocumentProjected => async context =>
+    {
+        var db = context.Services.GetRequiredService<TestReadModelContext>();
+        var document = await context.Archive.GetDocumentAsync(context.DocumentId);
+
+        var probe = await db.ProjectionProbes.FindAsync(context.DocumentId);
+        if (probe is null)
+        {
+            probe = new TestProjectionProbe { DocumentId = context.DocumentId };
+            db.ProjectionProbes.Add(probe);
+        }
+
+        probe.SawName = document?.Name ?? string.Empty;
+        probe.Removed = context.Removed;
+        probe.Calls++;
+        await db.SaveChangesAsync();
+    };
+
     /// <summary>Per-tenant configuration (ABI 0.12, ADR 0772) — one plain value and one secret, which are
     /// the two paths worth proving: what the admin surface may echo back, and what it must never.</summary>
     public IReadOnlyList<ModuleSetting> Settings { get; } =

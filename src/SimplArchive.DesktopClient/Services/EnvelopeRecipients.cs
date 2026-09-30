@@ -42,12 +42,23 @@ public static class EnvelopeRecipients
             return [];
         }
 
+        using var cms = new MemoryStream();
+        enveloped.Content.DecodeTo(cms);
+        return Of(cms.ToArray());
+    }
+
+    /// <summary>The same question of a BARE CMS structure, for a caller holding the bytes already.</summary>
+    /// <remarks>
+    /// The MIME overload above is this one with the part unwrapped. Separate rather than a flag because the
+    /// callers genuinely differ: the content funnel holds a MIME part, while the hardware check reads a
+    /// <c>EnvelopedData</c> from a file and has no message around it.
+    /// </remarks>
+    public static IReadOnlyList<(string Issuer, string Serial)> Of(byte[] cmsBytes)
+    {
         try
         {
-            using var cms = new MemoryStream();
-            enveloped.Content.DecodeTo(cms);
             var envelopedCms = new EnvelopedCms();
-            envelopedCms.Decode(cms.ToArray());
+            envelopedCms.Decode(cmsBytes);
 
             var recipients = new List<(string, string)>();
             foreach (RecipientInfo recipient in envelopedCms.RecipientInfos)

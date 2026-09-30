@@ -338,7 +338,16 @@ public static class DependencyInjection
         services.AddOptions<ObjectStorageOptions>()
             .Bind(configuration.GetSection("ObjectStorage"))
             .ValidateOnStart();
-        services.AddSingleton<S3ObjectStorageClient>();
+        // REFUSES CIPHERTEXT IT CANNOT DECRYPT when no encryption service is configured (#1499) — the flag
+        // is false whenever the encrypting decorator is installed below, because that decorator reads
+        // ciphertext through this client on purpose. Same condition, read once.
+        var encryptionConfigured = !string.IsNullOrWhiteSpace(configuration["Encryption:ServiceUrl"]);
+        services.AddSingleton(provider => new S3ObjectStorageClient(
+            provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<Storage.ObjectStorageOptions>>(),
+            provider.GetRequiredService<ILogger<S3ObjectStorageClient>>())
+        {
+            RefuseEncryptedObjects = !encryptionConfigured,
+        });
         // Registered unconditionally so controllers can inject it and ask (Enabled/GatedAsync answer
         // honestly either way); only the DECORATOR below is conditional.
         services.AddHttpClient(AtRestKeyService.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(10));
@@ -352,7 +361,7 @@ public static class DependencyInjection
         services.AddSingleton<AtRestKeyService>();
         // Singleton: it owns the one-sweep-at-a-time gate and the progress counters a status read reports.
         services.AddSingleton<KekRotationSweep>();
-        if (!string.IsNullOrWhiteSpace(configuration["Encryption:ServiceUrl"]))
+        if (encryptionConfigured)
         {
             // At-rest encryption (ADR 0818): the ONE seam every server-side storage call crosses gets the
             // encrypting decorator — gated per tenant inside it (same Encryption:Tenants list as the

@@ -287,6 +287,14 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             new FieldSpec("Subject", FieldDataType.Text, IsRequired: false),
             new FieldSpec("Issuer", FieldDataType.Text, IsRequired: false),
             new FieldSpec("Thumbprint", FieldDataType.Text, IsRequired: false),
+            // THE SERIAL, because it is what a CA speaks. A certification authority identifies what it
+            // issued and what it revoked by serial — its CRL carries nothing else — while everything here
+            // keys on the thumbprint, which a CA never mentions. Without it, an automated revocation coming
+            // from the CA has no way to find the enrolment it is about (owner-decided 2026-09-30).
+            //
+            // Text, not a number: a serial is an arbitrary-length integer rendered as hex, routinely 20
+            // bytes, and there is no numeric type here that holds one.
+            new FieldSpec("Serial", FieldDataType.Text, IsRequired: false),
             new FieldSpec("Valid from", FieldDataType.Date, IsRequired: false),
             new FieldSpec("Valid until", FieldDataType.Date, IsRequired: false),
             new FieldSpec("Revoked on", FieldDataType.Date, IsRequired: false),

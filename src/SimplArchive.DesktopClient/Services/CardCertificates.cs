@@ -42,7 +42,8 @@ public static class CardCertificates
         string TokenLabel,
         string TokenSerial,
         string ObjectLabel,
-        X509Certificate2 Certificate)
+        X509Certificate2 Certificate,
+        byte[]? KeyId = null)
     {
         /// <summary>The certificate in the PEM form the server registers.</summary>
         public string Pem => new(System.Security.Cryptography.PemEncoding.Write("CERTIFICATE", Certificate.RawData));
@@ -223,11 +224,26 @@ public static class CardCertificates
                         continue;
                     }
 
+                    // CKA_ID TIES THE CERTIFICATE TO ITS KEY, and it is the only thing that does: a PIV
+                    // token has four key slots, so "the first private key on this token" is a guess that is
+                    // right by luck on a card where only one slot is used (#1500). Optional because a token
+                    // that does not set it still works — the opener falls back and says so.
+                    byte[]? keyId = null;
+                    try
+                    {
+                        keyId = session.GetAttributeValue(handle, CK_ATTRIBUTE_TYPE.CKA_ID);
+                    }
+                    catch (Exception)
+                    {
+                        // No CKA_ID on this object. Not a reason to drop a certificate that reads perfectly.
+                    }
+
                     found.Add(new Found(
                         token.Label.AsPkcs11String().Trim(),
                         token.SerialNumber.AsPkcs11String().Trim(),
                         label,
-                        certificate));
+                        certificate,
+                        keyId));
                 }
             }
             catch (Exception e)

@@ -5035,7 +5035,7 @@
     <value>With a certificate set, messages fetched over IMAP are encrypted so only your devices can read them. Upload your certificate, or generate a complete identity for your devices.</value>
   </data>
   <data name="SmimeProvisioned" xml:space="preserve">
-    <value>Certificates on this installation are provided centrally — there is nothing to set up here.</value>
+    <value>Mail certificates on this installation are provided centrally — there is nothing to set up here. Certificates for reading documents are enrolled separately.</value>
   </data>
   <data name="SmimeNone" xml:space="preserve">
     <value>No certificate is set — mail is served unencrypted.</value>

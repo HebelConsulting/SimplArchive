@@ -30,7 +30,12 @@ public class ModuleProjectionHookTests
         public Exception? Throws { get; set; }
 
         public Task DispatchAsync(
-            Guid documentId, Guid maskId, Guid tenantId, bool removed, CancellationToken cancellationToken = default)
+            Guid documentId,
+            Guid maskId,
+            Guid tenantId,
+            bool removed,
+            AmbientDatabaseTransaction? ambient = null,
+            CancellationToken cancellationToken = default)
         {
             Calls.Add(new Seen(documentId, maskId, tenantId, removed));
             return Throws is null ? Task.CompletedTask : Task.FromException(Throws);

@@ -43,7 +43,8 @@ public sealed class StrictEnvelopeDelivery(
     SmimeMessageEnveloper enveloper,
     SimplArchive.Infrastructure.Encryption.MessageEnvelopeClient registry,
     SimplArchive.Infrastructure.Storage.AtRestKeyService atRestKeys,
-    SimplArchive.Infrastructure.Modules.ModuleReaderCertificates moduleCertificates)
+    SimplArchive.Infrastructure.Modules.ModuleReaderCertificates moduleCertificates,
+    Microsoft.Extensions.Logging.ILogger<StrictEnvelopeDelivery> logger)
 {
     // MEMOISED FOR THE REQUEST, which is all this class lives for (registered scoped). The resource builder
     // asks ReaderCertificateAsync once per version, so a versions dialog asks several times — and since #1433
@@ -225,8 +226,26 @@ public sealed class StrictEnvelopeDelivery(
         _outcome = fromModule.Outcome;
         if (fromModule.ModuleSpoke)
         {
+            // THE ANSWER THIS TIER TURNS ON, SAID OUT LOUD (#1498). An empty set here withdraws the download
+            // and preview rels — correctly, since nothing can be enveloped — and that withdrawal is silent
+            // by construction: the reader sees a document with no content affordance and no reason. It cost
+            // an evening's guessing, because every layer looked right and nothing anywhere said "the module
+            // answered, and it answered none".
+            logger.LogDebug(
+                "The module answered which certificates user {UserId} is addressed by: {Count}. "
+                + "The enveloping rels are {State}.",
+                userId, fromModule.Certificates.Count,
+                fromModule.Certificates.Count > 0 ? "advertised" : "WITHDRAWN");
+
             return [.. fromModule.Certificates.Select(c => c.CertificatePem)];
         }
+
+        // Not "no certificate": the module did not speak, and the three ways that happens have three
+        // different fixes (ADR 0859). Named here because the core's own sources are about to be tried and
+        // whichever answer they give will look like the module's.
+        logger.LogDebug(
+            "No module answered for user {UserId} ({Outcome}); falling back to the core's own sources.",
+            userId, _outcome);
 
         var reader = await dbContext.Users
             .Where(u => u.Id == userId)
@@ -401,12 +420,24 @@ public sealed class StrictEnvelopeDelivery(
                 innerContentDisposition: $"attachment; filename=\"{fileName.Replace("\"", string.Empty)}\"",
                 cancellationToken);
         }
-        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        catch (Infrastructure.Storage.EnvelopeServiceRefusedException refusal) when (refusal.OurRequest)
+        {
+            // THE SERVICE ANSWERED, and what it said is that the request is unacceptable — so this is not an
+            // outage and must not be reported as one. Retrying a 4xx answers the same way forever, and the
+            // reader following "try again shortly" learns nothing. The service's own words are already in the
+            // log at Error (AtRestKeyService); this is the refusal that matches them.
+            throw new Errors.Exceptions.Encryption.ContentEnvelopeRefusedException();
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException
+            or Infrastructure.Storage.EnvelopeServiceRefusedException)
         {
             // NOT null, and not a plaintext fall-back. Null here would reach the caller's "could not
             // envelope" refusal, which tells a reader to re-register a certificate that is perfectly
             // fine — the mistaken advice ADR 0859 was written to stop. This says the SERVICE is down,
             // and there is no plaintext available to fall back to even if that were wanted (ADR 0862).
+            //
+            // A 5xx from the service lands here too: it answered, but about itself, which is the same fact
+            // as not answering at all as far as a client's next move goes.
             throw new Errors.Exceptions.Encryption.EnvelopeServiceUnavailableException();
         }
 

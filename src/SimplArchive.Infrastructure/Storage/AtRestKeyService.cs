@@ -227,13 +227,72 @@ public sealed class AtRestKeyService(
             },
             cancellationToken);
 
-        // No fail-open branch, and that is the tier's whole contract: this path exists because the caller
-        // must not be able to serve plaintext, so a service that will not envelope means the read REFUSES.
-        // EnsureSuccessStatusCode is the right bluntness here — the status is the diagnosis (400 our data,
-        // 502 the ciphertext fetch, 503 the service) and the Api's handler turns the throw into a refusal.
-        response.EnsureSuccessStatusCode();
+        // No fail-open branch, and that is the tier's whole contract: this path exists because the caller must
+        // not be able to serve plaintext, so a service that will not envelope means the read REFUSES.
+        //
+        // But the REASON has to survive. EnsureSuccessStatusCode stood here with a comment saying "the status
+        // is the diagnosis (400 our data, 502 the ciphertext fetch, 503 the service)" — and then discarded
+        // both the status and the body, so nothing in this process ever learned which of the three it was.
+        // Every one of them reached the reader as "the encryption service is unavailable, try again shortly".
+        if (!response.IsSuccessStatusCode)
+        {
+            var detail = await ProblemDetailAsync(response, cancellationToken);
+            logger.LogError(
+                "The encryption service refused to envelope: {Status} {Detail}. This is {Whose} — a 4xx names "
+                + "something about the request (a recipient certificate it cannot address, a DEK that does not "
+                + "match the blob) and retrying will answer the same way.",
+                (int)response.StatusCode, detail, (int)response.StatusCode < 500 ? "OURS" : "the service's");
+
+            throw new EnvelopeServiceRefusedException((int)response.StatusCode, detail);
+        }
+
         return await response.Content.ReadAsByteArrayAsync(cancellationToken);
     }
+
+    /// <summary>
+    /// The service's own words for a refusal — the problem document's <c>detail</c>, else its whole body.
+    /// </summary>
+    /// <remarks>
+    /// Capped, because this goes into a log line and a misbehaving counterparty could otherwise write a
+    /// megabyte into it. Never the request: the recipient certificates and the wrapped DEK went the other way,
+    /// and neither belongs in a log.
+    /// </remarks>
+    private static async Task<string> ProblemDetailAsync(
+        HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (body.Length == 0)
+            {
+                return "(no body)";
+            }
+
+            try
+            {
+                var problem = JsonSerializer.Deserialize<JsonElement>(body);
+                var title = problem.TryGetProperty("title", out var t) ? t.GetString() : null;
+                var detail = problem.TryGetProperty("detail", out var d) ? d.GetString() : null;
+                if (title is not null || detail is not null)
+                {
+                    return Truncated($"{title} {detail}".Trim());
+                }
+            }
+            catch (JsonException)
+            {
+                // Not a problem document; the raw body is still the best answer available.
+            }
+
+            return Truncated(body);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or IOException or OperationCanceledException)
+        {
+            return "(the body could not be read)";
+        }
+    }
+
+    private static string Truncated(string text) =>
+        text.Length <= 500 ? text : $"{text[..500]}…";
 
     private async Task<Kek> CurrentKekAsync(CancellationToken cancellationToken)
     {

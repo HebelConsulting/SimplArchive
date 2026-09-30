@@ -15,8 +15,25 @@ public partial class CardPinDialog : Window
     public string? Pin { get; private set; }
 
     public CardPinDialog()
+        : this(new Services.CardBeingUnlocked(string.Empty, string.Empty, string.Empty))
+    {
+    }
+
+    /// <summary>Names the card being unlocked, which is what makes the prompt answerable (#1500).</summary>
+    /// <remarks>
+    /// The parameterless overload above exists for the designer and for a caller with nothing to say; it
+    /// renders no card line rather than an empty one, so a single-card installation looks exactly as before.
+    /// </remarks>
+    public CardPinDialog(Services.CardBeingUnlocked card)
     {
         InitializeComponent();
+
+        var named = card.TokenLabel.Length > 0 || card.TokenSerial.Length > 0;
+        CardLine.IsVisible = named;
+        CardLine.Text = card.TokenLabel.Length > 0 ? card.TokenLabel : card.TokenSerial;
+        CertificateLine.IsVisible = card.ObjectLabel.Length > 0;
+        CertificateLine.Text = card.ObjectLabel;
+
         Opened += (_, _) => PinBox.Focus();
     }
 

@@ -92,7 +92,7 @@ internal static class Program
         // The PIN comes from CARD_PIN so nothing has to be typed and nothing is written down.
         if (args.Contains("--card-open-test"))
         {
-            Services.CardSession.PinPrompt = () =>
+            Services.CardSession.PinPrompt = _ =>
                 Task.FromResult(Environment.GetEnvironmentVariable("CARD_PIN"));
 
             Environment.Exit(CardOpenSelfTest().GetAwaiter().GetResult() ? 0 : 1);

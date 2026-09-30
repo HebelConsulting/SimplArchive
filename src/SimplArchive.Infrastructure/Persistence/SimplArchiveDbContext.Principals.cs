@@ -34,9 +34,24 @@ public partial class SimplArchiveDbContext
         // The mapping was therefore never written by any real caller, and ABI 0.13's feature was inert from
         // the day it shipped — invisibly, because a document representing nobody looks exactly like a
         // document nobody has claimed yet. Found by driving the demo stack, not by a test.
+        // ADDED counts, and NOT because a new document's mask "changed" — because `IsModified` is FALSE for
+        // an Added entity, so the predicate below sees nothing for a document created with its mask already
+        // set. That is exactly what a module's CreateDocumentAsync does: Add the document WITH its
+        // MaskVersionId, Add its field values, and save ONCE.
+        //
+        // The fallback below could not rescue it either: inside this save the row is not in the database yet,
+        // so the query for it returns nothing and this method returned early. So the mapping was never
+        // written for anything a module created — the ABI's own creation helper — while the bare → fields →
+        // mask order that this file was fixed for worked. One feature, two creation orders, one of them
+        // silently inert.
+        //
+        // Measured on the demo stack (#1496): an encryption certificate enrolled through the module's own
+        // surface answered 201 with usable: true, represented nobody, and therefore never reached the
+        // module's read model — so the module answered "this reader holds none", and because a module that
+        // answers is the ONLY source (ADR 0842), activating the module REMOVED the reader's access.
         var remasked = ChangeTracker.Entries<Document>()
-            .Where(e => e.State is EntityState.Added or EntityState.Modified
-                && e.Property(d => d.MaskVersionId).IsModified)
+            .Where(e => e.State is EntityState.Added
+                || (e.State is EntityState.Modified && e.Property(d => d.MaskVersionId).IsModified))
             .Select(e => e.Entity)
             .ToList();
 

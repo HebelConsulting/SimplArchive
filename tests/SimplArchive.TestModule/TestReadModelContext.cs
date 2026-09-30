@@ -13,6 +13,9 @@ public sealed class TestReadModelContext(DbContextOptions options) : ModuleDbCon
 {
     public DbSet<TestLandingCounter> LandingCounters => Set<TestLandingCounter>();
 
+    /// <summary>What the projection hook SAW each time it was called (ABI 1.1, ADR 0848).</summary>
+    public DbSet<TestProjectionProbe> ProjectionProbes => Set<TestProjectionProbe>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Fluent only, provider-agnostic (ADR 0738) — the same parity rule the core's model lives by.
@@ -20,6 +23,12 @@ public sealed class TestReadModelContext(DbContextOptions options) : ModuleDbCon
         {
             counter.ToTable("tm_landing_counters");
             counter.HasKey(c => c.DossierId);
+        });
+
+        modelBuilder.Entity<TestProjectionProbe>(probe =>
+        {
+            probe.ToTable("tm_projection_probes");
+            probe.HasKey(p => p.DocumentId);
         });
     }
 }
@@ -31,6 +40,36 @@ public sealed class TestLandingCounter
     public Guid DossierId { get; set; }
 
     public int Count { get; set; }
+}
+
+/// <summary>
+/// One call of the projection hook, and — the point of it — WHETHER THE HOOK COULD SEE ITS OWN SUBJECT.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A row per projected document, written by <c>TestModule.DocumentProjected</c>. It records the document's
+/// name as the hook read it back through the facade, or that the facade answered "no such document" — which
+/// is the defect this fixture exists to catch and is otherwise invisible: the hook simply returns, having
+/// written nothing and logged nothing, and only a rebuild ever fills the read model.
+/// </para>
+/// <para>
+/// So a test must assert <see cref="SawName"/>, not merely that a row exists. "The hook ran" and "the hook
+/// could do its job" are different facts, and the bug lives between them.
+/// </para>
+/// </remarks>
+public sealed class TestProjectionProbe
+{
+    /// <summary>The projected document. Ids are globally unique, so tenancy rides the key.</summary>
+    public Guid DocumentId { get; set; }
+
+    /// <summary>The name the facade gave back, or empty when the facade could not see the document.</summary>
+    public string SawName { get; set; } = string.Empty;
+
+    /// <summary>What the core said about the document's fate, carried so a removal is distinguishable.</summary>
+    public bool Removed { get; set; }
+
+    /// <summary>How many times the hook has been called for this document.</summary>
+    public int Calls { get; set; }
 }
 
 /// <summary>

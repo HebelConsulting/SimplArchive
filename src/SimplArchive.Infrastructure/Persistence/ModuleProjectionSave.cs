@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using SimplArchive.Application.Abstractions;
 
 namespace SimplArchive.Infrastructure.Persistence;
@@ -48,21 +49,32 @@ internal static class ModuleProjectionSave
 
         // An AMBIENT transaction means a caller (the module engine, ADR 0737) already owns the boundary, so
         // opening a second one here would be an error rather than a nesting. Join theirs instead.
-        if (db.Database.CurrentTransaction is not null)
+        if (db.Database.CurrentTransaction is { } ambient)
         {
             var inner = await save(cancellationToken);
-            await DispatchAsync(dispatcher, projections, cancellationToken);
+            await DispatchAsync(db, ambient, dispatcher, projections, cancellationToken);
             return inner;
         }
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var saved = await save(cancellationToken);
-        await DispatchAsync(dispatcher, projections, cancellationToken);
+        await DispatchAsync(db, transaction, dispatcher, projections, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return saved;
     }
 
+    /// <summary>
+    /// Dispatches every collected projection ON THIS SAVE'S connection and transaction.
+    /// </summary>
+    /// <remarks>
+    /// Lending both is not a convenience — the rows this save wrote are not committed yet, so a projection on
+    /// any other connection cannot see the document it was called about, and a projection's own write on
+    /// another connection would commit independently of the document it describes. See
+    /// <see cref="AmbientDatabaseTransaction"/> for what that cost in practice.
+    /// </remarks>
     private static async Task DispatchAsync(
+        SimplArchiveDbContext db,
+        IDbContextTransaction transaction,
         IModuleProjectionDispatcher? dispatcher,
         List<ModuleProjectionCollector.Change> projections,
         CancellationToken cancellationToken)
@@ -72,10 +84,14 @@ internal static class ModuleProjectionSave
             return;
         }
 
+        var ambient = transaction.GetDbTransaction() is { } dbTransaction
+            ? new AmbientDatabaseTransaction(db.Database.GetDbConnection(), dbTransaction)
+            : null;
+
         foreach (var change in projections)
         {
             await dispatcher.DispatchAsync(
-                change.DocumentId, change.MaskId, change.TenantId, change.Removed, cancellationToken);
+                change.DocumentId, change.MaskId, change.TenantId, change.Removed, ambient, cancellationToken);
         }
     }
 }

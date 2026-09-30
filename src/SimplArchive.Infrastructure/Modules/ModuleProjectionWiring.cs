@@ -18,5 +18,8 @@ public static class ModuleProjectionWiring
         IServiceCollection services, IReadOnlyList<ModuleLoader.LoadedModule> modules) =>
         services.AddSingleton<IModuleProjectionDispatcher>(sp =>
             new ModuleProjectionDispatcher(
-                modules, sp.GetRequiredService<IServiceScopeFactory>(), sp.GetService<TimeProvider>()));
+                modules,
+                sp.GetRequiredService<IServiceScopeFactory>(),
+                sp.GetService<TimeProvider>(),
+                sp.GetService<Microsoft.Extensions.Logging.ILogger<ModuleProjectionDispatcher>>()));
 }

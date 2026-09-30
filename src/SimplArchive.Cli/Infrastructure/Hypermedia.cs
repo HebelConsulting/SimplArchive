@@ -58,6 +58,17 @@ public sealed class Hypermedia(SimplArchiveApi api)
                 $"{source} does not offer '{rel}'. Either this installation does not provide it, "
                 + "or the signed-in principal may not use it.");
 
+    /// <summary>
+    /// Everything a resource ALREADY IN HAND advertises — for a caller that read it for something else.
+    /// </summary>
+    /// <remarks>
+    /// The public face of the parser below, so a caller holding a resource does not have to fetch it again to
+    /// learn its rels. That second fetch is exactly what ADR 0557 forbids: a caller that reads a document for
+    /// its ETag and then reads it again for its links has turned one request into two to learn something it
+    /// was already holding.
+    /// </remarks>
+    public static IReadOnlyDictionary<string, string> LinksOf(JsonElement resource) => Links(resource);
+
     private static IReadOnlyDictionary<string, string> Links(JsonElement resource)
     {
         var links = new Dictionary<string, string>(StringComparer.Ordinal);

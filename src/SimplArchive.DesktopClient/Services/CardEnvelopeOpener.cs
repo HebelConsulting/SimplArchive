@@ -2,6 +2,7 @@ using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
+using System.Security.Cryptography.Xml;
 using CAManagement.Pkcs11.DataStructures;
 using MimeKit;
 using MimeKit.Cryptography;
@@ -65,23 +66,53 @@ public static class CardEnvelopeOpener
                 var onCard = CardCertificates.ReadFromLibrary(library);
                 CardModule.Observed(onCard.Count > 0);
 
-                if (!onCard.Any(c => EnvelopeRecipients.Matches(c.Certificate, recipients)))
+                // EVERY certificate that matched, tried in turn (#1500, owner-decided 2026-09-30). Two cards
+                // may be in the reader and BOTH may be addressees — a reader's card and their laptop are one
+                // person, and ADR 0842 addresses the whole set — so "the first match" is a choice, and
+                // stopping there means a blocked or mistyped card hides one that would have worked.
+                //
+                // A CHOOSER was declined: every valid recipient opens the same document, so the choice has no
+                // outcome the reader can see, and a prompt whose answer changes nothing in front of one that
+                // does is how people learn to click through prompts. Instead the PIN prompt NAMES the card,
+                // and this moves on.
+                var addressed = onCard
+                    .Where(c => EnvelopeRecipients.Matches(c.Certificate, recipients))
+                    .ToList();
+
+                if (addressed.Count == 0)
                 {
                     return null;
                 }
 
-                if (await CardSession.OpenAsync(library) is not { } session)
+                foreach (var card in addressed)
                 {
-                    return null;
+                    if (await CardSession.OpenAsync(library, card.TokenSerial, card.TokenLabel, card.ObjectLabel)
+                        is not { } session)
+                    {
+                        // Declined, blocked, or gone from the reader. Another card may still hold the key.
+                        continue;
+                    }
+
+                    if (Unwrap(session, raw, card.KeyId, card.Certificate) is { } opened)
+                    {
+                        return opened;
+                    }
+
+                    DesktopLog.Debug(
+                        "Card {Serial} is an addressee but did not open the envelope; trying the next of {Count}.",
+                        card.TokenSerial, addressed.Count);
                 }
 
-                return Unwrap(session, raw);
+                return null;
             },
             whenUnavailable: null);
     }
 
     private static (byte[] Bytes, string ContentType)? Unwrap(
-        CAManagement.Pkcs11.Pkcs11Session session, byte[] raw)
+        CAManagement.Pkcs11.Pkcs11Session session,
+        byte[] raw,
+        byte[]? keyId,
+        X509Certificate2 addressedTo)
     {
 
         var envelopedCms = new EnvelopedCms();
@@ -111,21 +142,73 @@ public static class CardEnvelopeOpener
                 return null;
             }
 
+            // THE KEY THAT BELONGS TO THE MATCHED CERTIFICATE, by CKA_ID (#1500). A PIV token has four key
+            // slots, so taking the first is a guess — right by luck on a card where only slot 9D holds a key,
+            // and wrong the moment a signing key in 9C comes first. The fallback keeps a token that sets no
+            // CKA_ID working, and says so rather than failing silently.
+            var key = keys[0];
+            if (keyId is { Length: > 0 })
+            {
+                // AN INDEX, not the handle: an object handle is a CK_ULONG, so FirstOrDefault answers 0 for
+                // "not found" — indistinguishable from a real handle of 0 — and the type cannot be named in a
+                // nullable to fix that (ADR 0831). The index says "not found" as -1, unambiguously.
+                var match = keys.ToList().FindIndex(handle =>
+                {
+                    try
+                    {
+                        return session.GetAttributeValue(handle, CK_ATTRIBUTE_TYPE.CKA_ID)
+                            .AsSpan().SequenceEqual(keyId);
+                    }
+                    catch (Exception)
+                    {
+                        return false;   // this key will not say what it is; another may
+                    }
+                });
+
+                if (match >= 0)
+                {
+                    key = keys[match];
+                }
+                else
+                {
+                    DesktopLog.Debug(
+                        "No private key on the card carries the matched certificate's CKA_ID, so the first of "
+                        + "{Count} is used. An unwrap failure after this is likely the wrong key.", keys.Count);
+                }
+            }
+
+            // OUR OWN RECIPIENT, not the first one in the set (#1500). The server addresses a reader's whole
+            // certificate SET (ADR 0842), so an envelope for somebody holding a card AND a laptop carries
+            // several RecipientInfos — and measured on a real one, the reader's card was the SECOND: taking
+            // the first read the other key's EncryptedKey and routed by the other key's KIND, so an RSA
+            // recipient's wrapped key was handed to an EC card. The comment that used to stand here said
+            // "the server addresses one reader per response, so taking the first is correct here and would
+            // become a lookup the day that changes". This is that day, and this is that lookup.
+            var mine = RecipientIndexOf(envelopedCms, addressedTo);
+            if (mine < 0)
+            {
+                // The certificate matched by issuer and serial a moment ago, so this cannot normally happen —
+                // it would mean the CMS names the recipient a way EnvelopeRecipients does not read. Declining
+                // lets a later opener try, which is the same answer as "not addressed to this card".
+                DesktopLog.Debug("The envelope's recipients do not name the card certificate that matched it.");
+                return null;
+            }
+
             // ROUTED BY RECIPIENT KIND, because the two kinds do not differ in degree. An RSA recipient has
             // the content key WRAPPED to its public key and carries it in EncryptedKey; an elliptic-curve
             // recipient AGREES a key-encryption key and EncryptedKey holds the content key wrapped under
             // THAT. Reading EncryptedKey and decrypting it is meaningless for the second — which is why this
             // opener could not read an EC recipient of any curve before ABI-side work made agreement possible.
-            contentKey = envelopedCms.RecipientInfos[0] switch
+            contentKey = envelopedCms.RecipientInfos[mine] switch
             {
                 // The card's part passed as a LAMBDA, not the handle: NativeULong is a global using alias
                 // inside CAManagement (uint on Windows, ulong on Unix), so a consumer cannot name it in a
                 // signature — and closing over it here keeps the agreement logic free of the card entirely,
                 // which is what makes it testable without one.
                 KeyAgreeRecipientInfo agreed => AgreeContentKey(
-                    raw, agreed.EncryptedKey, point => session.DeriveEcdhSecret(point, keys[0])),
+                    raw, agreed.EncryptedKey, point => session.DeriveEcdhSecret(point, key), mine),
                 _ => session.Decrypt(
-                    CK_MECHANISM_TYPE.CKM_RSA_PKCS, envelopedCms.RecipientInfos[0].EncryptedKey, keys[0]),
+                    CK_MECHANISM_TYPE.CKM_RSA_PKCS, envelopedCms.RecipientInfos[mine].EncryptedKey, key),
             };
         }
         catch (Exception e)
@@ -149,6 +232,28 @@ public static class CardEnvelopeOpener
         using var opened = new MemoryStream();
         part.Content.DecodeTo(opened);
         return (opened.ToArray(), part.ContentType?.MimeType ?? "application/octet-stream");
+    }
+
+    /// <summary>
+    /// Which recipient of <paramref name="envelopedCms"/> is <paramref name="certificate"/>, or -1.
+    /// </summary>
+    /// <remarks>
+    /// By issuer and serial, the same identification <see cref="EnvelopeRecipients"/> uses to decide whether
+    /// the card is an addressee at all — so the question that selects the recipient is the question that was
+    /// already answered, rather than a second opinion that could differ.
+    /// </remarks>
+    internal static int RecipientIndexOf(EnvelopedCms envelopedCms, X509Certificate2 certificate)
+    {
+        for (var i = 0; i < envelopedCms.RecipientInfos.Count; i++)
+        {
+            if (envelopedCms.RecipientInfos[i].RecipientIdentifier.Value is X509IssuerSerial id
+                && EnvelopeRecipients.Matches(certificate, [(id.IssuerName, id.SerialNumber)]))
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     /// <summary>Which of card, reader or registered certificate is missing — the message the reader acts on.</summary>
@@ -185,13 +290,14 @@ public static class CardEnvelopeOpener
     /// another producer need not, and the point of the check is the CRYPTO agreeing with a standard
     /// implementation rather than our own framing.
     /// </remarks>
-    internal static byte[] OpenWithAgreement(byte[] raw, Func<byte[], byte[]> deriveSharedSecret)
+    internal static byte[] OpenWithAgreement(
+        byte[] raw, Func<byte[], byte[]> deriveSharedSecret, int recipientIndex = 0)
     {
         var envelopedCms = new EnvelopedCms();
         envelopedCms.Decode(raw);
 
         var contentKey = AgreeContentKey(
-            raw, envelopedCms.RecipientInfos[0].EncryptedKey, deriveSharedSecret);
+            raw, envelopedCms.RecipientInfos[recipientIndex].EncryptedKey, deriveSharedSecret, recipientIndex);
 
         return DecryptContent(raw, envelopedCms.ContentInfo.Content, contentKey);
     }
@@ -268,9 +374,9 @@ public static class CardEnvelopeOpener
     /// <param name="deriveSharedSecret">Performs the private half of the agreement over the originator's
     /// public point — the card, in production; a software key in a test.</param>
     internal static byte[] AgreeContentKey(
-        byte[] raw, byte[] encryptedKey, Func<byte[], byte[]> deriveSharedSecret)
+        byte[] raw, byte[] encryptedKey, Func<byte[], byte[]> deriveSharedSecret, int recipientIndex = 0)
     {
-        var (originatorPoint, ukm, kdfSchemeOid, wrapOid) = ReadKeyAgreement(raw);
+        var (originatorPoint, ukm, kdfSchemeOid, wrapOid) = ReadKeyAgreement(raw, recipientIndex);
 
         if (!KdfSchemes.TryGetValue(kdfSchemeOid, out var kdfHash))
         {
@@ -288,14 +394,57 @@ public static class CardEnvelopeOpener
         };
 
         // The card does the one thing only it can: the private half of the agreement. Everything after this is
-        // managed code, which is what keeps it testable against published vectors.
+        // managed code, which is what keeps it testable against published vectors — and it happens ONCE,
+        // before the loop below, because the card operation is the expensive and user-visible part.
         var sharedSecret = deriveSharedSecret(originatorPoint);
 
-        var kek = KeyAgreementCrypto.DeriveKeyEncryptionKey(
-            sharedSecret, EccCmsSharedInfo(wrapOid, ukm, kekLength * 8), kekLength, kdfHash);
+        // BOTH SPELLINGS OF keyInfo, because real producers disagree about one byte string and the derived
+        // key differs (#1498). RFC 3565 says an AES key wrap's AlgorithmIdentifier carries NO parameters,
+        // OpenSSL writes it that way, and this client derived only that form — but BouncyCastle writes an
+        // explicit NULL, and BouncyCastle is what the encryption service produces CMS with (its ADR 0018).
+        // Measured: every algorithm matched, the structure parsed, and the unwrap failed its integrity check,
+        // which reads as a wrong key rather than as a disagreement about encoding.
+        //
+        // TRYING BOTH IS SAFE, and that is the argument rather than mere convenience: RFC 3394 prepends a
+        // known integrity value, so a KEK derived from the wrong shared info fails a comparison instead of
+        // producing plausible bytes. There is exactly one spelling that can succeed, so this cannot silently
+        // pick the wrong one — which is what makes a loop acceptable where guessing a cipher would not be.
+        foreach (var (spelling, sharedInfo) in SharedInfoSpellings(wrapOid, ukm, kekLength * 8))
+        {
+            var kek = KeyAgreementCrypto.DeriveKeyEncryptionKey(
+                sharedSecret, sharedInfo, kekLength, kdfHash);
+            try
+            {
+                var contentKey = KeyAgreementCrypto.UnwrapKey(kek, encryptedKey);
+                DesktopLog.Debug("The envelope's key agreement used the {Spelling} keyInfo encoding.", spelling);
+                return contentKey;
+            }
+            catch (CryptographicException)
+            {
+                // Not this spelling. The last one rethrows below with the message a reader can act on.
+            }
+        }
 
-        return KeyAgreementCrypto.UnwrapKey(kek, encryptedKey);
+        throw new EnvelopeNotOpenedException(
+            "the content key did not unwrap under either encoding of the key-agreement shared info, so the "
+            + "key this agreement derived is not the one it was wrapped with");
     }
+
+    /// <summary>
+    /// The <c>ECC-CMS-SharedInfo</c> as each real producer writes it — RFC-correct first.
+    /// </summary>
+    /// <remarks>
+    /// The difference is whether <c>keyInfo</c>'s AlgorithmIdentifier carries an explicit NULL for its
+    /// parameters. RFC 3565 §2.2 says it must be ABSENT for an AES key wrap, and that form is tried first
+    /// because it is the standard's; BouncyCastle writes the NULL, and a client that rejects what a common
+    /// library produces is a client that cannot open real documents.
+    /// </remarks>
+    private static IEnumerable<(string Spelling, byte[] SharedInfo)> SharedInfoSpellings(
+        string keyWrapOid, byte[]? ukm, int kekLengthBits) =>
+    [
+        ("RFC 3565 (no parameters)", EccCmsSharedInfo(keyWrapOid, ukm, kekLengthBits)),
+        ("explicit NULL parameters", EccCmsSharedInfo(keyWrapOid, ukm, kekLengthBits, nullParameters: true)),
+    ];
 
     /// <summary>
     /// The <c>ECC-CMS-SharedInfo</c> the KDF is fed (RFC 5753 §7.2).
@@ -310,12 +459,16 @@ public static class CardEnvelopeOpener
     /// The tags are 0 and <b>2</b> — there is no [1]. Writing [1] for suppPubInfo produces a structure that
     /// encodes perfectly and derives a different key, with nothing to point at but a failed integrity check.
     /// <para>
-    /// <c>keyInfo</c> carries NO parameters for an AES key wrap. An explicit NULL is the reflex from RSA
-    /// algorithm identifiers and is wrong here: RFC 3565 says absent, and absent versus NULL is two different
-    /// byte strings hashed into two different keys.
+    /// <c>keyInfo</c>'s parameters are where producers disagree, and the consequence is exact: absent versus
+    /// an explicit NULL is two different byte strings hashed into two different keys. RFC 3565 §2.2 says
+    /// ABSENT for an AES key wrap and OpenSSL writes it that way — but <b>BouncyCastle writes the NULL</b>,
+    /// and it is what the encryption service produces CMS with, so a client that derives only the RFC form
+    /// cannot open the envelopes this product itself sends (#1498). Hence <paramref name="nullParameters"/>
+    /// and the caller that tries both.
     /// </para>
     /// </remarks>
-    internal static byte[] EccCmsSharedInfo(string keyWrapOid, byte[]? ukm, int kekLengthBits)
+    internal static byte[] EccCmsSharedInfo(
+        string keyWrapOid, byte[]? ukm, int kekLengthBits, bool nullParameters = false)
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);
         using (writer.PushSequence())
@@ -323,6 +476,12 @@ public static class CardEnvelopeOpener
             using (writer.PushSequence())
             {
                 writer.WriteObjectIdentifier(keyWrapOid);
+                if (nullParameters)
+                {
+                    // BouncyCastle's spelling. See SharedInfoSpellings for why both are produced rather than
+                    // one being declared correct and the other rejected.
+                    writer.WriteNull();
+                }
             }
 
             if (ukm is { Length: > 0 })
@@ -374,7 +533,7 @@ public static class CardEnvelopeOpener
     /// </para>
     /// </remarks>
     internal static (byte[] OriginatorPoint, byte[]? Ukm, string KdfSchemeOid, string KeyWrapOid)
-        ReadKeyAgreement(byte[] cms)
+        ReadKeyAgreement(byte[] cms, int recipientIndex = 0)
     {
         try
         {
@@ -390,7 +549,23 @@ public static class CardEnvelopeOpener
                 envelopedData.ReadEncodedValue(); // originatorInfo
             }
 
-            var recipient = envelopedData.ReadSetOf()
+            // THE RECIPIENT AT THIS POSITION, because a set may hold several and ours need not be first
+            // (#1500). Each earlier element is read and discarded rather than parsed: a KeyTrans recipient is
+            // an untagged SEQUENCE and a KeyAgree one is tagged [1], so parsing the wrong one throws rather
+            // than misreading — but throwing reads as "its key-agreement structure could not be read", which
+            // sends a reader looking at the envelope instead of at the position.
+            //
+            // Position rather than a match inside the structure: EnvelopedCms.RecipientInfos enumerates the
+            // set in order, so the caller's index aligns with it. That holds while each KeyAgree info carries
+            // ONE RecipientEncryptedKey, which is what both producers here write; an info bundling several
+            // recipients under one originator key would need the inner list walked as well.
+            var recipients = envelopedData.ReadSetOf();
+            for (var skipped = 0; skipped < recipientIndex; skipped++)
+            {
+                recipients.ReadEncodedValue();
+            }
+
+            var recipient = recipients
                 .ReadSequence(new Asn1Tag(TagClass.ContextSpecific, 1, isConstructed: true));
 
             recipient.ReadInteger(); // version, always 3 for a key-agreement recipient

@@ -98,6 +98,78 @@ public class CertificateHolderPrincipalTests
 
     // --- harness ----------------------------------------------------------------------------------------
 
+    [Fact]
+    public async Task A_document_created_in_ONE_save_with_its_mask_and_fields_still_resolves_its_holder()
+    {
+        // THE ORDER A MODULE USES, and the one this file did not cover (#1496). `CreateDocumentAsync` Adds
+        // the document WITH its MaskVersionId, Adds its field values, and saves ONCE — so neither branch of
+        // the sync saw it: `IsModified` is false for an Added entity, and the fallback query cannot find a
+        // row that this very save is inserting.
+        //
+        // The cost of that gap was not theoretical. An encryption certificate enrolled through the module's
+        // own surface answered 201 with usable: true, represented nobody, never reached the module's read
+        // model, and so the module answered "this reader holds none" — which, because a module that answers
+        // is the ONLY source (ADR 0842), REMOVED the reader's access that the service registry had provided.
+        // Every layer behaved as designed.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+        var (tenantId, userId, email) = await SeedAsync(connection);
+
+        var documentId = await FileCertificateInOneSaveAsync(connection, tenantId, userId, email);
+
+        using var read = Context(connection, tenantId);
+        var principal = await read.ResourcePrincipals
+            .FirstOrDefaultAsync(p => p.ResourceDocumentId == documentId);
+
+        Assert.NotNull(principal);
+        Assert.Equal(userId, principal!.UserId);
+    }
+
+    /// <summary>
+    /// Files a certificate the way <c>IModuleArchiveFacade.CreateDocumentAsync</c> does: one save, mask and
+    /// fields together.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately a SECOND helper rather than a parameter on the first. The two orders are different facts
+    /// about the core — one is what the metadata endpoint does, the other is what every module does — and a
+    /// single helper with a flag would let a future edit "simplify" one of them away, which is how this gap
+    /// stayed open while a test for the feature passed.
+    /// </remarks>
+    private static async Task<Guid> FileCertificateInOneSaveAsync(
+        SqliteConnection connection, Guid tenantId, Guid userId, string holder)
+    {
+        using var db = Context(connection, tenantId);
+
+        var maskVersionId = await db.MaskVersions
+            .Where(v => v.MaskId == WellKnownMaskIds.Certificate && v.IsCurrent)
+            .Select(v => v.Id).FirstAsync();
+        var holderFieldId = await db.FieldDefinitions
+            .Where(f => f.MaskVersionId == maskVersionId && f.Name == "Holder")
+            .Select(f => f.Id).FirstAsync();
+
+        var document = new Document
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            Name = $"cert-{Guid.NewGuid():N}",
+            MaskVersionId = maskVersionId,
+            CreatedByUserId = userId,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        db.Documents.Add(document);
+        db.FieldValues.Add(new FieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DocumentId = document.Id,
+            FieldDefinitionId = holderFieldId,
+            Value = holder,
+        });
+
+        await db.SaveChangesAsync();   // ONE save — the whole point
+        return document.Id;
+    }
+
     private static async Task<(Guid TenantId, Guid UserId, string Email)> SeedAsync(SqliteConnection connection)
     {
         using (var setup = Context(connection))

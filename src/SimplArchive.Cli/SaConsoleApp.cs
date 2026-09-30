@@ -99,6 +99,17 @@ public static class SaConsoleApp
                 });
             });
 
+            // CERTIFICATES, the ADMINISTRATOR's surface (owner-decided): enrolling for OTHER people, in bulk,
+            // from a certification authority's manifest. Deliberately not under `me` — that branch is the
+            // signed-in user's own settings and writes the self-service MAIL certificate, which is a
+            // different store from the reader certificates documents are addressed to (#1501).
+            config.AddBranch("certificates", certificates =>
+            {
+                certificates.SetDescription("Reader certificates, for a tenant administrator.");
+                certificates.AddCommand<CertificateImportCommand>("import")
+                    .WithDescription("Enrol and revoke in bulk from a CA manifest. Safe to re-run.");
+            });
+
             // Modules, and for now the one act a script needs that no client covers: filing a signed licence
             // and pointing the modules it names at it. Both clients already let a HUMAN do this; nothing let
             // a script, which is why the flight-school demo seeder grew its own inline copy (#1474).
