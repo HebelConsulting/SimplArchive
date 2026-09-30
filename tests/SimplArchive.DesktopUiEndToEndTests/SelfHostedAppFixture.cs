@@ -10,7 +10,36 @@ namespace SimplArchive.UiEndToEndTests;
 // SimplArchive.SelfHosting, shared with the web fixture + the manual-capture harness — no more hand-synced copies.
 public sealed class SelfHostedAppFixture : IAsyncLifetime
 {
-    private readonly SelfHostedApp _app = new();
+    /// <summary>The tenant this fixture declares STRICT (core #1421) — created by whichever test wants it.</summary>
+    /// <remarks>
+    /// Declared here because a MODE is read from configuration at startup, so it cannot be switched on later;
+    /// the tenant is a row and belongs to the test. Same division the E2E factory draws.
+    /// <para>
+    /// This is the desktop suite's one opt-in to an encrypting installation. It sets `Encryption:ServiceUrl`
+    /// for the whole app, which swaps the object-storage client for its encrypting decorator — but a MODE is
+    /// per tenant (ADR 0825), so the Demo tenant every other desktop test uses is untouched and objects
+    /// without the wrapping metadata pass straight through. The E2E factory has done exactly this for its
+    /// whole collection since #1387.
+    /// </para>
+    /// </remarks>
+    public const string StrictTenantName = "DesktopStrict";
+
+    private const string PlatformAdminClientId = "desktop-e2e-platform-admin";
+    private const string PlatformAdminClientSecret = "desktop-e2e-platform-secret";
+
+    private readonly SelfHostedApp _app = new()
+    {
+        StrictTenantName = StrictTenantName,
+        PlatformAdminClientId = PlatformAdminClientId,
+        PlatformAdminClientSecret = PlatformAdminClientSecret,
+    };
+
+    /// <summary>The stub encryption service, so a test can provision a reader's certificate as the real one would.</summary>
+    public EncryptionServiceStub EncryptionService => _app.EncryptionService
+        ?? throw new InvalidOperationException("the encryption stub is not running — StrictTenantName was not set");
+
+    /// <summary>Client credentials for the bootstrapped platform administrator, which provisions a tenant.</summary>
+    public (string ClientId, string ClientSecret) PlatformAdmin => (PlatformAdminClientId, PlatformAdminClientSecret);
 
     public const string AdminEmail = SelfHostedApp.AdminEmail;
     public const string AdminPassword = SelfHostedApp.AdminPassword;

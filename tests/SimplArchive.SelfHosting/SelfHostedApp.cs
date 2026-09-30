@@ -23,6 +23,45 @@ namespace SimplArchive.SelfHosting;
 // desktop suite stays light — the web fixture and the capture harness launch their own Chrome on top of BaseUrl.
 public sealed class SelfHostedApp : IAsyncDisposable
 {
+    /// <summary>
+    /// Opt in to an encrypting installation: a stub encryption service and one tenant in a mode (core #1421).
+    /// </summary>
+    /// <remarks>
+    /// <b>Off by default, and that is a requirement.</b> This engine is shared by the desktop suite, the
+    /// web-UI suite and the manual-capture harness (ADR 0502), and `Encryption:ServiceUrl` swaps the
+    /// object-storage client for its encrypting decorator installation-wide — so switching it on
+    /// unconditionally would change what all three run against. Set it to the tenant name that should be
+    /// STRICT; everything else keeps today's behaviour, because a mode is per tenant (ADR 0825).
+    /// <para>
+    /// The tenant itself is NOT created here — a mode is read from configuration at startup while a tenant is
+    /// a row, so whichever test wants it creates it under exactly this name. Same division the E2E factory
+    /// draws for its own strict tenant.
+    /// </para>
+    /// </remarks>
+    public string? StrictTenantName { get; set; }
+
+    /// <summary>The stub encryption service, once started — null unless <see cref="StrictTenantName"/> is set.</summary>
+    public EncryptionServiceStub? EncryptionService { get; private set; }
+
+    /// <summary>
+    /// Opt in to a bootstrapped platform administrator, so a test can PROVISION a tenant over the API.
+    /// </summary>
+    /// <remarks>
+    /// Needed because a tenant is provisioned by a platform administrator and nothing else (ADR 0206), and
+    /// this engine seeds only a tenant administrator for the demo tenant. A test that wants a SECOND tenant
+    /// — one in an encryption mode, say — has to create it properly: the provisioning endpoint seeds its
+    /// well-known masks and first repository, which inserting rows by hand would not.
+    /// <para>
+    /// Off by default, like the encryption stub: the Api bootstraps this only when a client id and secret are
+    /// configured, so absent these the installation has no platform administrator at all — which is what
+    /// every existing suite has run against.
+    /// </para>
+    /// </remarks>
+    public string? PlatformAdminClientId { get; set; }
+
+    /// <summary>The secret for <see cref="PlatformAdminClientId"/>. Both or neither.</summary>
+    public string? PlatformAdminClientSecret { get; set; }
+
     public const string Bucket = "simplarchive";
     public const string StorageUser = "storageadmin";
     public const string StoragePassword = "storageadmin";
@@ -304,6 +343,24 @@ public sealed class SelfHostedApp : IAsyncDisposable
         {
             env["Demo__Clock"] = DemoClock;
         }
+
+        // The encrypting installation, only when a caller asked for one. Started BEFORE the Api: a mode with
+        // no reachable service refuses at startup (#1406), so the Api would fail to boot rather than degrade
+        // — which is the designed behaviour and a confusing way to learn that this stub came up late.
+        if (!string.IsNullOrWhiteSpace(PlatformAdminClientId) && !string.IsNullOrWhiteSpace(PlatformAdminClientSecret))
+        {
+            env["Bootstrap__PlatformAdministrator__ClientId"] = PlatformAdminClientId;
+            env["Bootstrap__PlatformAdministrator__ClientSecret"] = PlatformAdminClientSecret;
+        }
+
+        if (!string.IsNullOrWhiteSpace(StrictTenantName))
+        {
+            var stub = new EncryptionServiceStub();
+            stub.Start();
+            EncryptionService = stub;
+            env["Encryption__ServiceUrl"] = stub.Url;
+            env[$"Encryption__Modes__{StrictTenantName}"] = "Strict";
+        }
         foreach (var (k, v) in env)
         {
             psi.Environment[k] = v;
@@ -529,6 +586,13 @@ public sealed class SelfHostedApp : IAsyncDisposable
         if (RemoteTarget is { Length: > 0 })
         {
             return;
+        }
+
+        // Before the Api, so a request in flight meets a refused connection rather than a listener that has
+        // gone away mid-response.
+        if (EncryptionService is { } stub)
+        {
+            await stub.DisposeAsync();
         }
 
         if (_api is { HasExited: false })
