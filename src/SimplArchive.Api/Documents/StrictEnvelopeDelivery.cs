@@ -54,6 +54,12 @@ public sealed class StrictEnvelopeDelivery(
     private bool _asked;
     private IReadOnlyList<string> _certificates = [];
 
+    // WHY the set is what it is, remembered beside it (#1411, ADR 0859). The rel decision only needs the
+    // set — absent is absent, whatever the cause — but the REFUSAL needs the cause, or a reader whose
+    // installation is broken is told to register a certificate they already have.
+    private SimplArchive.Infrastructure.Modules.ReaderCertificateOutcome _outcome =
+        SimplArchive.Infrastructure.Modules.ReaderCertificateOutcome.NoModule;
+
     /// <summary>True when this tenant DELIVERS content as an envelope.</summary>
     /// <remarks>
     /// Deliberately not the same question as <see cref="RefusesPlaintextDoorsAsync"/>, and they came apart with
@@ -153,6 +159,51 @@ public sealed class StrictEnvelopeDelivery(
         return _certificates;
     }
 
+    /// <summary>
+    /// The reader's certificates, or the RIGHT refusal for why there are none (#1411, ADR 0859).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Here rather than at the controller, because this is the only place that knows WHY the set is empty.
+    /// The controller used to throw <c>ContentCannotBeEnveloped</c> for every empty set, which is how a
+    /// reader on an installation with a broken or unlicensed module came to be told to "register a current
+    /// certificate and try again" — wrong, and unactionable, since the fix is an administrator's.
+    /// </para>
+    /// <para>
+    /// ADR 0842 requires four refusals to stay distinguishable because they have different fixes. Three are
+    /// answerable here. The fourth — no certificate enrolled versus every certificate filtered out — is known
+    /// only to the module, which returns an empty set either way, so those two still share a message until
+    /// the ABI carries a reason.
+    /// </para>
+    /// </remarks>
+    public async Task<IReadOnlyList<string>> RequireReaderCertificatesAsync(CancellationToken cancellationToken)
+    {
+        var certificates = await ReaderCertificatePemsAsync(cancellationToken);
+
+        return certificates.Count > 0 ? certificates : throw RefusalFor(_outcome);
+    }
+
+    /// <summary>
+    /// The refusal that names the cause, for an empty certificate set.
+    /// </summary>
+    /// <remarks>
+    /// Static and internal so the mapping can be ASSERTED. Constructing this service takes eight
+    /// collaborators and a database, none of which the mapping depends on — and a cause-to-message table
+    /// nobody tests is exactly how the collapsed message survived as long as it did.
+    /// </remarks>
+    internal static Exception RefusalFor(SimplArchive.Infrastructure.Modules.ReaderCertificateOutcome outcome) => outcome switch
+    {
+        SimplArchive.Infrastructure.Modules.ReaderCertificateOutcome.AskFailed =>
+            new Errors.Exceptions.Encryption.ReaderCertificatesUnavailableException(),
+
+        SimplArchive.Infrastructure.Modules.ReaderCertificateOutcome.LicenceLapsed =>
+            new Errors.Exceptions.Encryption.EncryptionModuleNotLicensedException(),
+
+        // A module answered "none", or there is no module and neither the column nor the registry had one.
+        // Both are genuinely "you have no usable certificate here", which the reader can act on.
+        _ => new Errors.Exceptions.Encryption.ContentCannotBeEnvelopedException(),
+    };
+
     private async Task<IReadOnlyList<string>> FindCertificatesAsync(CancellationToken cancellationToken)
     {
         if (currentUser.UserId is not { } userId)
@@ -164,11 +215,16 @@ public sealed class StrictEnvelopeDelivery(
 
         // THE MODULE, where one answers, is the ONLY source (ADR 0842). Not a fallback chain and not a union:
         // a union means a certificate REVOKED in the module still opens documents while a copy lingers in the
-        // column, which is a revocation that does not revoke. Null here means no module declared the
-        // capability at all — empty means one did and this reader has none, and the read is refused.
-        if (await moduleCertificates.ForAsync(userId, cancellationToken) is { } fromModule)
+        // column, which is a revocation that does not revoke.
+        //
+        // Every outcome but NoModule closes the core's own sources — a lapsed licence and a failure to ask
+        // have not said "this reader has none" — and each is remembered, because ADR 0842 requires the
+        // refusals to stay distinguishable and they have different fixes (ADR 0859).
+        var fromModule = await moduleCertificates.ForAsync(userId, cancellationToken);
+        _outcome = fromModule.Outcome;
+        if (fromModule.ModuleSpoke)
         {
-            return [.. fromModule.Select(c => c.CertificatePem)];
+            return [.. fromModule.Certificates.Select(c => c.CertificatePem)];
         }
 
         var reader = await dbContext.Users

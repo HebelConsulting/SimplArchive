@@ -31,8 +31,16 @@ public sealed class ModuleReaderCertificates(
     IServiceProvider services,
     ILogger<ModuleReaderCertificates> logger)
 {
-    /// <summary>The reader's certificates, or null when no active module answers this question.</summary>
-    public async Task<IReadOnlyList<ReaderCertificate>?> ForAsync(
+    /// <summary>
+    /// The reader's certificates and WHY the answer ended as it did (ADR 0859).
+    /// </summary>
+    /// <remarks>
+    /// Returns an outcome rather than null-or-empty since #1411. The old shape collapsed four causes with
+    /// four different fixes into one empty list — no certificate, all filtered out, licence lapsed, and the
+    /// module throwing — against ADR 0842's requirement that they stay distinguishable. The two fail-open
+    /// callers may still ignore the outcome; the strict content read must not.
+    /// </remarks>
+    public async Task<ReaderCertificateAnswer> ForAsync(
         Guid userId, CancellationToken cancellationToken = default)
     {
         var modules = (services.GetService(typeof(IReadOnlyList<ModuleLoader.LoadedModule>))
@@ -42,7 +50,8 @@ public sealed class ModuleReaderCertificates(
 
         if (modules.Count == 0)
         {
-            return null;   // the ordinary case: nothing enrols certificates, so nothing is asked
+            // the ordinary case: nothing enrols certificates, so nothing is asked
+            return ReaderCertificateAnswer.NoModule;
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -66,8 +75,8 @@ public sealed class ModuleReaderCertificates(
 
             try
             {
-                return await loaded.Module.ReaderCertificates!(
-                    new ReaderCertificateContext(userId, archive, services));
+                return ReaderCertificateAnswer.Answered(await loaded.Module.ReaderCertificates!(
+                    new ReaderCertificateContext(userId, archive, services)));
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
@@ -78,7 +87,10 @@ public sealed class ModuleReaderCertificates(
                     "Module {ModuleId} failed to answer which certificates user {UserId} is addressed by, "
                     + "so the read is refused. Turn Trace on for the exchange.",
                     loaded.Module.ModuleId, userId);
-                return [];
+
+                // NOT "none". The reader is told something different for this than for an empty answer,
+                // because the fix is an administrator's rather than theirs (ADR 0859).
+                return ReaderCertificateAnswer.AskFailed;
             }
             finally
             {
@@ -90,7 +102,8 @@ public sealed class ModuleReaderCertificates(
         }
 
         // Installed but not active for this tenant — the licence has lapsed or was never filed. That is NOT
-        // "no module": the tenant is in an enveloping mode and nothing can envelope, so it must refuse.
-        return [];
+        // "no module": the tenant is in an enveloping mode and nothing can envelope, so it must refuse — and
+        // it is not "no certificate" either, which is why it has its own outcome (ADR 0842's four refusals).
+        return ReaderCertificateAnswer.LicenceLapsed;
     }
 }

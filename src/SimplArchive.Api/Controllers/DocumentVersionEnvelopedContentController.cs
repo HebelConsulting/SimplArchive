@@ -76,10 +76,10 @@ public class DocumentVersionEnvelopedContentController(
             return NotFound();
         }
 
-        if (await envelopes.ReaderCertificatePemsAsync(cancellationToken) is not { Count: > 0 } certificates)
-        {
-            throw new Errors.Exceptions.Encryption.ContentCannotBeEnvelopedException();
-        }
+        // The refusal is chosen by the thing that knows WHY there are none (#1411, ADR 0859): a broken
+        // module, an unlicensed one and a reader with no certificate have three different fixes, and this
+        // line used to give all three the reader's.
+        var certificates = await envelopes.RequireReaderCertificatesAsync(cancellationToken);
 
         var documentName = await dbContext.Documents
             .Where(d => d.Id == documentId)

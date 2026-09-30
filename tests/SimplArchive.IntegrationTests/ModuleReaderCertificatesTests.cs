@@ -56,7 +56,8 @@ public class ModuleReaderCertificatesTests
         var answer = await new ModuleReaderCertificates(
             db, services, NullLogger<ModuleReaderCertificates>.Instance).ForAsync(Guid.NewGuid());
 
-        Assert.Null(answer);
+        Assert.Equal(ReaderCertificateOutcome.NoModule, answer.Outcome);
+        Assert.Empty(answer.Certificates);
     }
 
     [Fact]
@@ -74,8 +75,10 @@ public class ModuleReaderCertificatesTests
         var answer = await new ModuleReaderCertificates(
             db, services, NullLogger<ModuleReaderCertificates>.Instance).ForAsync(Guid.NewGuid());
 
-        Assert.NotNull(answer);
-        Assert.Empty(answer!);
+        // LicenceLapsed, not a bare empty set: ADR 0859 keeps this apart from "the reader has none",
+        // because filing a licence is a tenant administrator's act and registering a certificate is not.
+        Assert.Equal(ReaderCertificateOutcome.LicenceLapsed, answer.Outcome);
+        Assert.Empty(answer.Certificates);
     }
 
     /// <summary>The host provider, reduced to what this seam actually resolves from it.</summary>

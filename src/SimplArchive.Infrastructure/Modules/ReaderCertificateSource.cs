@@ -50,17 +50,19 @@ public sealed record ReaderCertificateSource(IReadOnlyList<string> Pems, bool An
     /// The module's answer where there is one, else the self-service column (#1332).
     /// </summary>
     /// <param name="fromModule">
-    /// What <c>ModuleReaderCertificates.ForAsync</c> returned — null for silence, empty for "none".
+    /// What <c>ModuleReaderCertificates.ForAsync</c> returned — its OUTCOME says whether a module spoke at
+    /// all, which is the distinction this type exists to preserve (ADR 0859).
     /// </param>
     /// <param name="columnPem">The user's own registered certificate, or null.</param>
-    public static ReaderCertificateSource Resolve(
-        IReadOnlyList<SimplArchive.ModuleAbi.ReaderCertificate>? fromModule, string? columnPem) => fromModule switch
-        {
-            // A module answered. Its answer stands even when empty — see MayConsultRegistry.
-            { } answered => new([.. answered.Select(certificate => certificate.CertificatePem)], AnsweredByModule: true),
+    public static ReaderCertificateSource Resolve(ReaderCertificateAnswer fromModule, string? columnPem) =>
+        fromModule.ModuleSpoke
+
+            // A module spoke. Its answer stands even when it names nothing — and even when the "answer" was
+            // a lapsed licence or a failure to ask, because none of those means "this reader has none"
+            // (ADR 0859; see MayConsultRegistry).
+            ? new([.. fromModule.Certificates.Select(certificate => certificate.CertificatePem)], AnsweredByModule: true)
 
             // No module enrols certificates on this installation, so the core resolves them as it always
             // has: the self-service column, and then the registry (which the FETCH path asks).
-            null => columnPem is { Length: > 0 } own ? new([own], AnsweredByModule: false) : None,
-        };
+            : columnPem is { Length: > 0 } own ? new([own], AnsweredByModule: false) : None;
 }
