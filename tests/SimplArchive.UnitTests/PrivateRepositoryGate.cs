@@ -2,10 +2,19 @@ namespace SimplArchive.UnitTests;
 
 /// <summary>
 /// Answers "is this checkout the private repository?" for the guards whose inputs are withheld from the public
-/// mirror (ADR 0484) — <c>docs/</c> and <c>CLAUDE.md</c>. Those guards must stand down where their inputs do not
-/// exist, and must NOT stand down anywhere else.
+/// mirror (ADR 0484) — <c>docs/</c>, <c>CLAUDE.md</c> and <c>publish/</c>. Those guards must stand down where
+/// their inputs do not exist, and must NOT stand down anywhere else.
 /// </summary>
 /// <remarks>
+/// <para>
+/// <b><c>publish/</c> was the one that got missed.</b> <c>docs/</c> and <c>CLAUDE.md</c> are obviously private;
+/// the publish SCRIPT reads like infrastructure, and the fact that it withholds its own directory is one line in
+/// the array it declares. So a guard comparing the withheld list against that script was written without this
+/// gate and threw an IO error on every mirror run for a day
+/// (<c>PublicMirrorBoundaryTests.The_withheld_list_matches_the_publish_script</c>). Before adding a guard that
+/// reads a file, ask whether the mirror HAS that file — and note that the answer is in the list the guard itself
+/// is checking.
+/// </para>
 /// <para>
 /// It lives here, once, because it was three copies and every one of them carried the same blind spot (issue
 /// #583 named two; the third was found while fixing them). That is the failure this file exists to prevent:

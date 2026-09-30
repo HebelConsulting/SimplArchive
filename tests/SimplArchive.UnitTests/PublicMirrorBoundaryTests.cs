@@ -58,10 +58,26 @@ public class PublicMirrorBoundaryTests
     //
     // A drift here is not a test problem, it is a LEAK: this list decides what the scan looks at, so an entry
     // this copy has and the script does not means a genuinely published file is never scanned at all.
+    //
+    // AND IT ONLY RUNS IN THE PRIVATE REPOSITORY, because `publish/` is itself in the list below — so on the
+    // mirror this guard's own input does not exist. Without the gate it threw an IO error on EVERY mirror run:
+    // red from 2026-09-29T23:12Z until it was noticed a day later, which is issue #1384's complaint happening
+    // again rather than a new one. The mirror's CI is nobody's daily read, so a guard that cannot pass there
+    // does not fail loudly, it fails quietly and permanently.
+    //
+    // The reason this was easy to write wrongly: the two other guards with withheld inputs (`AdrIndexTests`,
+    // `SeedClaudeLockstepTests`) read `docs/` and `CLAUDE.md`, which are obviously private — while the publish
+    // SCRIPT reads like infrastructure rather than withheld content, and the fact that it withholds its own
+    // directory is a line in the array it declares.
     [Fact]
     public void The_withheld_list_matches_the_publish_script()
     {
-        var script = File.ReadAllText(Path.Combine(RepoPaths.Root(), "publish", "publish-public.sh"));
+        if (PrivateRepositoryGate.RepoRoot() is not { } root || !PrivateRepositoryGate.IsPrivateRepository(root))
+        {
+            return;
+        }
+
+        var script = File.ReadAllText(Path.Combine(root, "publish", "publish-public.sh"));
 
         // The array literal, not the comments above it: the comment block names the same paths in prose, so a
         // whole-file scan would "agree" with itself no matter what the array said.
