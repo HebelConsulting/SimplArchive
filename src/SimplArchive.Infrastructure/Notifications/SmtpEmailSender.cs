@@ -26,10 +26,10 @@ public sealed class SmtpEmailSender : IEmailSender
     private static bool IsPermanent(SmtpStatusCode status) => (int)status >= 500;
 
     public Task SendAsync(string toAddress, string toName, string subject, string body, CancellationToken cancellationToken = default) =>
-        SendAsync(toAddress, toName, subject, body, envelopeCertificatePem: null, cancellationToken);
+        SendAsync(toAddress, toName, subject, body, envelopeCertificatePems: [], cancellationToken);
 
     public async Task SendAsync(string toAddress, string toName, string subject, string body,
-        string? envelopeCertificatePem, CancellationToken cancellationToken = default)
+        IReadOnlyList<string> envelopeCertificatePems, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Sending mail to {Recipient}.", toAddress);
         var message = new MimeMessage();
@@ -43,9 +43,9 @@ public sealed class SmtpEmailSender : IEmailSender
         // the CALLER already genericized the subject). Fails OPEN to plaintext with a Warning naming the
         // fix — a stored certificate that stopped parsing must not stop the notification, and the caller
         // has already moved the details into the body, which is correct either way.
-        if (envelopeCertificatePem is { Length: > 0 })
+        if (envelopeCertificatePems.Count > 0)
         {
-            TryEnvelopeBody(message, envelopeCertificatePem, _logger);
+            TryEnvelopeBody(message, envelopeCertificatePems, _logger);
         }
 
         // Registered only when Smtp:Host is configured (see AddInfrastructure), so Host is non-null here.
@@ -81,24 +81,34 @@ public sealed class SmtpEmailSender : IEmailSender
     /// becomes CMS EnvelopedData to the certificate (headers stay readable — the caller genericized the
     /// subject first). Fails OPEN to plaintext with a Warning naming the fix: a stored certificate that
     /// stopped parsing must not stop the notification, and the details already moved into the body.</summary>
-    public static void TryEnvelopeBody(MimeMessage message, string certificatePem, ILogger logger)
+    public static void TryEnvelopeBody(MimeMessage message, IReadOnlyList<string> certificatePems, ILogger logger)
     {
-        if (message.Body is not { } body)
+        if (message.Body is not { } body || certificatePems.Count == 0)
         {
             return; // a bodyless message has nothing to envelope — the enveloper family's shared refusal
         }
 
+        var certificates = new List<System.Security.Cryptography.X509Certificates.X509Certificate2>();
         try
         {
-            using var certificate = System.Security.Cryptography.X509Certificates.X509Certificate2
-                .CreateFromPem(certificatePem);
+            // A lambda, not a method group: CreateFromPem takes a ReadOnlySpan<char>, which no
+            // Func<string, X509Certificate2> can bind to.
+            certificates.AddRange(certificatePems.Select(pem =>
+                System.Security.Cryptography.X509Certificates.X509Certificate2.CreateFromPem(pem)));
             using var context = new MimeKit.Cryptography.TemporarySecureMimeContext();
+
             // SmimeRecipient states the content cipher; without it MimeKit falls back to 3DES (see that type).
-            message.Body = MimeKit.Cryptography.ApplicationPkcs7Mime.Encrypt(
-                context, new MimeKit.Cryptography.CmsRecipientCollection
-                {
-                    SimplArchive.Infrastructure.Encryption.SmimeRecipient.For(certificate),
-                }, message.Body);
+            //
+            // SEVERAL recipients over ONE ciphertext (ADR 0842): a CMS EnvelopedData wraps the same
+            // content-encryption key to each recipient's public key, so addressing a reader's card AND
+            // their laptop costs one key-wrap each rather than a second copy of the notification.
+            var recipients = new MimeKit.Cryptography.CmsRecipientCollection();
+            foreach (var certificate in certificates)
+            {
+                recipients.Add(SimplArchive.Infrastructure.Encryption.SmimeRecipient.For(certificate));
+            }
+
+            message.Body = MimeKit.Cryptography.ApplicationPkcs7Mime.Encrypt(context, recipients, message.Body);
         }
         catch (Exception exception) when (exception is System.Security.Cryptography.CryptographicException or ArgumentException)
         {
@@ -106,6 +116,15 @@ public sealed class SmtpEmailSender : IEmailSender
                 "The S/MIME certificate for {Recipient} could not envelope a notification — sending "
                 + "plaintext. Re-upload or delete the certificate in the profile dialog.",
                 message.To.ToString());
+        }
+        finally
+        {
+            // Created here, so disposed here — including on the failure path, where the old single-certificate
+            // `using` used to do it and a loop cannot.
+            foreach (var certificate in certificates)
+            {
+                certificate.Dispose();
+            }
         }
     }
 }

@@ -37,7 +37,7 @@ public class NotificationEnvelopingTests
         using var _ = withKey;
         var message = Message("SimplArchive — new notification", "Approve 'Salary review 2026' by Friday.");
 
-        SmtpEmailSender.TryEnvelopeBody(message, pem, NullLogger.Instance);
+        SmtpEmailSender.TryEnvelopeBody(message, [pem], NullLogger.Instance);
 
         var enveloped = Assert.IsType<MimeKit.Cryptography.ApplicationPkcs7Mime>(message.Body);
         Assert.Equal("SimplArchive — new notification", message.Subject); // headers cannot encrypt — by design
@@ -50,11 +50,59 @@ public class NotificationEnvelopingTests
         Assert.Contains("Salary review 2026", System.Text.Encoding.UTF8.GetString(cms.ContentInfo.Content), StringComparison.Ordinal);
     }
 
+    // A module answers a SET (ADR 0842/0856) — the same person's card and their laptop — so the notification
+    // must open with EITHER key. Without this, addressing several would pass a count assertion while
+    // producing an envelope only the first holder could open.
+    [Fact]
+    public void A_notification_addressed_to_two_devices_opens_with_either_key()
+    {
+        var (card, cardPem) = Recipient();
+        var (laptop, laptopPem) = Recipient();
+        using var _ = card;
+        using var __ = laptop;
+        var message = Message("SimplArchive — new notification", "Approve 'Salary review 2026' by Friday.");
+
+        SmtpEmailSender.TryEnvelopeBody(message, [cardPem, laptopPem], NullLogger.Instance);
+
+        var enveloped = Assert.IsType<MimeKit.Cryptography.ApplicationPkcs7Mime>(message.Body);
+        using var raw = new MemoryStream();
+        enveloped.Content!.DecodeTo(raw);
+        var bytes = raw.ToArray();
+
+        var addressed = new EnvelopedCms();
+        addressed.Decode(bytes);
+        Assert.Equal(2, addressed.RecipientInfos.Count);
+
+        // Decoded FRESH per holder: EnvelopedCms does not round-trip through Encode() after a Decode, so
+        // reusing one instance would test the test.
+        foreach (var holder in new[] { card, laptop })
+        {
+            var opened = new EnvelopedCms();
+            opened.Decode(bytes);
+            opened.Decrypt(new X509Certificate2Collection(holder));
+            Assert.Contains("Salary review 2026",
+                System.Text.Encoding.UTF8.GetString(opened.ContentInfo.Content), StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void No_certificates_leaves_the_notification_as_plaintext()
+    {
+        // The dispatcher asks for certificates and may get none — a module answering "this reader holds
+        // none", or an installation with nothing registered. Plaintext is the notification's contract
+        // (it fails open, unlike the strict content read which refuses), so this must not throw.
+        var message = Message("T", "B");
+
+        SmtpEmailSender.TryEnvelopeBody(message, [], NullLogger.Instance);
+
+        Assert.IsType<TextPart>(message.Body);
+    }
+
     [Fact]
     public void A_corrupt_certificate_fails_open_to_plaintext()
     {
         var message = Message("T", "B");
-        SmtpEmailSender.TryEnvelopeBody(message, "-----BEGIN CERTIFICATE-----\nnot a cert\n-----END CERTIFICATE-----", NullLogger.Instance);
+        SmtpEmailSender.TryEnvelopeBody(message, ["-----BEGIN CERTIFICATE-----\nnot a cert\n-----END CERTIFICATE-----"], NullLogger.Instance);
         Assert.IsType<TextPart>(message.Body); // untouched — the notification still goes out
     }
 }

@@ -21,7 +21,7 @@ public class ReaderCertificateSourceTests
     [Fact]
     public void A_modules_answer_is_used_and_no_other_source_may_be_consulted()
     {
-        var source = SimplArchive.Api.Imap.ReaderCertificateSource.Resolve(
+        var source = SimplArchive.Infrastructure.Modules.ReaderCertificateSource.Resolve(
             Module("card-pem", "laptop-pem"), columnPem: "column-pem");
 
         // The column is IGNORED, which is the point: not a fallback chain and not a union.
@@ -34,7 +34,7 @@ public class ReaderCertificateSourceTests
     [Fact] // THE case the first draft got wrong
     public void A_module_answering_NONE_still_closes_every_other_source()
     {
-        var source = SimplArchive.Api.Imap.ReaderCertificateSource.Resolve(Module(), columnPem: "column-pem");
+        var source = SimplArchive.Infrastructure.Modules.ReaderCertificateSource.Resolve(Module(), columnPem: "column-pem");
 
         Assert.Empty(source.Pems);
         Assert.False(source.Envelopes);              // nothing to envelope to...
@@ -44,7 +44,7 @@ public class ReaderCertificateSourceTests
     [Fact]
     public void With_no_module_the_self_service_column_answers()
     {
-        var source = SimplArchive.Api.Imap.ReaderCertificateSource.Resolve(fromModule: null, columnPem: "column-pem");
+        var source = SimplArchive.Infrastructure.Modules.ReaderCertificateSource.Resolve(fromModule: null, columnPem: "column-pem");
 
         Assert.Equal(["column-pem"], source.Pems);
         Assert.False(source.AnsweredByModule);
@@ -57,7 +57,7 @@ public class ReaderCertificateSourceTests
     {
         // The pre-existing behaviour of an installation with neither: the FETCH path asks the encryption
         // service's registry, and falls back to plaintext if that has nothing either.
-        var source = SimplArchive.Api.Imap.ReaderCertificateSource.Resolve(fromModule: null, columnPem: null);
+        var source = SimplArchive.Infrastructure.Modules.ReaderCertificateSource.Resolve(fromModule: null, columnPem: null);
 
         Assert.Empty(source.Pems);
         Assert.False(source.Envelopes);
@@ -69,7 +69,7 @@ public class ReaderCertificateSourceTests
     [InlineData(null)]
     public void An_empty_column_is_the_same_as_no_column(string? columnPem)
     {
-        var source = SimplArchive.Api.Imap.ReaderCertificateSource.Resolve(fromModule: null, columnPem);
+        var source = SimplArchive.Infrastructure.Modules.ReaderCertificateSource.Resolve(fromModule: null, columnPem);
 
         Assert.Empty(source.Pems);
         Assert.True(source.MayConsultRegistry);

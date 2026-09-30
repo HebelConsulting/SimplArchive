@@ -89,7 +89,7 @@ public sealed class ImapSession
     /// equivalent, and asking per fetched message would cost a module query per message.
     /// </para>
     /// </remarks>
-    internal ReaderCertificateSource ReaderCertificates { get; private set; } = ReaderCertificateSource.None;
+    internal SimplArchive.Infrastructure.Modules.ReaderCertificateSource ReaderCertificates { get; private set; } = SimplArchive.Infrastructure.Modules.ReaderCertificateSource.None;
     // The peer's address, for the sign-in throttle's per-address spray counter (ADR 0716). Read once at
     // accept: a socket that has been closed no longer has a remote endpoint to ask.
     private string? _address;
@@ -618,7 +618,7 @@ public sealed class ImapSession
             .GetRequiredService<SimplArchive.Infrastructure.Modules.ModuleReaderCertificates>()
             .ForAsync(user.Id);
 
-        ReaderCertificates = ReaderCertificateSource.Resolve(fromModule, user.SmimeCertificatePem);
+        ReaderCertificates = SimplArchive.Infrastructure.Modules.ReaderCertificateSource.Resolve(fromModule, user.SmimeCertificatePem);
 
         // A sign-in is a security-relevant SUCCESS, which is Information by the logging convention — the
         // counterpart of the Warning a failure already emits, so a SIEM sees both sides. ShowAllDocuments

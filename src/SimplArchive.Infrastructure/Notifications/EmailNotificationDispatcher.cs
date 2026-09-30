@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Infrastructure.Persistence;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace SimplArchive.Infrastructure.Notifications;
 
@@ -46,14 +47,18 @@ public sealed class EmailNotificationDispatcher : IEmailNotificationDispatcher
     private readonly ILogger<EmailNotificationDispatcher> _logger;
     private readonly IAuditRecorder _audit;
 
+    private readonly Microsoft.Extensions.DependencyInjection.IServiceScopeFactory _scopeFactory;
+
     public EmailNotificationDispatcher(SimplArchiveDbContext dbContext, IEmailSender emailSender,
-        Encryption.MessageEnvelopeClient envelopeClient, ILogger<EmailNotificationDispatcher> logger, IAuditRecorder audit)
+        Encryption.MessageEnvelopeClient envelopeClient, ILogger<EmailNotificationDispatcher> logger, IAuditRecorder audit,
+        Microsoft.Extensions.DependencyInjection.IServiceScopeFactory scopeFactory)
     {
         _envelopeClient = envelopeClient;
         _dbContext = dbContext;
         _emailSender = emailSender;
         _logger = logger;
         _audit = audit;
+        _scopeFactory = scopeFactory;
     }
 
     public async Task<int> DispatchPendingAsync(CancellationToken cancellationToken = default)
@@ -116,17 +121,17 @@ public sealed class EmailNotificationDispatcher : IEmailNotificationDispatcher
 
             try
             {
-                // S/MIME enveloping (#1334): the recipient's own certificate wins (the #1332 column), the
-                // sidecar's registry answers for gated tenants (ADR 0813) — the same precedence as the
-                // IMAP funnel, fetched as a PUBLIC certificate so ONE in-process enveloping path serves
-                // both sources. With a certificate the subject goes GENERIC (headers cannot encrypt) and
-                // the title moves into the encrypted body; without one, exactly yesterday's plaintext.
-                var certificatePem = item.SmimeCertificatePem
-                    ?? await _envelopeClient.TryGetCertificatePemAsync(item.TenantName, item.Email, cancellationToken);
-                var (subject, body) = certificatePem is null
+                // S/MIME enveloping (#1334; ADR 0856): THE MODULE FIRST, and where it answers it is the
+                // ONLY source (ADR 0842) — then the #1332 column, then the sidecar's registry. The same
+                // precedence the IMAP funnel now follows, so one rule serves both
+                // (`ReaderCertificateSource`). With a certificate the subject goes GENERIC (headers cannot
+                // encrypt) and the title moves into the encrypted body; without one, exactly yesterday's
+                // plaintext.
+                var certificates = await ReaderCertificatesForAsync(item, cancellationToken);
+                var (subject, body) = certificates.Count == 0
                     ? (item.Title, item.Body)
                     : ("SimplArchive — new notification", $"{item.Title}\n\n{item.Body}");
-                await _emailSender.SendAsync(item.Email, item.DisplayName, subject, body, certificatePem, cancellationToken);
+                await _emailSender.SendAsync(item.Email, item.DisplayName, subject, body, certificates, cancellationToken);
 
                 await CompleteAsync(item, emailedAt: DateTimeOffset.UtcNow, failedAt: null, cancellationToken);
                 sent++;
@@ -241,6 +246,48 @@ public sealed class EmailNotificationDispatcher : IEmailNotificationDispatcher
                 u.SmimeCertificatePem,
                 t.Name))
             .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// The certificates this recipient is addressed by — the module first, then the core's own sources.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A SCOPE PER ITEM, inside a sweep that deliberately has no ambient tenant.</b> This sweep spans
+    /// every tenant (its batch query ignores the tenant filter and says so), while the module gate reads a
+    /// tenant-scoped activation row — so the tenant has to be supplied per recipient. Mutating this
+    /// dispatcher's own scope inside a cross-tenant loop was the alternative and is the shape that leaks:
+    /// anything downstream caching "the" tenant would then serve one tenant's answer to the next. A child
+    /// scope is thrown away with the item.
+    /// </para>
+    /// <para>
+    /// <b>Failing to ask is NOT the same as an answer of none.</b> A module that throws is logged by
+    /// <c>ModuleReaderCertificates</c> and returns no answer, and this path then sends PLAINTEXT — which is
+    /// the notification contract (fail open, ADR 0813's precedent) and deliberately weaker than the strict
+    /// content read, which refuses. Stated because the two paths read the same null and answer differently.
+    /// </para>
+    /// </remarks>
+    private async Task<IReadOnlyList<string>> ReaderCertificatesForAsync(
+        Candidate item, CancellationToken cancellationToken)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        ((CurrentTenantAccessor)scope.ServiceProvider
+            .GetRequiredService<SimplArchive.Application.Abstractions.ICurrentTenantAccessor>()).TenantId = item.TenantId;
+
+        var fromModule = await scope.ServiceProvider
+            .GetRequiredService<Modules.ModuleReaderCertificates>()
+            .ForAsync(item.RecipientUserId, cancellationToken);
+
+        var source = Modules.ReaderCertificateSource.Resolve(fromModule, item.SmimeCertificatePem);
+        if (source.Envelopes || !source.MayConsultRegistry)
+        {
+            // Either the module (or the column) answered with certificates, or a module answered "none" —
+            // which closes the registry too, or a certificate the module revoked would go on opening mail.
+            return source.Pems;
+        }
+
+        return await _envelopeClient.TryGetCertificatePemAsync(item.TenantName, item.Email, cancellationToken)
+            is { Length: > 0 } registered ? [registered] : [];
     }
 
     /// <summary>

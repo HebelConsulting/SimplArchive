@@ -18,7 +18,29 @@ public class EmailNotificationDispatcherTests
     private static SimplArchiveDbContext CreateContext(SqliteConnection connection) =>
         new(new DbContextOptionsBuilder<SimplArchiveDbContext>().UseSqlite(connection).Options, new CurrentTenantAccessor());
 
-    private sealed record SentEmail(string Address, string Subject, string? Body = null, string? CertificatePem = null);
+    /// <param name="CertificatePems">
+    /// Every certificate the notification was addressed to — a LIST since ADR 0856, because a module
+    /// answers a set. <see cref="CertificatePem"/> reads the single one the pre-module sources produce,
+    /// so the assertions that predate this keep saying what they said.
+    /// </param>
+    private sealed record SentEmail(
+        string Address, string Subject, string? Body = null, IReadOnlyList<string>? CertificatePems = null)
+    {
+        /// <summary>The one certificate, where there is exactly one — null when there are none.</summary>
+        /// <remarks>
+        /// Deliberately throws when there are SEVERAL rather than returning the first: a test asserting
+        /// "the certificate" against a multi-certificate send is asking a question with no single answer,
+        /// and silently answering the first is how such a test would keep passing while addressing the
+        /// wrong reader.
+        /// </remarks>
+        public string? CertificatePem => CertificatePems switch
+        {
+            null or { Count: 0 } => null,
+            { Count: 1 } one => one[0],
+            { } many => throw new InvalidOperationException(
+                $"This notification was addressed to {many.Count} certificates; assert on CertificatePems."),
+        };
+    }
 
     private sealed class RecordingEmailSender : IEmailSender
     {
@@ -27,20 +49,25 @@ public class EmailNotificationDispatcherTests
         public HashSet<string> FailFor { get; } = [];
 
         public Task SendAsync(string toAddress, string toName, string subject, string body, CancellationToken cancellationToken = default) =>
-            SendAsync(toAddress, toName, subject, body, envelopeCertificatePem: null, cancellationToken);
+            SendAsync(toAddress, toName, subject, body, envelopeCertificatePems: [], cancellationToken);
 
-        // The enveloping overload (#1334) is implemented, not left to the interface default — the default
-        // DROPS the certificate, and a fake that silently swallowed it would green the very tests that
-        // exist to see it.
+        // The LIST overload is what is implemented, because since ADR 0856 that is the interface's
+        // primitive and the single-certificate one is sugar for it. Implemented rather than left to the
+        // interface default for the reason that has not changed: the default DROPS the certificates, and a
+        // fake that silently swallowed them would green the very tests that exist to see them.
+        //
+        // This fake previously implemented the SINGLE overload, and the change caught it honestly — the
+        // dispatcher started calling the list, nothing recorded a certificate, and the enveloping test
+        // failed rather than passing on a fake that had stopped observing anything.
         public Task SendAsync(string toAddress, string toName, string subject, string body,
-            string? envelopeCertificatePem, CancellationToken cancellationToken = default)
+            IReadOnlyList<string> envelopeCertificatePems, CancellationToken cancellationToken = default)
         {
             if (FailFor.Contains(toAddress))
             {
                 throw new InvalidOperationException($"simulated send failure for {toAddress}");
             }
 
-            Sent.Add(new SentEmail(toAddress, subject, body, envelopeCertificatePem));
+            Sent.Add(new SentEmail(toAddress, subject, body, envelopeCertificatePems));
             return Task.CompletedTask;
         }
     }
@@ -74,7 +101,7 @@ public class EmailNotificationDispatcherTests
         int sent;
         using (var act = CreateContext(connection))
         {
-            var dispatcher = new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
+            var dispatcher = new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance, new NoModuleScopeFactory(act));
             sent = await dispatcher.DispatchPendingAsync();
         }
 
@@ -92,7 +119,7 @@ public class EmailNotificationDispatcherTests
         // A second pass sends nothing (the first is now stamped, the other was already emailed).
         using (var again = CreateContext(connection))
         {
-            var dispatcher = new EmailNotificationDispatcher(again, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
+            var dispatcher = new EmailNotificationDispatcher(again, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance, new NoModuleScopeFactory(again));
             Assert.Equal(0, await dispatcher.DispatchPendingAsync());
         }
 
@@ -123,7 +150,7 @@ public class EmailNotificationDispatcherTests
         var sender = new RecordingEmailSender();
         using (var act = CreateContext(connection))
         {
-            var dispatcher = new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
+            var dispatcher = new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance, new NoModuleScopeFactory(act));
             Assert.Equal(1, await dispatcher.DispatchPendingAsync()); // only the non-muted one counts as sent
         }
 
@@ -164,7 +191,7 @@ public class EmailNotificationDispatcherTests
         var sender = new RecordingEmailSender();
         using (var act = CreateContext(connection))
         {
-            var dispatcher = new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
+            var dispatcher = new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance, new NoModuleScopeFactory(act));
             Assert.Equal(2, await dispatcher.DispatchPendingAsync());
         }
 
@@ -190,7 +217,7 @@ public class EmailNotificationDispatcherTests
         sender.FailFor.Add("bad@acme.test");
         using (var act = CreateContext(connection))
         {
-            var dispatcher = new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
+            var dispatcher = new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance, new NoModuleScopeFactory(act));
             Assert.Equal(1, await dispatcher.DispatchPendingAsync()); // only the good one counts as sent
         }
 
@@ -253,7 +280,7 @@ public class EmailNotificationDispatcherTests
         using (var act = CreateContext(connection))
         {
             var dispatcher = new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(),
-                NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
+                NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance, new NoModuleScopeFactory(act));
             await dispatcher.DispatchPendingAsync();
         }
 

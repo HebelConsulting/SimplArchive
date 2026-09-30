@@ -1,7 +1,7 @@
-namespace SimplArchive.Api.Imap;
+namespace SimplArchive.Infrastructure.Modules;
 
 /// <summary>
-/// Which certificates an IMAP reader is addressed by, and WHERE the answer came from (ADR 0855).
+/// Which certificates a reader is addressed by, and WHERE the answer came from (ADRs 0855/0856).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -17,19 +17,25 @@ namespace SimplArchive.Api.Imap;
 /// The first draft of this change did exactly that. It is a record rather than two loose fields so the two
 /// travel together and a caller cannot read one without the other.
 /// </para>
+/// <para>
+/// <b>It lives in Infrastructure because TWO callers need the same rule</b> (ADR 0856): the IMAP session and
+/// the notification dispatcher. It began in <c>Api.Imap</c> with one caller, and the dispatcher is in
+/// Infrastructure — which cannot reference Api — so a second copy was the alternative, and a second copy of a
+/// precedence rule is how the two come to disagree about whether a revoked certificate still counts.
+/// </para>
 /// </remarks>
 /// <param name="Pems">The certificates to envelope to — possibly none.</param>
 /// <param name="AnsweredByModule">
 /// True when an active module answered. The caller must then NOT consult any other source, whatever
 /// <paramref name="Pems"/> holds.
 /// </param>
-internal sealed record ReaderCertificateSource(IReadOnlyList<string> Pems, bool AnsweredByModule)
+public sealed record ReaderCertificateSource(IReadOnlyList<string> Pems, bool AnsweredByModule)
 {
     /// <summary>Nothing answered, and no other source has been consulted yet.</summary>
-    internal static readonly ReaderCertificateSource None = new([], AnsweredByModule: false);
+    public static readonly ReaderCertificateSource None = new([], AnsweredByModule: false);
 
     /// <summary>True when this session envelopes in-process to the certificates above.</summary>
-    internal bool Envelopes => Pems.Count > 0;
+    public bool Envelopes => Pems.Count > 0;
 
     /// <summary>
     /// True when the encryption service's registry may still be asked — only when NO module answered.
@@ -38,7 +44,7 @@ internal sealed record ReaderCertificateSource(IReadOnlyList<string> Pems, bool 
     /// The whole reason this type exists. A module that answered has spoken for this reader, including when
     /// it answered "none": asking further is how a revocation stops revoking.
     /// </remarks>
-    internal bool MayConsultRegistry => !AnsweredByModule;
+    public bool MayConsultRegistry => !AnsweredByModule;
 
     /// <summary>
     /// The module's answer where there is one, else the self-service column (#1332).
@@ -47,8 +53,8 @@ internal sealed record ReaderCertificateSource(IReadOnlyList<string> Pems, bool 
     /// What <c>ModuleReaderCertificates.ForAsync</c> returned — null for silence, empty for "none".
     /// </param>
     /// <param name="columnPem">The user's own registered certificate, or null.</param>
-    internal static ReaderCertificateSource Resolve(
-        IReadOnlyList<ModuleAbi.ReaderCertificate>? fromModule, string? columnPem) => fromModule switch
+    public static ReaderCertificateSource Resolve(
+        IReadOnlyList<SimplArchive.ModuleAbi.ReaderCertificate>? fromModule, string? columnPem) => fromModule switch
         {
             // A module answered. Its answer stands even when empty — see MayConsultRegistry.
             { } answered => new([.. answered.Select(certificate => certificate.CertificatePem)], AnsweredByModule: true),

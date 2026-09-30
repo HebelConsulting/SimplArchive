@@ -33,7 +33,7 @@ public class EmailOutboxClaimTests
     }
 
     private static EmailNotificationDispatcher Dispatcher(SimplArchiveDbContext context, IEmailSender sender) =>
-        new(context, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
+        new(context, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance, new NoModuleScopeFactory(context));
 
     /// <summary>
     /// A sender that runs a SECOND sweep from inside the first one's send — the interleaving that matters.

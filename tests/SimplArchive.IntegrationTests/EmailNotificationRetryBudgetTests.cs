@@ -65,7 +65,7 @@ public class EmailNotificationRetryBudgetTests
                 new CurrentPlatformAdministratorAccessor(), new CurrentTenantAccessor(),
                 new CurrentImpersonationAccessor(), new CurrentSystemActorAccessor(), TimeProvider.System,
                 NullLogger<SimplArchive.Infrastructure.Audit.AuditRecorder>.Instance);
-            await new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, recorder)
+            await new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, recorder, new NoModuleScopeFactory(act))
                 .DispatchPendingAsync();
         }
 
@@ -142,7 +142,7 @@ public class EmailNotificationRetryBudgetTests
         for (var i = 0; i < MaxEmailAttempts + 3; i++)
         {
             using var act = CreateContext(connection);
-            await new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, audit)
+            await new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, audit, new NoModuleScopeFactory(act))
                 .DispatchPendingAsync();
         }
 
@@ -184,7 +184,7 @@ public class EmailNotificationRetryBudgetTests
         for (var i = 0; i < 3; i++)
         {
             using var act = CreateContext(connection);
-            await new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, new CountingAudit())
+            await new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, new CountingAudit(), new NoModuleScopeFactory(act))
                 .DispatchPendingAsync();
         }
 
@@ -223,7 +223,7 @@ public class EmailNotificationRetryBudgetTests
         for (var i = 0; i < MaxEmailAttempts + 2; i++)
         {
             using var act = CreateContext(connection);
-            await new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, new CountingAudit())
+            await new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, new CountingAudit(), new NoModuleScopeFactory(act))
                 .DispatchPendingAsync();
         }
 
