@@ -28,6 +28,65 @@ public partial class AdrIndexTests
     [GeneratedRegex(@"^\| (\d{4}) \| \[(?<title>.+?)\]\((?<href>[^)]+)\) \|")]
     private static partial Regex IndexRow();
 
+    [GeneratedRegex(@"\[(?<label>\d{4})\]\((?<href>0\d{3}-[a-z0-9-]+\.md)\)")]
+    private static partial Regex CrossLink();
+
+    // EVERY ADR CROSS-LINK RESOLVES, AND ITS LABEL MATCHES ITS TARGET.
+    //
+    // Two failures, one guard, because they are the same mistake at different stages of the same sentence: an
+    // author knows which ADR they mean and writes the filename from memory.
+    //
+    //   * a BROKEN TARGET — `[0557](0557-following-a-rel-costs-a-request.md)` when the file is
+    //     `0557-following-a-rel-must-not-cost-a-request-per-rel.md`. Renders as a dead link; nothing else notices.
+    //   * a MISLABELLED target — `[0842](0843-….md)`, citing the DECISION and pointing at the ABI slice that
+    //     ships it. Worse than a dead link, because it renders fine and sends the reader to a real ADR that
+    //     is not the one being cited. It also PROPAGATES: written once in 0851, it was copied into three
+    //     later ADRs by authors following the house style of citing what you build on.
+    //
+    // Measured on the day this was written: 5 broken targets and 4 mislabels across one session's ADRs, every
+    // one of them caught only by hand-checking after the fact. The numbers are the argument — a rule nothing
+    // measures drifts, and this file already exists to say so about the index.
+    [Fact]
+    public void Every_adr_cross_link_resolves_and_is_labelled_with_its_targets_number()
+    {
+        if (PrivateRepositoryGate.RepoRoot() is not { } root || !PrivateRepositoryGate.IsPrivateRepository(root))
+        {
+            return; // the public mirror has no docs/, by design
+        }
+
+        var adrDir = Path.Combine(root, "docs", "adr");
+        var present = Directory.GetFiles(adrDir, "0*.md").Select(Path.GetFileName).ToHashSet(StringComparer.Ordinal);
+        var broken = new List<string>();
+        var mislabelled = new List<string>();
+        var scanned = 0;
+
+        foreach (var file in Directory.GetFiles(adrDir, "*.md"))
+        {
+            var name = Path.GetFileName(file);
+            foreach (var link in CrossLink().Matches(File.ReadAllText(file)).Cast<Match>())
+            {
+                scanned++;
+                var href = link.Groups["href"].Value;
+                var label = link.Groups["label"].Value;
+
+                if (!present.Contains(href))
+                {
+                    broken.Add($"{name}: [{label}]({href}) — no such ADR file");
+                }
+                else if (!href.StartsWith(label, StringComparison.Ordinal))
+                {
+                    mislabelled.Add($"{name}: [{label}]({href}) — the label says {label}, the target is {href[..4]}");
+                }
+            }
+        }
+
+        // Anti-vacuous: the ADRs cross-reference each other constantly, so a scan finding almost nothing means
+        // the pattern stopped matching rather than that the links became perfect.
+        Assert.True(scanned > 100, $"only {scanned} ADR cross-links matched — the pattern is probably broken");
+
+        Assert.Empty(broken.Concat(mislabelled));
+    }
+
     [Fact]
     public void The_index_stays_sorted_unique_and_one_to_one_with_the_adr_files()
     {
