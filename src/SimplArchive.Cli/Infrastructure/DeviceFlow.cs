@@ -110,7 +110,28 @@ public sealed class DeviceFlow(HttpClient http)
 
             using var response = await http.PostAsync("connect/token", form, cancellationToken);
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            var json = JsonDocument.Parse(body).RootElement;
+
+            // A BODY THAT IS NOT JSON IS AS TRANSIENT AS authorization_pending, and must be treated that way.
+            // This parsed unconditionally, before looking at the status — so an EMPTY body killed the whole
+            // login, and with it an approval the user had already given: they had to go back to the browser
+            // and approve a second code. Measured after a rolling api update, where a poll that lands on an
+            // instance mid-restart gets a bodiless answer through the proxy.
+            //
+            // The loop is already bounded by the expiry check above, so continuing here cannot spin forever —
+            // it ends when the code the user was shown expires, which is the same bound the pending case has.
+            // A success with an unreadable body is a different matter and is refused below: that one means
+            // the endpoint claimed to have issued a token and did not say what it was.
+            if (Parsed(body) is not { } json)
+            {
+                if (response.IsSuccessStatusCode)
+                {
+                    throw new CliException(
+                        "The token endpoint answered success with a body that is not JSON, so there is no "
+                        + $"token to read: {Describe(body)}");
+                }
+
+                continue;
+            }
 
             if (response.IsSuccessStatusCode)
             {
@@ -143,6 +164,35 @@ public sealed class DeviceFlow(HttpClient http)
     }
 
     /// <summary>An OAuth error body reads as <c>error</c>/<c>error_description</c>, not RFC 7807.</summary>
+    /// <summary>The body as JSON, or null when it is not JSON at all.</summary>
+    /// <remarks>
+    /// Its own method so the caller reads as the decision it is making — transient or fatal — rather than as
+    /// exception handling. An empty body, an HTML error page from a proxy and a truncated response all land
+    /// here, and none of them is a reason to abandon a login the user has already approved.
+    /// </remarks>
+    internal static JsonElement? Parsed(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonDocument.Parse(body).RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>A non-JSON body, short enough for a message and stripped of newlines.</summary>
+    private static string Describe(string body) =>
+        string.IsNullOrWhiteSpace(body)
+            ? "the response was empty"
+            : $"\"{body.ReplaceLineEndings(" ").Trim()[..Math.Min(body.Trim().Length, 120)]}\"";
+
     private static string DescribeTokenError(string body, string fallback)
     {
         try
