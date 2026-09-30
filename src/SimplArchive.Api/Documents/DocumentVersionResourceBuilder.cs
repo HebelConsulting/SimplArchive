@@ -127,7 +127,25 @@ public sealed class DocumentVersionResourceBuilder(
             // Per-page word boxes for search hit-overlay (ADR "Search hit overlay"). A static link — the
             // endpoint computes/caches the layout on demand and returns 204 for formats with no overlay — so
             // building the resource stays cheap (no OCR/PDF parse here).
-            links.Add(new Link("text-layout", $"/api/documents/{version.DocumentId}/versions/{version.Id}/text-layout", "GET"));
+            //
+            // WITHHELD where that endpoint REFUSES (#1402, ADR 0857). The words are the document (ADR 0829),
+            // so the overlay route reconstructs it in full and is refused on a tenant whose doors refuse
+            // plaintext — while this rel was advertised on every version regardless. A rel that is always
+            // present and sometimes refuses is the lying affordance ADR 0543 exists to prevent, and this one
+            // lied in the worst available way: 204 means "nothing to highlight", so a client that followed it
+            // and met the refusal had no way to tell "this document has no text" from "this tenant will not
+            // tell you". Absent, it means "not available to you, here, now", and the desktop computes the
+            // layout from the bytes it already decrypted (ADR 0830).
+            //
+            // The DOOR question, not the delivery one, and the same predicate the endpoint refuses on —
+            // `RefuseIfStrictAsync` asks `RefusesPlaintextDoorsAsync`. Gating on `canEnvelope` instead would
+            // withhold it on a SealedDeliveryPermissive tenant whose other doors serve, and keep it on a
+            // reader with no certificate whose request still refuses: advertising and accepting have to be
+            // the same list, or fixing one half is worse than fixing neither.
+            if (!await envelopes.RefusesPlaintextDoorsAsync(cancellationToken))
+            {
+                links.Add(new Link("text-layout", $"/api/documents/{version.DocumentId}/versions/{version.Id}/text-layout", "GET"));
+            }
 
             // Ordered per-page image URLs for a multi-page TIFF (ADR "Multi-page TIFF preview pages"). Static
             // link; the endpoint returns 204 for every other format (the client then uses the single `preview`).

@@ -1007,6 +1007,13 @@ store your private key lives in, so on such an installation reading documents is
 The web client stays fully usable for everything that is not content — browsing, index data, search results,
 workflow, administration.
 
+*Find-in-document follows the same line, and for the same reason.* Highlighting your search words on the page
+needs the words and their positions, and on such an installation the server does not have them — it holds only
+the envelope. The desktop client finds within a document because it has already opened that envelope and holds
+the page in the clear; the web client cannot, so the find box is not offered there. Where a document carries no
+text of its own — a photograph, or a scan that was never recognised — find has nothing to search and says so,
+on either client.
+
 #note[
   *A key held on a smartcard never leaves it.* Where your private key lives on a card or a token rather than in a
   file, the card performs the one operation that opens each envelope, and the key itself is never read out — not

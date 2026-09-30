@@ -100,6 +100,32 @@ public class StrictTierEnvelopedReadTests
     }
 
     [Fact]
+    public async Task The_find_overlay_rel_is_absent_where_the_route_refuses_and_present_where_it_serves()
+    {
+        // ADVERTISING AND ACCEPTING HAVE TO BE THE SAME LIST (#1402). The overlay's word coordinates
+        // reconstruct the document, so the route is refused on a tenant whose doors refuse plaintext — while
+        // the rel was advertised on EVERY version regardless.
+        //
+        // This one lied in the worst available way rather than merely failing: the endpoint answers 204 for a
+        // format with no overlay, which a client reads as "nothing to highlight". A client that followed the
+        // rel and met the refusal could not tell "this document has no text" from "this tenant will not tell
+        // you", so find-in-document looked BROKEN rather than relocated (it is computed client-side from the
+        // decrypted bytes, ADR 0830).
+        var strict = await StrictReaderAsync(withCertificate: true);
+
+        Assert.Null(Href(strict.Version, "text-layout"));
+
+        using var forced = await strict.Api.GetAsync(strict.ForcedTextLayoutHref);
+        Assert.Equal(HttpStatusCode.Conflict, forced.StatusCode);
+
+        // The contrast, without which the assertion above would pass on an installation where the overlay is
+        // simply gone for everybody.
+        var ordinary = await ReaderAsync($"Plain{Guid.NewGuid():N}"[..24], withCertificate: false);
+
+        Assert.NotNull(Href(ordinary.Version, "text-layout"));
+    }
+
+    [Fact]
     public async Task An_ordinary_tenant_still_gets_a_presigned_download_and_no_envelope_door()
     {
         // The contrast, without which every assertion above could be passing on an installation where content
@@ -232,7 +258,8 @@ public class StrictTierEnvelopedReadTests
     }
 
     private sealed record Reader(
-        HttpClient Api, JsonElement Version, string? EnvelopeHrefOrNull, string ForcedEnvelopeHref, byte[] Pkcs12)
+        HttpClient Api, JsonElement Version, string? EnvelopeHrefOrNull, string ForcedEnvelopeHref,
+        string ForcedTextLayoutHref, byte[] Pkcs12)
     {
         public string EnvelopeHref => EnvelopeHrefOrNull
             ?? throw new InvalidOperationException("the version advertises no enveloped-content address");
@@ -302,6 +329,7 @@ public class StrictTierEnvelopedReadTests
             // the route refuses rather than serves — the one place composing is the point (ADR 0543 binds
             // CLIENTS; this is an adversary).
             $"{versionSelf}/enveloped-content",
+            $"{versionSelf}/text-layout",
             pkcs12);
     }
 
