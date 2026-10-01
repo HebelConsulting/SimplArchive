@@ -775,8 +775,6 @@ if (app.Configuration.GetValue<bool>("App:TrustProxyHeaders"))
     app.UseForwardedHeaders(forwardedOptions);
 }
 
-app.UseExceptionHandler();
-
 // The browser-hardening headers, on every response including the static client files — so they must sit ahead
 // of UseBlazorFrameworkFiles/UseStaticFiles, not with the API middleware further down (ADR 0084, #844).
 SimplArchive.Api.Security.SecurityHeaders.UseSecurityHeaders(app);
@@ -808,6 +806,10 @@ app.UseSerilogRequestLogging(options =>
         if (services.GetService<ICurrentServiceAccountAccessor>()?.ServiceAccountId is { } saId) diagnostic.Set("ServiceAccountId", saId);
     };
 });
+
+// AFTER the logging and INSIDE CorrelationIdMiddleware, both deliberate (#1520): registered before the
+// logging it is OUTER, so every thrown ApiException was logged 500/Error while the client got its real 4xx.
+app.UseExceptionHandler();
 
 // Sign-in throttling for the two HTTP doors whose refusal is legible from the response (ADR 0716): the token
 // endpoint, and HTTP Basic — which is every DAV gateway below. Ahead of them all, so a blocked caller is
