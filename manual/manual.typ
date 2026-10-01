@@ -994,10 +994,19 @@ is an *envelope addressed to your own certificate*#idx("Encrypted content") — 
 to make your mail readable (see @imap) — and it is opened on your own machine, with your own key, by the client
 you are working in.
 
+#note[
+  *This describes the strict level.* An administrator can also set a level where documents are offered *both*
+  ways — as an envelope to whoever can open one, and in the ordinary readable way to everyone else. There the
+  buttons below stay where they are and keep working, the web client keeps showing documents, and what changes
+  is only that the desktop client reads through your card. If your buttons work, you are on that level rather
+  than this one, and nothing here has gone wrong. @encryptionservice sets out the levels.
+]
+
 Two consequences are worth meeting in a manual rather than in the application, because neither looks like what it
 is.
 
-*Without a registered certificate, download and preview are not offered.* Not refused with an error — *absent*.
+*Without a registered certificate, download and preview are not offered* — on the strict level. Not refused
+with an error — *absent*.
 The document, its index data and its history all still render; the buttons that would hand you content simply
 are not there. That is deliberate: a button that fails when clicked teaches nothing, while a missing one, beside
 the certificate entry in your account menu, points at the remedy. Register a certificate and the buttons appear.
@@ -1040,20 +1049,40 @@ certificate here — is set out in @cardsetup.
 
 == Encryption of the archive itself <encryptionservice>
 
-A separate *Encryption Service*#idx("Encryption Service") is under development for SimplArchive, and will be available as a *paid
-extra*. It provides *comprehensive encryption* for an entire installation: document content encrypted where it
-is stored, under keys held in hardware the operating organisation controls, with the level set per tenant — so
-an archive that needs this can have it beside one that does not.
+SimplArchive's encryption is extended by *two separate paid products*, and which one you need depends on what
+you are trying to achieve. They are named here because the division is not where most people guess.
 
-Two things it adds are worth naming here, because they are what people run into first with the self-service
-certificate this application provides: *several certificates per person* — one per device, so a smartcard in
-a computer and an identity on a phone can both be addressed at once — and *automated enrolment*, for more
-people than an administrator wants to prepare by hand. @cardsetup explains where that limit is met.
+*The Encryption Service*#idx("Encryption Service") encrypts *content where it is stored*, under keys held in
+hardware the operating organisation controls. It also keeps the *registry* of which certificate belongs to
+which person, for installations that provision identities centrally rather than letting people register their
+own.
 
-This manual covers only the part you operate yourself — registering the certificate that makes the mail your
-program fetches readable on your devices alone (see @imap). Everything else the service does, including what its
-protection does and does not claim, is described in *its own manual*: it is a separate product with its own
-releases, and documenting it twice is how the two come to disagree.
+*The Encryption Module*#idx("Encryption Module") manages *certificates at the scale of an organisation*:
+several per person — one per device, so a smartcard in a computer and an identity on a phone can both be
+addressed at once — enrolment *on somebody else's behalf* and in bulk, *revocation*, and a *tenant policy*
+stating what makes a certificate acceptable at all (minimum key sizes, permitted curves).
+
+What may surprise you is what is *not* in either list. *Addressing a document to your own certificate needs
+neither product.* This application can do that with the certificate you registered yourself — it is the same
+mechanism that makes your mail readable on your devices alone (see @imap). What the paid products add is
+protection of the stored bytes, and the means to run certificates for hundreds of people rather than one.
+
+Where the Service is installed, an administrator sets a *level per tenant*, so an archive that needs this can
+sit beside one that does not. Three of those levels concern you as a reader, and they differ in what happens
+when you have no certificate yet:
+
+/ Stored encrypted: Content is encrypted where it is kept. Nothing changes in how you read it.
+/ Rehearsal: Every document is *also* offered as an envelope to whoever can open one, while every ordinary way
+  of reading stays open. It exists so an organisation can find out whether its machines and cards are ready
+  *before* the strict level is switched on — nobody is blocked while the gaps are found. It is a readiness
+  exercise and *not* additional protection: everything readable before is still readable, by anyone who could
+  read it before.
+/ Strict: Content is served *only* as an envelope. This is the level @encryptedreads describes, and the one
+  where a missing certificate means no content at all.
+
+Everything else these products do, including what their protection does and does not claim, is described in
+*their own manuals*: they are separate products with their own releases, and documenting them twice is how the
+two come to disagree.
 
 // ─────────────────────────────────────────────────────────────────────────────
 #pagebreak()
@@ -1081,8 +1110,11 @@ differ per vendor; everything from the certificate request onwards is the same f
 
   - *Slot 9D (Key Management).* That is the decryption slot. 9A is authentication and 9C is signing; a
     certificate in either cannot open an envelope, and using the wrong one is the classic first mistake.
-  - *RSA 2048, not an elliptic curve.* Content is enveloped with RSA key transport. An EC key needs key
-    agreement instead, which is much thinner ground.
+  - *An elliptic curve (P-256) is preferred; RSA 2048 also works.* Both are addressed: an EC key by key
+    agreement, an RSA key by key transport. EC is the better choice on a modern token and is what the
+    provisioning command below picks unless told otherwise. This manual said *RSA, not an elliptic curve*
+    until the EC path was completed and proven on two cards — if your card already carries an RSA key there
+    is no reason to replace it.
   - *PIN policy on, touch policy OFF.* A touch requirement means a physical tap *per decryption* — and one
     document's preview, page images and searchable text are three separate reads. Acceptable for signing,
     unusable for an archive.
@@ -1134,11 +1166,49 @@ table is empty the module loaded but the reader sees no card; if the command fai
 is wrong rather than the card.
 
 #note[
-  *`saconsole` is not involved.* The archive's own command-line tool signs in, creates tenants and reports
-  who you are; it has no certificate commands. If you were told to install it for this, you were told wrong.
+  *Two tools, two jobs — and both are now involved.* `caconsole` belongs to the certificate authority: it
+  prepares the card and issues the certificate. `saconsole` belongs to the archive: it *enrols* a finished
+  certificate against a person, lists what is enrolled and revokes one (`saconsole certificates enrol|list|revoke`).
+
+  This manual said `saconsole` had no certificate commands, which was true until they were added. The division
+  still holds and is worth keeping straight: the authority issues, the archive enrols.
 ]
 
+== One command, where your own authority issues the certificate
+
+If the certificate comes from a certificate authority you run with `caconsole`, the whole of the next section
+is one command:
+
+```sh
+caconsole yubikey provision --holder anna@example.test \
+    --token-label ca-token --pin "$CA_PIN" --ca-label ca-root --ca-cert ca.crt \
+    --label "YubiKey 5C" --manifest enrolments.json
+```
+
+It generates the key in slot 9D, has the *card itself* sign the certificate request — which is the only
+available proof that the private key is really there and reachable — issues a certificate for decryption,
+imports it, and reads the slot back to confirm what the card now holds.
+
+Three things it will not do quietly:
+
+- *It will not overwrite a card without being told.* If the slot already holds something it prints what is
+  there and stops. `--force` replaces the *certificate* and keeps the key — which is the repair for a card
+  whose certificate declares the wrong usage — and `--regenerate-key` replaces the *key*, which is
+  irreversible: anything encrypted to the old one becomes unreadable. Any certificate already in the slot is
+  saved beside the new one first.
+- *It will not trust a card that cannot answer.* A token whose PIV firmware is older than 5.3 reports
+  `Private key type: EMPTY` whether or not a key is present — it simply does not publish that detail. The
+  command treats "empty" on such a card as *unknown* rather than *absent* and refuses to generate over it.
+- *It will not hide what it did.* Every command it runs against the card, and the card's answer, is printed —
+  with the PIN and management key removed.
+
+With `--manifest` it also records what was issued and to whom, in a file `saconsole certificates enrol`
+reads, so a box of prepared cards can be enrolled in one go rather than one at a time.
+
 == The walk-through
+
+This is what the command above does, and the route to take when the certificate comes from somewhere else —
+a corporate authority, or a card that arrives already personalised.
 
 *1 — Personalise the card,* once per card. These two objects must exist before anything else will behave.
 

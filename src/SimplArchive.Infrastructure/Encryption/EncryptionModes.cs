@@ -331,28 +331,45 @@ public sealed class EncryptionModes(IConfiguration configuration)
         mode is EncryptionMode.SealedDeliveryPermissive or EncryptionMode.SealedDeliveryStrict;
 
     /// <summary>
-    /// Refuses a delivery-only mode while nothing can perform its delivery (#1411, ADR 0834).
+    /// Refuses a delivery-only mode without the Encryption Module, which is the product these tiers belong to.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The delivery tiers envelope every read to the reader's certificates, and the component that answers
-    /// <i>which certificates is this user addressed by?</i> is the <b>Encryption Module</b>, which does not
-    /// exist yet (owner, 2026-09-28: the mode waits for it rather than shipping an interim source that would
-    /// have to be retired). Until it does, the values are written down so the three questions above could be
-    /// answered for them — and refused, so nobody configures a tier nothing performs.
+    /// <b>This is a LICENSING gate, and it is now written as one.</b> It said the delivery tiers could not be
+    /// performed without the module — <i>"nothing would envelope those reads"</i> — and that was true when it
+    /// was written (owner, 2026-09-28: the mode waits for the module rather than shipping an interim source
+    /// that would have to be retired). It is no longer true, and the claim is worth retiring rather than
+    /// leaving for the next reader to disprove.
     /// </para>
     /// <para>
-    /// <b>The same failure as #1406, caught the same way.</b> A mode with nothing behind it does not misbehave:
-    /// every surface works and the guarantee is simply absent. That is why this is a refusal rather than a
-    /// warning, in Development too — a developer misled by it is exactly as misled as an administrator.
+    /// <b>What changed.</b> <see cref="StrictEnvelopeDelivery"/>'s certificate lookup has no mode branch: it
+    /// asks the module, then the reader's own <c>SmimeCertificatePem</c>, then the service's registry. So an
+    /// installation with a service envelopes from the registry — which is what
+    /// <see cref="EncryptionMode.Strict"/> does on the public kiosk today, with no module anywhere — and an
+    /// installation with NEITHER still envelopes from the column, because core's self-service is open
+    /// precisely when no service governs the tenant, and it has a <c>POST</c> that GENERATES an identity.
+    /// Something would always envelope those reads. The refusal is a commercial boundary, not an
+    /// impossibility.
+    /// </para>
+    /// <para>
+    /// <b>And the message must point somewhere useful</b>, because an administrator who wants to exercise
+    /// envelope delivery can: <see cref="EncryptionMode.StrictRehearsal"/> (ADR 0866) delivers to whoever can
+    /// open an envelope, keeps every other door serving, and needs the Service rather than the Module. A
+    /// refusal that only says "no" sends them to a sales conversation to answer a question the software could
+    /// have answered.
+    /// </para>
+    /// <para>
+    /// Still a refusal rather than a warning, and in Development too — for #1406's reason, unchanged: a tier
+    /// nobody is licensed for must not run silently, and a developer misled by it is exactly as misled as an
+    /// administrator.
     /// </para>
     /// </remarks>
     public static void ThrowIfSealedDeliveryHasNoModule(
         IConfiguration configuration, IEnumerable<ModuleAbi.IIndustryModule> modules)
     {
         // The question is about a LOADED module, which is why this no longer rides in
-        // ThrowIfMisconfigured: an installation carrying a module that answers the capability can perform
-        // these tiers, and one carrying none cannot, and configuration alone cannot tell them apart.
+        // ThrowIfMisconfigured: whether an installation is licensed for these tiers is answered by what it
+        // carries, and configuration alone cannot tell.
         if (modules.Any(module => module.ReaderCertificates is not null))
         {
             return;
@@ -376,13 +393,19 @@ public sealed class EncryptionModes(IConfiguration configuration)
         }
 
         throw new InvalidOperationException(
-            $"{string.Join(", ", claimed)} — but the delivery tiers are performed by the Encryption Module "
-            + "(ADR 0834), and no module on this installation answers the reader-certificate capability, so "
-            + "nothing would envelope those reads (#1411).\n\n"
-            + "This is refused rather than ignored because it is invisible: content would be stored and SERVED "
-            + "as plaintext while the configuration claims envelope delivery, and no surface would report it.\n\n"
-            + "Either mount the Encryption Module (it declares ReaderCertificates), or use "
-            + $"{nameof(EncryptionMode.Storage)} or {nameof(EncryptionMode.Strict)}.");
+            $"{string.Join(", ", claimed)} — but these tiers belong to the Encryption Module (ADR 0834), and no "
+            + "module on this installation answers the reader-certificate capability.\n\n"
+            + "This is a LICENSING boundary rather than a technical one, and saying so is the point: an "
+            + "installation without the module could envelope these reads, from the reader's own certificate "
+            + "or the encryption service's registry. It is refused rather than ignored because a tier nobody "
+            + "is licensed for must not run silently.\n\n"
+            + "To exercise envelope delivery WITHOUT the module, use "
+            + $"{nameof(EncryptionMode.StrictRehearsal)} (ADR 0866): every read is also offered as an envelope "
+            + "to whoever can open one, every other door keeps serving, and it needs the encryption service "
+            + "rather than the module. It protects nothing beyond "
+            + $"{nameof(EncryptionMode.Storage)} — it is a readiness exercise, not a tier.\n\n"
+            + $"Otherwise mount the Encryption Module, or use {nameof(EncryptionMode.Storage)} or "
+            + $"{nameof(EncryptionMode.Strict)}.");
     }
 
     private Dictionary<string, EncryptionMode> Map() =>

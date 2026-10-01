@@ -405,6 +405,42 @@ public class EncryptionModesTests
     /// tier without saying so.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The delivery refusal names what an administrator can actually do instead.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// It used to claim <i>"nothing would envelope those reads"</i>, which stopped being true once the
+    /// certificate lookup grew a registry source and core kept a self-service endpoint that GENERATES an
+    /// identity. A refusal resting on a false premise is one the next reader disproves and then distrusts,
+    /// and this one is the first thing an evaluator meets.
+    /// </para>
+    /// <para>
+    /// Asserted on the message because the message IS the change — the behaviour is deliberately unchanged.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void The_delivery_refusal_is_honest_about_being_a_licence_and_names_the_alternative()
+    {
+        var configuration = Config(
+            (EncryptionModes.DefaultSection, nameof(EncryptionMode.SealedDeliveryPermissive)));
+
+        var refusal = Assert.Throws<InvalidOperationException>(
+            () => EncryptionModes.ThrowIfSealedDeliveryHasNoModule(configuration, []));
+
+        // It says what kind of boundary it is...
+        Assert.Contains("LICENSING", refusal.Message, StringComparison.Ordinal);
+
+        // ...and does not repeat the claim that was false.
+        Assert.DoesNotContain("nothing would envelope", refusal.Message, StringComparison.OrdinalIgnoreCase);
+
+        // ...and points at the mode that exercises delivery without the module.
+        Assert.Contains(nameof(EncryptionMode.StrictRehearsal), refusal.Message, StringComparison.Ordinal);
+
+        // ...while still refusing to let the tier run unlicensed, which is the part that must not change.
+        Assert.Contains(nameof(EncryptionMode.SealedDeliveryPermissive), refusal.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void StrictRehearsal_is_the_only_mode_that_wraps_at_rest_AND_leaves_the_doors_open_AND_envelopes()
     {
