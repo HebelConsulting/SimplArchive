@@ -69,6 +69,10 @@ public partial class NoServerDetailInClientsTests
         // refused — its catalog composes the sentence for the request culture, so this is not the
         // unlocalizable English this guard exists for.
         ["src/SimplArchive.DesktopClient/Views/SelfEnrolmentDialog.axaml.cs"] = 1,
+        // The web half of the same dialog (ADR 0511: desktop canonical, web matches). The same licence for
+        // the same reason — and listed separately rather than as a count of two on one entry, because the
+        // two files can drift and each should have to justify itself.
+        ["src/SimplArchive.Client/Dialogs/SelfEnrolmentDialog.razor"] = 1,
     };
 
     [Fact]

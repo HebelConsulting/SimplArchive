@@ -190,6 +190,14 @@
                     <MudMenuItem Icon="@Icons.Material.Filled.Storage" OnClick="ManageWebDavAsync">@Strings.Get("AccountWebDav")</MudMenuItem>
                     <MudMenuItem Icon="@Icons.Material.Filled.Email" OnClick="ManageImapAsync">@Strings.Get("AccountImap")</MudMenuItem>
                     <MudMenuItem Icon="@Icons.Material.Filled.MailLock" OnClick="ManageSmimeAsync">@Strings.Get("AccountSmime")</MudMenuItem>
+                    @* Beside the certificate entry, which is where the manual tells a reader to look when
+                       download and preview are absent. Shown only where some module declares an enrolment
+                       (ADR 0864) — an absent affordance means the capability is absent, and this client
+                       learns that from the REL alone, never from a module id. *@
+                    @if (_canSelfEnrol)
+                    {
+                        <MudMenuItem Icon="@Icons.Material.Filled.AddModerator" OnClick="SelfEnrolAsync">@Strings.Get("AccountSelfEnrol")</MudMenuItem>
+                    }
                     <MudMenuItem Icon="@Icons.Material.Filled.NotificationsActive" OnClick="NotificationPreferencesAsync">@Strings.Get("AccountNotificationPrefs")</MudMenuItem>
                     <MudDivider />
                     @* Promote the desktop fat-client (ADR 0505): resolve the visitor's OS → /download/clients/<os>/. *@
@@ -322,6 +330,12 @@
     private string? _displayName;
     private string? _photoDataUrl;
     private bool _mfaEnabled;
+
+    // Whether this installation offers a per-user enrolment at all (ADR 0864). From the PRESENCE of the
+    // `selfEnrolments` rel — deliberately NOT from whether the tenant switched the surface ON, which is the
+    // dialog's to report: hiding the entry when an administrator could turn it on is indistinguishable from
+    // the installation not having the capability.
+    private bool _canSelfEnrol;
     private string? _impersonatedBy;
 
     private async Task StopImpersonatingAsync() => await ImpersonationSvc.StopAsync();
@@ -441,6 +455,24 @@
             _displayName = me?.UserName;
             _impersonatedBy = me?.ImpersonatedBy;
             _mfaEnabled = me?.MfaEnabled ?? false;
+
+            // ITS OWN TRY, and that is the point. This block's catch is silent and the notification bell's
+            // wiring — LoadUnreadCountAsync, StartRealtimeAsync — comes AFTER this line, so a throw here
+            // would stop the bell updating live with nothing saying why: an optional capability taking out a
+            // core one. Not reproduced as a defect (3/3 isolation passes, 0 failures across a full four-leg
+            // run), but the coupling should not exist either way.
+            //
+            // Failing to find out means NO menu entry, which is the right answer: a missing affordance means
+            // "not available to you, here, now" (ADR 0543), and that is exactly true when the question failed.
+            try
+            {
+                _canSelfEnrol = await ApiRoot.MeHrefAsync("selfEnrolments") is { Length: > 0 };
+            }
+            catch (Exception)
+            {
+                _canSelfEnrol = false;
+            }
+
             // whoami advertises `photo` exactly when there is one to fetch, so the rel's presence replaces both
             // the HasPhoto check and the composed /users/{id}/photo path (issue #416).
             _photoDataUrl = me?.Links.FirstOrDefault(l => l.Rel == "photo")?.Href is { } photoHref
@@ -524,6 +556,12 @@
 
     private async Task ManageSmimeAsync() =>
         await (await DialogService.ShowAsync<SmimeDialog>(Strings.Get("SmimeTitle"))).Result;
+
+    // A DIFFERENT store from the dialog above: that one writes the core's self-service MAIL certificate,
+    // this one the READER certificate documents are addressed to. A person can have one and not the other,
+    // which is why they are two entries rather than two modes of one.
+    private async Task SelfEnrolAsync() =>
+        await (await DialogService.ShowAsync<SelfEnrolmentDialog>(Strings.Get("EnrolTitle"))).Result;
 
     private async Task NotificationPreferencesAsync() =>
         await (await DialogService.ShowAsync<NotificationPreferencesDialog>(Strings.Get("DlgNotificationPrefs"))).Result;

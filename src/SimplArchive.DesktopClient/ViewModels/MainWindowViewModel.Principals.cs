@@ -301,6 +301,42 @@ public sealed partial class MainWindowViewModel
     /// </para>
     /// </remarks>
     [ObservableProperty] private bool _canSelfEnrol;
+
+    /// <summary>
+    /// Whether this installation offers a per-user enrolment — asked so that it CANNOT affect anything else.
+    /// </summary>
+    /// <remarks>
+    /// <b>Its own try, and that is the whole point of this method existing.</b> The caller runs inside one
+    /// long <c>try</c> whose <c>catch</c> is silent, and the notification bell's wiring
+    /// (<c>LoadNotificationsAsync</c>, <c>StartRealtimeNotificationsAsync</c>) comes AFTER this line. So a
+    /// throw here would stop the bell updating, with nothing anywhere saying why — an optional capability
+    /// taking out a core one.
+    /// <para>
+    /// Found while investigating a single failure of the web client's live-bell test. It did not reproduce
+    /// (3/3 in isolation, 0 across a full four-leg run), so this is NOT a fix for a proven defect — it is the
+    /// removal of a coupling that should not exist either way, and which would have made that failure mode
+    /// real the first time an installation answered this call badly.
+    /// </para>
+    /// </remarks>
+    private async Task<bool> OffersSelfEnrolmentAsync()
+    {
+        if (Api is not { } api)
+        {
+            return false;
+        }
+
+        try
+        {
+            return (await api.Profile.GetSelfEnrolmentsAsync()).Count > 0;
+        }
+        catch (Exception)
+        {
+            // No menu entry is the right answer to "we could not find out": a missing affordance means "not
+            // available to you, here, now" (ADR 0543), which is exactly true when the question failed.
+            return false;
+        }
+    }
+
     [ObservableProperty] private bool _canResetMfa;
 
     // Exposed for the MFA setup dialog, which drives enroll/enable interactively against the API.

@@ -1,0 +1,218 @@
+@inject HttpClient Http
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
+
+@* Enrolling your OWN credential, where the tenant's modules offer it (ABI 1.3, ADR 0864, #1502).
+
+   The core renders this on the module's behalf — a module contributes controllers and root links, never UI
+   (ADR 0737). Nothing here names a module: a second one declaring an enrolment appears with no change.
+   Desktop is canonical (ADR 0511); this mirrors its SelfEnrolmentDialog. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 460px;">
+            <MudText Typo="Typo.body2" Class="mb-3">@Strings.Get("EnrolBody")</MudText>
+
+            @if (_enrolment is null)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get(_failed ? "EnrolLoadError" : "EnrolNone")</MudText>
+            }
+            else
+            {
+                @* WHAT is being enrolled, in the MODULE's own wording — not a literal, because a second
+                   module enrolling something else must read correctly here with no change. *@
+                <MudText Typo="Typo.subtitle1">@_enrolment.Title</MudText>
+
+                @if (!_enrolment.Enabled)
+                {
+                    @* DISABLED WITH THE REASON rather than hidden: hiding would be indistinguishable from
+                       "this installation does not do this at all", which is exactly the distinction the
+                       resource carries by sending `enabled: false` rather than omitting the row. *@
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">@Strings.Get("EnrolDisabled")</MudAlert>
+                }
+                else
+                {
+                    @if (!string.IsNullOrWhiteSpace(_enrolment.LabelField))
+                    {
+                        <MudTextField T="string" @bind-Value="_label" Label="@Strings.Get("EnrolLabel")"
+                                      Placeholder="@Strings.Get("EnrolLabelHint")" Variant="Variant.Outlined"
+                                      Margin="Margin.Dense" Class="mt-3" Disabled="@_busy" />
+                    }
+
+                    <MudFileUpload T="IBrowserFile" FilesChanged="ChooseAsync" Accept=".pem,.crt,.cer" Class="d-inline-flex mt-3">
+                        <CustomContent Context="upload">
+                            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.UploadFile"
+                                       Disabled="@_busy" OnClick="@(() => upload.OpenFilePickerAsync())">
+                                @Strings.Get("EnrolChoose")
+                            </MudButton>
+                        </CustomContent>
+                    </MudFileUpload>
+
+                    @if (_chosen is not null)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-2">@_chosen</MudText>
+                    }
+                }
+            }
+
+            @if (_status is not null)
+            {
+                <MudAlert Severity="@_statusSeverity" Dense="true" Class="mt-3">@_status</MudAlert>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Disabled="@(_busy || _pem is null)" Color="Color.Primary" Variant="Variant.Filled"
+                   OnClick="EnrolAsync">@Strings.Get("EnrolSubmit")</MudButton>
+        <MudButton OnClick="@(() => Dialog.Close())">@Strings.Get("Close")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    private SelfEnrolmentDto? _enrolment;
+    private string? _pem;
+    private string? _chosen;
+    private string _label = string.Empty;
+    private string? _status;
+    private Severity _statusSeverity = Severity.Error;
+    private bool _busy;
+    private bool _failed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // An absent rel is an EMPTY offer, not an error: the core advertises it only where some module
+            // declares an enrolment (ADR 0543). The menu entry is gated on the same thing, so reaching here
+            // with none means a module was deactivated in between.
+            if (await ApiRoot.MeHrefAsync("selfEnrolments") is not { Length: > 0 } href)
+            {
+                return;
+            }
+
+            var listing = await Http.GetFromJsonAsync<ListingDto>(href);
+
+            // THE FIRST, because the core orders them and today exactly one module declares one. A chooser
+            // for a list of one is a step with no outcome; the resource already carries what a selector
+            // would need when a second module appears.
+            _enrolment = listing?.Items?.FirstOrDefault();
+        }
+        catch (Exception)
+        {
+            _failed = true;
+        }
+    }
+
+    /// <remarks>
+    /// A PRIVATE KEY is refused HERE, before anything is sent, whatever the module's own policy says — the
+    /// server refuses key material too, but by then it has crossed the wire, which is the one thing this is
+    /// about. The rule lives in <c>SimplArchive.Presentation.EnrolledCertificate</c> so this dialog, the
+    /// desktop one and <c>saconsole</c> cannot drift about what they refuse.
+    ///
+    /// Unlike the desktop, DER is NOT converted and the picker does not offer it: a browser cannot parse a
+    /// certificate at all — the attempt freezes the render silently, which looks exactly like a binding bug.
+    /// So a DER file is refused with the reason rather than accepted and then mishandled.
+    /// </remarks>
+    private async Task ChooseAsync(IBrowserFile? file)
+    {
+        if (file is null)
+        {
+            return;
+        }
+
+        using var reader = new StreamReader(file.OpenReadStream(512 * 1024));
+        var text = await reader.ReadToEndAsync();
+
+        if (SimplArchive.Presentation.EnrolledCertificate.Refusal(text) is { } refusal)
+        {
+            _pem = null;
+            _chosen = null;
+            _statusSeverity = Severity.Error;
+            _status = Strings.Get(refusal switch
+            {
+                SimplArchive.Presentation.CertificateRefusal.PrivateKey => "EnrolRefusedPrivateKey",
+                SimplArchive.Presentation.CertificateRefusal.Empty => "EnrolRefusedEmpty",
+                _ => "EnrolRefusedNotCertificate",
+            });
+
+            return;
+        }
+
+        _pem = text;
+        _chosen = file.Name;
+        _status = null;
+    }
+
+    private async Task EnrolAsync()
+    {
+        if (_enrolment is not { Enabled: true, Links: not null } || _pem is null)
+        {
+            return;
+        }
+
+        var address = _enrolment.Links.FirstOrDefault(l => l.Rel == "enrol")?.Href;
+        if (address is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        _statusSeverity = Severity.Normal;
+        _status = Strings.Get("EnrolSending");
+
+        // The request shape is the MODULE's, which is why the field names travel in the declaration rather
+        // than being assumed: the core is filling in a form on the module's behalf.
+        var body = new Dictionary<string, string?> { [_enrolment.Field] = _pem };
+        if (!string.IsNullOrWhiteSpace(_enrolment.LabelField) && !string.IsNullOrWhiteSpace(_label))
+        {
+            body[_enrolment.LabelField] = _label;
+        }
+
+        using var response = await Http.PostAsJsonAsync(address, body);
+        _busy = false;
+
+        if (response.IsSuccessStatusCode)
+        {
+            _statusSeverity = Severity.Success;
+            _status = Strings.Get("EnrolDone");
+            _enrolment = _enrolment with { Enabled = false };   // the form is done; the alert stays
+            return;
+        }
+
+        _statusSeverity = Severity.Error;
+        _status = await RefusalAsync(response);
+    }
+
+    /// <remarks>
+    /// The MODULE's own sentence, composed by its catalog for the request culture (ABI 0.10) — the one
+    /// server text a client may show. The four refusals have four different fixes and only one is the
+    /// user's (ADR 0859), so a single client-side line would send all four to the same place.
+    /// </remarks>
+    private static async Task<string> RefusalAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            var problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+            if (problem?.Detail is { Length: > 0 } said)
+            {
+                return said;
+            }
+        }
+        catch (Exception)
+        {
+            // Not a problem document — fall through rather than showing raw bytes.
+        }
+
+        return Strings.Get(response.StatusCode == System.Net.HttpStatusCode.Forbidden ? "EnrolDisabled" : "EnrolFailed");
+    }
+
+    private sealed record ListingDto(List<SelfEnrolmentDto>? Items);
+
+    private sealed record SelfEnrolmentDto(
+        string ModuleId, string Title, bool Enabled, string Field, string LabelField, List<LinkDto>? Links);
+
+    private sealed record LinkDto(string Rel, string Href, string? Method);
+
+    private sealed record ProblemDto(string? Detail, string? ErrorCode);
+}
