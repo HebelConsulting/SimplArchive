@@ -20,7 +20,16 @@
     paper: "a4",
     margin: (x: 2.2cm, top: margin-top, bottom: margin-bottom),
     numbering: "1",
-    footer: context {
+    // Suppressed entirely on a page whose numbering is `none` — the title page and the contents. The front
+    // matter carries no page number so that the count starts at 1 where the manual itself begins, and a reader
+    // told "see page 12" counts from there rather than from the cover.
+    //
+    // The condition reads the page's OWN `numbering`, which is the only thing here a footer can ask reliably.
+    // Two shapes were tried first and both printed a number on the contents page: a boolean `state`, and
+    // `counter(page).get()`. A footer's context resolves AFTER that page's own flow, so both already saw the
+    // end-of-front-matter update that sits at the foot of the contents page — and `get()` does not agree with
+    // `display()` there either, so the comparison was against a value the page never showed.
+    footer: context if page.numbering == none [] else {
       set text(size: 8pt, fill: gray)
       grid(
         columns: (1fr, 1fr),

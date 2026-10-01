@@ -36,8 +36,14 @@
   ]
 ]
 
-// ─────────────────────────────────────────────────────────────────────────────
+// The contents are front matter: unnumbered, with the count starting at 1 on the first page of the
+// Introduction. `update(0)` rather than `update(1)`, and placed BEFORE the numbering is switched back on: it
+// lands at the foot of the last contents page, which the next page then increments to 1. An `update(1)` after
+// the switch is itself content, so it claims a blank page of its own carrying the number 1.
+#set page(numbering: none)
 #outline(title: "Contents", depth: 1, indent: auto)
+#counter(page).update(0)
+#set page(numbering: "1")
 
 // ─────────────────────────────────────────────────────────────────────────────
 = Introduction
