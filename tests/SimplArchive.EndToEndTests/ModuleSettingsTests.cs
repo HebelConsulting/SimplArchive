@@ -43,7 +43,8 @@ public class ModuleSettingsTests
             // what this assertion is really guarding, since the PUT refuses anything not in it.
             var before = await TestJson.Get(rig.Admin, SettingsUrl);
             var declared = before.GetProperty("items").EnumerateArray().ToList();
-            Assert.Equal(["apiSecret", "core.protocolReadRefresh", "endpoint", "posture"],
+            Assert.Equal(
+                ["apiSecret", "core.protocolReadRefresh", "endpoint", "posture", "selfEnrolmentOpen"],
                 declared.Select(i => i.GetProperty("key").GetString()).Order());
             Assert.All(declared, item => Assert.False(item.GetProperty("hasValue").GetBoolean()));
 

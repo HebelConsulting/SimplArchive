@@ -47,10 +47,15 @@ public sealed class TestModule : IIndustryModule
     public IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> LocalizedTexts { get; } =
         new Dictionary<string, IReadOnlyDictionary<string, string>>
         {
+            ["en"] = new Dictionary<string, string>
+            {
+                ["test.enrolment-title"] = "Reader certificate",
+            },
             ["de"] = new Dictionary<string, string>
             {
                 ["test.certificate-expired"] = "Das Zertifikat ist am {value} abgelaufen.",
                 ["TEST_HANDLER_REFUSED"] = "Der Testschritt wurde abgelehnt.",
+                ["test.enrolment-title"] = "Lesezertifikat",
             },
         };
 
@@ -246,7 +251,28 @@ public sealed class TestModule : IIndustryModule
             Kind = ModuleSettingKind.Choice,
             Choices = ["strict", "permissive"],
         },
+        // The GATE for the per-user enrolment declared below (ABI 1.3). Boolean and unset by default, so the
+        // host's "unset is off" rule is provable rather than assumed.
+        new ModuleSetting("selfEnrolmentOpen", "Let people enrol their own credential")
+        {
+            Kind = ModuleSettingKind.Boolean,
+        },
     ];
+
+    /// <summary>
+    /// The per-user enrolment surface (ABI 1.3, ADR 0864) — declared here because the host's rendering of it
+    /// can only be proved against a module that declares one.
+    /// </summary>
+    /// <remarks>
+    /// The title key is one the catalog above translates into German, so the host's resolution of a module's
+    /// own wording is exercised rather than assumed — a literal here would have proved only that a string
+    /// survives a round trip.
+    /// </remarks>
+    public PerUserEnrolment? PerUserCertificateEnrolment { get; } =
+        new PerUserEnrolment("/api/modules/test-module/credential", "selfEnrolmentOpen")
+        {
+            TitleKey = "test.enrolment-title",
+        };
 
     public void ConfigureServices(IServiceCollection services)
     {

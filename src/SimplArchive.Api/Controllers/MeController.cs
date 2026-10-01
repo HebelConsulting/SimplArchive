@@ -38,11 +38,18 @@ public class MeController : ControllerBase
     private readonly SimplArchiveDbContext _dbContext;
     private readonly Concurrency.UserVerbs _users;
 
-    public MeController(ICurrentUserAccessor currentUser, SimplArchiveDbContext dbContext, Concurrency.UserVerbs users)
+    private readonly IReadOnlyList<SimplArchive.Infrastructure.Modules.ModuleLoader.LoadedModule> _modules;
+
+    public MeController(
+        ICurrentUserAccessor currentUser,
+        SimplArchiveDbContext dbContext,
+        Concurrency.UserVerbs users,
+        IReadOnlyList<SimplArchive.Infrastructure.Modules.ModuleLoader.LoadedModule> modules)
     {
         _currentUser = currentUser;
         _dbContext = dbContext;
         _users = users;
+        _modules = modules;
     }
 
     public class MeResource : HypermediaResource
@@ -154,6 +161,14 @@ public class MeController : ControllerBase
                 // compose the address — an endpoint no resource links to is unreachable by a conforming
                 // client, and therefore unfinished (ADR 0543).
                 new Link("timeZone", "/api/me/time-zone", "PUT"),
+                // What this person may enrol for THEMSELVES, declared by the tenant's modules (ADR 0864,
+                // #1502). Conditional, because a missing rel means "not available to you, here, now": an
+                // installation whose modules declare no such surface would otherwise hand every client an
+                // address that can only ever answer an empty list. The gate inside is evaluated per tenant,
+                // which is why this cannot live on the admin-only modules listing — see the controller.
+                .. _modules.Any(m => m.Module.PerUserCertificateEnrolment is not null)
+                    ? new[] { new Link("selfEnrolments", "/api/me/self-enrolments", "GET") }
+                    : [],
             // The caller's addressbooks and calendars, for the Calendar/Contacts tabs (#564). The DAV home set
             // answers the same question for external clients; our own clients follow this rel and get JSON.
             new Link("davCollections", "/api/dav-collections", "GET"),
