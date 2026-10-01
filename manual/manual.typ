@@ -426,7 +426,8 @@ be.
 
 While a certificate is set, all three entrances stay greyed out — *Delete certificate* switches your mail
 back to plain, and they come back. On installations where certificates are managed centrally,
-the dialog says so and there is nothing to set up. The profile also installs the *archive's own mail-in
+the dialog says so and there is nothing to set up *here* — the entry beside it is then the one that enrols a
+certificate for reading documents (@selfenrolment). The profile also installs the *archive's own mail-in
 certificate*: composing an encrypted message *to* the archive's ingest address (`archive@` your
 installation's mail domain) then works out of the box — the archive decrypts it on arrival and files a
 normal, searchable document.
@@ -1015,7 +1016,9 @@ is.
 with an error — *absent*.
 The document, its index data and its history all still render; the buttons that would hand you content simply
 are not there. That is deliberate: a button that fails when clicked teaches nothing, while a missing one, beside
-the certificate entry in your account menu, points at the remedy. Register a certificate and the buttons appear.
+the certificate entry in your account menu, points at the remedy. Register a certificate and the buttons
+appear — and note that on an installation that runs certificate management there are *two* entries there,
+of which only one addresses documents to you. @selfenrolment sets out which.
 
 *The desktop client opens these envelopes; the web client cannot.* A browser has no access to the certificate
 store your private key lives in, so on such an installation reading documents is work for the desktop client.
@@ -1383,6 +1386,53 @@ what they see.
   that works.
 ]
 
+== Enrolling it yourself, where that is open to you <selfenrolment>
+
+The registration above is the archive's own, and it holds *one* certificate per person. Where the
+installation also runs *certificate management* — several certificates per person, revocation, and a policy
+stating what counts as an acceptable certificate (@encryptionservice) — the account menu carries a second
+entry beside the mail one: *Enrol a certificate…*#idx("Enrolling a certificate"). Both clients have it.
+
+The entry is there where that management is installed and licensed, and nowhere else: on an installation
+that does not run it there is nothing the entry could have done, so it is not shown.
+
+*Whether you may use it is your organisation's decision, and the dialog tells you* rather than the menu
+hiding it. Enrolling your own certificate is switched *off* until an administrator opens it — so where it is
+closed, the dialog says that it is closed and that somebody who administers certificates can enrol one for
+you, or open it. That is deliberately not the same message as "this installation does not do this at all":
+one of the two is something a colleague can change this afternoon, and a missing entry could not tell them
+apart.
+
+*What it asks for is the certificate file* — the public half, as `.pem`, `.crt` or `.cer`; the desktop client
+also takes the binary `.der` that card tools export. *A file containing a private key is refused before
+anything is sent*, with the reason: the private key belongs on the card or in the keystore that generated it,
+and the moment worth saying so is while it is still only on your own machine.
+
+*You also give the key a name* you will recognise — "YubiKey 5C", "work laptop". That is what stops several
+certificates per person being confusable later, and it is worth a moment's thought because a document is
+addressed to *all* of them: the card on your desk and the identity on your laptop open the same document,
+with nothing having to guess which one you are at.
+
+*A refusal names which of four things happened*, because the remedy differs every time and only one of them
+is yours to act on: enrolment is not open to you here (an administrator's), the certificate is not one the
+product can use at all (a re-issue), your organisation's policy does not accept this one because its key is
+too short or its curve is not on the permitted list (ask for one that is), or it is enrolled already (nothing
+to do). The sentence comes from the certificate management itself, in your own language, rather than a single
+"could not enrol" that would send all four to the same place.
+
+#note[
+  *Two entries, two stores — and where certificate management is in use, only one of them addresses your
+  documents.* *Encrypted mail (S/MIME)…* registers the certificate that makes your *mail* readable: the
+  archive's own, one per person, and on an installation without certificate management it is what documents
+  are addressed to as well. *Enrol a certificate…* enrols a *reader* certificate with the certificate
+  management — and where that management is in use, it is the *only* place the archive looks when it addresses
+  a document. Deliberately not both: a certificate revoked in one store would otherwise go on opening
+  documents because a copy of it lingered in the other, which is a revocation that does not revoke.
+
+  So on such an installation, having registered a mail certificate is *not* the same as being addressed.
+  Enrol one, and @encryptedreads describes what you then see.
+]
+
 == When the certificate expires, and replacing a key
 
 *The key does not expire; the certificate does.* Validity dates are a property of the certificate, and the
@@ -1458,12 +1508,12 @@ addressed to, so the devices that cannot use the card cannot read anything.
 
 Several certificates per person dissolves it — a card for the computer and an installed identity for the
 phone, each addressed alongside the other, so the same document opens on both without the card's key ever
-leaving it. That, and *automated enrolment* for more people than one administrator wants to prepare by hand,
-belong to the separate *Encryption Service* described in @encryptionservice. If you need either, contact
-support and ask about it; it is a paid extra.
+leaving it. That, and *enrolment* for more people than one administrator wants to prepare by hand, belong to
+the separate *Encryption Module* described in @encryptionservice. If you need either, contact support and ask
+about it; it is a paid extra.
 
 Nothing in this appendix is wasted if you go that way — the card is prepared the same, and it is the
-registration that the service takes over.
+registration that the module takes over: @selfenrolment is what the last step becomes.
 
 == When something looks wrong
 
