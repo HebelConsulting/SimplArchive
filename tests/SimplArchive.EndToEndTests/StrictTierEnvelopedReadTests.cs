@@ -208,24 +208,122 @@ public class StrictTierEnvelopedReadTests
     /// </para>
     /// <para>
     /// Written as an AGREEMENT between the two tiers rather than as "strict says true", because the property
-    /// that matters is that the answer does not depend on the tier. Markdown is the subject because the server
-    /// renders it to PDF, so the display object genuinely differs from what was uploaded.
+    /// that matters is that the answer does not depend on the tier.
+    /// </para>
+    /// <para>
+    /// <b>One case per CONVERTER, not one per path</b> (#1529, split out of #1378). Markdown alone proved the
+    /// path; it could not prove that each converter is reached on the enveloped branch — and the defect this
+    /// area actually produced was of exactly that shape: <c>previewConverted</c> assigned in one place, the
+    /// non-enveloped branch, so the badge could never appear whatever the format (#1454). A per-format version
+    /// of that flaw is invisible in the same way. So the four subjects are the four distinct routes a display
+    /// object can come from: markdown and e-mail through the conversion sidecar's browser route, an office
+    /// document through its LibreOffice route, and a TIFF through the image library in-process.
+    /// </para>
+    /// <para>
+    /// The <c>.docx</c> is a real OOXML package built here rather than the <c>.csv</c> stand-in
+    /// <c>PreviewRenditionTests</c> uses for the office family, because that would make this the same claim
+    /// again under a new name — and because nothing else proves a VALID <c>.docx</c> converts at all: the only
+    /// other one in the suite is deliberately corrupt, pinning the failure path.
     /// </para>
     /// </remarks>
-    [Fact]
-    public async Task A_converted_preview_is_reported_as_converted_on_both_tiers()
+    [Theory]
+    [InlineData(".md")]
+    [InlineData(".docx")]
+    [InlineData(".eml")]
+    [InlineData(".tif")]
+    public async Task A_converted_preview_is_reported_as_converted_on_both_tiers(string fileExtension)
     {
-        var strict = await ConvertedFlagAsync(E2EApiFactory.StrictTenantName, withCertificate: true);
-        var ordinary = await ConvertedFlagAsync(E2EApiFactory.CryptoTenantName, withCertificate: false);
+        var sample = ConvertibleSample(fileExtension);
 
-        Assert.True(ordinary, "the ordinary tenant should report a markdown preview as converted — if this "
-            + "fails the fixture is not converting at all and the strict assertion below would pass vacuously");
-        Assert.True(strict, "a strict tenant delivers the RENDITION for an inline read (ADR 0828) and must say "
-            + "so, or the reader is shown a converted document with nothing saying it is not the original");
+        var strict = await ConvertedFlagAsync(
+            E2EApiFactory.StrictTenantName, withCertificate: true, sample, fileExtension);
+        var ordinary = await ConvertedFlagAsync(
+            E2EApiFactory.CryptoTenantName, withCertificate: false, sample, fileExtension);
+
+        // The ordinary tenant first, and it is not ceremony: it is what makes a failure DIAGNOSABLE. Ordinary
+        // true with strict false points at the enveloped branch; both false points at the converter or its
+        // sidecar. Asserting strict alone would still fail, but would not say which of the two to go and read.
+        Assert.True(ordinary, $"the ordinary tenant should report a {fileExtension} preview as converted — if "
+            + "this fails the fixture is not converting this format at all, and the strict assertion below "
+            + "would be measuring the converter rather than the tier");
+        Assert.True(strict, $"a strict tenant delivers the RENDITION for an inline read of {fileExtension} "
+            + "(ADR 0828) and must say so, or the reader is shown a converted document with nothing saying it "
+            + "is not the original");
     }
 
-    /// <summary>Uploads a markdown document to a tenant and reports what its version says about conversion.</summary>
-    private async Task<bool> ConvertedFlagAsync(string tenantName, bool withCertificate)
+    /// <summary>A smallest-possible document of <paramref name="fileExtension"/> that the server converts.</summary>
+    /// <remarks>
+    /// Synthesized rather than committed: an opaque binary under <c>tests/</c> is one nobody can review or
+    /// regenerate, and that directory is published byte-for-byte (ADR 0484). The TIFF goes through NetVips,
+    /// which is how this suite already makes TIFFs — the managed library is MIT, and the LGPL native it binds
+    /// is the project's one documented licence exception, already referenced by this test project for the
+    /// platforms tests run on (issue #496 carries the trigger that retires those).
+    /// </remarks>
+    private static byte[] ConvertibleSample(string fileExtension) => fileExtension switch
+    {
+        ".md" => Encoding.ASCII.GetBytes("# Heading\n\nA markdown document the server renders to PDF.\n"),
+        ".docx" => MinimalOfficeDocument(),
+        ".eml" => Encoding.ASCII.GetBytes(
+            "From: sender@e2e.local\r\nTo: reader@e2e.local\r\nSubject: A message the archive renders\r\n"
+            + "Date: Thu, 1 Jan 2026 09:50:00 +0000\r\nMIME-Version: 1.0\r\n"
+            + "Content-Type: text/plain; charset=utf-8\r\n\r\nA message body the server renders to PDF.\r\n"),
+        ".tif" => (NetVips.Image.Black(600, 800) + 255)
+            .Cast(NetVips.Enums.BandFormat.Uchar)
+            .WriteToBuffer(".tif"),
+        _ => throw new ArgumentOutOfRangeException(nameof(fileExtension), fileExtension, "no sample for this"),
+    };
+
+    /// <summary>The smallest valid OOXML word-processing package: content types, the relationship, the body.</summary>
+    /// <remarks>
+    /// Three parts is genuinely the minimum — drop <c>_rels/.rels</c> and the import filter cannot find the
+    /// main document part, which fails as a CONVERSION failure (no <c>preview</c> link) rather than as
+    /// anything naming the package, so a shortcut here would read exactly like the defect under test.
+    /// </remarks>
+    private static byte[] MinimalOfficeDocument()
+    {
+        using var buffer = new MemoryStream();
+        using (var zip = new System.IO.Compression.ZipArchive(
+            buffer, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
+        {
+            Write(zip, "[Content_Types].xml",
+                """
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+                  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+                  <Default Extension="xml" ContentType="application/xml"/>
+                  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+                </Types>
+                """);
+
+            Write(zip, "_rels/.rels",
+                """
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+                  <Relationship Id="rId1" Target="word/document.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"/>
+                </Relationships>
+                """);
+
+            Write(zip, "word/document.xml",
+                """
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+                  <w:body><w:p><w:r><w:t>An office document the server renders to PDF.</w:t></w:r></w:p></w:body>
+                </w:document>
+                """);
+        }
+
+        return buffer.ToArray();
+
+        static void Write(System.IO.Compression.ZipArchive zip, string path, string xml)
+        {
+            using var entry = zip.CreateEntry(path).Open();
+            entry.Write(Encoding.UTF8.GetBytes(xml));
+        }
+    }
+
+    /// <summary>Uploads one document to a tenant and reports what its version says about conversion.</summary>
+    private async Task<bool> ConvertedFlagAsync(
+        string tenantName, bool withCertificate, byte[] sample, string fileExtension)
     {
         var tenantId = await _factory.SeedTenantNamedAsync(tenantName);
         var email = $"converted-reader-{Guid.NewGuid():N}@e2e.local";
@@ -250,8 +348,7 @@ public class StrictTierEnvelopedReadTests
         var documentId = (await TestJson.Post(api, $"/api/documents/{repository}/children",
             new { name = $"doc-{Guid.NewGuid():N}" })).GetProperty("id").GetGuid();
 
-        var versionSelf = await UploadAsync(api, documentId,
-            Encoding.ASCII.GetBytes("# Heading\n\nA markdown document the server renders to PDF.\n"), ".md");
+        var versionSelf = await UploadAsync(api, documentId, sample, fileExtension);
 
         var version = await TestJson.Get(api, versionSelf);
         return version.GetProperty("previewConverted").GetBoolean();

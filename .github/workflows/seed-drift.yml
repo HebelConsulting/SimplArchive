@@ -1,0 +1,48 @@
+# Does a repository seeded from docs/SeedCLAUDE.md still carry its standing principles? (issue #1469)
+#
+# SeedClaudeLockstepTests guards the other direction — CLAUDE.md to the seed — and runs on every PR. This one
+# cannot: it reads four OTHER repositories, so it needs a credential and the network, and it has nothing to do
+# with whether a given change is sound. Hence a schedule.
+#
+# A SCHEDULE RATHER THAN A REPORT, deliberately. The issue weighed printing a report and rejected it: a report
+# nobody reads is the shape of the problem, not its fix. This fails a job instead, so drift arrives as a
+# notification.
+name: Seed drift
+
+on:
+  schedule:
+    # Mondays, 06:20 UTC. Early enough to be read with the week's first coffee, and off the hour because
+    # everything in the world is scheduled on the hour.
+    - cron: '20 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The job's own GITHUB_TOKEN is scoped to THIS repository and cannot read the private siblings — it
+      # would 404 on every one and report "no drift", which is the worst available answer. So the token is
+      # required, and its absence fails rather than degrading into a green tick.
+      - name: Check the token is present
+        env:
+          TOKEN: ${{ secrets.SEED_DRIFT_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::SEED_DRIFT_TOKEN is not set. This job reads CLAUDE.md from the seeded sibling"
+            echo "::error::repositories, which the job's own GITHUB_TOKEN cannot see. Add a fine-grained PAT"
+            echo "::error::with READ-ONLY Contents access to SimplArchiveEncryption,"
+            echo "::error::SimplArchiveEncryptionService and SimplArchiveFlightSchool as the repository secret"
+            echo "::error::SEED_DRIFT_TOKEN. It needs no write scope anywhere — do not reuse PUBLISH_PAT,"
+            echo "::error::which can write to the public mirror."
+            exit 1
+          fi
+
+      - name: Compare each seeded repository against the seed
+        env:
+          GH_TOKEN: ${{ secrets.SEED_DRIFT_TOKEN }}
+        run: scripts/check-seed-drift.sh

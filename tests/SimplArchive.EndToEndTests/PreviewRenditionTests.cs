@@ -6,8 +6,15 @@ namespace SimplArchive.EndToEndTests;
 // rendition pipeline (ADR "Server-side preview renditions" 0226, "Office document preview via Gotenberg" 0228,
 // "CSV/Markdown preview" 0232, "Preview fallback when a rendition can't be produced" 0229). The single-version
 // resource builds the `preview` link on demand — GETting it triggers the actual conversion — so no polling is
-// needed (renditions are synchronous, unlike search indexing). TIFF→PNG is intentionally not covered: NetVips'
-// native lib is only packaged for the Linux-musl container image, not this macOS test host.
+// needed (renditions are synchronous, unlike search indexing).
+//
+// TIFF→PNG is not covered HERE, and the reason this comment used to give was wrong: it said NetVips' native is
+// "only packaged for the Linux-musl container image, not this macOS test host". That stopped being true when
+// the test projects took version-matched NetVips.Native packages for the platforms tests actually run on
+// (osx-arm64, osx-x64, linux-x64, linux-arm64 — issue #496, which carries the trigger that retires them). This
+// suite already drives NetVips on this host: IntrayPageOperationsTests synthesizes real multi-page TIFFs, and
+// StrictTierEnvelopedReadTests converts one. Left standing, the sentence was an instruction not to test the
+// thing — which is how #1529 came to be a gap. The image route is covered there and in the page-algebra tests.
 [Collection(E2ECollection.Name)]
 [Trait("Area", "e2e-2")]
 public class PreviewRenditionTests
