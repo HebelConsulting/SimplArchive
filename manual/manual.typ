@@ -1034,6 +1034,18 @@ while you stay signed in and the card stays in the reader — one document's pre
 searchable text are three separate reads, and a prompt for each would be unusable. The PIN itself is not
 stored: what the client keeps is the unlocked connection to the card, not the number you typed.
 
+*Two cards in readers at once is fine.* Where more than one card is plugged in — your own and a colleague's,
+or a card you are preparing beside the one you work with — the client first asks the *document* who it was
+addressed to, and compares that against what each card carries. That question is answered from public
+information, so *a card that cannot open the document is never asked for its PIN*: a prompt whose answer was
+always going to be no is how people learn to click through prompts.
+
+Where *several* cards could open it — a card and a laptop identity are one person, and a document is addressed
+to all of them — each is tried in turn, and the PIN prompt *names the card it is about*. So declining one, or
+mistyping it, does not lose a document another card would have opened. You are not offered a choice between
+them, deliberately: every card that can open it opens the same document, so the choice would have no outcome
+you could see.
+
 *Taking your card out closes what it opened.* Within a few seconds of removing the card, any document on screen
 that it decrypted is closed and the pages it drew are discarded. You stay signed in and can carry on browsing
 folders, index data and search results — none of that is encrypted — and putting the card back lets you open
@@ -1202,8 +1214,17 @@ Three things it will not do quietly:
 - *It will not hide what it did.* Every command it runs against the card, and the card's answer, is printed —
   with the PIN and management key removed.
 
-With `--manifest` it also records what was issued and to whom, in a file `saconsole certificates enrol`
-reads, so a box of prepared cards can be enrolled in one go rather than one at a time.
+With `--manifest` it also records what was issued and to whom, in a file `saconsole certificates import`
+reads — so a box of prepared cards is enrolled in one go rather than one at a time:
+
+```bash
+saconsole certificates import enrolments.json --dry-run   # what would change
+saconsole certificates import enrolments.json
+```
+
+It is safe to re-run: a certificate already enrolled is reported as *unchanged* rather than as an error, so
+an interrupted import is finished by running it again. (`saconsole certificates enrol <file> --holder <email>`
+is the single-certificate sibling, for one card prepared on its own.)
 
 == The walk-through
 
