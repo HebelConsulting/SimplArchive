@@ -478,6 +478,18 @@ public partial class MainWindow
         }
     });
 
+    // Enrolling your own credential, where a module offers it (ABI 1.3, ADR 0864, #1502). A DIFFERENT store
+    // from the dialog above: that one writes the core's self-service MAIL certificate, this one the READER
+    // certificate documents are addressed to. A person can have one and not the other, which is why they are
+    // two entries rather than two modes of one.
+    internal void OnSelfEnrol(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel { Api: { } api })
+        {
+            await new SelfEnrolmentDialog(api).ShowDialog(this);
+        }
+    });
+
     // The Intray / Check-out tabs' single WebDAV button (ADR "One WebDAV button per tab, deep-linked"). It does
     // the same next-useful-thing the ribbon button does — set up credentials, else mount, else open what is
     // already mounted — with one difference that is the whole point of it being on a tab: when the volume is

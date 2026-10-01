@@ -284,6 +284,23 @@ public sealed partial class MainWindowViewModel
     // The current user's MFA status (from whoami) gates the account-menu Enable/Disable items; CanResetMfa
     // gates the admin reset on the selected user.
     [ObservableProperty] private bool _mfaEnabled;
+
+    /// <summary>
+    /// Whether this installation offers a per-user enrolment at all (ABI 1.3, ADR 0864, #1502).
+    /// </summary>
+    /// <remarks>
+    /// Read from the PRESENCE of the <c>selfEnrolments</c> rel, not from a module id: a missing rel means
+    /// "not available to you, here, now" (ADR 0543), and the core withholds it where no module declares one.
+    /// So the menu entry appears on an installation that has the capability and nowhere else, and this client
+    /// knows nothing about which module provides it.
+    /// <para>
+    /// Note what this is NOT gated on: whether the tenant has switched the surface ON. That is
+    /// <c>enabled</c> on the row, and the dialog says so — because hiding the entry when an administrator
+    /// could turn it on is indistinguishable from the installation not having it, which is the one
+    /// distinction the resource exists to carry.
+    /// </para>
+    /// </remarks>
+    [ObservableProperty] private bool _canSelfEnrol;
     [ObservableProperty] private bool _canResetMfa;
 
     // Exposed for the MFA setup dialog, which drives enroll/enable interactively against the API.

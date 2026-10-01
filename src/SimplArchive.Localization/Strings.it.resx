@@ -5184,4 +5184,55 @@
   <data name="DeviceRefusedHint" xml:space="preserve">
     <value>Non è stato concesso nulla. Puoi chiudere questa scheda.</value>
   </data>
+  <data name="AccountSelfEnrol" xml:space="preserve">
+    <value>Registra un certificato…</value>
+  </data>
+  <data name="EnrolTitle" xml:space="preserve">
+    <value>Registra un certificato</value>
+  </data>
+  <data name="EnrolBody" xml:space="preserve">
+    <value>I documenti vengono indirizzati al certificato registrato qui, così che solo lei possa aprirli. Registri il certificato PUBBLICO — mai la chiave privata, che deve restare sulla carta o nel portachiavi che l'ha generata.</value>
+  </data>
+  <data name="EnrolDisabled" xml:space="preserve">
+    <value>La sua organizzazione non ha aperto questa funzione all'autoservizio. Un amministratore può registrare un certificato per lei, oppure attivarla.</value>
+  </data>
+  <data name="EnrolNone" xml:space="preserve">
+    <value>In questa installazione non c'è nulla da registrare.</value>
+  </data>
+  <data name="EnrolLabel" xml:space="preserve">
+    <value>Come chiama questa chiave</value>
+  </data>
+  <data name="EnrolLabelHint" xml:space="preserve">
+    <value>YubiKey 5C, portatile di lavoro…</value>
+  </data>
+  <data name="EnrolChoose" xml:space="preserve">
+    <value>Scegli un file di certificato…</value>
+  </data>
+  <data name="EnrolFileType" xml:space="preserve">
+    <value>Certificato</value>
+  </data>
+  <data name="EnrolSubmit" xml:space="preserve">
+    <value>Registra</value>
+  </data>
+  <data name="EnrolSending" xml:space="preserve">
+    <value>Registrazione in corso…</value>
+  </data>
+  <data name="EnrolDone" xml:space="preserve">
+    <value>Registrato. D'ora in poi i documenti saranno indirizzati a questo certificato.</value>
+  </data>
+  <data name="EnrolFailed" xml:space="preserve">
+    <value>Non è stato possibile registrare il certificato.</value>
+  </data>
+  <data name="EnrolRefusedPrivateKey" xml:space="preserve">
+    <value>Quel file contiene una CHIAVE PRIVATA. Scelga invece il certificato pubblico — la chiave privata non deve mai lasciare la carta o il portachiavi che l'ha generata.</value>
+  </data>
+  <data name="EnrolRefusedEmpty" xml:space="preserve">
+    <value>Quel file è vuoto.</value>
+  </data>
+  <data name="EnrolRefusedNotCertificate" xml:space="preserve">
+    <value>Quello non è un file di certificato.</value>
+  </data>
+  <data name="EnrolLoadError" xml:space="preserve">
+    <value>Non è stato possibile caricare l'elenco di ciò che può registrare.</value>
+  </data>
 </root>

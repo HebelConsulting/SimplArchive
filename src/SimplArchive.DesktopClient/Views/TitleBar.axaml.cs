@@ -48,6 +48,8 @@ public partial class TitleBar : UserControl
 
     private void OnManageSmime(object? sender, RoutedEventArgs e) => Window()?.OnManageSmime(sender, e);
 
+    private void OnSelfEnrol(object? sender, RoutedEventArgs e) => Window()?.OnSelfEnrol(sender, e);
+
     private void OnNotificationPreferences(object? sender, RoutedEventArgs e) => Window()?.OnNotificationPreferences(sender, e);
 
     private void OnOpenManual(object? sender, RoutedEventArgs e) => Window()?.OnOpenManual(sender, e);

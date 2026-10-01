@@ -5184,4 +5184,55 @@
   <data name="DeviceRefusedHint" xml:space="preserve">
     <value>Nothing was granted. You can close this tab.</value>
   </data>
+  <data name="AccountSelfEnrol" xml:space="preserve">
+    <value>Enrol a certificate…</value>
+  </data>
+  <data name="EnrolTitle" xml:space="preserve">
+    <value>Enrol a certificate</value>
+  </data>
+  <data name="EnrolBody" xml:space="preserve">
+    <value>Documents are addressed to the certificate you enrol here, so that only you can open them. Enrol the PUBLIC certificate — never the private key, which must stay on the card or keystore that made it.</value>
+  </data>
+  <data name="EnrolDisabled" xml:space="preserve">
+    <value>Your organisation has not opened this for people to do themselves. An administrator can enrol a certificate for you, or switch this on.</value>
+  </data>
+  <data name="EnrolNone" xml:space="preserve">
+    <value>There is nothing to enrol on this installation.</value>
+  </data>
+  <data name="EnrolLabel" xml:space="preserve">
+    <value>What you call this key</value>
+  </data>
+  <data name="EnrolLabelHint" xml:space="preserve">
+    <value>YubiKey 5C, work laptop…</value>
+  </data>
+  <data name="EnrolChoose" xml:space="preserve">
+    <value>Choose a certificate file…</value>
+  </data>
+  <data name="EnrolFileType" xml:space="preserve">
+    <value>Certificate</value>
+  </data>
+  <data name="EnrolSubmit" xml:space="preserve">
+    <value>Enrol</value>
+  </data>
+  <data name="EnrolSending" xml:space="preserve">
+    <value>Enrolling…</value>
+  </data>
+  <data name="EnrolDone" xml:space="preserve">
+    <value>Enrolled. Documents will be addressed to it from now on.</value>
+  </data>
+  <data name="EnrolFailed" xml:space="preserve">
+    <value>It could not be enrolled.</value>
+  </data>
+  <data name="EnrolRefusedPrivateKey" xml:space="preserve">
+    <value>That file contains a PRIVATE KEY. Choose the public certificate instead — the private key must never leave the card or keystore that generated it.</value>
+  </data>
+  <data name="EnrolRefusedEmpty" xml:space="preserve">
+    <value>That file is empty.</value>
+  </data>
+  <data name="EnrolRefusedNotCertificate" xml:space="preserve">
+    <value>That is not a certificate file.</value>
+  </data>
+  <data name="EnrolLoadError" xml:space="preserve">
+    <value>The list of what you can enrol could not be loaded.</value>
+  </data>
 </root>

@@ -1,0 +1,36 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.SelfEnrolmentDialog"
+        Title="{loc:Tr EnrolTitle}" Width="520" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="10">
+        <TextBlock TextWrapping="Wrap" Text="{loc:Tr EnrolBody}" />
+
+        <!-- WHAT is being enrolled, in the MODULE's own wording. Shown as a heading rather than hard-coded,
+             because a second module enrolling something else must read correctly here with no change. -->
+        <TextBlock x:Name="SubjectText" FontWeight="SemiBold" TextWrapping="Wrap" />
+
+        <!-- Switched off by the tenant. The entry is DISABLED WITH THE REASON rather than hidden: hiding it
+             would be indistinguishable from "this installation does not do this at all", which is exactly the
+             distinction the resource was built to carry (its `enabled` is present-and-false, not absent). -->
+        <TextBlock x:Name="DisabledText" IsVisible="False" TextWrapping="Wrap"
+                   Foreground="{DynamicResource WbMuted}" FontSize="12" Text="{loc:Tr EnrolDisabled}" />
+
+        <StackPanel x:Name="FormPanel" IsVisible="False" Spacing="8">
+            <TextBlock Text="{loc:Tr EnrolLabel}" FontWeight="SemiBold" FontSize="12" />
+            <TextBox x:Name="LabelBox" Watermark="{loc:Tr EnrolLabelHint}" />
+
+            <Button x:Name="ChooseButton" Content="{loc:Tr EnrolChoose}" Click="OnChoose" />
+            <TextBlock x:Name="ChosenText" IsVisible="False" FontSize="12"
+                       Foreground="{DynamicResource WbMuted}" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <TextBlock x:Name="StatusText" Foreground="{DynamicResource WbMuted}" FontSize="12" TextWrapping="Wrap" />
+
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button x:Name="EnrolButton" Content="{loc:Tr EnrolSubmit}" IsEnabled="False" Click="OnEnrol" />
+            <Button Content="{loc:Tr Close}" Click="OnClose" IsCancel="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

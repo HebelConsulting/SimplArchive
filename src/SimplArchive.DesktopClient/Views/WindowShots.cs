@@ -155,9 +155,15 @@ public static class WindowShots
             // `--pin` renders the PIN prompt instead (#1353, ADR 0832). Same reason as everything else here:
             // it is a Window, so nothing else can look at it — and it appears only when a user with a card
             // opens an encrypted document, which is the worst possible moment to discover a XAML load crash.
+            // `--enrol` renders the self-enrolment dialog (ABI 1.3, ADR 0864). Same reason as its neighbours:
+            // it is a Window, so no other check can look at it, and it opens from a menu entry that only
+            // appears on an installation whose modules declare an enrolment — which makes a XAML load crash
+            // here something a developer would never meet and a customer would.
             Avalonia.Controls.Window cardWin = args.Contains("--pin")
                 ? new Views.CardPinDialog()
-                : new Views.CardCertificateDialog();
+                : args.Contains("--enrol")
+                    ? new Views.SelfEnrolmentDialog()
+                    : new Views.CardCertificateDialog();
 
             cardWin.Show();
             Dispatcher.UIThread.RunJobs();

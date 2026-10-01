@@ -109,6 +109,11 @@
                     <MenuItem Header="{loc:Tr AccountWebDav}" Click="OnManageWebDav" />
                     <MenuItem Header="{loc:Tr AccountImap}" Click="OnManageImap" />
                     <MenuItem Header="{loc:Tr AccountSmime}" Click="OnManageSmime" />
+                    <!-- Beside the certificate entry, which is where the manual already tells a reader to
+                         look when download and preview are absent. Visible only where some module declares
+                         an enrolment (ADR 0864) — an absent affordance means the capability is absent. -->
+                    <MenuItem Header="{loc:Tr AccountSelfEnrol}" Click="OnSelfEnrol"
+                              IsVisible="{Binding CanSelfEnrol}" />
                     <MenuItem Header="{loc:Tr AccountNotificationPrefs}" Click="OnNotificationPreferences" />
                     <Separator />
                     <MenuItem Header="{loc:Tr AccountLogout}" Command="{Binding LogoutCommand}" />

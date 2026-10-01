@@ -84,6 +84,84 @@ public sealed class ProfileClient(ApiCore core)
         return await _core.SendRelAsync(_meLinks, rel, body, cancellationToken);
     }
 
+    /// <summary>What this person may enrol for themselves, as their tenant's modules declare it (ADR 0864).</summary>
+    /// <param name="ModuleId">Which module declared it — shown only when more than one did.</param>
+    /// <param name="Title">The module's own wording, already in this request's language.</param>
+    /// <param name="Enabled">Whether the tenant has the surface switched on.</param>
+    /// <param name="EnrolHref">Where to POST, or null when the surface is switched off.</param>
+    /// <param name="Field">The field the certificate is sent as, inside the posted object.</param>
+    /// <param name="LabelField">The field a label is sent as, or empty when the endpoint takes none.</param>
+    public sealed record SelfEnrolment(
+        string ModuleId, string Title, bool Enabled, string? EnrolHref, string Field, string LabelField);
+
+    /// <summary>
+    /// The enrolments this person may make, or an EMPTY list where the installation offers none.
+    /// </summary>
+    /// <remarks>
+    /// <b>An absent rel is an empty list, not an error.</b> The core advertises <c>selfEnrolments</c> only
+    /// where some module declares one (ADR 0543: a missing rel means "not available to you, here, now"), so a
+    /// client asking an installation that has no such module must be able to ask without catching anything —
+    /// otherwise every caller wraps this in a try, and the one that forgets shows a stack trace for a normal
+    /// state.
+    /// </remarks>
+    public async Task<IReadOnlyList<SelfEnrolment>> GetSelfEnrolmentsAsync(CancellationToken cancellationToken = default)
+    {
+        await MeHrefAsync("self", cancellationToken);   // populates the cache
+        if (_meLinks is null || !_meLinks.Has("selfEnrolments"))
+        {
+            return [];
+        }
+
+        var listing = await _core.Http.GetFromJsonAsync<JsonElement>(
+            await MeHrefAsync("selfEnrolments", cancellationToken), cancellationToken);
+
+        if (!listing.TryGetProperty("items", out var items))
+        {
+            return [];
+        }
+
+        var enrolments = new List<SelfEnrolment>();
+        foreach (var item in items.EnumerateArray())
+        {
+            string Text(string name) =>
+                item.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String
+                    ? v.GetString() ?? string.Empty
+                    : string.Empty;
+
+            // The POST address comes from the row's own `enrol` rel, which the core withholds while the
+            // surface is switched off — so this client never holds an address it may not use.
+            var links = ApiCore.ParseLinks(item);
+
+            enrolments.Add(new SelfEnrolment(
+                Text("moduleId"),
+                Text("title"),
+                item.TryGetProperty("enabled", out var on) && on.ValueKind == JsonValueKind.True,
+                links?.Href("enrol"),
+                Text("field"),
+                Text("labelField")));
+        }
+
+        return enrolments;
+    }
+
+    /// <summary>Enrols a certificate through the module's own endpoint.</summary>
+    /// <remarks>
+    /// The request shape is the MODULE's, which is why the field names travel in the declaration rather than
+    /// being assumed here: the core is filling in a form on the module's behalf, and a second module taking
+    /// <c>pem</c> instead of <c>certificatePem</c> must need no change on this side.
+    /// </remarks>
+    public async Task<HttpResponseMessage> EnrolAsync(
+        SelfEnrolment enrolment, string certificatePem, string? label, CancellationToken cancellationToken = default)
+    {
+        var body = new Dictionary<string, string?> { [enrolment.Field] = certificatePem };
+        if (!string.IsNullOrWhiteSpace(enrolment.LabelField) && !string.IsNullOrWhiteSpace(label))
+        {
+            body[enrolment.LabelField] = label;
+        }
+
+        return await _core.Http.PostAsJsonAsync(enrolment.EnrolHref!, body, cancellationToken);
+    }
+
     public async Task<string> MeHrefAsync(string rel, CancellationToken cancellationToken = default)
     {
         if (_meLinks is null)

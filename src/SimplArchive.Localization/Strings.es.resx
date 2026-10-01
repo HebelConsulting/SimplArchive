@@ -5184,4 +5184,55 @@
   <data name="DeviceRefusedHint" xml:space="preserve">
     <value>No se concedió nada. Puedes cerrar esta pestaña.</value>
   </data>
+  <data name="AccountSelfEnrol" xml:space="preserve">
+    <value>Registrar un certificado…</value>
+  </data>
+  <data name="EnrolTitle" xml:space="preserve">
+    <value>Registrar un certificado</value>
+  </data>
+  <data name="EnrolBody" xml:space="preserve">
+    <value>Los documentos se dirigen al certificado que registre aquí, de modo que solo usted pueda abrirlos. Registre el certificado PÚBLICO — nunca la clave privada, que debe permanecer en la tarjeta o el almacén que la generó.</value>
+  </data>
+  <data name="EnrolDisabled" xml:space="preserve">
+    <value>Su organización no ha abierto esto al autoservicio. Un administrador puede registrar un certificado por usted, o activarlo.</value>
+  </data>
+  <data name="EnrolNone" xml:space="preserve">
+    <value>En esta instalación no hay nada que registrar.</value>
+  </data>
+  <data name="EnrolLabel" xml:space="preserve">
+    <value>Cómo llama a esta clave</value>
+  </data>
+  <data name="EnrolLabelHint" xml:space="preserve">
+    <value>YubiKey 5C, portátil del trabajo…</value>
+  </data>
+  <data name="EnrolChoose" xml:space="preserve">
+    <value>Elegir un archivo de certificado…</value>
+  </data>
+  <data name="EnrolFileType" xml:space="preserve">
+    <value>Certificado</value>
+  </data>
+  <data name="EnrolSubmit" xml:space="preserve">
+    <value>Registrar</value>
+  </data>
+  <data name="EnrolSending" xml:space="preserve">
+    <value>Registrando…</value>
+  </data>
+  <data name="EnrolDone" xml:space="preserve">
+    <value>Registrado. A partir de ahora los documentos se dirigirán a él.</value>
+  </data>
+  <data name="EnrolFailed" xml:space="preserve">
+    <value>No se pudo registrar el certificado.</value>
+  </data>
+  <data name="EnrolRefusedPrivateKey" xml:space="preserve">
+    <value>Ese archivo contiene una CLAVE PRIVADA. Elija el certificado público — la clave privada nunca debe salir de la tarjeta o el almacén que la generó.</value>
+  </data>
+  <data name="EnrolRefusedEmpty" xml:space="preserve">
+    <value>Ese archivo está vacío.</value>
+  </data>
+  <data name="EnrolRefusedNotCertificate" xml:space="preserve">
+    <value>Eso no es un archivo de certificado.</value>
+  </data>
+  <data name="EnrolLoadError" xml:space="preserve">
+    <value>No se pudo cargar la lista de lo que puede registrar.</value>
+  </data>
 </root>

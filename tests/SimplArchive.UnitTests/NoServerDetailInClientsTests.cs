@@ -61,6 +61,14 @@ public partial class NoServerDetailInClientsTests
         // detail: it is the MODULE's sentence about one candidate ("FI(A) · offered and free"), composed by
         // its own catalog for the request culture, and only the module knows what distinguishes its choices.
         ["src/SimplArchive.DesktopClient/ViewModels/ModuleActionPickerViewModel.cs"] = 1,
+        // ADR 0864's enrolment refusals — the same class again, and the one place it matters most. The four
+        // have four different fixes and only one is the user's: self-service switched off is an
+        // administrator's, a certificate the product's key rules reject is a re-issue, one the tenant's
+        // policy rejects is a different CA, and already-enrolled is nothing at all. Mapping them to one
+        // client-side sentence would send all four to the same place, and only the MODULE knows which rule
+        // refused — its catalog composes the sentence for the request culture, so this is not the
+        // unlocalizable English this guard exists for.
+        ["src/SimplArchive.DesktopClient/Views/SelfEnrolmentDialog.axaml.cs"] = 1,
     };
 
     [Fact]
