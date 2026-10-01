@@ -55,6 +55,16 @@ public class EncryptionKeysController : ControllerBase
 
         public List<string> Generations { get; set; } = [];
 
+        /// <summary>
+        /// Per generation: WHICH key it is, and whether a sampled object agrees (#1510, ADR 0867).
+        /// </summary>
+        /// <remarks>
+        /// Additive beside <see cref="Generations"/>, which is a bare name list a client may already read —
+        /// the same reason the service added its <c>keys</c> array beside its own. Empty against an encryption
+        /// service too old to publish thumbprints, in which case this surface says exactly what it said before.
+        /// </remarks>
+        public List<KekKeyResource> Keys { get; set; } = [];
+
         public bool SweepRunning { get; set; }
 
         public int Rewrapped { get; set; }
@@ -64,6 +74,29 @@ public class EncryptionKeysController : ControllerBase
         public int Remaining { get; set; }
 
         public int Failed { get; set; }
+    }
+
+    /// <summary>One generation, and the identity of the key behind it.</summary>
+    public class KekKeyResource
+    {
+        public string Generation { get; set; } = string.Empty;
+
+        /// <summary>SHA-256 over the key's SubjectPublicKeyInfo. Not a secret — it is a fingerprint of
+        /// material the service hands out on request, which is what makes comparing two of them useful.</summary>
+        public string Thumbprint { get; set; } = string.Empty;
+
+        /// <summary>
+        /// What one sampled object says: <c>agrees</c>, <c>mismatch</c>, or <c>unstamped</c> when no object
+        /// carrying a thumbprint was found for this generation.
+        /// </summary>
+        /// <remarks>
+        /// <b><c>mismatch</c> is the finding this whole surface exists for</b>, and it is unrecoverable for
+        /// anything WORM-locked: an object wrapped by an earlier key of the same name can never be re-wrapped,
+        /// so the time to see it is while the source rows still exist — not when somebody opens a document.
+        /// <b><c>unstamped</c> is not a problem</b>: it is every object written before ADR 0867, and the
+        /// coverage grows on its own as the rotation sweep re-wraps.
+        /// </remarks>
+        public string Sampled { get; set; } = string.Empty;
     }
 
     [HttpGet]
@@ -81,11 +114,45 @@ public class EncryptionKeysController : ControllerBase
 
         var (current, generations) = await _keys.GenerationsAsync(cancellationToken);
         var status = _sweep.Status();
+
+        // The key identities, and one sampled object per generation (ADR 0867, decision 5). Reported HERE
+        // because the rotation runbook tells an administrator to call this first — so a key that changed
+        // under its own name is seen by the person deciding whether to rotate or retire, which is precisely
+        // when it changes what they should do. The sample unwraps nothing: it compares metadata to metadata.
+        var held = await _keys.GenerationKeysAsync(cancellationToken);
+        var sampled = held.Count == 0
+            ? new Dictionary<string, KekRotationSweep.KeySample>()
+            : await _sweep.SampleGenerationKeysAsync(cancellationToken);
+
+        foreach (var (generation, sample) in sampled.Where(s => s.Value == KekRotationSweep.KeySample.Mismatch))
+        {
+            // Error rather than Warning: this is not a transient condition and no retry changes it. Every
+            // object wrapped by the earlier key is unreadable, and a WORM-locked one cannot be repaired.
+            _logger.LogError(
+                "KEK generation {Generation} holds key {Thumbprint}, but a sampled object was wrapped by a "
+                + "DIFFERENT key under the same name. The token has been re-provisioned, restored or "
+                + "recreated. Objects wrapped by the earlier key cannot be decrypted, and WORM-locked "
+                + "versions cannot be re-wrapped (#1510).",
+                generation, held.GetValueOrDefault(generation, "unknown"));
+            _ = sample;
+        }
+
         return Ok(new KekStatusResource
         {
             Available = true,
             Current = current,
             Generations = [.. generations],
+            Keys = [.. held.Select(k => new KekKeyResource
+            {
+                Generation = k.Key,
+                Thumbprint = k.Value,
+                Sampled = sampled.GetValueOrDefault(k.Key, KekRotationSweep.KeySample.Unstamped) switch
+                {
+                    KekRotationSweep.KeySample.Agrees => "agrees",
+                    KekRotationSweep.KeySample.Mismatch => "mismatch",
+                    _ => "unstamped",
+                },
+            }).OrderBy(k => k.Generation, StringComparer.Ordinal)],
             SweepRunning = status.Running,
             Rewrapped = status.Rewrapped,
             // Only counted on demand when no sweep is running: the count walks every object's metadata,

@@ -388,12 +388,32 @@ public sealed class StrictEnvelopeDelivery(
         }
 
         var info = await storage.GetObjectInfoAsync(objectKey, cancellationToken);
-        return info.Metadata.TryGetValue(
+        if (!info.Metadata.TryGetValue(
                 SimplArchive.Infrastructure.Storage.EncryptingObjectStorageClient.WrappedDekKey, out var wrapped)
-            && info.Metadata.TryGetValue(
-                SimplArchive.Infrastructure.Storage.EncryptingObjectStorageClient.KekGenerationKey, out var generation)
-            ? (wrapped, generation)
-            : null;
+            || !info.Metadata.TryGetValue(
+                SimplArchive.Infrastructure.Storage.EncryptingObjectStorageClient.KekGenerationKey, out var generation))
+        {
+            return null;
+        }
+
+        // THE KEY-IDENTITY CHECK HAS TO BE REPEATED HERE, and the reason is structural rather than defensive:
+        // on this tier the core does NOT unwrap (ADR 0862 hands the wrapped DEK and a ciphertext address to
+        // the service, which decrypts and envelopes), so this read never reaches AtRestKeyService's oracle
+        // where ADR 0867's check otherwise sits. Without this the one tier where the loss matters most —
+        // the one holding WORM content that can never be re-wrapped — would be the one tier that reported it
+        // as a generic service refusal inviting a retry.
+        if (info.Metadata.TryGetValue(
+                SimplArchive.Infrastructure.Storage.EncryptingObjectStorageClient.KekThumbprintKey,
+                out var stamped)
+            && stamped is { Length: > 0 }
+            && await atRestKeys.GenerationThumbprintAsync(generation, cancellationToken) is { Length: > 0 } held
+            && !string.Equals(stamped, held, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new SimplArchive.Infrastructure.Storage.AtRestKeyChangedException(
+                objectKey, generation, stamped, held);
+        }
+
+        return (wrapped, generation);
     }
 
     /// <summary>

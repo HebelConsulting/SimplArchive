@@ -160,6 +160,19 @@ public sealed partial class E2EApiFactory : WebApplicationFactory<Program>, IAsy
 
     public void RegisterEncryptionRecipient(string email) => _encryptionRecipients[email] = true;
 
+    /// <summary>The stub's KEK keypairs, one per generation — real RSA, so the crypto facts are real.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, System.Security.Cryptography.RSA> _keks =
+        new();
+
+    private string _currentGeneration = "kek-v1";
+
+    /// <summary>SHA-256 over the SubjectPublicKeyInfo DER, lower-case hex — the service's own definition.</summary>
+    private static string ThumbprintOf(System.Security.Cryptography.RSA key) =>
+        Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(key.ExportSubjectPublicKeyInfo()));
+
+    /// <summary>The thumbprint the stub publishes for a generation.</summary>
+    public string KekThumbprint(string generation = "kek-v1") => ThumbprintOf(_keks[generation]);
+
     // A certificate held by the SERVICE's registry rather than on the user row (#1433). That is how a strict
     // tenant's identities actually arrive — self-service is closed for exactly those tenants (ADR 0813), and the
     // service has the provisioning door (PUT /api/users/{email}/certificate) — so a test that planted the column
@@ -229,31 +242,40 @@ public sealed partial class E2EApiFactory : WebApplicationFactory<Program>, IAsy
         // Generations are REAL keypairs here, one per generation, because the rotation tests assert
         // cryptographic facts (a re-wrap must yield the same DEK under a different wrapping) — a stub that
         // faked the wrapping would green exactly the mistakes those tests exist to catch.
-        var keks = new System.Collections.Concurrent.ConcurrentDictionary<string, System.Security.Cryptography.RSA>();
+        var keks = _keks;
         keks["kek-v1"] = System.Security.Cryptography.RSA.Create(2048);
-        var currentGeneration = "kek-v1";
 
         app.MapGet("/api/kek/current", () => Results.Ok(new
         {
-            generation = currentGeneration,
-            publicKeyPem = keks[currentGeneration].ExportSubjectPublicKeyInfoPem(),
+            generation = _currentGeneration,
+            publicKeyPem = keks[_currentGeneration].ExportSubjectPublicKeyInfoPem(),
             oaepHash = "SHA256",
+            // WHICH key this generation is (service ADR 0019). Computed from the same SPKI DER the core
+            // computes it from, because a thumbprint each side derived its own way would agree until it did
+            // not — and this stub is the only place that property can be tested from both ends.
+            thumbprint = ThumbprintOf(keks[_currentGeneration]),
         }));
         app.MapGet("/api/kek/generations", () => Results.Ok(new
         {
-            current = currentGeneration,
+            current = _currentGeneration,
+            currentThumbprint = ThumbprintOf(keks[_currentGeneration]),
             generations = keks.Keys.OrderBy(k => int.Parse(k["kek-v".Length..])).ToArray(),
+            // ADDITIVE beside `generations`, which is a bare name list the core already read. The pairing is
+            // what lets the core compare an object's stamp against the key its generation holds NOW.
+            keys = keks.OrderBy(k => int.Parse(k.Key["kek-v".Length..]))
+                .Select(k => new { generation = k.Key, thumbprint = ThumbprintOf(k.Value) }).ToArray(),
         }));
         app.MapPost("/api/kek/rotate", () =>
         {
             var next = $"kek-v{keks.Keys.Max(k => int.Parse(k["kek-v".Length..])) + 1}";
             keks[next] = System.Security.Cryptography.RSA.Create(2048);
-            currentGeneration = next;
+            _currentGeneration = next;
             return Results.Ok(new
             {
                 generation = next,
                 publicKeyPem = keks[next].ExportSubjectPublicKeyInfoPem(),
                 oaepHash = "SHA256",
+                thumbprint = ThumbprintOf(keks[next]),
             });
         });
         app.MapPost("/api/unwrapped-dek", async (HttpRequest request) =>
@@ -348,14 +370,14 @@ public sealed partial class E2EApiFactory : WebApplicationFactory<Program>, IAsy
                 System.Security.Cryptography.RSAEncryptionPadding.OaepSHA256);
             return Results.Ok(new
             {
-                wrappedDek = Convert.ToBase64String(keks[currentGeneration].Encrypt(dek,
+                wrappedDek = Convert.ToBase64String(keks[_currentGeneration].Encrypt(dek,
                     System.Security.Cryptography.RSAEncryptionPadding.OaepSHA256)),
-                kekGeneration = currentGeneration,
+                kekGeneration = _currentGeneration,
             });
         });
         app.MapDelete("/api/kek/{generation}", (string generation) =>
         {
-            if (generation == currentGeneration)
+            if (generation == _currentGeneration)
             {
                 return Results.Problem(statusCode: 409, title: "Cannot retire the current generation.");
             }

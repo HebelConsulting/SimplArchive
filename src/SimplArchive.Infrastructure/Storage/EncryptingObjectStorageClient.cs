@@ -23,6 +23,24 @@ public sealed class EncryptingObjectStorageClient(
 
     public const string KekGenerationKey = "sa-kek-generation";
 
+    /// <summary>
+    /// Which KEY that generation was when it wrapped this object — the SHA-256 of its SubjectPublicKeyInfo
+    /// (ADR 0867, service ADR 0019).
+    /// </summary>
+    /// <remarks>
+    /// <b>A generation's NAME is not its identity</b>, and that is what made the loss this stamp exists to
+    /// catch silent: <c>kek-v1</c> addresses whichever key wears the label on whichever token the service is
+    /// pointed at, so a re-provisioned token mints a correct-looking <c>kek-v1</c> and orphans everything the
+    /// previous one wrapped. Measured: 5 of 48 objects dead, two of them WORM segments that can never be
+    /// re-wrapped (#1510).
+    /// <para>
+    /// <b>Absent means UNKNOWN, never mismatched.</b> Every object written before this carries no stamp, so
+    /// the comparison is skipped and the oracle decides exactly as it did before — which is what makes the
+    /// whole change additive, with no migration and no backfill.
+    /// </para>
+    /// </remarks>
+    public const string KekThumbprintKey = "sa-kek-thumbprint";
+
     private static readonly TimeSpan ProxyUrlExpiry = TimeSpan.FromMinutes(15);
 
     // ---- Writes ---------------------------------------------------------------------------------------
@@ -44,13 +62,14 @@ public sealed class EncryptingObjectStorageClient(
         // path is the PRESIGNED upload, which never passes through here (client-side encryption, slice B2).
         using var buffer = new MemoryStream();
         await content.CopyToAsync(buffer, cancellationToken);
-        var (dek, wrappedDek, generation) = await keys.MintDekAsync(cancellationToken);
+        var (dek, wrappedDek, generation, thumbprint) = await keys.MintDekAsync(cancellationToken);
         var ciphertext = AtRestBlobCipher.Encrypt(dek, buffer.GetBuffer().AsSpan(0, (int)buffer.Length));
 
         var enriched = new Dictionary<string, string>(metadata)
         {
             [WrappedDekKey] = wrappedDek,
             [KekGenerationKey] = generation,
+            [KekThumbprintKey] = thumbprint,
         };
         await inner.PutObjectAsync(objectKey, new MemoryStream(ciphertext), contentType, enriched, cancellationToken);
     }
@@ -99,7 +118,8 @@ public sealed class EncryptingObjectStorageClient(
         await using var ciphertext = stored.Content;
         using var buffer = new MemoryStream();
         await ciphertext.CopyToAsync(buffer, cancellationToken);
-        var dek = await keys.UnwrapDekAsync(wrappedDek, stored.Metadata[KekGenerationKey], cancellationToken);
+        var dek = await keys.UnwrapDekAsync(wrappedDek, stored.Metadata[KekGenerationKey],
+            stored.Metadata.GetValueOrDefault(KekThumbprintKey), objectKey, cancellationToken);
         var plaintext = AtRestBlobCipher.Decrypt(dek, buffer.GetBuffer().AsSpan(0, (int)buffer.Length));
         return stored with { Content = new MemoryStream(plaintext), Length = plaintext.Length };
     }

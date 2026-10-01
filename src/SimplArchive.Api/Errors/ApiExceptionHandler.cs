@@ -65,6 +65,12 @@ public class ApiExceptionHandler : IExceptionHandler
             // service had already named the cause, and the log line below is what carries its words.
             SimplArchive.Infrastructure.Storage.AtRestKeyRefusedException key =>
                 (key.ErrorCode, key.ApiStatusCode, key.ApiDetail),
+            // The object was wrapped by a key its generation no longer holds (#1510, ADR 0867). Distinct from
+            // the case above on purpose: that one may be an outage that recovers, this one never does — so
+            // "try again shortly" would be false, and a reader is told to quote it to an administrator
+            // instead. The two thumbprints that identify the fault are in the Error line, not in the reply.
+            SimplArchive.Infrastructure.Storage.AtRestKeyChangedException changed =>
+                (changed.ErrorCode, changed.ApiStatusCode, changed.ApiDetail),
             _ => ("INTERNAL_ERROR", StatusCodes.Status500InternalServerError, "An unexpected error occurred."),
         };
 

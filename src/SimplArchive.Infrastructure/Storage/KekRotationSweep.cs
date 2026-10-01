@@ -119,13 +119,19 @@ public sealed class KekRotationSweep(
                 return; // already current: what makes the sweep idempotent and restartable
             }
 
-            var (rewrapped, newGeneration) = await keys.RewrapDekAsync(wrappedDek, generation, cancellationToken);
+            var (rewrapped, newGeneration, newThumbprint) =
+                await keys.RewrapDekAsync(wrappedDek, generation, cancellationToken);
 
             // Metadata only. The ciphertext is byte-identical before and after a rotation.
             var metadata = new Dictionary<string, string>(info.Metadata, StringComparer.OrdinalIgnoreCase)
             {
                 [EncryptingObjectStorageClient.WrappedDekKey] = rewrapped,
                 [EncryptingObjectStorageClient.KekGenerationKey] = newGeneration,
+                // Re-wrapping is the other operation that decides which key an object belongs to, so the
+                // stamp must move with it (ADR 0867). Omitting it here would leave a swept object carrying
+                // the OLD key's thumbprint under the NEW generation — a mismatch of our own making, and one
+                // that would refuse every object the sweep had touched.
+                [EncryptingObjectStorageClient.KekThumbprintKey] = newThumbprint,
             };
             await storage.SetObjectMetadataAsync(objectKey, metadata, cancellationToken);
             Interlocked.Increment(ref _rewrapped);
@@ -166,6 +172,88 @@ public sealed class KekRotationSweep(
     /// retirement waits.
     /// </para>
     /// </remarks>
+    /// <summary>What a sampled object says about each generation's key (ADR 0867, decision 5).</summary>
+    public enum KeySample
+    {
+        /// <summary>No object carrying a thumbprint was found for that generation — nothing to compare.</summary>
+        Unstamped,
+
+        /// <summary>A stamped object agrees with the key the generation holds now.</summary>
+        Agrees,
+
+        /// <summary>A stamped object was wrapped by a DIFFERENT key under the same generation name.</summary>
+        Mismatch,
+    }
+
+    /// <summary>
+    /// Samples ONE stamped object per generation and reports whether it agrees with the key that generation
+    /// holds now — the detection half of #1510, reported where the rotation runbook already sends an
+    /// administrator (ADR 0867, decision 5).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>One witness settles it, which is why this is a sample rather than a scan.</b> The question is
+    /// whether a GENERATION's key is still the key it was — a property of the key, not of the object — so a
+    /// single stamped object answers it for the whole population. A full verification sweep was considered
+    /// and rejected: it duplicates this traversal and costs an unwrap per object for the same answer.
+    /// </para>
+    /// <para>
+    /// <b>It stops as soon as every known generation has a verdict</b>, so on a healthy installation it reads
+    /// a handful of object headers rather than the store. It unwraps nothing: the comparison is metadata
+    /// against metadata, so it cannot fail, cannot be slow, and cannot touch an HSM.
+    /// </para>
+    /// </remarks>
+    public async Task<IReadOnlyDictionary<string, KeySample>> SampleGenerationKeysAsync(
+        CancellationToken cancellationToken)
+    {
+        var held = await keys.GenerationKeysAsync(cancellationToken);
+        if (held.Count == 0)
+        {
+            return new Dictionary<string, KeySample>();
+        }
+
+        var verdicts = held.Keys.ToDictionary(g => g, _ => KeySample.Unstamped, StringComparer.Ordinal);
+
+        using var scope = scopeFactory.CreateScope();
+        var storage = scope.ServiceProvider.GetRequiredService<IObjectStorageClient>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+
+        foreach (var tenantId in await dbContext.Tenants.IgnoreQueryFilters(["TenantFilter"])
+                     .Select(t => t.Id).ToListAsync(cancellationToken))
+        {
+            var prefix = ObjectKeyPrefixes.Tenant(tenantId);
+            if (!await keys.GatedAsync(prefix + "probe", cancellationToken))
+            {
+                continue;
+            }
+
+            // VERSIONS, not objects — the same unit CountRemainingAsync walks, and for the same reason: a
+            // historical version keeps the wrapped DEK it was written with, and a WORM-locked one can never
+            // be re-wrapped, so it is exactly where a stale key survives longest.
+            foreach (var version in await storage.ListObjectVersionsAsync(prefix, cancellationToken))
+            {
+                if (!version.Metadata.TryGetValue(EncryptingObjectStorageClient.KekGenerationKey, out var generation)
+                    || !version.Metadata.TryGetValue(EncryptingObjectStorageClient.KekThumbprintKey, out var stamped)
+                    || !held.TryGetValue(generation, out var heldThumbprint)
+                    || verdicts.GetValueOrDefault(generation) != KeySample.Unstamped)
+                {
+                    continue;
+                }
+
+                verdicts[generation] = string.Equals(stamped, heldThumbprint, StringComparison.OrdinalIgnoreCase)
+                    ? KeySample.Agrees
+                    : KeySample.Mismatch;
+
+                if (verdicts.Values.All(v => v != KeySample.Unstamped))
+                {
+                    return verdicts;
+                }
+            }
+        }
+
+        return verdicts;
+    }
+
     public async Task<int> CountRemainingAsync(CancellationToken cancellationToken)
     {
         var (current, _) = await keys.GenerationsAsync(cancellationToken);

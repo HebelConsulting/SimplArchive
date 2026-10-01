@@ -47,8 +47,24 @@ public sealed class AtRestKeyService(
     private Kek? _kek;
     private readonly SemaphoreSlim _kekGate = new(1, 1);
 
+    /// <summary>
+    /// Generation name → the thumbprint of the key now wearing it, from the service's <c>keys</c> array
+    /// (ADR 0867, service ADR 0019). Empty until fetched, and empty for ever against a service too old to
+    /// send the array — which is what lets the two sides deploy in either order.
+    /// </summary>
+    private IReadOnlyDictionary<string, string> _generationKeys = new Dictionary<string, string>();
+    private DateTimeOffset _generationKeysFetchedAt = DateTimeOffset.MinValue;
+
     private static readonly TimeSpan NameTtl = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan KekTtl = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// How long the generation → thumbprint map is trusted. Longer than the current key's TTL on purpose: a
+    /// generation's key changes only when a token is re-provisioned, which is the catastrophe this map exists
+    /// to name rather than a routine event — while a SHORT TTL would put an outbound call on the read path
+    /// every few minutes to re-learn something that almost never moves.
+    /// </summary>
+    private static readonly TimeSpan GenerationKeysTtl = TimeSpan.FromMinutes(30);
     private static readonly TimeSpan DekTtl = TimeSpan.FromMinutes(10);
     private const int DekCacheCap = 1000;
 
@@ -99,12 +115,13 @@ public sealed class AtRestKeyService(
     }
 
     /// <summary>Mints and wraps a fresh DEK against the cached current KEK.</summary>
-    public async Task<(byte[] Dek, string WrappedDekBase64, string Generation)> MintDekAsync(CancellationToken cancellationToken)
+    public async Task<(byte[] Dek, string WrappedDekBase64, string Generation, string Thumbprint)> MintDekAsync(
+        CancellationToken cancellationToken)
     {
         var kek = await CurrentKekAsync(cancellationToken);
         var dek = RandomNumberGenerator.GetBytes(32);
         var wrapped = kek.PublicKey.Encrypt(dek, kek.Padding);
-        return (dek, Convert.ToBase64String(wrapped), kek.Generation);
+        return (dek, Convert.ToBase64String(wrapped), kek.Generation, kek.Thumbprint);
     }
 
     /// <summary>The rotation surface (ADR 0014): the generations the token holds and which is current.</summary>
@@ -118,8 +135,85 @@ public sealed class AtRestKeyService(
         using var response = await client.GetAsync($"{ServiceUrl}/api/kek/generations", cancellationToken);
         await RefuseAsync(response, "list the KEK generations", cancellationToken);
         var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        RememberGenerationKeys(json);
         return (json.GetProperty("current").GetString()!,
             [.. json.GetProperty("generations").EnumerateArray().Select(g => g.GetString()!)]);
+    }
+
+    /// <summary>
+    /// The thumbprint of the key currently behind <paramref name="generation"/>, or null when it cannot be
+    /// established (a service too old to publish the <c>keys</c> array, or a generation it does not list).
+    /// </summary>
+    /// <remarks>
+    /// <b>Per generation, never "the current key".</b> An object's generation is routinely OLDER than the
+    /// current one — that is the normal steady state after a rotation until the sweep finishes — so comparing
+    /// an old object's stamp against the current key would refuse every correctly-wrapped object in the
+    /// population the sweep has not reached. That mistake would have been silent in the worst direction:
+    /// reads failing on exactly the objects a rotation was meant to leave readable (ADR 0867, decision 3).
+    /// </remarks>
+    public async Task<string?> GenerationThumbprintAsync(string generation, CancellationToken cancellationToken)
+    {
+        if (DateTimeOffset.UtcNow - _generationKeysFetchedAt >= GenerationKeysTtl)
+        {
+            // Through the listing call, which is what reads the array — so there is one parser for it rather
+            // than two that can disagree about the shape.
+            try
+            {
+                _ = await GenerationsAsync(cancellationToken);
+            }
+            catch (AtRestKeyRefusedException exception)
+            {
+                // A map we could not refresh must not fail a read that would otherwise work: an unknown
+                // thumbprint is permitted (ADR 0867, decision 4), so the refusal is recorded and the caller
+                // falls through to the oracle, which remains the authority on whether the DEK unwraps.
+                logger.LogWarning(exception,
+                    "The KEK generation list could not be refreshed, so {Generation} cannot be checked "
+                    + "against the key that wrapped this object. The unwrap proceeds and the oracle decides.",
+                    generation);
+                return null;
+            }
+        }
+
+        return _generationKeys.TryGetValue(generation, out var thumbprint) ? thumbprint : null;
+    }
+
+    /// <summary>
+    /// The whole generation → thumbprint map, for the keys status surface (ADR 0867, decision 5). Empty
+    /// against a service too old to publish it.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, string>> GenerationKeysAsync(CancellationToken cancellationToken)
+    {
+        if (DateTimeOffset.UtcNow - _generationKeysFetchedAt >= GenerationKeysTtl)
+        {
+            _ = await GenerationsAsync(cancellationToken);
+        }
+
+        return _generationKeys;
+    }
+
+    /// <summary>Caches the <c>keys</c> array if the service sent one.</summary>
+    private void RememberGenerationKeys(JsonElement json)
+    {
+        if (!json.TryGetProperty("keys", out var keys) || keys.ValueKind != JsonValueKind.Array)
+        {
+            // A service predating service ADR 0019. The map stays as it was — deliberately NOT cleared, so a
+            // downgrade does not silently discard knowledge — and the fetch timestamp is not advanced either,
+            // since nothing was learned.
+            return;
+        }
+
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var entry in keys.EnumerateArray())
+        {
+            if (entry.TryGetProperty("generation", out var g) && g.GetString() is { Length: > 0 } name
+                && entry.TryGetProperty("thumbprint", out var t) && t.GetString() is { Length: > 0 } thumbprint)
+            {
+                map[name] = thumbprint;
+            }
+        }
+
+        _generationKeys = map;
+        _generationKeysFetchedAt = DateTimeOffset.UtcNow;
     }
 
     /// <summary>Mints the next generation and makes it current; the sweep then re-wraps into it.</summary>
@@ -140,7 +234,7 @@ public sealed class AtRestKeyService(
     /// Re-wraps one DEK into the current generation (ADR 0014). The DEK is unchanged, so the caller
     /// rewrites METADATA only — no blob is ever read or rewritten by a rotation.
     /// </summary>
-    public async Task<(string WrappedDek, string Generation)> RewrapDekAsync(
+    public async Task<(string WrappedDek, string Generation, string Thumbprint)> RewrapDekAsync(
         string wrappedDekBase64, string fromGeneration, CancellationToken cancellationToken)
     {
         var client = httpClientFactory.CreateClient(HttpClientName);
@@ -148,7 +242,14 @@ public sealed class AtRestKeyService(
             new { wrappedDek = wrappedDekBase64, fromGeneration }, cancellationToken);
         await RefuseAsync(response, $"re-wrap a data key out of {fromGeneration}", cancellationToken);
         var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-        return (json.GetProperty("wrappedDek").GetString()!, json.GetProperty("kekGeneration").GetString()!);
+
+        // THE THUMBPRINT COMES BACK TOO, because a re-wrap is the other operation that decides which key an
+        // object belongs to, and an object the sweep moved must carry the identity of the key it moved to
+        // (ADR 0867, decision 1). The re-wrap endpoint answers only the generation, so the key is the CURRENT
+        // one by construction — the service wraps against its current public half and says so.
+        var kek = await CurrentKekAsync(cancellationToken);
+        return (json.GetProperty("wrappedDek").GetString()!, json.GetProperty("kekGeneration").GetString()!,
+            kek.Thumbprint);
     }
 
     /// <summary>Retires a generation — IRREVERSIBLE. Only call once the sweep reports zero references.</summary>
@@ -162,11 +263,49 @@ public sealed class AtRestKeyService(
     private string ServiceUrl => configuration["Encryption:ServiceUrl"]!.TrimEnd('/');
 
     /// <summary>Unwraps through the HSM oracle, cached — one HTTP+HSM round trip per cold object.</summary>
-    public async Task<byte[]> UnwrapDekAsync(string wrappedDekBase64, string generation, CancellationToken cancellationToken)
+    public async Task<byte[]> UnwrapDekAsync(string wrappedDekBase64, string generation,
+        CancellationToken cancellationToken)
+        => await UnwrapDekAsync(wrappedDekBase64, generation, null, null, cancellationToken);
+
+    /// <summary>
+    /// As above, but checking the object's recorded key identity first (ADR 0867).
+    /// </summary>
+    /// <param name="stampedThumbprint">
+    /// The <c>sa-kek-thumbprint</c> the object carries, or null when it carries none — which is every object
+    /// written before ADR 0867 and therefore means <i>unknown</i>, not <i>mismatched</i>.
+    /// </param>
+    /// <param name="objectKey">Named only so a refusal can say WHICH object; not used to find anything.</param>
+    /// <exception cref="AtRestKeyChangedException">
+    /// The stamp and the generation's current key disagree, so the unwrap cannot succeed.
+    /// </exception>
+    public async Task<byte[]> UnwrapDekAsync(string wrappedDekBase64, string generation,
+        string? stampedThumbprint, string? objectKey, CancellationToken cancellationToken)
     {
+        // THE CACHE IS CONSULTED FIRST, AHEAD OF THE CHECK, AND THAT ORDER IS DELIBERATE. A cached DEK is one
+        // the oracle already unwrapped in this process, so the key matched when it did — the read works, and
+        // refusing a read that works is the one cost ADR 0867 names as its honest risk. The only way to reach
+        // a cache hit under a mismatch is for the token to have changed while this process ran, which serves
+        // the document rather than failing it: strictly the better outcome of the two.
         if (_deks.TryGetValue(wrappedDekBase64, out var cached) && DateTimeOffset.UtcNow - cached.FetchedAt < DekTtl)
         {
             return cached.Dek;
+        }
+
+        if (stampedThumbprint is { Length: > 0 }
+            && await GenerationThumbprintAsync(generation, cancellationToken) is { Length: > 0 } heldThumbprint
+            && !string.Equals(stampedThumbprint, heldThumbprint, StringComparison.OrdinalIgnoreCase))
+        {
+            // Logged as well as thrown, because the exception's detail reaches a READER while the two
+            // thumbprints are what an administrator needs — and because this line is the one that turns a
+            // store-wide question into a grep.
+            logger.LogError(
+                "{ObjectKey} was wrapped under {Generation} when its key was {Stamped}, but {Generation} now "
+                + "holds {Held}. The token has been re-provisioned, restored or recreated; every object "
+                + "wrapped by the earlier key is unreadable, and a WORM-locked one cannot be re-wrapped.",
+                objectKey ?? "an object", generation, stampedThumbprint, generation, heldThumbprint);
+
+            throw new AtRestKeyChangedException(
+                objectKey ?? "an object", generation, stampedThumbprint, heldThumbprint);
         }
 
         var client = httpClientFactory.CreateClient(HttpClientName);

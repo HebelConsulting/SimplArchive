@@ -632,11 +632,32 @@ public class DocumentVersionsController : ControllerBase
                     "this tenant is not encryption-gated; upload plaintext.");
             }
 
-            await _objectStorageClient.SetObjectMetadataAsync(version.ObjectKey, new Dictionary<string, string>
+            // THE THUMBPRINT OF THE GENERATION THE CLIENT NAMED (ADR 0867). This is the path most encrypted
+            // objects arrive by — the app clients wrap their own DEK against the public key the
+            // initiate-upload response published — so leaving it unstamped here would have left the largest
+            // population of objects with no recorded key identity at all, which is most of the protection.
+            //
+            // Derived from the generation → key map rather than reported by the client. The honest objection
+            // is a race: if the token were re-provisioned between the client fetching the public key and
+            // this call, the stamp would name the NEW key while the blob was wrapped with the OLD one. That
+            // object is already unreadable either way — its DEK cannot be unwrapped by the current key — so
+            // the stamp being consistent merely means the failure arrives from the oracle, exactly as it did
+            // before this ADR. Having the client ECHO the thumbprint it wrapped against is the stronger
+            // form; it changes both clients' upload contract and is recorded in ADR 0867 as deferred.
+            var metadata = new Dictionary<string, string>
             {
                 [SimplArchive.Infrastructure.Storage.EncryptingObjectStorageClient.WrappedDekKey] = request.WrappedDek,
                 [SimplArchive.Infrastructure.Storage.EncryptingObjectStorageClient.KekGenerationKey] = request.KekGeneration,
-            }, cancellationToken);
+            };
+
+            if (await _atRestKeys.GenerationThumbprintAsync(request.KekGeneration, cancellationToken)
+                is { Length: > 0 } thumbprint)
+            {
+                metadata[SimplArchive.Infrastructure.Storage.EncryptingObjectStorageClient.KekThumbprintKey] =
+                    thumbprint;
+            }
+
+            await _objectStorageClient.SetObjectMetadataAsync(version.ObjectKey, metadata, cancellationToken);
         }
 
         // Set the version comment from the finalize body when it wasn't given at create (don't overwrite one).
