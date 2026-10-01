@@ -94,6 +94,11 @@ public static class ModuleLoader
                     var build = assembly.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()
                         ?.InformationalVersion;
 
+                    if (!ReadModelsAreConstructible(module, candidate, logger))
+                    {
+                        continue;
+                    }
+
                     WarnAboutUnusableSettings(module, logger);
 
                     logger.LogInformation("Loaded module {ModuleId} ({DisplayName}) build {Build} from {Path}.",
@@ -114,6 +119,44 @@ public static class ModuleLoader
         }
 
         return loaded;
+    }
+
+    /// <summary>
+    /// Refuses a module whose declared read-model context the host cannot construct (#1475), naming it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Refused rather than warned-and-loaded</b>, unlike an unusable setting below. The difference is what
+    /// the defect costs: a <c>Choice</c> with no choices breaks one form control, while a context the host
+    /// cannot construct can never be MIGRATED — so its tables do not exist, every projection write fails, and
+    /// a rebuild cannot help. Half a module whose read model is missing is worse than none, and this is the
+    /// same judgement the ABI-version gate above makes for the same reason.
+    /// </para>
+    /// <para>
+    /// <b>Said at load because the alternative is said at a customer's migration.</b> The host constructs a
+    /// module context by reflection on exactly one path — the owner connection (ADR 0721) — which no test
+    /// suite runs, so the first report of this was a <c>MissingMethodException</c> from inside
+    /// <c>Activator</c> during <c>db-migrate</c>, with nothing naming the module and everything pointing at
+    /// the core. The predicate lives beside the construction it mirrors
+    /// (<see cref="ModuleReadModelWiring.CanHostConstruct"/>) so the two cannot drift.
+    /// </para>
+    /// </remarks>
+    public static bool ReadModelsAreConstructible(IIndustryModule module, string path, ILogger logger)
+    {
+        foreach (var set in module.ReadModels.Where(s => !ModuleReadModelWiring.CanHostConstruct(s.ContextType)))
+        {
+            logger.LogWarning(
+                "Module {ModuleId} ({Path}) declares read-model context {ContextType}, which this host cannot "
+                + "construct. The module is NOT loaded — its schema could never be migrated, so its projections "
+                + "would fail at every write. The context needs ONE public constructor taking either "
+                + "DbContextOptions<{ContextName}> or DbContextOptions, and nothing else; a constructor with "
+                + "further parameters cannot be used, because the host builds the context itself to migrate it.",
+                module.ModuleId, path, set.ContextType.FullName, set.ContextType.Name);
+
+            return false;
+        }
+
+        return true;
     }
 
     /// <summary>

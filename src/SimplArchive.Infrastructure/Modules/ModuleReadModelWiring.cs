@@ -77,6 +77,60 @@ public static class ModuleReadModelWiring
         }
     }
 
+    /// <summary>
+    /// The options the host hands a module's context when it constructs one ITSELF, outside DI — the
+    /// owner-connection migration path (ADR 0721), which is the only place that happens.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Built as <c>DbContextOptionsBuilder&lt;TContext&gt;</c>, by reflection, deliberately</b> (#1475). The
+    /// non-generic <c>DbContextOptionsBuilder</c> reads as the right choice here — the host does not know the
+    /// context type at compile time — but its <c>Options</c> is a <c>DbContextOptions&lt;DbContext&gt;</c>:
+    /// the type argument is WRONG rather than absent, so it satisfies a constructor taking
+    /// <c>DbContextOptions</c> and misses the <c>DbContextOptions&lt;TContext&gt;</c> that EF documents and
+    /// that every tutorial writes. The generic builder satisfies BOTH, because
+    /// <c>DbContextOptions&lt;TContext&gt;</c> derives from <c>DbContextOptions</c> and the binder matches on
+    /// assignability. So this is not a widening of the contract: it makes this path agree with the DI path,
+    /// which has always accepted either (EF registers both).
+    /// </para>
+    /// <para>
+    /// <b>No test suite exercises this path</b>, which is why the trap was invisible: it runs only when
+    /// <c>ConnectionStrings:Migration</c> is set — a real deployment or <c>db-migrate</c>. The module's own
+    /// suite constructs its context directly, the host's suites go through DI, and the failure arrived as a
+    /// <c>MissingMethodException</c> from inside <c>Activator</c> at a customer's migration, reading as a host
+    /// defect. <c>ModuleReadModelConstructionTests</c> therefore drives THIS method rather than a copy of it.
+    /// </para>
+    /// </remarks>
+    public static DbContextOptions OwnerOptions(Type contextType, string ownerConnectionString, string moduleId)
+    {
+        var builder = (DbContextOptionsBuilder)Activator.CreateInstance(
+            typeof(DbContextOptionsBuilder<>).MakeGenericType(contextType))!;
+
+        builder.UseNpgsql(ownerConnectionString, npgsql => npgsql
+            .MigrationsHistoryTable(HistoryTable(moduleId))
+            .MigrationsAssembly(contextType.Assembly));
+
+        return builder.Options;
+    }
+
+    /// <summary>
+    /// Whether the host can construct this declared context at all — asked at LOAD, so a module that cannot
+    /// be migrated says so by name instead of dying inside <c>Activator</c> later (#1475).
+    /// </summary>
+    /// <remarks>
+    /// Mirrors the binder rule <see cref="OwnerOptions"/> relies on: one public constructor parameter, to
+    /// which a <c>DbContextOptions&lt;TContext&gt;</c> is assignable. Both documented shapes pass; a
+    /// constructor taking extra parameters, a non-public one, or none at all does not — and those are real,
+    /// since a module author reaching for an injected dependency writes exactly the first.
+    /// </remarks>
+    public static bool CanHostConstruct(Type contextType)
+    {
+        var options = typeof(DbContextOptions<>).MakeGenericType(contextType);
+
+        return contextType.GetConstructors().Any(
+            c => c.GetParameters() is [{ } only] && only.ParameterType.IsAssignableFrom(options));
+    }
+
     /// <summary>The per-module migrations-history table — the core's history never learns a module exists.</summary>
     public static string HistoryTable(string moduleId) =>
         $"__EFMigrationsHistory_{moduleId.Replace('-', '_')}";
@@ -100,11 +154,8 @@ public static class ModuleReadModelWiring
             {
                 if (!string.IsNullOrWhiteSpace(ownerConnectionString))
                 {
-                    var builder = new DbContextOptionsBuilder();
-                    builder.UseNpgsql(ownerConnectionString, npgsql => npgsql
-                        .MigrationsHistoryTable(HistoryTable(loaded.Module.ModuleId))
-                        .MigrationsAssembly(set.ContextType.Assembly));
-                    await using var owned = (DbContext)Activator.CreateInstance(set.ContextType, builder.Options)!;
+                    var options = OwnerOptions(set.ContextType, ownerConnectionString, loaded.Module.ModuleId);
+                    await using var owned = (DbContext)Activator.CreateInstance(set.ContextType, options)!;
                     await owned.Database.MigrateAsync(cancellationToken);
                     continue;
                 }

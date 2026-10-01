@@ -25,6 +25,28 @@ namespace SimplArchive.ModuleAbi;
 public abstract class ModuleDbContext : DbContext
 {
     /// <summary>Constructed by the host with the wired options; module code only ever injects it.</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>What the host requires of YOUR subclass: exactly one public constructor, taking only the options</b>
+    /// — either <c>DbContextOptions&lt;TYourContext&gt;</c> (what EF documents) or the non-generic
+    /// <c>DbContextOptions</c>. Both work. A constructor with any further parameter does not, and the module
+    /// will be refused at load with a message naming it.
+    /// </para>
+    /// <para>
+    /// The reason is that the host does not only resolve this through DI: on the owner-connection migration
+    /// path (ADR 0721) it <i>constructs the context itself</i>, by reflection, because that connection belongs
+    /// to a DDL identity the running application does not use. There is no container at that moment, so there
+    /// is nothing to inject a dependency from. If your context needs a collaborator, inject it where the work
+    /// happens rather than into the context.
+    /// </para>
+    /// <para>
+    /// This was a trap rather than a rule for as long as it went unwritten (#1475): the host built the
+    /// non-generic options, whose <c>Options</c> is really a <c>DbContextOptions&lt;DbContext&gt;</c>, so the
+    /// generic constructor EF documents was the one shape that MISSED — and it missed only on that one path,
+    /// which no test suite runs. A module built clean, passed its own suite, and died in a customer's
+    /// <c>db-migrate</c> with a <c>MissingMethodException</c> that read as a host defect.
+    /// </para>
+    /// </remarks>
     protected ModuleDbContext(DbContextOptions options)
         : base(options)
     {
