@@ -25,6 +25,28 @@ public class WebAppointmentPreviewTests
     {
         var summary = $"LX{Guid.NewGuid():N}"[..10];
 
+        // IN THE MONTH THE CALENDAR OPENS ON (#1516). This was a hardcoded 2026-09-01, and the tab opens on
+        // the CURRENT month, fetching it ±7 days — so the test passed every day of September 2026 and began
+        // failing at midnight on 1 October, on EVERY run, for as long as the fixed month stayed in the past.
+        // A date-expiring test is not a flake: it fails deterministically from a date nobody wrote down, and
+        // the first run after midnight points at whatever merged last.
+        //
+        // The 15th, which no DST transition can land on: the EU switches on the last Sunday of March and
+        // October (the 25th at the earliest) and the US on the second Sunday of March (the 14th at the
+        // latest) and the first Sunday of November. So neither conversion below is ambiguous or invalid.
+        var day = DateOnly.FromDateTime(DateTime.Today).AddDays(15 - DateTime.Today.Day);
+
+        // AND THE EXPECTED READINGS ARE DERIVED, not written out — which is the half that makes the anchor
+        // safe. The clock faces the pane shows depend on each zone's offset ON THAT DATE: 09:00 in Zurich is
+        // 07:00 UTC in summer and 08:00 in winter. Anchoring the date while keeping literal readings would
+        // simply move the expiry to the next DST change, where it would fail twice a year and read as a
+        // flake. Computed from the IANA database rather than from the server's own conversion, so this stays
+        // an independent expectation rather than a copy of the code under test.
+        var startUtc = TimeZoneInfo.ConvertTimeToUtc(
+            day.ToDateTime(new TimeOnly(9, 0)), TimeZoneInfo.FindSystemTimeZoneById("Europe/Zurich"));
+        var endUtc = TimeZoneInfo.ConvertTimeToUtc(
+            day.ToDateTime(new TimeOnly(11, 30)), TimeZoneInfo.FindSystemTimeZoneById("America/New_York"));
+
         using var http = new HttpClient { BaseAddress = new Uri(_app.BaseUrl) };
         http.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", await Ui.GetUserTokenAsync(_app.BaseUrl));
@@ -40,8 +62,8 @@ public class WebAppointmentPreviewTests
         (await http.PostAsJsonAsync($"/api/documents/{calendarId}/appointments", new
         {
             summary,
-            start = "2026-09-01T09:00:00",
-            end = "2026-09-01T11:30:00",
+            start = $"{day:yyyy-MM-dd}T09:00:00",
+            end = $"{day:yyyy-MM-dd}T11:30:00",
             isAllDay = false,
             startTimeZoneId = "Europe/Zurich",
             endTimeZoneId = "America/New_York",
@@ -59,14 +81,19 @@ public class WebAppointmentPreviewTests
         await Expect(tab.GetByText(summary).First).ToBeVisibleAsync();
         await tab.GetByText(summary).First.ClickAsync();
 
-        // The three readings. UTC first: 09:00 in Zurich is 07:00 UTC, and 11:30 in New York is 15:30 —
-        // eight and a half hours, which is the number a single zone field could never produce.
+        // The three readings. UTC first, and the two endpoints are hours apart in a way a single zone field
+        // could never produce, which is the whole case this pane exists for.
         //
-        // Matched with a regex over both clock conventions: the times are formatted in the BROWSER's culture,
-        // so the same instant reads "07:00 – 15:30" or "7:00 AM – 3:30 PM" depending on the machine running
-        // the suite. Pinning one spelling makes the test a report about the runner's locale.
-        await Expect(tab.GetByText(new System.Text.RegularExpressions.Regex(@"\b0?7:00")).First).ToBeVisibleAsync();
-        await Expect(tab.GetByText(new System.Text.RegularExpressions.Regex(@"(15:30|3:30 PM)")).First).ToBeVisibleAsync();
+        // The old comment here said "eight and a half hours", and that is not invariant: Zurich switches on
+        // the last Sunday of October and New York on the first Sunday of November, so for the week between
+        // them the same two wall-clock times are 7.5 hours apart (08:00Z to 15:30Z). Measured, not reasoned
+        // about — which is why the expectation is derived per date rather than stated as a constant.
+        //
+        // Matched over both clock conventions: the times are formatted in the BROWSER's culture, so the same
+        // instant reads "07:00" or "7:00 AM" depending on the machine running the suite. Pinning one spelling
+        // makes the test a report about the runner's locale.
+        await Expect(tab.GetByText(ClockFace(startUtc)).First).ToBeVisibleAsync();
+        await Expect(tab.GetByText(ClockFace(endUtc)).First).ToBeVisibleAsync();
 
         // As recorded, with the zone each endpoint names.
         await Expect(tab.GetByText("Europe/Zurich").First).ToBeVisibleAsync();
@@ -78,4 +105,13 @@ public class WebAppointmentPreviewTests
         await Expect(tab.GetByRole(AriaRole.Link, new() { Name = "https://airline.example.test/lx54" }))
             .ToBeVisibleAsync();
     }
+
+    /// <summary>One instant, in either clock convention the browser's culture might render it.</summary>
+    /// <remarks>
+    /// Built from the time rather than written out, so the assertion follows the derived expectation above
+    /// instead of restating it — a literal here would re-introduce exactly the coupling to a particular month
+    /// that #1516 is about. Midnight renders as 12 AM rather than 0 AM, hence the modulo.
+    /// </remarks>
+    private static System.Text.RegularExpressions.Regex ClockFace(DateTime utc) =>
+        new($@"\b0?{utc.Hour}:{utc.Minute:00}\b|\b{(utc.Hour % 12 == 0 ? 12 : utc.Hour % 12)}:{utc.Minute:00}\s*[AP]M");
 }
