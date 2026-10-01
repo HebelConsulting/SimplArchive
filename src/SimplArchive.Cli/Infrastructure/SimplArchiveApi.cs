@@ -93,6 +93,34 @@ public sealed class SimplArchiveApi(HttpClient http)
         return (JsonDocument.Parse(body).RootElement.Clone(), response.Headers.ETag?.ToString());
     }
 
+    /// <summary>
+    /// A <see cref="GetWithETagAsync"/> that answers <c>null</c> for a resource that does not exist yet.
+    /// </summary>
+    /// <remarks>
+    /// For the read half of a read-modify-write where <b>absence is an ordinary state</b> rather than an
+    /// error: an ACL entry has no resource until somebody is first granted something, so <c>404</c> there
+    /// means "no rights yet", not "wrong address". Everything else still throws, so a typo in a rel-supplied
+    /// href is not quietly read as an empty grant.
+    /// </remarks>
+    public async Task<(JsonElement Resource, string? ETag)?> TryGetWithETagAsync(
+        string path, CancellationToken cancellationToken)
+    {
+        using var response = await http.GetAsync(path, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new CliException(Describe(response.StatusCode, body, path));
+        }
+
+        return (JsonDocument.Parse(body).RootElement.Clone(), response.Headers.ETag?.ToString());
+    }
+
     /// <summary>A <c>PUT</c> carrying the <c>If-Match</c> the resource was read with.</summary>
     /// <remarks>
     /// A <b>412</b> is a real case rather than a generic failure: somebody else changed the document between

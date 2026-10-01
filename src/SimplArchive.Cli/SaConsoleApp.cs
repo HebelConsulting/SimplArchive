@@ -122,10 +122,34 @@ public static class SaConsoleApp
             config.AddBranch("module", module =>
             {
                 module.SetDescription("Per-tenant module activation (tenant administrator).");
+                module.AddCommand<ModuleListCommand>("list")
+                    .WithDescription("Name the installed modules, and whether each is active for this tenant.");
+                module.AddBranch("settings", moduleSettings =>
+                {
+                    moduleSettings.SetDescription("What a module declared it needs configuring (ADR 0772).");
+                    moduleSettings.AddCommand<ModuleSettingsShowCommand>("show")
+                        .WithDescription("Report the declared settings and what is configured. A secret's value is never shown.");
+                    moduleSettings.AddCommand<ModuleSettingsSetCommand>("set")
+                        .WithDescription("Write one setting. The value comes from --from-env, --from-file or --stdin, never an option.");
+                });
                 module.AddCommand<ModuleRebuildCommand>("rebuild")
                     .WithDescription("Re-derive a module's read model from documents. One projection, or all.");
                 module.AddCommand<ModuleActivateCommand>("activate")
                     .WithDescription("File a vendor-signed licence and activate every module it names.");
+            });
+
+            // ACL: `set` states the complete set of rights (a replace, because the endpoint is a PUT), while
+            // `grant` and `revoke` adjust what is there. Three verbs for one concept, owner-decided
+            // 2026-10-01, because one verb makes one of the two intentions awkward or dishonest.
+            config.AddBranch("acl", acl =>
+            {
+                acl.SetDescription("Who may do what to a document.");
+                acl.AddCommand<AclSetCommand>("set")
+                    .WithDescription("State the COMPLETE set of rights a principal holds. Unnamed rights are withheld.");
+                acl.AddCommand<AclGrantCommand>("grant")
+                    .WithDescription("Add rights to what a principal already holds, leaving the rest alone.");
+                acl.AddCommand<AclRevokeCommand>("revoke")
+                    .WithDescription("Take rights away, leaving the rest alone.");
             });
 
             config.AddBranch("tenant", tenant =>
