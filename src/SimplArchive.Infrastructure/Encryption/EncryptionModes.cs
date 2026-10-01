@@ -40,6 +40,30 @@ public enum EncryptionMode
     /// <see cref="Strict"/> has, over storage that is not wrapped.
     /// </summary>
     SealedDeliveryStrict = 4,
+
+    /// <summary>
+    /// <see cref="Storage"/> with the delivery switched on — the readiness exercise before <see cref="Strict"/>
+    /// (ADR 0866, #1380): content wrapped at rest, every read ALSO offered as an envelope, and every plaintext
+    /// door still open.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>It protects nothing beyond <see cref="Storage"/>, and the name is deliberate.</b> It is not called
+    /// "Permissive" or anything else that reads as a security level, because it holds exactly
+    /// <see cref="Storage"/>'s properties and none of <see cref="Strict"/>'s: every plaintext door stays open,
+    /// anyone may follow the <c>plain-download</c> rel that is advertised to everybody (ADR 0865), and search
+    /// keeps the second plaintext copy at rest. Sold as partial encryption it would be the silently-absent
+    /// guarantee this epic exists to refuse.
+    /// </para>
+    /// <para>
+    /// <b>What it is for:</b> switching a tenant to <see cref="Strict"/> is a cliff, and until it is thrown
+    /// nothing says whether a desktop fleet can actually read enveloped content. Here an unready desktop fails
+    /// VISIBLY — the reader simply keeps working through the plaintext pair — so the gaps are found while they
+    /// are harmless. The one narrow gain is real: a desktop read becomes end-to-end enveloped to the card
+    /// rather than trusting TLS, which covers a compromised reverse proxy for those reads.
+    /// </para>
+    /// </remarks>
+    StrictRehearsal = 5,
 }
 
 /// <summary>
@@ -115,7 +139,8 @@ public sealed class EncryptionModes(IConfiguration configuration)
     /// </para>
     /// </remarks>
     public bool WrapsAtRest(string tenantName) =>
-        ModeFor(tenantName) is EncryptionMode.Storage or EncryptionMode.Strict;
+        ModeFor(tenantName) is EncryptionMode.Storage or EncryptionMode.Strict
+            or EncryptionMode.StrictRehearsal;
 
     /// <summary>
     /// True when no door may serve readable bytes for this tenant — previews, ranges, presigned URLs, search
@@ -138,7 +163,8 @@ public sealed class EncryptionModes(IConfiguration configuration)
     /// </remarks>
     public bool DeliversEnvelopes(string tenantName) =>
         ModeFor(tenantName) is EncryptionMode.Strict
-            or EncryptionMode.SealedDeliveryStrict or EncryptionMode.SealedDeliveryPermissive;
+            or EncryptionMode.SealedDeliveryStrict or EncryptionMode.SealedDeliveryPermissive
+            or EncryptionMode.StrictRehearsal;
 
     /// <summary>True when IMAP serves messages enveloped to the recipient's certificate (ADR 0813).</summary>
     /// <remarks>
@@ -157,7 +183,8 @@ public sealed class EncryptionModes(IConfiguration configuration)
     /// </remarks>
     public bool EnvelopesMail(string tenantName) =>
         ModeFor(tenantName) is EncryptionMode.Strict
-            or EncryptionMode.SealedDeliveryPermissive or EncryptionMode.SealedDeliveryStrict;
+            or EncryptionMode.SealedDeliveryPermissive or EncryptionMode.SealedDeliveryStrict
+            or EncryptionMode.StrictRehearsal;
 
     /// <summary>
     /// Refuses to start while a retired key is still present, naming what to write instead.
@@ -297,7 +324,7 @@ public sealed class EncryptionModes(IConfiguration configuration)
 
     /// <summary>Modes that cannot be performed without the encryption service: the ones that wrap at rest.</summary>
     private static bool NeedsService(EncryptionMode mode) =>
-        mode is EncryptionMode.Storage or EncryptionMode.Strict;
+        mode is EncryptionMode.Storage or EncryptionMode.Strict or EncryptionMode.StrictRehearsal;
 
     /// <summary>Modes whose delivery is performed by the Encryption Module (ADR 0834).</summary>
     private static bool NeedsModule(EncryptionMode mode) =>

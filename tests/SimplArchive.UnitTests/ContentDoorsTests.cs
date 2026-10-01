@@ -80,6 +80,10 @@ public class ContentDoorsTests
     [InlineData("Strict", true, false)]
     [InlineData("SealedDeliveryPermissive", true, true)]
     [InlineData("SealedDeliveryStrict", true, false)]
+    // The rehearsal (ADR 0866): both doors, exactly like permissive — which is the mechanism that makes it a
+    // rehearsal at all. The desktop prefers the envelope and exercises the card path; everyone else follows
+    // `plain-*` and is not blocked, so an unready fleet is discovered rather than locked out.
+    [InlineData("StrictRehearsal", true, true)]
     public void A_reader_with_a_certificate_gets_these_doors_per_mode(string mode, bool enveloped, bool plaintext)
     {
         var tenant = "Acme";
@@ -101,11 +105,20 @@ public class ContentDoorsTests
     }
 
     [Fact]
-    public void Permissive_is_the_ONLY_mode_that_serves_both_doors_at_once()
+    public void Exactly_two_modes_serve_BOTH_doors_at_once()
     {
-        // Stated as its own assertion because it is the tier's definition, and because the regression it
-        // guards was precisely that permissive served the same single door Strict does. If a later mode
-        // joins this set, that is a decision someone made rather than a position it inherited.
+        // Stated as its own assertion because it is these tiers' definition, and because the regression it
+        // guards was precisely that permissive served the same single door Strict does.
+        //
+        // It read "Permissive is the ONLY mode" until StrictRehearsal was added (ADR 0866) — and the test
+        // FAILED on that commit, which is the point: a new mode joining this set is a decision someone makes
+        // here, not a position it inherits. The two differ on exactly one question, at rest:
+        //
+        //   SealedDeliveryPermissive   delivers, doors open, nothing wrapped
+        //   StrictRehearsal            delivers, doors open, wrapped at rest
+        //
+        // Both therefore advertise `download`/`preview` at the envelope AND `plain-*` beside it, which is what
+        // lets a rehearsal work: the desktop takes the envelope, everyone else keeps working.
         var both = Enum.GetNames<EncryptionMode>()
             .Where(name =>
             {
@@ -123,6 +136,8 @@ public class ContentDoorsTests
             })
             .ToList();
 
-        Assert.Equal([nameof(EncryptionMode.SealedDeliveryPermissive)], both);
+        Assert.Equal(
+            [nameof(EncryptionMode.SealedDeliveryPermissive), nameof(EncryptionMode.StrictRehearsal)],
+            both.Order());
     }
 }

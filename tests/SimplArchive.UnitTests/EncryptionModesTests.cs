@@ -217,7 +217,11 @@ public class EncryptionModesTests
     {
         foreach (var mode in Enum.GetValues<EncryptionMode>())
         {
-            var wrapsAtRest = mode is EncryptionMode.Storage or EncryptionMode.Strict;
+            // StrictRehearsal joins the list DELIBERATELY (ADR 0866): it is Storage with the delivery
+            // switched on, so the at-rest guarantee is precisely what it does NOT put in question — the
+            // rehearsal is of the delivery path, over content that stays wrapped throughout.
+            var wrapsAtRest = mode is EncryptionMode.Storage or EncryptionMode.Strict
+                or EncryptionMode.StrictRehearsal;
 
             Assert.Equal(wrapsAtRest, Modes((EncryptionModes.DefaultSection, mode.ToString())).WrapsAtRest("Any"));
         }
@@ -239,6 +243,11 @@ public class EncryptionModesTests
     [InlineData(EncryptionMode.Strict, true, true, true, true)]
     [InlineData(EncryptionMode.SealedDeliveryPermissive, false, false, true, true)]
     [InlineData(EncryptionMode.SealedDeliveryStrict, false, true, true, true)]
+    // The readiness exercise (ADR 0866, #1380): Storage's row with delivery switched on, and the doors still
+    // open. It is the ONLY mode that wraps at rest AND envelopes AND serves plaintext — which is the whole
+    // point, and also why its name must never read as a security level: on three of these four answers it is
+    // Storage exactly, and a reader who wants plaintext simply follows the rel that is advertised to everyone.
+    [InlineData(EncryptionMode.StrictRehearsal, true, false, true, true)]
     public void Each_mode_answers_all_four_questions_explicitly(
         EncryptionMode mode, bool wraps, bool shutsDoors, bool envelopes, bool mail)
     {
@@ -380,6 +389,60 @@ public class EncryptionModesTests
         EncryptionModes.ThrowIfSealedDeliveryHasNoModule(configuration, []);   // does not throw
     }
 
+    /// <summary>
+    /// The rehearsal's defining combination, and the reason it needed to exist (ADR 0866, #1380).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Of the eight combinations of the three content questions, five had a mode and two of the missing three
+    /// are degenerate — doors that refuse while nothing is delivered serves nothing at all. This was the one
+    /// absent combination that anybody could want: wrap at rest, envelope for whoever can read an envelope,
+    /// and leave every other door open.
+    /// </para>
+    /// <para>
+    /// Asserted as a UNIQUENESS rather than as a property of one value, because the thing worth protecting is
+    /// that the gap stays filled by exactly one mode. A second mode arriving here means somebody has split a
+    /// tier without saying so.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void StrictRehearsal_is_the_only_mode_that_wraps_at_rest_AND_leaves_the_doors_open_AND_envelopes()
+    {
+        var matching = Enum.GetNames<EncryptionMode>()
+            .Where(name =>
+            {
+                var modes = Modes((EncryptionModes.DefaultSection, name));
+
+                return modes.WrapsAtRest("T") && modes.DeliversEnvelopes("T") && !modes.RefusesPlaintextDoors("T");
+            })
+            .ToList();
+
+        Assert.Equal([nameof(EncryptionMode.StrictRehearsal)], matching);
+    }
+
+    /// <summary>
+    /// It needs the Service and NOT the Module — which is what puts it on the right side of the line.
+    /// </summary>
+    /// <remarks>
+    /// It wraps at rest, so it cannot run without the encryption service; its certificates come from the same
+    /// chain <see cref="EncryptionMode.Strict"/> already uses (the reader's column, else the service's
+    /// registry), so it needs no module. That is the whole commercial placement: the rehearsal ships with the
+    /// Service, between <c>Storage</c> and <c>Strict</c>, and the Module sells what a card fleet needs on top.
+    /// </remarks>
+    [Fact]
+    public void StrictRehearsal_demands_the_service_and_not_the_module()
+    {
+        var withoutService = Config((EncryptionModes.DefaultSection, nameof(EncryptionMode.StrictRehearsal)));
+
+        // No service configured: refused at startup, the same way Storage and Strict are (#1406).
+        var refusal = Assert.Throws<InvalidOperationException>(
+            () => EncryptionModes.ThrowIfModeHasNoService(withoutService));
+        Assert.Contains(nameof(EncryptionMode.StrictRehearsal), refusal.Message);
+
+        // And no module is demanded: a host with none still starts, exactly as it does for Strict.
+        EncryptionModes.ThrowIfSealedDeliveryHasNoModule(withoutService, []);
+    }
+
     [Fact]
     public void A_NEW_mode_must_be_classified_rather_than_inheriting_a_position()
     {
@@ -389,7 +452,7 @@ public class EncryptionModesTests
         var values = Enum.GetValues<EncryptionMode>();
 
         Assert.Equal(EncryptionMode.None, values.Min());
-        Assert.True(values.Length == 5,
+        Assert.True(values.Length == 6,
             "A mode was added. `Applies` lists the modes that wrap at rest and must be reviewed — NOT by "
             + "sorting the enum: these values are not a scale (Storage names what is protected, Strict names a "
             + "posture, a delivery-only tier is stronger on delivery and encrypts nothing at rest). Decide "
