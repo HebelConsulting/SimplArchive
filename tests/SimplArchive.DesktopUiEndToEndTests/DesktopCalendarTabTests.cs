@@ -117,6 +117,47 @@ public class DesktopCalendarTabTests
     // A row's two time displays must agree. They are computed by different code — one formats the range, the
     // other the full start — and binding the raw DateTimeOffset formatted the STORED OFFSET while the range
     // converted to local, so one appointment read "When 11:00–12:00" and "Starts 09:00" two lines apart.
+    /// <summary>
+    /// The demo set and the month on show are the SAME month (#1518).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>PopulateDemoForScreenshot</c> pins its entries to a fixed date so the figure does not move daily —
+    /// deliberately, because a screenshot that changes every day cannot be compared against the last one. But
+    /// <c>Month</c> defaulted to TODAY's, so the two agreed only while the real clock happened to be in the
+    /// same month, and silently disagreed afterwards.
+    /// </para>
+    /// <para>
+    /// It went wrong at midnight on 2026-10-01: the manual's Calendar figure became an empty October grid
+    /// beside a detail pane describing an appointment that was nowhere in it. Nothing failed — the capture
+    /// succeeded, the PDF regenerated, and a release four minutes later would have published it.
+    /// </para>
+    /// <para>
+    /// Asserted as an AGREEMENT between the two rather than against September 2026, so moving the demo date
+    /// does not need this test edited — only the contradiction is forbidden.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void The_demo_month_on_show_contains_the_demo_entries()
+    {
+        var vm = new CalendarTabViewModel(new TestShell());
+        vm.PopulateDemoForScreenshot();
+
+        Assert.NotEmpty(vm.Appointments);
+
+        // Every seeded entry falls inside the month the tab is displaying, so the grid cannot be empty.
+        foreach (var appointment in vm.Appointments)
+        {
+            var start = DateOnly.FromDateTime(appointment.Start!.Value.Date);
+
+            Assert.True(
+                start.Year == vm.Month.Year && start.Month == vm.Month.Month,
+                $"'{appointment.Title}' starts {start:yyyy-MM-dd} while the tab is showing "
+                + $"{vm.Month:yyyy-MM}. The demo data and the month on show must be pinned together, or the "
+                + "figure is empty for eleven months of twelve (#1518).");
+        }
+    }
+
     [Fact]
     public void The_row_and_the_detail_pane_tell_the_same_time()
     {

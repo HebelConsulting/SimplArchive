@@ -924,6 +924,16 @@ public sealed partial class CalendarTabViewModel : ObservableObject
 
         // A fixed date, not "today": a screenshot that moves every day cannot be compared against the last one.
         var day = new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero);
+
+        // AND THE VIEW IS MOVED TO IT (#1518). Pinning the data while leaving `Month` on today's is a
+        // contradiction that only shows up once the two drift into different months — which happened at
+        // midnight on 2026-10-01, when the manual's Calendar figure became an EMPTY October grid beside a
+        // detail pane describing an appointment nowhere in it. Nothing failed: the capture succeeded, the PDF
+        // regenerated, the figure was simply wrong, and a release four minutes later would have shipped it.
+        //
+        // The fix belongs here rather than in the data, because the comment above is right: the figure must
+        // not move daily. Both halves have to be pinned, or neither is.
+        Month = DateOnly.FromDateTime(day.Date);
         // The last one spans three days on purpose: a multi-day entry is the case a chip-per-day grid can get
         // wrong invisibly, and a demo set where everything starts and ends within one afternoon never shows it.
         var items = new[]
