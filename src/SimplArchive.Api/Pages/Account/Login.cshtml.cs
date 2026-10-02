@@ -235,6 +235,7 @@ public class LoginModel : PageModel
         {
             _logger.LogWarning("Failed login for user {UserId}: incorrect password", user.Id);
             await RecordFailureAsync(normalizedEmail);
+            await RecordRefusedCredentialAsync(user, "password");
             Error = SimplArchive.Localization.Strings.Get("LoginErrInvalidCreds");
             PreparePasskeyLoginOption();
 
@@ -343,6 +344,10 @@ public class LoginModel : PageModel
             // Counted against the same identity as the password step, deliberately: six digits are the easier
             // half to guess, and reaching this step means the attacker already holds the password.
             await RecordFailureAsync(user.NormalizedEmail);
+
+            // …and the audit detail says SECOND FACTOR rather than password, because to an investigator those
+            // are different events: this one means somebody already got past the password.
+            await RecordRefusedCredentialAsync(user, "second factor");
 
             Error = SimplArchive.Localization.Strings.Get("LoginErrInvalidCode");
             // Re-issue a fresh ticket + re-render the challenge (incl. the passkey option) for a retry.
@@ -717,6 +722,29 @@ public class LoginModel : PageModel
     private Task RecordFailureAsync(string normalizedEmail) =>
         _throttle.RecordFailureAsync(
             SimplArchive.Api.Security.SignInSurface.Login, normalizedEmail, ClientAddress, HttpContext.RequestAborted);
+
+    /// <summary>Files a refused credential in the user's own audit trail (#847, A07/A09).</summary>
+    /// <remarks>
+    /// <para>
+    /// Takes the USER rather than the email, because that is the whole boundary: an <c>AuditEvent</c> is
+    /// tenant-scoped and an attempt against an address matching no user has no tenant to be filed in. The
+    /// call site that has no user therefore cannot call this, which is enforced by the signature rather than
+    /// remembered.
+    /// </para>
+    /// <para>
+    /// The actor is the user whose credential was refused — not whoever was really typing, which nobody knows.
+    /// That is the honest reading: the trail says "this account's password was refused", which is the fact,
+    /// and leaves the attribution to the investigation.
+    /// </para>
+    /// </remarks>
+    private Task RecordRefusedCredentialAsync(User user, string factor) =>
+        _audit.RecordForActorAsync(
+            AuditActorType.User,
+            user.Id,
+            user.DisplayName,
+            user.TenantId,
+            AuditActions.LoginFailed,
+            details: factor);
 
     private async Task<IActionResult> SignInAndRedirectAsync(User user)
     {

@@ -2,6 +2,12 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.EntityFrameworkCore;
+using OpenIddict.Abstractions;
+using SimplArchive.Api.Controllers;
+using SimplArchive.Application.Abstractions;
+using SimplArchive.Domain.Audit;
+using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Api.Pages.Account;
 
@@ -27,14 +33,50 @@ namespace SimplArchive.Api.Pages.Account;
 /// restricted to a local URL and never to a caller-supplied host.
 /// </para>
 /// </remarks>
-public class LogoutModel : PageModel
+public class LogoutModel(IAuditRecorder audit, SimplArchiveDbContext dbContext) : PageModel
 {
     public async Task<IActionResult> OnGetAsync(string? returnUrl = null)
     {
+        // BEFORE the sign-out, because the cookie is what names the actor — afterwards there is nobody to
+        // attribute it to. ADR 0065 puts logout in audit scope, and without it every sign-in in the trail is
+        // open-ended: "was anyone still signed in when this happened" becomes a guess (#847, A07/A09).
+        await RecordSignOutAsync();
+
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
 
         // LOCAL ONLY. A returnUrl is caller-supplied, and honouring an absolute one would make this an open
         // redirect on an endpoint every user is sent to by name — the classic phishing hand-off.
         return LocalRedirect(Url.IsLocalUrl(returnUrl) ? returnUrl! : "/");
+    }
+
+    private async Task RecordSignOutAsync()
+    {
+        // THE COOKIE SCHEME EXPLICITLY, not HttpContext.User. The default authentication scheme is
+        // OpenIddict's validation handler (it has to be, or a bare [Authorize] throws instead of answering
+        // 401), so `User` on this page is empty even for somebody who is very much signed in — and the audit
+        // event would silently never be written. The cookie signed out two lines below is the one that names
+        // the actor, so it is the one asked.
+        var session = await HttpContext.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+
+        // An anonymous hit is ordinary — a bookmark, a second tab, a client clearing up after a session that
+        // already ended — and there is nothing to record for it. Signing out is idempotent, so the page still
+        // answers; only the audit event is skipped.
+        if (session.Principal?.FindFirst(OpenIddictConstants.Claims.Subject)?.Value is not { } subject
+            || !Guid.TryParse(subject, out var userId))
+        {
+            return;
+        }
+
+        // The tenant filter has no ambient tenant on this page — the same reason every pre-session lookup in
+        // the auth surface ignores it (ADR 0150's note on tenant-less lookups).
+        var user = await dbContext.Users.IgnoreQueryFilters(["TenantFilter"])
+            .SingleOrDefaultAsync(u => u.Id == userId, HttpContext.RequestAborted);
+        if (user is null)
+        {
+            return;
+        }
+
+        await audit.RecordForActorAsync(
+            AuditActorType.User, user.Id, user.DisplayName, user.TenantId, AuditActions.LoggedOut);
     }
 }

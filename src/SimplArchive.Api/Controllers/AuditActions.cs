@@ -253,6 +253,38 @@ public static class AuditActions
     public const string EncryptionKeyRetired = "Encryption.KeyRetired";
 
     public const string LoggedIn = "Auth.LoggedIn";
+
+    /// <summary>The interactive session was ended deliberately (#847, A07/A09; ADR 0065 puts it in scope).</summary>
+    /// <remarks>
+    /// The companion to <see cref="LoggedIn"/>, and the one that makes a session's EXTENT readable: without
+    /// it, every sign-in in the trail is open-ended, so "was anyone still signed in when this happened" can
+    /// only be guessed at. Recorded at the sign-out page, which supersedes ADR 0334's "no end-session
+    /// endpoint" — before the cookie is cleared, since that cookie is what names the actor.
+    /// </remarks>
+    public const string LoggedOut = "Auth.LoggedOut";
+
+    /// <summary>A credential was presented for a KNOWN user and refused (#847, A07/A09).</summary>
+    /// <remarks>
+    /// <para>
+    /// A failed sign-in existed only as a Serilog Warning. That is enough for a SIEM counting attempts and not
+    /// enough for the question an investigation actually asks — <i>what happened to THIS account, in order,
+    /// beside everything else that happened to it</i> — because the audit trail is where the rest of that
+    /// story is, and the one event that matters most was missing from it.
+    /// </para>
+    /// <para>
+    /// <b>Only for a known user, and the boundary is deliberate rather than an oversight.</b> An
+    /// <c>AuditEvent</c> is tenant-scoped, and an attempt against an address that matches no user has no
+    /// tenant to be filed in — there is no honest place to put it. Those stay a Warning, which is where a
+    /// spray against non-existent accounts is visible anyway. Do not describe this as "failed logins are
+    /// audited" without that qualification: an unqualified coverage claim is exactly what stops the next
+    /// person checking (#1092).
+    /// </para>
+    /// <para>
+    /// The DETAIL says which factor was refused — a password or a second factor — because those are different
+    /// events to an investigator: the second means somebody already had the password.
+    /// </para>
+    /// </remarks>
+    public const string LoginFailed = "Auth.LoginFailed";
     // A device authorization grant was answered by a person (RFC 8628, ADR 0823). Approving hands a token —
     // renewable, where offline_access was asked for — to a machine the approver may not be sitting at, which
     // is the same class of act as issuing a protocol password above. The REFUSAL is recorded too: a grant
