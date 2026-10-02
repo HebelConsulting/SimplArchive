@@ -58,11 +58,15 @@ public static class DesktopLog
             System.IO.Directory.CreateDirectory(Directory);
 
             _logger = new LoggerConfiguration()
-                .MinimumLevel.Debug()
+                // Verbose is Serilog's Trace. The FILE takes it and the console does not unless --verbose:
+                // ADR 0626 asks that a seam be answerable at Trace, which is only true if the level exists at
+                // all — and the file is where a support conversation looks, so a trace that never reached it
+                // would be a level nobody can turn on.
+                .MinimumLevel.Verbose()
                 .Enrich.WithProperty("Application", "SimplArchive.DesktopClient")
                 .Enrich.WithProperty("Version", typeof(DesktopLog).Assembly.GetName().Version?.ToString() ?? "unknown")
                 .WriteTo.Console(outputTemplate: Template,
-                    restrictedToMinimumLevel: verbose ? LogEventLevel.Debug : LogEventLevel.Information)
+                    restrictedToMinimumLevel: verbose ? LogEventLevel.Verbose : LogEventLevel.Information)
                 .WriteTo.File(Path.Combine(Directory, "simplarchive-.log"),
                     outputTemplate: Template,
                     rollingInterval: RollingInterval.Day,
@@ -90,6 +94,9 @@ public static class DesktopLog
 
     /// <summary>Flushes the sinks. The crash path calls this before the process ends.</summary>
     public static void Shutdown() => (_logger as IDisposable)?.Dispose();
+
+    /// <summary>The level ADR 0626 asks every seam to be answerable at. Off in the console unless --verbose.</summary>
+    public static void Trace(string template, params object?[] values) => _logger.Verbose(template, values);
 
     public static void Debug(string template, params object?[] values) => _logger.Debug(template, values);
 

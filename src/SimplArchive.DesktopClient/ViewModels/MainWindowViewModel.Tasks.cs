@@ -109,6 +109,30 @@ public partial class MainWindowViewModel
     [ObservableProperty][NotifyPropertyChangedFor(nameof(HasTasks))] private int _taskCount;
     public bool HasTasks => TaskCount > 0;
 
+    /// <summary>Where the count is shown OUTSIDE the window — the Dock, the taskbar (#502).</summary>
+    /// <remarks>
+    /// Settable so a test can observe what was pushed without a Dock; the default is the real one for this
+    /// platform, so forgetting to set it leaves the feature working rather than silently off.
+    /// </remarks>
+    internal Services.ITaskbarBadge TaskbarBadge { get; set; } = Services.TaskbarBadge.ForThisPlatform();
+
+    /// <summary>
+    /// Mirrors the count onto the Dock or taskbar whenever it changes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Exactly what the in-app badge shows</b>, and the same value rather than a second calculation: the
+    /// point of this surface is that it is visible when the window is NOT, so nobody can compare it against
+    /// anything — and two numbers answering one question is how they come to disagree where it cannot be seen.
+    /// </para>
+    /// <para>
+    /// Deliberately NOT <c>async partial void</c>: the generated hook is void, so an async body would be async
+    /// void BY CONSTRUCTION and would bypass Safe.Fire — the shape that crashed this client from thirteen
+    /// different hooks. Every implementation of the badge is synchronous and swallows its own failures.
+    /// </para>
+    /// </remarks>
+    partial void OnTaskCountChanged(int value) => TaskbarBadge.Show(value);
+
     [RelayCommand]
     private Task RefreshTasks() => LoadTasksAsync();
 
