@@ -21,14 +21,10 @@ public static class DavXml
             return null;
         }
 
-        try
-        {
-            return XElement.Parse(text);
-        }
-        catch (XmlException)
-        {
-            return null;
-        }
+        // SafeXml rather than XElement.Parse, and it already answers null for malformed input — which is what
+        // this method did with its catch, so the behaviour is unchanged and the refusal is now explicit
+        // (#847, A03).
+        return SimplArchive.Application.Security.SafeXml.ParseElement(text);
     }
 
     /// <summary>A 207 Multi-Status response carrying the document.</summary>

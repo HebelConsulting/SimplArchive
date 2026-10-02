@@ -52,7 +52,16 @@ internal static class WebDavPropFind
         var logger = context.RequestServices.GetRequiredService<ILogger<WebDavMiddleware>>();
         try
         {
-            var root = XDocument.Parse(body).Root;
+            // SafeXml, not XDocument.Parse: DTDs and external entities refused by ASSERTION rather than
+            // by framework default (#847, A03). This body is the shape that matters — a protocol
+            // endpoint whose answer is echoed back, so a resolved entity would be an exfiltration
+            // channel rather than a crash.
+            var root = SimplArchive.Application.Security.SafeXml.ParseElement(body);
+            if (root is null)
+            {
+                throw new System.Xml.XmlException("The PROPFIND body is not XML this server will parse.");
+            }
+
             var request = PropRequest.Parse(root);
 
             // A request that names none of prop/allprop/propname (wrong namespace, unexpected shape) gets the
@@ -94,6 +103,9 @@ internal static class WebDavPropFind
             return [(response.Status, response.Props)];
         }
 
+        // Re-reads a props fragment THIS server composed moments earlier, so there is no outside document
+        // that could carry an entity; the request BODY, a few lines up, goes through SafeXml.
+        // safe-xml-exempt: this process's own output
         var known = XElement.Parse($"<D:prop xmlns:D=\"DAV:\">{response.Props}</D:prop>").Elements().ToList();
         if (request.PropName)
         {

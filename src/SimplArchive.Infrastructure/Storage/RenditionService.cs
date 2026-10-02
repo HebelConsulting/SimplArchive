@@ -471,15 +471,12 @@ public class RenditionService : IDocumentPreviewService
     // iframe). Invalid XML is passed through unchanged so it still previews rather than failing.
     private static byte[] PrettyPrintXml(byte[] originalBytes)
     {
-        try
-        {
-            var document = XDocument.Parse(Encoding.UTF8.GetString(originalBytes));
-            return Encoding.UTF8.GetBytes(document.ToString());
-        }
-        catch (XmlException)
-        {
-            return originalBytes;
-        }
+        // SafeXml, which answers null for anything it will not parse — the same pass-through this already did
+        // for invalid XML, now including a document that declares a DTD (#847, A03). Worth the assertion here
+        // even though the bytes are a STORED object: whoever uploaded it chose them, and the entity would be
+        // resolved by the server at preview time.
+        var document = SimplArchive.Application.Security.SafeXml.ParseDocument(originalBytes);
+        return document is null ? originalBytes : Encoding.UTF8.GetBytes(document.ToString());
     }
 
     /// <summary>Renders a stored card/appointment to HTML, then through the same converter markdown uses.</summary>
