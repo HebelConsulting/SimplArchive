@@ -191,7 +191,15 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             CreatedAt = at,
         };
 
+        // A SUPPLIED password is chosen, so the policy applies (#849) — `saconsole tenant create` passes one.
+        // The generated fallback is 18 random bytes and passes trivially, so it is validated too rather than
+        // excluded: an exception in the guard is a thing somebody later has to decide is still true.
         var password = administratorPassword ?? Convert.ToBase64String(RandomNumberGenerator.GetBytes(18));
+        if (SimplArchive.Application.Security.PasswordPolicy.Refusal(password) is { } refusal)
+        {
+            throw new Errors.Exceptions.Principals.PasswordRefusedException(refusal);
+        }
+
         administrator.PasswordHash = _passwordHasher.HashPassword(administrator, password);
 
         _dbContext.Users.Add(administrator);

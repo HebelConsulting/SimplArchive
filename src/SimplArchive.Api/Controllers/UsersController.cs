@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Errors;
 using SimplArchive.Api.Errors.Exceptions.Principals;
+using SimplArchive.Application.Security;
 using SimplArchive.Api.Errors.Exceptions.Authorization;
 using SimplArchive.Api.Errors.Exceptions.Users;
 using SimplArchive.Api.Hypermedia;
@@ -38,6 +39,7 @@ public class UsersController : ControllerBase
     private readonly ICurrentServiceAccountAccessor _currentServiceAccountAccessor;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly IUserSystemRightsResolver _userSystemRights;
+    private readonly Principals.UserAccessService _access;
     private readonly IAuditRecorder _audit;
     private readonly Concurrency.UserVerbs _users;
     private readonly INotificationService _notifications;
@@ -53,6 +55,7 @@ public class UsersController : ControllerBase
         ICurrentUserAccessor currentUserAccessor,
         IUserSystemRightsResolver userSystemRights,
         IClearanceResolver clearanceResolver,
+        Principals.UserAccessService access,
         IAuditRecorder audit,
         INotificationService notifications,
         Authentication.MfaService mfa,
@@ -69,6 +72,7 @@ public class UsersController : ControllerBase
         _currentUserAccessor = currentUserAccessor;
         _userSystemRights = userSystemRights;
         _clearanceResolver = clearanceResolver;
+        _access = access;
         _audit = audit;
         _users = users;
         _notifications = notifications;
@@ -167,12 +171,6 @@ public class UsersController : ControllerBase
         public string DisplayName { get; set; } = string.Empty;
     }
 
-    public class ChangePasswordRequest
-    {
-        public string CurrentPassword { get; set; } = string.Empty;
-
-        public string NewPassword { get; set; } = string.Empty;
-    }
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateUserRequest request, CancellationToken cancellationToken)
@@ -202,6 +200,14 @@ public class UsersController : ControllerBase
 
         if (!string.IsNullOrEmpty(request.Password))
         {
+            // The policy applies wherever a password is CHOSEN (#849) — here, the self-service change below,
+            // and tenant provisioning. A rule enforced at one set-point is silently absent at the others, which
+            // is the shape #689 and #630 both hit; PasswordPolicyIsEnforcedTests fails the build on a new one.
+            if (PasswordPolicy.Refusal(request.Password) is { } refusal)
+            {
+                throw new PasswordRefusedException(refusal);
+            }
+
             user.PasswordHash = _passwordHasher.HashPassword(user, request.Password);
         }
 
@@ -583,63 +589,8 @@ public class UsersController : ControllerBase
         return Ok(BuildResource(user, _emailEditable));
     }
 
-    // Self-service — requires being logged in as a User (ICurrentUserAccessor.UserId set), not gated on
-    // CanManageUsers. The one new endpoint this ADR adds outside the login mechanism itself: without it, a
-    // User provisioned with an admin-set initial password could never rotate away from it. See ADR
-    // "Interactive User login (foundation slice)".
-    [HttpPut("me/password")]
-    public async Task<IActionResult> ChangeOwnPassword([FromBody] ChangePasswordRequest request, CancellationToken cancellationToken)
-    {
-        if (_currentUserAccessor.UserId is not { } userId)
-        {
-            return Forbid();
-        }
 
-        var user = await _dbContext.Users.SingleAsync(u => u.Id == userId, cancellationToken);
 
-        if (user.PasswordHash is null || _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, request.CurrentPassword) == PasswordVerificationResult.Failed)
-        {
-            throw new InvalidCurrentPasswordException();
-        }
-
-        user.PasswordHash = _passwordHasher.HashPassword(user, request.NewPassword);
-        await SaveUserAsync(user, cancellationToken);
-        await _audit.RecordAsync(AuditActions.UserPasswordChanged, "User", user.Id, user.DisplayName, cancellationToken: cancellationToken);
-
-        return NoContent();
-    }
-
-    public class ResetPasswordResponse
-    {
-        public string Password { get; set; } = string.Empty;
-    }
-
-    // Admin password reset (ADR "User password management"): sets a fresh random password and returns it
-    // once (no email/invite flow exists), for the admin to hand to the user, who then changes it via
-    // PUT /users/me/password. Gated on CanManageUsers. An action endpoint (POST), like rotate-secret —
-    // each call mints a new password. Same random shape as the TenantAdministrator initial password.
-    [HttpPost("{userId:guid}/reset-password")]
-    public async Task<IActionResult> ResetPassword(Guid userId, CancellationToken cancellationToken)
-    {
-        if (!await CanManageUsersAsync(cancellationToken))
-        {
-            return Forbid();
-        }
-
-        var user = await _dbContext.Users.SingleOrDefaultAsync(u => u.Id == userId, cancellationToken);
-
-        if (user is null)
-        {
-            return NotFound();
-        }
-
-        var password = Convert.ToBase64String(RandomNumberGenerator.GetBytes(18));
-        user.PasswordHash = _passwordHasher.HashPassword(user, password);
-        await SaveUserAsync(user, cancellationToken);
-        await _audit.RecordAsync(AuditActions.UserPasswordReset, "User", user.Id, user.DisplayName, cancellationToken: cancellationToken);
-
-        return Ok(new ResetPasswordResponse { Password = password });
-    }
 
     // ---- Profile photo (ADR "User profile photo") ------------------------------------------------------
     // The clients crop + normalize to a 256×256 PNG before upload; the raw PNG bytes are the request body
@@ -954,27 +905,10 @@ public class UsersController : ControllerBase
         CanCreateExternalLink = r.CanCreateExternalLink,
     };
 
-    // Checks ServiceAccount.CanManageUsers first, then User.CanManageUsers — see ADR "User support for
-    // ServiceAccount/User/Group/Mask management endpoints".
-    private async Task<bool> CanManageUsersAsync(CancellationToken cancellationToken)
-    {
-        if (_currentServiceAccountAccessor.ServiceAccountId is { } serviceAccountId)
-        {
-            return await _dbContext.ServiceAccounts
-                .Where(s => s.Id == serviceAccountId)
-                .Select(s => s.CanManageUsers)
-                .SingleAsync(cancellationToken);
-        }
-
-        if (_currentUserAccessor.UserId is { } userId)
-        {
-            // Effective rights (own ∪ groups) so CanManageUsers held via a group takes effect — ADR
-            // "Enforce group system rights for members".
-            return (await _userSystemRights.GetEffectiveSystemRightsAsync(userId, cancellationToken)).CanManageUsers;
-        }
-
-        return false;
-    }
+    // Forwards to UserAccessService (#849): the walk moved there when the password endpoints became their own
+    // controller and would otherwise have needed a second copy of it.
+    private Task<bool> CanManageUsersAsync(CancellationToken cancellationToken) =>
+        _access.CanManageUsersAsync(cancellationToken);
 
 
     /// <summary>

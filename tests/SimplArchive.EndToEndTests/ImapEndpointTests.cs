@@ -745,9 +745,15 @@ public class ImapEndpointTests
         // the account dialog's own sentence instead of presenting a capability the server cannot provide.
         Assert.True(settings.GetProperty("imapServerAvailable").GetBoolean());
 
+        // POST /api/users is a set-point for a CHOSEN password, so it is subject to the policy (#849) — a
+        // fixture password that was fine when these tests were written is now refused, which is the policy
+        // working rather than a test that needs weakening. The seeded users elsewhere in the suite go through
+        // SeedUserAsync, which writes the hash directly and is not a product set-point.
+        const string SeededUserPassword = "e2e-seeded-reader-1234";
+
         // A user created now is seeded ON…
         var seededOn = await TestJson.Post(admin, "/api/users",
-            new { email = $"on-{Guid.NewGuid():N}@e2e.local", displayName = "Seeded On", password = "seed-1234" });
+            new { email = $"on-{Guid.NewGuid():N}@e2e.local", displayName = "Seeded On", password = SeededUserPassword });
         Assert.True(seededOn.GetProperty("imapShowAllDocuments").GetBoolean());
 
         // …and after the tenant flips the default OFF, the next user is seeded OFF while the first keeps ON:
@@ -755,14 +761,14 @@ public class ImapEndpointTests
         (await admin.PutAsJsonAsync("/api/tenant-settings/mail", new { imapShowAllDocumentsDefault = false }))
             .EnsureSuccessStatusCode();
         var seededOff = await TestJson.Post(admin, "/api/users",
-            new { email = $"off-{Guid.NewGuid():N}@e2e.local", displayName = "Seeded Off", password = "seed-1234" });
+            new { email = $"off-{Guid.NewGuid():N}@e2e.local", displayName = "Seeded Off", password = SeededUserPassword });
         Assert.False(seededOff.GetProperty("imapShowAllDocuments").GetBoolean());
         var firstAgain = await TestJson.Get(admin, $"/api/users/{seededOn.GetProperty("id").GetGuid()}");
         Assert.True(firstAgain.GetProperty("imapShowAllDocuments").GetBoolean());
 
         // …and the seeded user overrides their own seed — self-service survives (#793's whole premise).
         using var off = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(
-            seededOff.GetProperty("email").GetString()!, "seed-1234"));
+            seededOff.GetProperty("email").GetString()!, SeededUserPassword));
         (await off.PutAsJsonAsync("/api/me/imap-access/settings", new { showAllDocuments = true })).EnsureSuccessStatusCode();
         var overridden = await TestJson.Get(admin, $"/api/users/{seededOff.GetProperty("id").GetGuid()}");
         Assert.True(overridden.GetProperty("imapShowAllDocuments").GetBoolean());

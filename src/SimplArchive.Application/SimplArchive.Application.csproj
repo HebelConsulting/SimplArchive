@@ -10,4 +10,11 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+
+  <ItemGroup>
+    <!-- The breach list PasswordPolicy checks against (#849). Embedded rather than copied beside the assembly,
+         so it is present in the single-file desktop packaging and in the container image, neither of which has
+         a content directory. MIT-licensed; provenance in common-passwords.README.md. -->
+    <EmbeddedResource Include="Security/common-passwords.txt" />
+  </ItemGroup>
 </Project>

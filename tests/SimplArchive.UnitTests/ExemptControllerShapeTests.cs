@@ -79,7 +79,12 @@ public partial class ExemptControllerShapeTests
         ["TenantsController.cs"] = 1,
         ["TokenController.cs"] = 1,
         ["TypedItemsController.cs"] = 2,
-        ["UsersController.cs"] = 12,
+        // 12 -> 10: the two password endpoints moved to UserPasswordsController (#849), which is a SPLIT and
+        // not a loss of a way to mutate. The verdict this count guards says "its User writes go through
+        // UserVerbs, which is the pair that matters here" — re-read on moving them, and still true on both
+        // sides: the new controller calls UserVerbs.MutateAsync directly, so the precondition, the single
+        // transaction and the stale-token translation travel with the endpoints.
+        ["UsersController.cs"] = 10,
         ["WorkflowController.cs"] = 5,
     };
 
