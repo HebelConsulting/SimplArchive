@@ -91,6 +91,17 @@ public class EphemeralMailSweepTests
     private Task SweepAsync() =>
         _factory.Services.GetRequiredService<EphemeralMailSweepWorker>().SweepAsync(CancellationToken.None);
 
+    /// <summary>A sweep whose orphan half may act on objects written moments ago.</summary>
+    /// <remarks>
+    /// The production cutoff is an hour old (#1543) and every object these tests write is seconds old, so the
+    /// plain sweep above deliberately cannot reclaim one. A test that wants the orphan half to ACT says so
+    /// here, rather than the window being configured away for the whole suite — which is what makes the
+    /// protection real for every other test, and what the regression case below asserts.
+    /// </remarks>
+    private Task SweepReclaimingEvenFreshObjectsAsync() =>
+        _factory.Services.GetRequiredService<EphemeralMailSweepWorker>()
+            .SweepAsync(DateTimeOffset.UtcNow, CancellationToken.None);
+
     private async Task<bool> ExistsAsync(Guid documentId)
     {
         using var scope = _factory.Services.CreateScope();
@@ -183,6 +194,37 @@ public class EphemeralMailSweepTests
     }
 
     [Fact]
+    public async Task A_delivery_that_has_written_its_bytes_but_not_yet_its_row_is_not_reclaimed()
+    {
+        // #1543. Every staging path writes the object FIRST and commits the version row afterwards — on
+        // purpose, because a row pointing at absent bytes opens to an error while bytes with no row are
+        // something a sweep can collect. But in between, the object is claimed by nothing, which is EXACTLY
+        // the orphan half's predicate: a sweep running in that window deletes the bytes of a message that is
+        // arriving, and the commit that follows then writes the unopenable row the ordering was chosen to
+        // prevent.
+        //
+        // This reproduces that window directly rather than hoping to hit it: the object is written and the
+        // sweep runs before any version claims it. It surfaced as an "intermittent test" for two days because
+        // the sweep that did the deleting was the BACKGROUND timer, firing five minutes after the host starts
+        // — inside a full E2E leg's run — in whichever test happened to be staging at that moment.
+        var (tenantId, userId, _) = await MailboxAsync();
+
+        var key = ObjectKeyBuilder.EphemeralMailKey(tenantId, userId, Guid.NewGuid(), Guid.NewGuid(), ".eml");
+        using (var scope = _factory.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<IObjectStorageClient>()
+                .PutObjectAsync(key, new MemoryStream("Subject: arriving\r\n\r\nbody"u8.ToArray()), "message/rfc822");
+        }
+
+        await SweepAsync();
+
+        Assert.True(
+            await ObjectExistsAsync(key),
+            "The sweep reclaimed an object no version claims YET — the bytes of a delivery in flight. Nothing "
+            + "distinguishes that from an orphan except its age, which is what the arrival window is.");
+    }
+
+    [Fact]
     public async Task An_object_left_behind_by_filing_is_reclaimed_while_the_filed_document_stays_readable()
     {
         // The load-bearing half. DocumentMover deliberately leaves the ephemeral copy behind when a message is
@@ -213,7 +255,7 @@ public class EphemeralMailSweepTests
         Assert.NotEqual(staged.ObjectKey, archiveKey);
         Assert.True(await ObjectExistsAsync(staged.ObjectKey), "The ephemeral copy should still be there before the sweep.");
 
-        await SweepAsync();
+        await SweepReclaimingEvenFreshObjectsAsync();
 
         // The stranded copy is gone…
         Assert.False(await ObjectExistsAsync(staged.ObjectKey), "The ephemeral copy filing left behind was not reclaimed — the prefix grows forever.");

@@ -30,8 +30,10 @@ namespace SimplArchive.Infrastructure.Mail;
 /// </para>
 /// <para>
 /// The orphan half keys off the <b>object store</b>, not the database: it lists the mail prefix and deletes
-/// what no <c>DocumentVersion</c> claims. That is the only direction that can find a stranded object, since by
-/// definition nothing in the database points at it.
+/// what no <c>DocumentVersion</c> claims, <b>and is older than <see cref="ArrivalWindow"/></b>. That is the
+/// only direction that can find a stranded object, since by definition nothing in the database points at it —
+/// and the age is what separates an orphan from a delivery that has written its bytes and not yet committed
+/// its row, which are otherwise the same state (#1543).
 /// </para>
 /// </remarks>
 public sealed class EphemeralMailSweepWorker : BackgroundService
@@ -39,6 +41,32 @@ public sealed class EphemeralMailSweepWorker : BackgroundService
     // Long enough that a restarting app is not sweeping while it is still opening connections, and short enough
     // that a test or a demo does not have to wait a working day to see it happen.
     private static readonly TimeSpan InitialDelay = TimeSpan.FromMinutes(5);
+
+    /// <summary>How long an unclaimed mail object is left alone before the orphan half may reclaim it.</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>An orphan and a delivery IN FLIGHT are the same state.</b> Every staging path writes the object
+    /// FIRST and commits the version row afterwards — deliberately, because a row pointing at absent bytes is
+    /// a document that opens to an error while bytes with no row are something a sweep can collect. But
+    /// between those two steps the object is claimed by nothing, which is exactly the orphan half's predicate:
+    /// a sweep running in that window deletes the bytes of a message that is arriving, and the commit that
+    /// follows then creates the unopenable row the write order was chosen to prevent, by the other road.
+    /// </para>
+    /// <para>
+    /// There is no shared transaction to close this with — the object store has no enlistment — and a claim
+    /// object would need its own exclusion (ADR 0836). An ARRIVAL WINDOW is what the asymmetry allows: a
+    /// delivery takes milliseconds and a genuine orphan stays one forever, so waiting costs the orphan one
+    /// more cycle and costs a delivery nothing. An hour is far past any delivery and far inside the six-hour
+    /// interval, so nothing accumulates.
+    /// </para>
+    /// <para>
+    /// Found as #1543 — an intermittent E2E failure in which a staged message's bytes were gone while its row
+    /// stood. It read as a flaky test for two days because the sweep that deleted them was the BACKGROUND
+    /// timer firing in another test's staging window, five minutes after the host started, which is inside a
+    /// full leg's run. The product failure is the same one, on an inbound message.
+    /// </para>
+    /// </remarks>
+    public static readonly TimeSpan ArrivalWindow = TimeSpan.FromHours(1);
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<EphemeralMailSweepWorker> _logger;
@@ -76,7 +104,18 @@ public sealed class EphemeralMailSweepWorker : BackgroundService
     }
 
     /// <summary>One pass: discarded messages, then stranded objects. Public so a test can drive it directly.</summary>
-    public async Task SweepAsync(CancellationToken cancellationToken)
+    public Task SweepAsync(CancellationToken cancellationToken) =>
+        SweepAsync(DateTimeOffset.UtcNow - ArrivalWindow, cancellationToken);
+
+    /// <summary>The same pass with the orphan half's cutoff supplied, so a test can reach it without waiting an hour.</summary>
+    /// <remarks>
+    /// A test that wants the orphan half to ACT has to say so: the production cutoff is an hour old and every
+    /// object a test writes is seconds old, so the default correctly protects them. Driving the cutoff here
+    /// keeps that protection real for every other test rather than configuring it away — and the window's own
+    /// behaviour is then tested through the ordinary <see cref="SweepAsync(CancellationToken)"/>, which is the
+    /// one production calls.
+    /// </remarks>
+    public async Task SweepAsync(DateTimeOffset reclaimableBefore, CancellationToken cancellationToken)
     {
         try
         {
@@ -85,7 +124,7 @@ public sealed class EphemeralMailSweepWorker : BackgroundService
             var storage = scope.ServiceProvider.GetRequiredService<IObjectStorageClient>();
 
             var discarded = await SweepDiscardedAsync(db, storage, cancellationToken);
-            var stranded = await SweepStrandedObjectsAsync(db, storage, cancellationToken);
+            var stranded = await SweepStrandedObjectsAsync(db, storage, reclaimableBefore, cancellationToken);
 
             if (discarded > 0 || stranded > 0)
             {
@@ -200,7 +239,9 @@ public sealed class EphemeralMailSweepWorker : BackgroundService
 
     // ---- Half two: what filing left behind ----------------------------------------------------------
 
-    private async Task<int> SweepStrandedObjectsAsync(SimplArchiveDbContext db, IObjectStorageClient storage, CancellationToken cancellationToken)
+    private async Task<int> SweepStrandedObjectsAsync(
+        SimplArchiveDbContext db, IObjectStorageClient storage, DateTimeOffset reclaimableBefore,
+        CancellationToken cancellationToken)
     {
         // Every tenant that has ever staged mail. Listing per tenant rather than globally because the object
         // store is partitioned per tenant bucket (ADR 0372).
@@ -233,8 +274,11 @@ public sealed class EphemeralMailSweepWorker : BackgroundService
                 .Select(v => v.ObjectKey)
                 .ToListAsync(cancellationToken);
 
+            // Anything younger than the window may be a delivery mid-flight rather than an orphan, and the two
+            // are indistinguishable from here. Measured against the STORE's own timestamp, which is the clock
+            // that stamped the object — comparing it to this process's is a skew the object store would win.
             var claimedSet = new HashSet<string>(claimed, StringComparer.Ordinal);
-            foreach (var stranded in mailObjects.Where(o => !claimedSet.Contains(o.Key)))
+            foreach (var stranded in mailObjects.Where(o => !claimedSet.Contains(o.Key) && o.LastModified < reclaimableBefore))
             {
                 _logger.LogTrace(
                     "Ephemeral mail sweep: reclaiming {ObjectKey} — no version references it (tenant {TenantId})",
