@@ -53,7 +53,7 @@ internal static class ScreenshotRenderer
     /// figure, because it looks like the product.
     /// </para>
     /// </remarks>
-    internal static void RenderLive(string path, string baseUrl, string accessToken)
+    internal static void RenderLive(string path, string baseUrl, string accessToken, string screen)
     {
         AppBuilder.Configure<App>()
             .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
@@ -65,8 +65,33 @@ internal static class ScreenshotRenderer
         DesktopClientOptions.ApiBaseUrl = baseUrl.TrimEnd('/');
 
         var viewModel = new MainWindowViewModel();
-        PumpUntil(viewModel.PopulateWorkbenchFromLiveAppAsync(accessToken), TimeSpan.FromMinutes(2),
-            "signing in and opening the repository");
+
+        // Each live screen is a (navigate, ready-when) PAIR, and they are chosen together on purpose: the
+        // readiness predicate must name every pane that screen's figure shows, which only whoever wrote the
+        // navigation knows. Splitting them — a shared "loaded" flag, say — is how the first live figure came
+        // to publish a preview pane reading "Loading…" while passing its own check.
+        var (navigate, ready, what) = screen switch
+        {
+            "workbench" => (viewModel.PopulateWorkbenchFromLiveAppAsync(accessToken),
+                (Func<bool>)(() => viewModel.LiveShotPanesArrived),
+                $"the detail pane to show '{MainWindowViewModel.LiveShotDocument}'"),
+            "users" => (viewModel.PopulateUsersFromLiveAppAsync(accessToken),
+                () => viewModel.LiveShotUsersArrived,
+                "the principal list and the rights matrix beside it"),
+            "tenant" => (viewModel.PopulateTenantFromLiveAppAsync(accessToken),
+                () => viewModel.LiveShotTenantArrived,
+                "the tenant settings and their reference card"),
+            "contacts" => (viewModel.PopulateContactsFromLiveAppAsync(accessToken),
+                () => viewModel.LiveShotContactsArrived,
+                "the contact list and the selected contact's detail"),
+            _ => throw new ArgumentException(
+                $"No live capture is defined for the screen '{screen}'. A screen classified Capture.Live in "
+                + "Screens.cs needs its navigate/ready pair here — the classification and this switch move "
+                + "together, which is why an unknown name throws rather than falling back to the workbench.",
+                nameof(screen)),
+        };
+
+        PumpUntil(navigate, TimeSpan.FromMinutes(2), $"signing in and reaching the {screen} screen");
 
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
@@ -74,8 +99,7 @@ internal static class ScreenshotRenderer
 
         // The selection's own loads land after the first arrange, so the wait is here rather than before Show():
         // the panes have to be populated AND laid out before the frame is worth anything.
-        PumpUntil(() => viewModel.LiveShotPanesArrived, TimeSpan.FromMinutes(2),
-            $"the detail pane to show '{MainWindowViewModel.LiveShotDocument}'");
+        PumpUntil(ready, TimeSpan.FromMinutes(2), what);
 
         var frame = window.CaptureRenderedFrame()
             ?? throw new InvalidOperationException(

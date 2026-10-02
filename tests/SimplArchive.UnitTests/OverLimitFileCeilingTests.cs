@@ -262,7 +262,14 @@ public class OverLimitFileCeilingTests
         // already distinguishes navigating from a same-folder reload, which is the distinction the fix turns
         // on -- hooking the reset somewhere else to dodge the number would scatter it across the five call
         // paths this one branch covers, which is the shape the file's own history keeps warning about.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 1563,
+        // 1563 -> 1568 (#1358): clearing the stale "Not logged in." status line when a session is established.
+        // Raised deliberately, which the rule asks for, because the five lines cannot live anywhere else:
+        // SetupUserContextAsync is the ONE seam all four session paths pass through (interactive sign-in, the
+        // bootstrap, impersonate and stop-impersonating), and the alternative was the same assignment copied to
+        // each of them -- more lines in this file, not fewer. One is code; four are the comment saying why a
+        // bare assignment to a status line is there, without which it is exactly the kind of line a later
+        // reader tidies away.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 1568,
 
         // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
         // the one authenticated ApiCore. Four areas left it:

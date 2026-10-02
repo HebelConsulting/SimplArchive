@@ -58,17 +58,22 @@ public static class Screens
         new("search-hit-overlay", ["--hitoverlay", "--fullscreen"], WhyFixture: "Needs OCR word boxes for a specific page — the heaviest live surface, deliberately last."),
         new("intray", ["--intray"], WhyFixture: "Needs scanned pages staged in the intray, which the seed does not file."),
         new("tasks", ["--workflow", "--tasks"], WhyFixture: "Needs workflow tasks assigned to the captured user; the seed creates none."),
-        new("users", ["--users"], WhyFixture: "Live-capturable; not yet migrated (this slice is the workbench only)."),
+        new("users", ["--users"], Capture: Capture.Live),
         new("audit", ["--audit"], WhyFixture: "Needs audit entries whose timestamps would churn the figure on every run."),
         new("recycle-bin", ["--recyclebin"], WhyFixture: "Needs soft-deleted documents, which the seed does not leave behind."),
-        new("tenant", ["--tenant"], WhyFixture: "Live-capturable; not yet migrated (this slice is the workbench only)."),
+        new("tenant", ["--tenant"], Capture: Capture.Live),
         new("checkout", ["--checkout"], WhyFixture: "Needs a document checked out BY the captured user."),
         new("server-manager", [], DesktopWindow.Servers, WhyFixture: "A pre-session window over local configuration — no app to capture from."),
         // The sort & rotate dialog over the checked-in sample batch — its mis-rotated page 4 shown mid-fix,
         // which is the figure the manual's page-operations section stands on (#527).
         new("sort-rotate", [], DesktopWindow.SortDialog, Pdf: "src/SimplArchive.Api/wwwroot/download/samples/SimplArchive-Patch3-Sample-Batch.pdf", WhyFixture: "A dialog over a fixed sample batch; its mis-rotated page is what the figure is of."),
-        new("contacts", ["--contacts"], WhyFixture: "Live-capturable; not yet migrated (this slice is the workbench only)."),
-        new("calendar", ["--calendar"], WhyFixture: "Live-capturable; not yet migrated, and dated rows need the frozen clock honoured."),
+        new("contacts", ["--contacts"], Capture: Capture.Live),
+        new("calendar", ["--calendar"], WhyFixture:
+            "MEASURED, not assumed (#1358, second slice): the live capture drew October 2026 while the "
+            + "seed's frozen clock is 2026-06-01. The grid comes from the CLIENT's today and Demo:Clock "
+            + "freezes the SERVER's, so this figure would change on the first of every month — and the "
+            + "harness's determinism check cannot see it, because two captures seconds apart agree. "
+            + "Live again once the client's today is reachable by the capture."),
         // The structured contact editor with the "Advanced: the stored item" disclosure OPEN. Its own window,
         // because neither of the two tabs above can show it — and the disclosure is the part of this feature a
         // reader is least likely to guess at, since its whole point is the properties the form does not show.

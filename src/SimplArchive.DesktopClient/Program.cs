@@ -420,13 +420,13 @@ internal static class Program
         }
 
         // The manual's LIVE workbench figure, rendered against a running app (#1358):
-        // `--live-screenshot <out.png> <baseUrl> <accessToken>`. Sibling of --screenshot, whose fixture path
+        // `--live-screenshot <out.png> <baseUrl> <accessToken> <screen>`. Sibling of --screenshot, whose fixture path
         // stays as the PR gate's Docker-free render smoke; this one is what the published manual uses.
         var liveShotIndex = Array.IndexOf(args, "--live-screenshot");
-        if (liveShotIndex >= 0 && liveShotIndex + 3 < args.Length)
+        if (liveShotIndex >= 0 && liveShotIndex + 4 < args.Length)
         {
             Views.ScreenshotRenderer.RenderLive(
-                args[liveShotIndex + 1], args[liveShotIndex + 2], args[liveShotIndex + 3]);
+                args[liveShotIndex + 1], args[liveShotIndex + 2], args[liveShotIndex + 3], args[liveShotIndex + 4]);
             return;
         }
 

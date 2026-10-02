@@ -92,7 +92,7 @@ public static class LiveDesktopCapture
         foreach (var a in new[]
                  {
                      "run", "--project", csproj, "--framework", "net10.0", "--no-build", "--no-launch-profile",
-                     "--", "--live-screenshot", outPath, baseUrl, token,
+                     "--", "--live-screenshot", outPath, baseUrl, token, name,
                  })
         {
             psi.ArgumentList.Add(a);

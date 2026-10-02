@@ -854,6 +854,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     // {intray,temp} folders; point native-open at the temp folder.
     private async Task SetupUserContextAsync()
     {
+        // "Not logged in." is this line's INITIAL value, and only a folder-contents load overwrites it — so a
+        // user who signs in and goes straight to Users, Tenant or Contacts read it under their own name, all
+        // session (#1358, found by the manual's live capture of those tabs).
+        Status = string.Empty;
+
         if (_api is null)
         {
             return;

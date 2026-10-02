@@ -141,4 +141,130 @@ public partial class MainWindowViewModel
         DetailTitle == LiveShotDocument      // the detail pane is describing the right document…
         && Preview.HasPreviewPages            // …its preview has rasterised, rather than still saying "Loading…"
         && Comments.Count > 0;                // …and the thread has arrived (ADR 0545 files one for the filing)
+
+    // ---- The second slice: the four screens whose data the seed already holds (#1358) -------------------
+    //
+    // SIBLINGS, NOT PARAMETERS — as the workbench method above says: these screens differ by which TAB and
+    // which ROW, which is navigation rather than configuration, and a single method with a switch in it would
+    // be the populator shape this epic exists to retire.
+    //
+    // ONE RULE THEY ALL SHARE, and it is the trap the workbench already paid for. Assigning the `SelectedTab`
+    // PROPERTY fires a changed-handler that starts the tab's load fire-and-forget, so the capture would race an
+    // unawaitable load it cannot see. Each method therefore AWAITS the tab's own load and then sets the backing
+    // field, which is the same reason the workbench assigns `_selectedTreeNode` directly.
+
+    /// <summary>Signs in and opens Users &amp; groups with a principal selected, from the real app.</summary>
+    /// <remarks>
+    /// The figure's subject is a GROUP, because a group is what shows both halves of the pane — the rights
+    /// matrix and the Members list. The fixture invented <c>Administrators</c>, <c>Editors</c>, <c>Jane Doe</c>
+    /// and <c>Bob Smith</c>; whatever the seeder really creates is what a live capture will show, and that
+    /// difference is the entire point of the migration.
+    /// </remarks>
+    internal async Task PopulateUsersFromLiveAppAsync(string accessToken)
+    {
+        await SignInForLiveShotAsync(accessToken);
+        await LoadPrincipalsAsync();
+
+        var subject = Principals.FirstOrDefault(p => p.IsGroup)
+            ?? Principals.FirstOrDefault()
+            ?? throw new InvalidOperationException(
+                "The live app lists no principals at all, so the Users & groups figure would be an empty pane. "
+                + "The seeder creates the demo users and groups — either the capture is pointed at an app that "
+                + "was not seeded, or the caller cannot manage users and the tab is not even visible to them.");
+
+        // The real selection path, which loads the photo and the members exactly as a click does. It is
+        // fire-and-forget by construction (a setter cannot be awaited), which is why there is a predicate below
+        // rather than an await here.
+        SelectedPrincipal = subject;
+        SetLiveShotTab(6);
+    }
+
+    /// <summary>Whether the Users &amp; groups figure has everything it shows.</summary>
+    /// <remarks>
+    /// Both panes are named, per the lesson the first live figure taught: asking only about the list would pass
+    /// while the rights matrix beside it was still empty, and a figure of a half-drawn pane looks like the
+    /// product rather than like a harness fault.
+    /// </remarks>
+    internal bool LiveShotUsersArrived =>
+        Principals.Count > 0 && PrincipalRights.Count > 0 && PrincipalRightsHeader.Length > 0;
+
+    /// <summary>Signs in and opens the Tenant tab, from the real app.</summary>
+    /// <remarks>
+    /// This screen is a pure read of one resource, so it has no row to select — which makes it the simplest of
+    /// the four and the one most likely to drift unnoticed, since a settings pane gains a group whenever a
+    /// tenant setting is added and a fixture gains one only when somebody remembers.
+    /// </remarks>
+    internal async Task PopulateTenantFromLiveAppAsync(string accessToken)
+    {
+        await SignInForLiveShotAsync(accessToken);
+        await LoadTenantSettingsAsync();
+        SetLiveShotTab(10);
+    }
+
+    /// <summary>Whether the Tenant figure has arrived.</summary>
+    /// <remarks>
+    /// <c>TenantSettingsLoaded</c> is the pane's own gate — the markup renders nothing until it is set — so
+    /// asking anything narrower would be asking about a value rather than about the figure. The identity line
+    /// is named beside it because it is the REFERENCE card the pane leads with, and an empty one would publish
+    /// a figure of a tenant with no name.
+    /// </remarks>
+    internal bool LiveShotTenantArrived => TenantSettingsLoaded && TenantName.Length > 0 && TenantId.Length > 0;
+
+    /// <summary>Signs in and opens Contacts with a contact selected, from the real app.</summary>
+    internal async Task PopulateContactsFromLiveAppAsync(string accessToken)
+    {
+        await SignInForLiveShotAsync(accessToken);
+        await ContactsTab.LoadAsync();
+
+        // Selecting the first contact is what fills the detail half; with none selected the figure is a list
+        // beside an empty pane, which is not what the manual describes.
+        ContactsTab.Selected = ContactsTab.Contacts.FirstOrDefault()
+            ?? throw new InvalidOperationException(
+                "The live app has no contacts, so the Contacts figure would be an empty list. The seeder files "
+                + "them into the demo address book — if that changed, this screen goes back to Capture.Fixture "
+                + "with the reason written down rather than being published empty.");
+
+        SetLiveShotTab(13);
+    }
+
+    /// <summary>Whether the Contacts figure has arrived.</summary>
+    internal bool LiveShotContactsArrived =>
+        ContactsTab.Collections.Count > 0 && ContactsTab.Contacts.Count > 0 && ContactsTab.Selected is not null;
+
+    // CALENDAR IS NOT HERE, AND THAT IS THE FINDING. It was written, captured, and sent back to
+    // Capture.Fixture the same hour: the live grid drew OCTOBER 2026 against a seed whose frozen clock is
+    // 2026-06-01, because a calendar's grid comes from the CLIENT's today while Demo:Clock freezes the
+    // SERVER's. The figure would have churned on the first of every month, and the harness's determinism
+    // check passed it — two captures seconds apart agree about the month, which is the "determinism proves
+    // stability, never correctness" lesson arriving a second time. The reason is recorded at the screen in
+    // Screens.cs, where whoever picks it up next will be standing.
+
+    /// <summary>The sign-in every live screen begins with.</summary>
+    /// <remarks>
+    /// Shared because it is genuinely the same act, unlike the navigation above: the token, the user context
+    /// and the gated flags (<c>CanManageUsers</c>, <c>IsTenantAdmin</c>) come from the server, and three of
+    /// these four tabs are not even VISIBLE without them — so a figure captured without this would be of a
+    /// tab the user cannot reach.
+    /// </remarks>
+    private async Task SignInForLiveShotAsync(string accessToken)
+    {
+        UseApi(new SimplArchiveApiClient(accessToken));
+        IsLoggedIn = true;
+        await SetupUserContextAsync();
+    }
+
+    /// <summary>Puts a tab in front WITHOUT starting its load a second time.</summary>
+    /// <remarks>
+    /// The property's changed-handler fires the tab's load through <c>Safe.Fire</c>, so assigning it after the
+    /// caller has already awaited that load would run it twice — once awaited and once not — and the capture
+    /// would race the unawaitable copy. Setting the field puts the tab in front and starts nothing.
+    /// </remarks>
+    private void SetLiveShotTab(int index)
+    {
+#pragma warning disable MVVMTK0034
+        _selectedTab = index;
+#pragma warning restore MVVMTK0034
+        OnPropertyChanged(nameof(SelectedTab));
+    }
 }
+
