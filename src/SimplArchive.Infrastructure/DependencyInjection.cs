@@ -185,6 +185,10 @@ public static class DependencyInjection
         services.AddScoped<Intray.IIntrayIngestProcessor, Intray.PatchCodeIngestProcessor>();
         services.AddScoped<Intray.IntrayIngestPipeline>();
         services.AddHostedService<Intray.IntrayIngestSweepWorker>();
+
+        // Expires the bytes an overwrite set aside (#799). The preservation net has written into
+        // inbox-previous/ and stash-previous/ since #794 and nothing has ever removed them.
+        services.AddHostedService<Intray.PreservedBytesSweepWorker>();
         services.AddScoped<IWormLockService, Worm.WormLockService>();
 
         // TOTP-secret encryption (ADR "MFA require-policy + TOTP secret encryption"): OpenBao transit when
@@ -251,9 +255,9 @@ public static class DependencyInjection
         services.AddHostedService<Reminders.DocumentReminderWorker>();
 
         // Email notifications (ADR "Email notifications (SMTP)"): a background sweep emails the not-yet-emailed
-        // Notification rows via MailKit. Gated on Smtp:Host the same "unset → disabled" way as the sidecars —
-        // configured → real SMTP sender + the worker; unconfigured → a log-only sender and no worker (so tests /
-        // SMTP-less deployments don't send). The dispatcher is registered either way so it's directly testable.
+        // Notification rows via MailKit. The options still bind from the Smtp section — that is the
+        // INSTALLATION's account, and it remains the fallback for a tenant that brings none — but the
+        // registration below is no longer gated on it (#1337); see the note there.
         services.AddOptions<Notifications.SmtpOptions>().Bind(configuration.GetSection("Smtp"));
         services.AddScoped<IEmailNotificationDispatcher, Notifications.EmailNotificationDispatcher>();
 

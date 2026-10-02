@@ -116,6 +116,23 @@ public static class SaConsoleApp
                     .WithDescription("Enrol and revoke in bulk from a CA manifest. Safe to re-run.");
             });
 
+            // The intray's recovery path (#799). The bytes an overwrite set aside have been preserved since
+            // #794 and were reachable only by going into object storage by hand; this is the way back, and it
+            // is here rather than in the two user interfaces because saconsole is a client too — an endpoint
+            // it reaches by following a rel is complete, not a gap waiting for a button.
+            config.AddBranch("intray", intray =>
+            {
+                intray.SetDescription("The signed-in user's intray.");
+                intray.AddBranch("previous", previous =>
+                {
+                    previous.SetDescription("Bytes an intray overwrite set aside, and the way back to them.");
+                    previous.AddCommand<IntrayPreviousListCommand>("list")
+                        .WithDescription("What is recoverable, and how long is left to recover it.");
+                    previous.AddCommand<IntrayPreviousRestoreCommand>("restore")
+                        .WithDescription("Put one back into the intray. Reversible: what is there now is kept.");
+                });
+            });
+
             // Modules, and for now the one act a script needs that no client covers: filing a signed licence
             // and pointing the modules it names at it. Both clients already let a HUMAN do this; nothing let
             // a script, which is why the flight-school demo seeder grew its own inline copy (#1474).

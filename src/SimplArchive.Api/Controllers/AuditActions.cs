@@ -13,6 +13,14 @@ public static class AuditActions
 
     public const string DocumentDeleted = "Document.Deleted";
     public const string DocumentRestored = "Document.Restored";
+
+    /// <summary>A set-aside intray copy was put back over the live item (#799).</summary>
+    /// <remarks>
+    /// Recorded because it REPLACES somebody's current bytes: the trail should be able to answer "where did
+    /// this file come from" when the answer is "a recovery", and the restore is the only act in the intray
+    /// that overwrites on purpose.
+    /// </remarks>
+    public const string IntrayItemRestored = "Intray.ItemRestored";
     public const string DocumentMoved = "Document.Moved";
 
     // Document content/metadata lifecycle (ADR "Audit every-mutation coverage — document lifecycle").

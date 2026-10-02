@@ -137,6 +137,11 @@ public class IntrayController : ControllerBase
         // collection is read (ADR 0557) — the client enables it once the selection is two compatible items.
         new Link("join", "/api/intray/from-items", "POST"),
         // The printable Patch 3 separator sheet, and a sample batch made with it (ADR 0577).
+        // The way back to what an overwrite set aside (#799). Advertised unconditionally: the collection
+        // answers empty when nothing has been preserved, which is a different and honest answer from "this
+        // installation cannot do that" — and a rel withheld on emptiness would mean a client could only
+        // discover recovery at the moment it had already stopped being possible.
+        new Link("previous", "/api/intray/previous", "GET"),
         new Link("patchCodeSheet", "/api/intray/patch-code-sheet", "GET"),
         new Link("patchCodeSample", "/api/intray/patch-code-sample", "GET"),
         new Link("patchCodeSampleScan", "/api/intray/patch-code-sample-scan", "GET"),
