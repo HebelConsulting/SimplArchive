@@ -242,6 +242,7 @@ public sealed partial class MainWindowViewModel
         OnPropertyChanged(nameof(IsEditingTenantCheckout));
         OnPropertyChanged(nameof(IsEditingTenantStorage));
         OnPropertyChanged(nameof(IsEditingTenantMail));
+        OnPropertyChanged(nameof(IsEditingTenantOutboundMail));
         OnPropertyChanged(nameof(CanEditTenantImapDefault)); // computed from BOTH inputs (#996; the wrong-hook trap)
         OnPropertyChanged(nameof(IsEditingTenantExternalLinks));
         OnPropertyChanged(nameof(IsEditingTenantAuditStreaming));
@@ -259,6 +260,8 @@ public sealed partial class MainWindowViewModel
     public bool IsEditingTenantCheckout => TenantEditingGroup == "checkout";
     public bool IsEditingTenantStorage => TenantEditingGroup == "storage";
     public bool IsEditingTenantMail => TenantEditingGroup == "mail";
+
+    public bool IsEditingTenantOutboundMail => TenantEditingGroup == "outbound-mail";
 
     public bool IsEditingTenantExternalLinks => TenantEditingGroup == "external-links";
     public bool IsEditingTenantAuditStreaming => TenantEditingGroup == "audit-streaming";
@@ -300,6 +303,17 @@ public sealed partial class MainWindowViewModel
                 incompleteUploadCleanupDays = TenantIncompleteUploadCleanupDays,
             },
             "mail" => new { imapShowAllDocumentsDefault = TenantImapShowAllDocumentsDefault },
+            // NULL when the password box is empty, never "": the server distinguishes them, and "" CLEARS.
+            "outbound-mail" => new
+            {
+                smtpHost = string.IsNullOrWhiteSpace(TenantSmtpHost) ? null : TenantSmtpHost!.Trim(),
+                smtpPort = TenantSmtpPort,
+                smtpUseStartTls = TenantSmtpUseStartTls,
+                smtpUser = string.IsNullOrWhiteSpace(TenantSmtpUser) ? null : TenantSmtpUser,
+                smtpPassword = string.IsNullOrEmpty(TenantSmtpPassword) ? null : TenantSmtpPassword,
+                smtpFromAddress = string.IsNullOrWhiteSpace(TenantSmtpFromAddress) ? null : TenantSmtpFromAddress,
+                smtpFromName = string.IsNullOrWhiteSpace(TenantSmtpFromName) ? null : TenantSmtpFromName,
+            },
             "external-links" => new { allowExternalLinks = TenantAllowExternalLinks, externalLinkMaxDays = TenantExternalLinkMaxDays, externalLinkDefaultAccesses = TenantExternalLinkDefaultAccesses, showExternalLinkUrl = TenantShowExternalLinkUrl },
             "audit-streaming" => new
             {

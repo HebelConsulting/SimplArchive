@@ -5235,4 +5235,52 @@
   <data name="EnrolLoadError" xml:space="preserve">
     <value>Die Liste der hinterlegbaren Zertifikate konnte nicht geladen werden.</value>
   </data>
+  <data name="TenantGroupOutboundMail" xml:space="preserve">
+    <value>Ausgehende E-Mail</value>
+  </data>
+  <data name="TenantSmtpInfo" xml:space="preserve">
+    <value>Der Server, über den die Benachrichtigungen dieses Mandanten versendet werden. Leer lassen, um das Konto der Installation zu verwenden.</value>
+  </data>
+  <data name="TenantSmtpHost" xml:space="preserve">
+    <value>SMTP-Server</value>
+  </data>
+  <data name="TenantSmtpPort" xml:space="preserve">
+    <value>Port</value>
+  </data>
+  <data name="TenantSmtpStartTls" xml:space="preserve">
+    <value>STARTTLS verwenden</value>
+  </data>
+  <data name="TenantSmtpUser" xml:space="preserve">
+    <value>Benutzername</value>
+  </data>
+  <data name="TenantSmtpPasswordLabel" xml:space="preserve">
+    <value>Passwort</value>
+  </data>
+  <data name="TenantSmtpPasswordKeep" xml:space="preserve">
+    <value>Passwort (leer lassen, um das aktuelle zu behalten)</value>
+  </data>
+  <data name="TenantSmtpPasswordSet" xml:space="preserve">
+    <value>Ein Passwort ist hinterlegt.</value>
+  </data>
+  <data name="TenantSmtpPasswordNotSet" xml:space="preserve">
+    <value>Kein Passwort hinterlegt.</value>
+  </data>
+  <data name="TenantSmtpFromAddress" xml:space="preserve">
+    <value>Absenderadresse</value>
+  </data>
+  <data name="TenantSmtpFromName" xml:space="preserve">
+    <value>Absendername</value>
+  </data>
+  <data name="TenantSmtpUsingInstallation" xml:space="preserve">
+    <value>Es wird das Konto der Installation verwendet.</value>
+  </data>
+  <data name="TenantSendTestMail" xml:space="preserve">
+    <value>Testnachricht senden</value>
+  </data>
+  <data name="StTestMailSent" xml:space="preserve">
+    <value>Testnachricht über {0} gesendet.</value>
+  </data>
+  <data name="StTestMailFailed" xml:space="preserve">
+    <value>Die Testnachricht konnte nicht gesendet werden: {0}</value>
+  </data>
 </root>

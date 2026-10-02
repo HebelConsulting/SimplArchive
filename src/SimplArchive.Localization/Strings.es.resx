@@ -5235,4 +5235,52 @@
   <data name="EnrolLoadError" xml:space="preserve">
     <value>No se pudo cargar la lista de lo que puede registrar.</value>
   </data>
+  <data name="TenantGroupOutboundMail" xml:space="preserve">
+    <value>Correo saliente</value>
+  </data>
+  <data name="TenantSmtpInfo" xml:space="preserve">
+    <value>El servidor por el que se envían las notificaciones de este inquilino. Déjelo vacío para usar la cuenta de la instalación.</value>
+  </data>
+  <data name="TenantSmtpHost" xml:space="preserve">
+    <value>Servidor SMTP</value>
+  </data>
+  <data name="TenantSmtpPort" xml:space="preserve">
+    <value>Puerto</value>
+  </data>
+  <data name="TenantSmtpStartTls" xml:space="preserve">
+    <value>Usar STARTTLS</value>
+  </data>
+  <data name="TenantSmtpUser" xml:space="preserve">
+    <value>Nombre de usuario</value>
+  </data>
+  <data name="TenantSmtpPasswordLabel" xml:space="preserve">
+    <value>Contraseña</value>
+  </data>
+  <data name="TenantSmtpPasswordKeep" xml:space="preserve">
+    <value>Contraseña (déjelo vacío para mantener la actual)</value>
+  </data>
+  <data name="TenantSmtpPasswordSet" xml:space="preserve">
+    <value>Hay una contraseña almacenada.</value>
+  </data>
+  <data name="TenantSmtpPasswordNotSet" xml:space="preserve">
+    <value>No hay contraseña almacenada.</value>
+  </data>
+  <data name="TenantSmtpFromAddress" xml:space="preserve">
+    <value>Dirección del remitente</value>
+  </data>
+  <data name="TenantSmtpFromName" xml:space="preserve">
+    <value>Nombre del remitente</value>
+  </data>
+  <data name="TenantSmtpUsingInstallation" xml:space="preserve">
+    <value>Se utiliza la cuenta de la instalación.</value>
+  </data>
+  <data name="TenantSendTestMail" xml:space="preserve">
+    <value>Enviar mensaje de prueba</value>
+  </data>
+  <data name="StTestMailSent" xml:space="preserve">
+    <value>Mensaje de prueba enviado a través de {0}.</value>
+  </data>
+  <data name="StTestMailFailed" xml:space="preserve">
+    <value>No se pudo enviar el mensaje de prueba: {0}</value>
+  </data>
 </root>

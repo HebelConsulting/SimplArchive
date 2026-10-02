@@ -44,6 +44,31 @@ public sealed partial class MainWindowViewModel
 
     public bool CanEditTenantImapDefault => TenantImapServerAvailable && IsEditingTenantMail;
 
+    // Outbound mail (#1337): the account THIS tenant's notifications leave through. An empty server falls back
+    // to the installation's, which is what keeps the feature additive for every existing deployment.
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(TenantHasOwnSmtp))] private string? _tenantSmtpHost;
+    [ObservableProperty] private int _tenantSmtpPort = 587;
+    [ObservableProperty] private bool _tenantSmtpUseStartTls;
+    [ObservableProperty] private string? _tenantSmtpUser;
+    [ObservableProperty] private string? _tenantSmtpFromAddress;
+    [ObservableProperty] private string? _tenantSmtpFromName;
+
+    /// <summary>Whether a password is STORED — never the password, which no read returns.</summary>
+    [ObservableProperty] private bool _tenantSmtpPasswordSet;
+
+    /// <summary>
+    /// What the administrator typed, which is empty unless they are setting or replacing one.
+    /// </summary>
+    /// <remarks>
+    /// Cleared on every load, and sent as NULL when empty: the server reads an omitted password as "leave the
+    /// stored one alone". Sending an empty string instead would wipe the credential every time somebody edited
+    /// the port, and the tenant's mail would stop that evening with nothing on screen having said so.
+    /// </remarks>
+    [ObservableProperty] private string? _tenantSmtpPassword;
+
+    /// <summary>Whether this tenant brings its own account, which is what the extra fields are for.</summary>
+    public bool TenantHasOwnSmtp => !string.IsNullOrWhiteSpace(TenantSmtpHost);
+
     [ObservableProperty] private bool _tenantAllowExternalLinks;
 
     // Whether an existing link's URL may be revealed again (issue #412). Threaded through EVERY site below:
@@ -130,6 +155,14 @@ public sealed partial class MainWindowViewModel
         TenantRestrictTagsToCatalog = s.RestrictTagsToCatalog;
         TenantEnforceClearance = s.EnforceClearance;
         TenantImapShowAllDocumentsDefault = s.ImapShowAllDocumentsDefault;
+        TenantSmtpHost = s.SmtpHost;
+        TenantSmtpPort = s.SmtpPort == 0 ? 587 : s.SmtpPort;
+        TenantSmtpUseStartTls = s.SmtpUseStartTls;
+        TenantSmtpUser = s.SmtpUser;
+        TenantSmtpPasswordSet = s.SmtpPasswordSet;
+        TenantSmtpFromAddress = s.SmtpFromAddress;
+        TenantSmtpFromName = s.SmtpFromName;
+        TenantSmtpPassword = null; // never prefilled: there is nothing to prefill it FROM
         TenantImapServerAvailable = s.ImapServerAvailable;
         TenantAllowExternalLinks = s.AllowExternalLinks;
         TenantShowExternalLinkUrl = s.ShowExternalLinkUrl;
@@ -211,6 +244,31 @@ public sealed partial class MainWindowViewModel
         catch (Exception)
         {
             ReportError(Strings.Get("StErrRecompute"));
+        }
+    }
+
+    [RelayCommand]
+    private async Task TestOutboundMail()
+    {
+        if (_api is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var (success, account, error) = await _api.Admin.TestOutboundMailAsync();
+            Status = success
+                ? string.Format(Strings.Get("StTestMailSent"), account ?? string.Empty)
+                : string.Format(Strings.Get("StTestMailFailed"), error ?? string.Empty);
+        }
+        catch (ApiActionException ex)
+        {
+            ReportError(ex.Message);
+        }
+        catch (Exception)
+        {
+            ReportError(string.Format(Strings.Get("StTestMailFailed"), string.Empty));
         }
     }
 

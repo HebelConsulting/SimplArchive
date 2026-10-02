@@ -33,6 +33,8 @@ public class TenantSettingsController : ControllerBase
     private readonly ITransitEncryptor _transit;
     private readonly IObjectStorageClient _objectStorage;
     private readonly IAuditWebhookSender _webhookSender;
+    private readonly Infrastructure.Notifications.TenantSmtpSettingsResolver _smtpAccounts;
+    private readonly IEmailSender _emailSender;
     private readonly IOutboundAddressPolicy _outbound;
     private readonly IAuditRecorder _audit;
     private readonly Concurrency.TenantVerbs _tenants;
@@ -46,6 +48,8 @@ public class TenantSettingsController : ControllerBase
         ITransitEncryptor transit,
         IObjectStorageClient objectStorage,
         IAuditWebhookSender webhookSender,
+        Infrastructure.Notifications.TenantSmtpSettingsResolver smtpAccounts,
+        IEmailSender emailSender,
         IOutboundAddressPolicy outbound,
         IAuditRecorder audit,
         Microsoft.Extensions.Options.IOptions<Imap.ImapOptions> imapOptions,
@@ -59,6 +63,8 @@ public class TenantSettingsController : ControllerBase
         _transit = transit;
         _objectStorage = objectStorage;
         _webhookSender = webhookSender;
+        _smtpAccounts = smtpAccounts;
+        _emailSender = emailSender;
         _outbound = outbound;
         _audit = audit;
         _imapOptions = imapOptions;
@@ -82,6 +88,23 @@ public class TenantSettingsController : ControllerBase
         // the projection grants nothing the ACL does not — just the tenant's starting position for a
         // self-service knob. Existing users keep their own value.
         public bool ImapShowAllDocumentsDefault { get; set; }
+
+        // Per-tenant outbound SMTP (#1337). The PASSWORD is deliberately absent: a read never returns it, so
+        // the only thing a client can learn is WHETHER one is set — which is all a form needs to decide
+        // between "Set a password" and "Replace it".
+        public string? SmtpHost { get; set; }
+
+        public int SmtpPort { get; set; }
+
+        public bool SmtpUseStartTls { get; set; }
+
+        public string? SmtpUser { get; set; }
+
+        public bool SmtpPasswordSet { get; set; }
+
+        public string? SmtpFromAddress { get; set; }
+
+        public string? SmtpFromName { get; set; }
 
         /// <summary>Whether the SERVER runs an IMAP listener at all (Imap:Enabled) — read-only context for
         /// the tenant preference above (#996): without it, an IMAP-labelled switch on a listener-less
@@ -169,6 +192,34 @@ public class TenantSettingsController : ControllerBase
         // What a NEW user's IMAP "show all documents" preference is seeded from (#793) — not a permission,
         // just the tenant's starting position for a self-service knob. Existing users keep their own value.
         public bool ImapShowAllDocumentsDefault { get; set; }
+    }
+
+    public class UpdateOutboundMailSettingsRequest
+    {
+        /// <summary>Empty clears the tenant's account, and the installation's is used again (#1337).</summary>
+        public string? SmtpHost { get; set; }
+
+        public int SmtpPort { get; set; } = 587;
+
+        public bool SmtpUseStartTls { get; set; }
+
+        public string? SmtpUser { get; set; }
+
+        /// <summary>
+        /// Write-only, and the distinction between NULL and EMPTY is the whole contract.
+        /// </summary>
+        /// <remarks>
+        /// <b>Null means "leave the stored password alone"</b>, so a form that never received the secret can
+        /// submit the rest of the group without destroying it — which is what would otherwise happen every
+        /// time somebody changed the port, because a read cannot return the password to be sent back.
+        /// <b>Empty means "clear it"</b>, deliberately, so removing a password is possible rather than an
+        /// operation nobody can express.
+        /// </remarks>
+        public string? SmtpPassword { get; set; }
+
+        public string? SmtpFromAddress { get; set; }
+
+        public string? SmtpFromName { get; set; }
     }
 
     public class UpdateExternalLinkSettingsRequest
@@ -398,6 +449,27 @@ public class TenantSettingsController : ControllerBase
             return Task.CompletedTask;
         }, cancellationToken);
 
+    /// <summary>The tenant's own submission account (#1337), or empty to fall back to the installation's.</summary>
+    [HttpPut("outbound-mail")]
+    public Task<IActionResult> UpdateOutboundMail(
+        [FromBody] UpdateOutboundMailSettingsRequest request, CancellationToken cancellationToken) =>
+        UpdateGroupAsync(AuditActions.TenantSettingsOutboundMailUpdated, async tenant =>
+        {
+            tenant.SmtpHost = string.IsNullOrWhiteSpace(request.SmtpHost) ? null : request.SmtpHost.Trim();
+            tenant.SmtpPort = request.SmtpPort;
+            tenant.SmtpUseStartTls = request.SmtpUseStartTls;
+            tenant.SmtpUser = string.IsNullOrWhiteSpace(request.SmtpUser) ? null : request.SmtpUser;
+            tenant.SmtpFromAddress = string.IsNullOrWhiteSpace(request.SmtpFromAddress) ? null : request.SmtpFromAddress;
+            tenant.SmtpFromName = string.IsNullOrWhiteSpace(request.SmtpFromName) ? null : request.SmtpFromName;
+
+            // NULL leaves the stored password alone; EMPTY clears it. Anything else is a new password and is
+            // encrypted before it is stored, exactly like the audit webhook's secret.
+            if (request.SmtpPassword is { } password)
+            {
+                tenant.SmtpPassword = password.Length == 0 ? null : await _transit.EncryptAsync(password);
+            }
+        }, cancellationToken);
+
     [HttpPut("external-links")]
     public Task<IActionResult> UpdateExternalLinks([FromBody] UpdateExternalLinkSettingsRequest request, CancellationToken cancellationToken) =>
         UpdateGroupAsync(AuditActions.TenantSettingsExternalLinksUpdated, tenant =>
@@ -573,6 +645,98 @@ public class TenantSettingsController : ControllerBase
     // (ADR "Audit trail export") with a marked Webhook.Test action + Sequence -1, HMAC-SHA256-signed with the
     // stored secret — the same signing the dispatcher does. Returns the delivery outcome (200 even on a failed
     // delivery: the request succeeded; Success/Error report whether the endpoint accepted it). Tenant-admin only.
+    /// <summary>
+    /// Sends one message through whatever account this tenant's mail would really use (#1337).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>To the acting administrator's own address, with no recipient field.</b> It proves host, port, TLS,
+    /// credentials and from-address in one click — and it cannot be used to send attacker-chosen mail from the
+    /// tenant's own domain, which an arbitrary recipient would turn this authenticated endpoint into.
+    /// </para>
+    /// <para>
+    /// <b>It resolves the account the same way dispatch does</b> rather than reading the columns itself: a
+    /// test that proved a configuration the sender does not use would be worse than no test. So a tenant with
+    /// no host of its own legitimately tests the INSTALLATION's account, which is exactly what its mail would
+    /// use, and the response says which it was.
+    /// </para>
+    /// <para>
+    /// The point is to fail HERE, in front of somebody who can fix it, rather than at 03:00 inside a reminder
+    /// nobody is watching.
+    /// </para>
+    /// </remarks>
+    [HttpPost("outbound-mail/test-deliveries")]
+    public async Task<IActionResult> TestOutboundMail(CancellationToken cancellationToken)
+    {
+        if (!await IsTenantAdminAsync(cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (_currentUserAccessor.UserId is not { } userId)
+        {
+            // A service account has no mailbox to send to, so there is no honest recipient.
+            return Forbid();
+        }
+
+        var user = await _dbContext.Users.SingleOrDefaultAsync(u => u.Id == userId, cancellationToken);
+        if (user is null)
+        {
+            return NotFound();
+        }
+
+        var account = await _smtpAccounts.ResolveAsync(cancellationToken);
+        if (account is null)
+        {
+            return Ok(new TestOutboundMailResponse
+            {
+                Success = false,
+                Error = "No SMTP account is configured — neither for this tenant nor for the installation.",
+                Links = [new Link("self", "/api/tenant-settings", "GET")],
+            });
+        }
+
+        try
+        {
+            await _emailSender.SendAsync(
+                user.Email, user.DisplayName,
+                "SimplArchive test message",
+                "This message confirms that SimplArchive can send mail through the configured account.\n\n"
+                + $"It was submitted through {account.Source}, as {account.FromAddress}.",
+                cancellationToken);
+
+            return Ok(new TestOutboundMailResponse
+            {
+                Success = true,
+                Account = account.Source,
+                Links = [new Link("self", "/api/tenant-settings", "GET")],
+            });
+        }
+        catch (Exception e)
+        {
+            // The server's own words, not a generic failure: "authentication failed", "name resolution
+            // failed" and "connection refused" have three different fixes, and the person reading this is the
+            // one who can apply them.
+            return Ok(new TestOutboundMailResponse
+            {
+                Success = false,
+                Account = account.Source,
+                Error = e.Message,
+                Links = [new Link("self", "/api/tenant-settings", "GET")],
+            });
+        }
+    }
+
+    public class TestOutboundMailResponse : HypermediaResource
+    {
+        public bool Success { get; set; }
+
+        /// <summary>Whose account was used — the tenant's or the installation's.</summary>
+        public string? Account { get; set; }
+
+        public string? Error { get; set; }
+    }
+
     [HttpPost("audit-webhook/test-deliveries")]
     public async Task<IActionResult> TestAuditWebhook(CancellationToken cancellationToken)
     {
@@ -632,6 +796,13 @@ public class TenantSettingsController : ControllerBase
         RestrictTagsToCatalog = tenant.RestrictTagsToCatalog,
         RequireDispositionReview = tenant.RequireDispositionReview,
         ImapShowAllDocumentsDefault = tenant.ImapShowAllDocumentsDefault,
+        SmtpHost = tenant.SmtpHost,
+        SmtpPort = tenant.SmtpPort,
+        SmtpUseStartTls = tenant.SmtpUseStartTls,
+        SmtpUser = tenant.SmtpUser,
+        SmtpPasswordSet = !string.IsNullOrEmpty(tenant.SmtpPassword),
+        SmtpFromAddress = tenant.SmtpFromAddress,
+        SmtpFromName = tenant.SmtpFromName,
         ImapServerAvailable = _imapOptions.Value.Enabled,
         AllowExternalLinks = tenant.AllowExternalLinks,
         ExternalLinkMaxDays = tenant.ExternalLinkMaxDays,
@@ -661,6 +832,8 @@ public class TenantSettingsController : ControllerBase
             new Link("settings-checkout", "/api/tenant-settings/checkout", "PUT"),
             new Link("settings-storage", "/api/tenant-settings/storage", "PUT"),
             new Link("settings-mail", "/api/tenant-settings/mail", "PUT"),
+            new Link("settings-outbound-mail", "/api/tenant-settings/outbound-mail", "PUT"),
+            new Link("test-outbound-mail", "/api/tenant-settings/outbound-mail/test-deliveries", "POST"),
             new Link("settings-external-links", "/api/tenant-settings/external-links", "PUT"),
             new Link("settings-audit-streaming", "/api/tenant-settings/audit-streaming", "PUT"),
             // Maintenance actions on these settings, advertised where the client already is (issue #416):

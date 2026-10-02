@@ -164,6 +164,10 @@ public partial class ConcurrencyContractRatchetTests
         ["AclEntriesController.cs:Group"] =
             "Reads only: projects a group's Name onto an ACL row and walks ParentGroupId to find the "
             + "tenant-admin groups. The grants it writes are AclEntry rows, not group edits.",
+        ["TenantSettingsController.cs:User"] =
+            "Reads only: the outbound-mail test delivery (#1337) reads the CALLER's own row for an address to "
+            + "send to — a test message goes to whoever asked for it, so there is an honest recipient and "
+            + "nothing to guess. Sending is not a user edit, and this file writes no User column.",
         ["AdminController.cs:User"] =
             "Reads only: joins Users to name the owner of each personal repository, and projects "
             + "DisplayName/IsActive when taking one over. The takeover writes AclEntry rows.",

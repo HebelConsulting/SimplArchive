@@ -5235,4 +5235,52 @@
   <data name="EnrolLoadError" xml:space="preserve">
     <value>The list of what you can enrol could not be loaded.</value>
   </data>
+  <data name="TenantGroupOutboundMail" xml:space="preserve">
+    <value>Outbound mail</value>
+  </data>
+  <data name="TenantSmtpInfo" xml:space="preserve">
+    <value>The server this tenant's notifications are sent through. Leave the server empty to use the installation's own account.</value>
+  </data>
+  <data name="TenantSmtpHost" xml:space="preserve">
+    <value>SMTP server</value>
+  </data>
+  <data name="TenantSmtpPort" xml:space="preserve">
+    <value>Port</value>
+  </data>
+  <data name="TenantSmtpStartTls" xml:space="preserve">
+    <value>Use STARTTLS</value>
+  </data>
+  <data name="TenantSmtpUser" xml:space="preserve">
+    <value>Username</value>
+  </data>
+  <data name="TenantSmtpPasswordLabel" xml:space="preserve">
+    <value>Password</value>
+  </data>
+  <data name="TenantSmtpPasswordKeep" xml:space="preserve">
+    <value>Password (leave empty to keep the current one)</value>
+  </data>
+  <data name="TenantSmtpPasswordSet" xml:space="preserve">
+    <value>A password is stored.</value>
+  </data>
+  <data name="TenantSmtpPasswordNotSet" xml:space="preserve">
+    <value>No password is stored.</value>
+  </data>
+  <data name="TenantSmtpFromAddress" xml:space="preserve">
+    <value>From address</value>
+  </data>
+  <data name="TenantSmtpFromName" xml:space="preserve">
+    <value>From name</value>
+  </data>
+  <data name="TenantSmtpUsingInstallation" xml:space="preserve">
+    <value>Using the installation's own account.</value>
+  </data>
+  <data name="TenantSendTestMail" xml:space="preserve">
+    <value>Send test message</value>
+  </data>
+  <data name="StTestMailSent" xml:space="preserve">
+    <value>Test message sent through {0}.</value>
+  </data>
+  <data name="StTestMailFailed" xml:space="preserve">
+    <value>The test message could not be sent: {0}</value>
+  </data>
 </root>

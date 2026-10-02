@@ -161,6 +161,67 @@
                                 ToolTip.Tip="{loc:Tr TenantImapShowAllDefaultInfo}" />
                     </StackPanel>
 
+                    <!-- ==== Outbound mail (#1337) ================================================
+                         The account THIS tenant's notifications leave through. The normal deployment runs no
+                         relay of its own and authenticates against an ordinary provider, whose account is
+                         naturally per tenant — each tenant's mail should come from its own domain. Empty
+                         server = the installation's account, which keeps this additive. -->
+                    <v:TenantGroupHeader Title="{loc:Tr TenantGroupOutboundMail}" Group="outbound-mail"
+                                         IsEditing="{Binding IsEditingTenantOutboundMail}" />
+                    <TextBlock Text="{loc:Tr TenantSmtpInfo}" Foreground="{DynamicResource WbMuted}" FontSize="12"
+                               TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="{loc:Tr TenantSmtpHost}" VerticalAlignment="Center" />
+                        <TextBox Text="{Binding TenantSmtpHost}" IsEnabled="{Binding IsEditingTenantOutboundMail}"
+                                 Watermark="smtp.example.com" MinWidth="220" />
+                    </StackPanel>
+                    <StackPanel Spacing="6" IsVisible="{Binding TenantHasOwnSmtp}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="{loc:Tr TenantSmtpPort}" VerticalAlignment="Center" />
+                            <NumericUpDown Value="{Binding TenantSmtpPort}" Minimum="1" Maximum="65535" Increment="1"
+                                           FormatString="0" IsEnabled="{Binding IsEditingTenantOutboundMail}" MinWidth="110" />
+                            <CheckBox IsChecked="{Binding TenantSmtpUseStartTls}" IsEnabled="{Binding IsEditingTenantOutboundMail}"
+                                      Content="{loc:Tr TenantSmtpStartTls}" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="{loc:Tr TenantSmtpUser}" VerticalAlignment="Center" />
+                            <TextBox Text="{Binding TenantSmtpUser}" IsEnabled="{Binding IsEditingTenantOutboundMail}" MinWidth="180" />
+                        </StackPanel>
+                        <!-- The password box appears only while EDITING, and is always empty: no read returns
+                             it, so there is nothing to prefill, and an empty submission means "keep the stored
+                             one". Out of edit mode the pane states whether one exists, which is the only fact
+                             anybody can act on. -->
+                        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsEditingTenantOutboundMail}">
+                            <TextBlock Text="{loc:Tr TenantSmtpPasswordLabel}" VerticalAlignment="Center" />
+                            <TextBox Text="{Binding TenantSmtpPassword}" PasswordChar="•" MinWidth="180" />
+                            <TextBlock Text="{loc:Tr TenantSmtpPasswordKeep}" Foreground="{DynamicResource WbMuted}"
+                                       FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="260"
+                                       IsVisible="{Binding TenantSmtpPasswordSet}" />
+                        </StackPanel>
+                        <StackPanel IsVisible="{Binding !IsEditingTenantOutboundMail}">
+                            <TextBlock Text="{loc:Tr TenantSmtpPasswordSet}" Foreground="{DynamicResource WbMuted}"
+                                       FontSize="12" IsVisible="{Binding TenantSmtpPasswordSet}" />
+                            <TextBlock Text="{loc:Tr TenantSmtpPasswordNotSet}" Foreground="{DynamicResource WbMuted}"
+                                       FontSize="12" IsVisible="{Binding !TenantSmtpPasswordSet}" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="{loc:Tr TenantSmtpFromAddress}" VerticalAlignment="Center" />
+                            <TextBox Text="{Binding TenantSmtpFromAddress}" IsEnabled="{Binding IsEditingTenantOutboundMail}"
+                                     Watermark="notifications@example.com" MinWidth="220" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="{loc:Tr TenantSmtpFromName}" VerticalAlignment="Center" />
+                            <TextBox Text="{Binding TenantSmtpFromName}" IsEnabled="{Binding IsEditingTenantOutboundMail}" MinWidth="180" />
+                        </StackPanel>
+                    </StackPanel>
+                    <TextBlock Text="{loc:Tr TenantSmtpUsingInstallation}" Foreground="{DynamicResource WbMuted}"
+                               FontSize="12" IsVisible="{Binding !TenantHasOwnSmtp}" />
+                    <!-- Offered whether or not this tenant has its own account: with none it proves the
+                         INSTALLATION's, which is what this tenant's mail would really use. The point is to fail
+                         here, in front of somebody who can fix it, rather than at 03:00 inside a reminder. -->
+                    <Button Content="{loc:Tr TenantSendTestMail}" Command="{Binding TestOutboundMailCommand}"
+                            IsVisible="{Binding !IsEditingTenantOutboundMail}" HorizontalAlignment="Left" />
+
                     <!-- ==== External links (ADR 0546) ============================================ -->
                     <v:TenantGroupHeader Title="{loc:Tr TenantGroupExternalLinks}" Group="external-links"
                                          IsEditing="{Binding IsEditingTenantExternalLinks}" />

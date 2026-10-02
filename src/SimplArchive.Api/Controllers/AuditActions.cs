@@ -157,6 +157,14 @@ public static class AuditActions
     public const string TenantSettingsCheckoutUpdated = "Tenant.SettingsCheckoutUpdated";
     public const string TenantSettingsStorageUpdated = "Tenant.SettingsStorageUpdated";
     public const string TenantSettingsMailUpdated = "Tenant.SettingsMailUpdated";
+
+    /// <summary>The tenant's own outbound SMTP account was changed (#1337).</summary>
+    /// <remarks>
+    /// Recorded like every other settings group — and worth more than most, because it decides WHICH ACCOUNT
+    /// this tenant's mail leaves through. "Why did our notifications start arriving from a different sender"
+    /// is a question the trail should answer.
+    /// </remarks>
+    public const string TenantSettingsOutboundMailUpdated = "Tenant.SettingsOutboundMailUpdated";
     public const string TenantSettingsExternalLinksUpdated = "Tenant.SettingsExternalLinksUpdated";
     public const string TenantSettingsAuditStreamingUpdated = "Tenant.SettingsAuditStreamingUpdated";
 

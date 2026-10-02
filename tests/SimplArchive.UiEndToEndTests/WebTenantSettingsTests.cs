@@ -1,5 +1,6 @@
 using Microsoft.Playwright;
 using static Microsoft.Playwright.Assertions;
+using System.Text.RegularExpressions;
 
 namespace SimplArchive.UiEndToEndTests;
 
@@ -34,9 +35,15 @@ public class WebTenantSettingsTests
         await Expect(view.GetByText("Tenant ID")).ToBeVisibleAsync();
 
         // The nine decided groups render, in order (Mail joined with #793).
-        foreach (var group in new[] { "General", "Documents & capture", "Security & sign-in", "Records & compliance", "Check-out", "Storage", "Mail", "External links", "Audit streaming (SIEM)" })
+        foreach (var group in new[] { "General", "Documents & capture", "Security & sign-in", "Records & compliance", "Check-out", "Storage", "Mail", "Outbound mail", "External links", "Audit streaming (SIEM)" })
         {
-            await Expect(view.Locator(".wb-tenant-group-head").Filter(new() { HasText = group })).ToBeVisibleAsync();
+            // ANCHORED, because `HasText` is a SUBSTRING match and this list now contains a name that is a
+            // prefix of another: "Outbound mail" (#1337) arrived and "Mail" began matching both heads, which
+            // Playwright reports as a strict-mode violation rather than a miss. A head's text is its label
+            // plus the pencil's, so the optional "Edit" is part of the anchor rather than a trailing wildcard
+            // — a wildcard there would re-admit the very ambiguity this fixes.
+            await Expect(view.Locator(".wb-tenant-group-head")
+                .Filter(new() { HasTextRegex = new Regex($"^{Regex.Escape(group)}(Edit)?$") })).ToBeVisibleAsync();
         }
 
         // Each explainable setting carries an info button (hover tooltip) — eighteen: the seventeen from the
@@ -48,8 +55,10 @@ public class WebTenantSettingsTests
         // The storage-usage line (ADR "Per-tenant storage quota") shows how much is used vs the limit.
         await Expect(view.GetByText("Used:")).ToBeVisibleAsync();
 
-        // Read-only everywhere: nine pencils, no Save/Cancel.
-        await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Edit" })).ToHaveCountAsync(9);
+        // Read-only everywhere: TEN pencils, no Save/Cancel — nine plus Outbound mail (#1337). The number is
+        // one per editable group and moves whenever a group is added, which is the point: a new group that
+        // forgot its pencil would be read-only forever with nothing to say so.
+        await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Edit" })).ToHaveCountAsync(10);
         await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Save" })).ToBeHiddenAsync();
 
         // A group's pencil → Save/Cancel appear IN ITS HEADER ROW, and the other pencils hide (starting a
@@ -62,7 +71,7 @@ public class WebTenantSettingsTests
 
         // Cancel discards without persisting anything and returns every pencil.
         await general.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
-        await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Edit" })).ToHaveCountAsync(9);
+        await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Edit" })).ToHaveCountAsync(10);
     }
 
     // Per-group editability: a group's pencil enables ITS fields and nobody else's — the point of the split.

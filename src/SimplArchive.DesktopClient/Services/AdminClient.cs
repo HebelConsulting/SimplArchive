@@ -202,6 +202,9 @@ public sealed class AdminClient(ApiCore core)
     // ---- Tenant-admin settings (ADR "Tenant-admin settings tab") -----------------------------------
 
     public sealed record TenantSettingsInfo(Guid Id, string Name, string Status, DateTimeOffset CreatedAt, string DefaultOcrLanguages, int AuditRetentionDays, int CheckoutTtlDays, int CheckoutWarningDays, int WormLockMode, bool RequireMfa, bool AllowPasskeyLogin, bool RequireDispositionReview, bool RestrictTagsToCatalog, bool EnforceClearance, bool ImapShowAllDocumentsDefault, bool ImapServerAvailable, bool AllowExternalLinks, int ExternalLinkMaxDays, int ExternalLinkDefaultAccesses, bool ShowExternalLinkUrl, long? StorageQuotaBytes, long StorageUsedBytes, int IncompleteUploadCleanupDays, string? AuditWebhookUrl, bool AuditWebhookConfigured, int AuditWebhookConsecutiveFailures, DateTimeOffset? AuditWebhookLastSuccessAt, DateTimeOffset? AuditWebhookLastFailureAt, DateTimeOffset? AuditWebhookNextAttemptAt, string? AuditWebhookLastError,
+        // Outbound mail (#1337). No password: the server reports only whether one is stored.
+        string? SmtpHost, int SmtpPort, bool SmtpUseStartTls, string? SmtpUser, bool SmtpPasswordSet,
+        string? SmtpFromAddress, string? SmtpFromName,
         LinkMap? Links = null);
 
     public async Task<TenantSettingsInfo> GetTenantSettingsAsync(CancellationToken cancellationToken = default)
@@ -739,6 +742,13 @@ public sealed class AdminClient(ApiCore core)
         SimplArchiveApiClient.OptDate(j, "auditWebhookLastFailureAt"),
         SimplArchiveApiClient.OptDate(j, "auditWebhookNextAttemptAt"),
         j.TryGetProperty("auditWebhookLastError", out var le) && le.ValueKind == JsonValueKind.String ? le.GetString() : null,
+        j.TryGetProperty("smtpHost", out var sh) && sh.ValueKind == JsonValueKind.String ? sh.GetString() : null,
+        j.TryGetProperty("smtpPort", out var sp) ? sp.GetInt32() : 587,
+        j.TryGetProperty("smtpUseStartTls", out var stls) && stls.ValueKind == JsonValueKind.True,
+        j.TryGetProperty("smtpUser", out var smtpU) && smtpU.ValueKind == JsonValueKind.String ? smtpU.GetString() : null,
+        j.TryGetProperty("smtpPasswordSet", out var sps) && sps.ValueKind == JsonValueKind.True,
+        j.TryGetProperty("smtpFromAddress", out var sfa) && sfa.ValueKind == JsonValueKind.String ? sfa.GetString() : null,
+        j.TryGetProperty("smtpFromName", out var sfn) && sfn.ValueKind == JsonValueKind.String ? sfn.GetString() : null,
         ApiCore.ParseLinks(j));
 
     private async Task SetRightsCoreAsync(string path, SystemRightsData rights, CancellationToken cancellationToken)
@@ -856,6 +866,27 @@ public sealed class AdminClient(ApiCore core)
         response.EnsureSuccessStatusCode();
         var j = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
         return (j.GetProperty("success").GetBoolean(),
+            j.TryGetProperty("error", out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() : null);
+    }
+
+    /// <summary>Sends a test message through whichever account this tenant's mail would really use (#1337).</summary>
+    /// <remarks>
+    /// Offered whether or not the tenant has its own account: with none it proves the INSTALLATION's, which is
+    /// what the notifications would leave through. The point is to fail here, in front of somebody who can fix
+    /// it, rather than at 03:00 inside a reminder.
+    /// </remarks>
+    public async Task<(bool Success, string? Account, string? Error)> TestOutboundMailAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await SendTenantSettingsRelAsync("test-outbound-mail", null, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to send a test message.");
+        }
+
+        response.EnsureSuccessStatusCode();
+        var j = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return (j.GetProperty("success").GetBoolean(),
+            j.TryGetProperty("account", out var a) && a.ValueKind == JsonValueKind.String ? a.GetString() : null,
             j.TryGetProperty("error", out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() : null);
     }
 

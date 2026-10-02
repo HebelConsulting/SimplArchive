@@ -168,6 +168,81 @@
             <InfoButton Text="@(Strings.Get("TenantImapShowAllDefaultInfo"))" />
         </div>
 
+        @* ---- Outbound mail (#1337) ------------------------------------------------------------------
+           The account this tenant's own notifications leave through. The normal deployment runs no relay of
+           its own and authenticates against an ordinary provider, whose account is naturally per tenant —
+           each tenant's mail should come from the tenant's own domain. An empty server falls back to the
+           installation's account, which is what keeps this additive. *@
+        @GroupHeader("outbound-mail", Strings.Get("TenantGroupOutboundMail"))
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">@Strings.Get("TenantSmtpInfo")</MudText>
+        <div class="wb-setting-row mb-2">
+            <MudTextField T="string" Label="@Strings.Get("TenantSmtpHost")" @bind-Value="_tenantEdit.SmtpHost"
+                          Disabled="@(!Editing("outbound-mail"))" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Class="flex-grow-1" Placeholder="smtp.example.com" />
+        </div>
+        @if (!string.IsNullOrWhiteSpace(_tenantEdit.SmtpHost))
+        {
+            <div class="wb-setting-row mb-2">
+                <MudNumericField T="int" @bind-Value="_tenantEdit.SmtpPort" Min="1" Max="65535"
+                                 Label="@Strings.Get("TenantSmtpPort")" Disabled="@(!Editing("outbound-mail"))"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
+            </div>
+            <div class="wb-setting-row mb-2">
+                <MudSwitch T="bool" @bind-Value="_tenantEdit.SmtpUseStartTls" Disabled="@(!Editing("outbound-mail"))"
+                           Color="Color.Primary" Class="flex-grow-1" Label="@Strings.Get("TenantSmtpStartTls")" />
+            </div>
+            <div class="wb-setting-row mb-2">
+                <MudTextField T="string" Label="@Strings.Get("TenantSmtpUser")" @bind-Value="_tenantEdit.SmtpUser"
+                              Disabled="@(!Editing("outbound-mail"))" Variant="Variant.Outlined" Margin="Margin.Dense"
+                              Class="flex-grow-1" />
+            </div>
+            @if (Editing("outbound-mail"))
+            {
+                @* The label CHANGES when one is stored, because the field is empty either way and the two
+                   situations mean opposite things: empty-and-none is "set one", empty-and-stored is "keep it".
+                   The server reads an omitted password as "leave it alone" for exactly this reason. *@
+                <div class="wb-setting-row mb-2">
+                    <MudTextField T="string" InputType="InputType.Password"
+                                  Label="@(_tenant.SmtpPasswordSet ? Strings.Get("TenantSmtpPasswordKeep") : Strings.Get("TenantSmtpPasswordLabel"))"
+                                  @bind-Value="_tenantEdit.SmtpPassword"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
+                </div>
+            }
+            else
+            {
+                <div class="wb-setting-row mb-2" style="align-items:center; gap:8px;">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary flex-grow-1">
+                        @(_tenant.SmtpPasswordSet ? Strings.Get("TenantSmtpPasswordSet") : Strings.Get("TenantSmtpPasswordNotSet"))
+                    </MudText>
+                </div>
+            }
+            <div class="wb-setting-row mb-2">
+                <MudTextField T="string" Label="@Strings.Get("TenantSmtpFromAddress")" @bind-Value="_tenantEdit.SmtpFromAddress"
+                              Disabled="@(!Editing("outbound-mail"))" Variant="Variant.Outlined" Margin="Margin.Dense"
+                              Class="flex-grow-1" Placeholder="notifications@example.com" />
+            </div>
+            <div class="wb-setting-row mb-2">
+                <MudTextField T="string" Label="@Strings.Get("TenantSmtpFromName")" @bind-Value="_tenantEdit.SmtpFromName"
+                              Disabled="@(!Editing("outbound-mail"))" Variant="Variant.Outlined" Margin="Margin.Dense"
+                              Class="flex-grow-1" />
+            </div>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@Strings.Get("TenantSmtpUsingInstallation")</MudText>
+        }
+        @if (!Editing("outbound-mail"))
+        {
+            @* Offered whether or not this tenant has its own account: with none, it proves the INSTALLATION's,
+               which is what this tenant's mail would really use — a test that proved something else would be
+               worse than no test. The point is to fail here, in front of somebody who can fix it, rather than
+               at 03:00 inside a reminder nobody is watching. *@
+            <div class="wb-setting-row mb-4" style="align-items:center; gap:8px;">
+                <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Send"
+                           OnClick="TestOutboundMailAsync">@Strings.Get("TenantSendTestMail")</MudButton>
+            </div>
+        }
+
         @* ---- External links (ADR 0546) ------------------------------------------------------------ *@
         @GroupHeader("external-links", Strings.Get("TenantGroupExternalLinks"))
         <div class="wb-setting-row mb-2">
@@ -420,7 +495,7 @@
     private void SyncTenantEditFromTenant()
     {
         if (_tenant is null) return;
-        _tenantEdit = new TenantSettingsEdit { Name = _tenant.Name, AuditRetentionDays = _tenant.AuditRetentionDays, CheckoutTtlDays = _tenant.CheckoutTtlDays, CheckoutWarningDays = _tenant.CheckoutWarningDays, WormLockMode = _tenant.WormLockMode, RequireMfa = _tenant.RequireMfa, AllowPasskeyLogin = _tenant.AllowPasskeyLogin, RequireDispositionReview = _tenant.RequireDispositionReview, RestrictTagsToCatalog = _tenant.RestrictTagsToCatalog, EnforceClearance = _tenant.EnforceClearance, ImapShowAllDocumentsDefault = _tenant.ImapShowAllDocumentsDefault, AllowExternalLinks = _tenant.AllowExternalLinks, ShowExternalLinkUrl = _tenant.ShowExternalLinkUrl, ExternalLinkMaxDays = _tenant.ExternalLinkMaxDays, ExternalLinkDefaultAccesses = _tenant.ExternalLinkDefaultAccesses, StorageQuotaMb = _tenant.StorageQuotaBytes is { } b ? (int)(b / (1024 * 1024)) : null, IncompleteUploadCleanupDays = _tenant.IncompleteUploadCleanupDays, AuditWebhookUrl = _tenant.AuditWebhookUrl, AuditWebhookSecret = null };
+        _tenantEdit = new TenantSettingsEdit { Name = _tenant.Name, AuditRetentionDays = _tenant.AuditRetentionDays, CheckoutTtlDays = _tenant.CheckoutTtlDays, CheckoutWarningDays = _tenant.CheckoutWarningDays, WormLockMode = _tenant.WormLockMode, RequireMfa = _tenant.RequireMfa, AllowPasskeyLogin = _tenant.AllowPasskeyLogin, RequireDispositionReview = _tenant.RequireDispositionReview, RestrictTagsToCatalog = _tenant.RestrictTagsToCatalog, EnforceClearance = _tenant.EnforceClearance, ImapShowAllDocumentsDefault = _tenant.ImapShowAllDocumentsDefault, AllowExternalLinks = _tenant.AllowExternalLinks, ShowExternalLinkUrl = _tenant.ShowExternalLinkUrl, ExternalLinkMaxDays = _tenant.ExternalLinkMaxDays, ExternalLinkDefaultAccesses = _tenant.ExternalLinkDefaultAccesses, StorageQuotaMb = _tenant.StorageQuotaBytes is { } b ? (int)(b / (1024 * 1024)) : null, IncompleteUploadCleanupDays = _tenant.IncompleteUploadCleanupDays, AuditWebhookUrl = _tenant.AuditWebhookUrl, AuditWebhookSecret = null, SmtpHost = _tenant.SmtpHost, SmtpPort = _tenant.SmtpPort == 0 ? 587 : _tenant.SmtpPort, SmtpUseStartTls = _tenant.SmtpUseStartTls, SmtpUser = _tenant.SmtpUser, SmtpPassword = null, SmtpFromAddress = _tenant.SmtpFromAddress, SmtpFromName = _tenant.SmtpFromName };
         _tenantEditOcr = new HashSet<string>(_tenant.DefaultOcrLanguages.Split('+', StringSplitOptions.RemoveEmptyEntries));
     }
 
@@ -447,6 +522,18 @@
                 incompleteUploadCleanupDays = _tenantEdit.IncompleteUploadCleanupDays,
             },
             "mail" => new { imapShowAllDocumentsDefault = _tenantEdit.ImapShowAllDocumentsDefault },
+            // NULL rather than empty when untouched: the server distinguishes the two, and sending "" here
+            // would clear the password every time somebody edited the port.
+            "outbound-mail" => new
+            {
+                smtpHost = _tenantEdit.SmtpHost,
+                smtpPort = _tenantEdit.SmtpPort,
+                smtpUseStartTls = _tenantEdit.SmtpUseStartTls,
+                smtpUser = _tenantEdit.SmtpUser,
+                smtpPassword = string.IsNullOrEmpty(_tenantEdit.SmtpPassword) ? null : _tenantEdit.SmtpPassword,
+                smtpFromAddress = _tenantEdit.SmtpFromAddress,
+                smtpFromName = _tenantEdit.SmtpFromName,
+            },
             "external-links" => new { allowExternalLinks = _tenantEdit.AllowExternalLinks, externalLinkMaxDays = _tenantEdit.ExternalLinkMaxDays, externalLinkDefaultAccesses = _tenantEdit.ExternalLinkDefaultAccesses, showExternalLinkUrl = _tenantEdit.ShowExternalLinkUrl },
             "audit-streaming" => new
             {
@@ -478,6 +565,29 @@
         if (result?.Success == true) Snackbar.Add(Strings.Get("StTestEventDelivered"), Severity.Success);
         else Snackbar.Add(string.Format(Strings.Get("StTestDeliveryFailed"), result?.Error ?? Strings.Get("StUnknownError")), Severity.Warning);
     }
+
+    private async Task TestOutboundMailAsync()
+    {
+        // Followed, never composed (ADR 0543).
+        if (_tenantLinks?.GetValueOrDefault("test-outbound-mail") is not { } testHref) { return; }
+
+        var resp = await Http.PostAsync(testHref, null);
+        if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("StErrTestEvent"), Severity.Error); return; }
+
+        var result = await resp.Content.ReadFromJsonAsync<TestOutboundMailResult>();
+        if (result?.Success == true)
+        {
+            Snackbar.Add(string.Format(Strings.Get("StTestMailSent"), result.Account ?? string.Empty), Severity.Success);
+        }
+        else
+        {
+            // The server's own words: "authentication failed", "name resolution failed" and "connection
+            // refused" have three different fixes, and the person reading this is the one who applies them.
+            Snackbar.Add(string.Format(Strings.Get("StTestMailFailed"), result?.Error ?? Strings.Get("StUnknownError")), Severity.Warning);
+        }
+    }
+
+    private record TestOutboundMailResult { public bool Success { get; set; } public string? Account { get; set; } public string? Error { get; set; } }
 
     private record TestWebhookResult { public bool Success { get; set; } public string? Error { get; set; } }
 
@@ -642,6 +752,17 @@
         public int IncompleteUploadCleanupDays { get; set; }
         public string? AuditWebhookUrl { get; set; }
         public bool AuditWebhookConfigured { get; set; }
+
+        // Outbound mail (#1337). No SmtpPassword: the server never sends it, only whether one is stored —
+        // a settings read is the easiest place in the product to leak a credential, and this DTO is where it
+        // would arrive if it ever did.
+        public string? SmtpHost { get; set; }
+        public int SmtpPort { get; set; }
+        public bool SmtpUseStartTls { get; set; }
+        public string? SmtpUser { get; set; }
+        public bool SmtpPasswordSet { get; set; }
+        public string? SmtpFromAddress { get; set; }
+        public string? SmtpFromName { get; set; }
         public int AuditWebhookConsecutiveFailures { get; set; }
         public DateTimeOffset? AuditWebhookLastSuccessAt { get; set; }
         public DateTimeOffset? AuditWebhookLastFailureAt { get; set; }
@@ -672,6 +793,16 @@
         public int IncompleteUploadCleanupDays { get; set; }
         public string? AuditWebhookUrl { get; set; }
         public string? AuditWebhookSecret { get; set; }
+
+        // Outbound mail (#1337). SmtpPassword is write-only and starts EMPTY on every edit: the server never
+        // returns it, so there is nothing to prefill — and an empty submission means "keep the stored one".
+        public string? SmtpHost { get; set; }
+        public int SmtpPort { get; set; } = 587;
+        public bool SmtpUseStartTls { get; set; }
+        public string? SmtpUser { get; set; }
+        public string? SmtpPassword { get; set; }
+        public string? SmtpFromAddress { get; set; }
+        public string? SmtpFromName { get; set; }
     }
 
     // Bytes → a human "N.N MB" / "N.N GB" for the storage-usage line (ADR "Per-tenant storage quota").

@@ -76,6 +76,11 @@ public partial class ExemptControllerShapeTests
         ["SavedSearchesController.cs"] = 3,
         ["SearchablePdfBackfillController.cs"] = 1,
         ["SensitivityLabelsController.cs"] = 4,
+        // Judged for the first time by #1337, which added the outbound-mail group and its test delivery. The
+        // verdict was re-read against the controller as it now stands rather than the number simply filled in:
+        // all ten PUTs and `recompute-storage` write the TENANT row, and the two test deliveries write nothing
+        // at all — so "reads only" remains true of the User pair the ledger judges.
+        ["TenantSettingsController.cs"] = 13,
         ["TenantsController.cs"] = 1,
         ["TokenController.cs"] = 1,
         ["TypedItemsController.cs"] = 2,

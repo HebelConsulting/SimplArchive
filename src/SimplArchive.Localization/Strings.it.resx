@@ -5235,4 +5235,52 @@
   <data name="EnrolLoadError" xml:space="preserve">
     <value>Non è stato possibile caricare l'elenco di ciò che può registrare.</value>
   </data>
+  <data name="TenantGroupOutboundMail" xml:space="preserve">
+    <value>Posta in uscita</value>
+  </data>
+  <data name="TenantSmtpInfo" xml:space="preserve">
+    <value>Il server attraverso cui vengono inviate le notifiche di questo tenant. Lasciare vuoto per usare l'account dell'installazione.</value>
+  </data>
+  <data name="TenantSmtpHost" xml:space="preserve">
+    <value>Server SMTP</value>
+  </data>
+  <data name="TenantSmtpPort" xml:space="preserve">
+    <value>Porta</value>
+  </data>
+  <data name="TenantSmtpStartTls" xml:space="preserve">
+    <value>Usa STARTTLS</value>
+  </data>
+  <data name="TenantSmtpUser" xml:space="preserve">
+    <value>Nome utente</value>
+  </data>
+  <data name="TenantSmtpPasswordLabel" xml:space="preserve">
+    <value>Password</value>
+  </data>
+  <data name="TenantSmtpPasswordKeep" xml:space="preserve">
+    <value>Password (lasciare vuoto per mantenere quella attuale)</value>
+  </data>
+  <data name="TenantSmtpPasswordSet" xml:space="preserve">
+    <value>È memorizzata una password.</value>
+  </data>
+  <data name="TenantSmtpPasswordNotSet" xml:space="preserve">
+    <value>Nessuna password memorizzata.</value>
+  </data>
+  <data name="TenantSmtpFromAddress" xml:space="preserve">
+    <value>Indirizzo mittente</value>
+  </data>
+  <data name="TenantSmtpFromName" xml:space="preserve">
+    <value>Nome mittente</value>
+  </data>
+  <data name="TenantSmtpUsingInstallation" xml:space="preserve">
+    <value>Si utilizza l'account dell'installazione.</value>
+  </data>
+  <data name="TenantSendTestMail" xml:space="preserve">
+    <value>Invia messaggio di prova</value>
+  </data>
+  <data name="StTestMailSent" xml:space="preserve">
+    <value>Messaggio di prova inviato tramite {0}.</value>
+  </data>
+  <data name="StTestMailFailed" xml:space="preserve">
+    <value>Impossibile inviare il messaggio di prova: {0}</value>
+  </data>
 </root>
