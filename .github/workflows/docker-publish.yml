@@ -78,3 +78,20 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          # ATTESTATIONS (#847, A08). Nothing attested what these images were built from: Trivy scans them,
+          # which answers "are there known CVEs in it" and not "where did this come from and what is in it".
+          # Those are the two questions a consumer of a published image has, and only the first had an answer.
+          #
+          # provenance mode=max records the build steps and their inputs, not merely that a build happened —
+          # which is what makes it useful for "was this image built from the tag it claims". Safe at max HERE
+          # because the only build-arg is VERSION; a secret passed as a build-arg would be recorded by it, so
+          # check that before adding one.
+          #
+          # sbom emits SPDX for the image's contents, which is what turns "is this CVE in our estate" from an
+          # archaeology exercise into a query.
+          #
+          # NO MANIFEST-SHAPE RISK, which is the usual reason people leave these off: attestations make the
+          # pushed manifest an OCI image index, and this build is ALREADY multi-arch, so it has been one all
+          # along. Nothing that can pull these images today stops being able to.
+          provenance: mode=max
+          sbom: true
