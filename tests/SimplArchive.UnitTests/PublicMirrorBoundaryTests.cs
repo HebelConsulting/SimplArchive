@@ -34,7 +34,7 @@ public class PublicMirrorBoundaryTests
     // so a guard that looks at five directories is not the same rule shifted left; it is a weaker one wearing its
     // name. Enumerating the tracked tree instead means a newly-added published path is in scope automatically.
     private static readonly string[] Withheld =
-        ["docs/", "tools/", "publish/", ".idea/", "CLAUDE.md", "README.md", "=",
+        ["docs/", "tools/", "publish/", ".idea/", ".claude/", "CLAUDE.md", "README.md", "=",
          ".github/workflows/private-tools.yml", ".github/workflows/abi-publish.yml",
          ".github/workflows/auto-publish.yml", ".github/dependabot.yml"];
 
