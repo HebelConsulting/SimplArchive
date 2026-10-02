@@ -126,6 +126,14 @@ rolls the Deployment automatically (the pod template changes). Secrets come from
 {{- end }}
 - name: App__TrustProxyHeaders
   value: {{ $trustProxy | quote }}
+{{- if .Values.config.app.knownProxyNetworks }}
+- name: App__KnownProxyNetworks
+  value: {{ .Values.config.app.knownProxyNetworks | quote }}
+{{- end }}
+{{- if .Values.config.app.knownProxies }}
+- name: App__KnownProxies
+  value: {{ .Values.config.app.knownProxies | quote }}
+{{- end }}
 - name: App__ApplyMigrationsAtStartup
   value: {{ .Values.config.app.applyMigrationsAtStartup | quote }}
 {{- /* poolOverride lets the migration Job ask for a smaller pool than the serving pods (#750). */}}

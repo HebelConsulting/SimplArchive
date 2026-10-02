@@ -111,4 +111,97 @@ public class ProductionReadinessValidatorTests
 
         Assert.DoesNotContain(ProductionReadinessValidator.Validate(config, new StubEnvironment(), StampedVersion), v => v.Contains("Postgres password"));
     }
+
+    // ---- Trust-any-proxy (#847, A05) -----------------------------------------------------------------
+
+    [Fact]
+    public void Trusting_forwarded_headers_without_naming_a_proxy_is_refused()
+    {
+        var config = Config(new(CleanProduction) { ["App:TrustProxyHeaders"] = "true" });
+
+        var violations = ProductionReadinessValidator.Validate(config, new StubEnvironment(), "1.2.3");
+
+        Assert.Contains(violations, v => v.Contains("ANY peer", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Naming_a_network_or_an_address_satisfies_it()
+    {
+        foreach (var named in new[]
+                 {
+                     ("App:KnownProxyNetworks", "10.0.0.0/8"),
+                     ("App:KnownProxies", "10.1.2.3"),
+                 })
+        {
+            var config = Config(new(CleanProduction)
+            {
+                ["App:TrustProxyHeaders"] = "true",
+                [named.Item1] = named.Item2,
+            });
+
+            Assert.Empty(ProductionReadinessValidator.Validate(config, new StubEnvironment(), "1.2.3"));
+        }
+    }
+
+    [Fact]
+    public void The_flag_being_OFF_needs_no_named_proxy()
+    {
+        // The refusal is on the COMBINATION. The chart turns the flag on with its Ingress, which is the normal
+        // production topology — refusing the flag itself would stop every such deployment from starting.
+        var config = Config(new(CleanProduction) { ["App:TrustProxyHeaders"] = "false" });
+
+        Assert.Empty(ProductionReadinessValidator.Validate(config, new StubEnvironment(), "1.2.3"));
+    }
+
+    [Fact]
+    public void An_entry_that_cannot_be_read_is_named_and_does_not_count_as_naming_a_proxy()
+    {
+        // The case worth a test of its own: a typo parses to nothing, which is INDISTINGUISHABLE from having
+        // named none — so without its own line an administrator fixing the typo would see the same refusal and
+        // conclude the fix had not worked.
+        var config = Config(new(CleanProduction)
+        {
+            ["App:TrustProxyHeaders"] = "true",
+            ["App:KnownProxyNetworks"] = "10.0.0.0/999",
+        });
+
+        var violations = ProductionReadinessValidator.Validate(config, new StubEnvironment(), "1.2.3");
+
+        Assert.Contains(violations, v => v.Contains("10.0.0.0/999", StringComparison.Ordinal));
+        Assert.Contains(violations, v => v.Contains("ANY peer", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_prefix_too_wide_for_its_family_is_rejected_rather_than_widening_the_trusted_set()
+    {
+        // /64 is a legitimate IPv6 prefix and a nonsense IPv4 one. Accepting it would trust far more than the
+        // administrator wrote, which is the one parsing mistake here that fails OPEN.
+        var config = Config(new(CleanProduction)
+        {
+            ["App:TrustProxyHeaders"] = "true",
+            ["App:KnownProxyNetworks"] = "10.0.0.0/64",
+        });
+
+        Assert.Contains(
+            ProductionReadinessValidator.Validate(config, new StubEnvironment(), "1.2.3"),
+            v => v.Contains("10.0.0.0/64", StringComparison.Ordinal));
+        Assert.Empty(ProxyTrust.KnownNetworks(config));
+    }
+
+    [Fact]
+    public void Several_entries_are_read_and_the_valid_ones_survive_an_invalid_neighbour()
+    {
+        // A bad entry must not discard its neighbours: the deployment would then trust nothing it named while
+        // the refusal above pointed only at the typo.
+        var config = Config(new()
+        {
+            ["App:KnownProxyNetworks"] = "10.0.0.0/8, not-a-network, fd00::/8",
+            ["App:KnownProxies"] = "10.1.2.3,::1",
+        });
+
+        Assert.Equal(2, ProxyTrust.KnownNetworks(config).Count());
+        Assert.Equal(2, ProxyTrust.KnownProxies(config).Count());
+        Assert.True(ProxyTrust.NamesAnyProxy(config));
+    }
 }
+

@@ -73,6 +73,33 @@ public static class ProductionReadinessValidator
             violations.Add("ObjectStorage:AccessKey/SecretKey are the known development MinIO credentials — use real object-storage credentials.");
         }
 
+        // TRUST-ANY-PROXY (#847, A05). These headers decide the scheme and host every generated URL carries and
+        // the address the credential throttle counts against (ADR 0716), so a deployment that believes any peer
+        // lets whoever can reach the process choose both. Empty lists are the DEV posture — right for the LAN
+        // stack this was built for, where the Api is reachable only through Caddy (ADR 0473), and wrong
+        // anywhere the pod or container can be reached directly.
+        //
+        // The refusal is on the COMBINATION, not on the flag: the chart turns TrustProxyHeaders on whenever its
+        // Ingress is enabled, which is the ordinary production topology, so refusing the flag itself would stop
+        // every such deployment from starting and leave no way to run behind an ingress at all.
+        if (configuration.GetValue<bool>("App:TrustProxyHeaders") && !ProxyTrust.NamesAnyProxy(configuration))
+        {
+            violations.Add(
+                $"App:TrustProxyHeaders is on but neither {ProxyTrust.ProxiesKey} nor {ProxyTrust.NetworksKey} "
+                + "names a proxy, so X-Forwarded-* would be believed from ANY peer — whoever can reach this "
+                + "process could choose the host its links carry and the address the sign-in throttle counts. "
+                + "Name the proxy or its network (the chart's config.app.knownProxyNetworks defaults to the pod "
+                + "CIDR).");
+        }
+
+        // A named entry that cannot be read is worth its own line, because it is INDISTINGUISHABLE from one
+        // never written: without this, fixing a typo would look like it had worked while the refusal above kept
+        // firing for a reason that names a different key.
+        foreach (var invalid in ProxyTrust.Invalid(configuration))
+        {
+            violations.Add($"{invalid} — it is ignored, so it narrows nothing.");
+        }
+
         // The development Postgres password, unless a credential source (OpenBao) is composing the connection.
         var connectionString = configuration["ConnectionStrings:Default"] ?? "";
         if (string.IsNullOrWhiteSpace(configuration["OpenBao:Address"])

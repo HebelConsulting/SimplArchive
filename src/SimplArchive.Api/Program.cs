@@ -762,18 +762,7 @@ using (var scope = app.Services.CreateScope())
 // the browser actually used, not the internal http ones. Gated on App:TrustProxyHeaders (default off, so
 // direct/local access + the test suite are unchanged); dev-only "trust any proxy" since the Api is only ever
 // reached through the proxy in that setup. Must run first so downstream sees the corrected scheme/host.
-if (app.Configuration.GetValue<bool>("App:TrustProxyHeaders"))
-{
-    var forwardedOptions = new Microsoft.AspNetCore.Builder.ForwardedHeadersOptions
-    {
-        ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor
-            | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto
-            | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedHost,
-    };
-    forwardedOptions.KnownIPNetworks.Clear();
-    forwardedOptions.KnownProxies.Clear();
-    app.UseForwardedHeaders(forwardedOptions);
-}
+SimplArchive.Api.Configuration.ProxyTrust.UseTrustedForwardedHeaders(app);
 
 // The browser-hardening headers, on every response including the static client files — so they must sit ahead
 // of UseBlazorFrameworkFiles/UseStaticFiles, not with the API middleware further down (ADR 0084, #844).

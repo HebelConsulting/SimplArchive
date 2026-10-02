@@ -24,6 +24,14 @@ config:
     # this the sign-in fails with a bare 400 because OpenIddict sees an insecure transport. Set it explicitly
     # only when the Service is published directly, or when a proxy fronts the app without this chart's Ingress.
     trustProxyHeaders: null
+    # WHICH proxy may set X-Forwarded-* (#847). Those headers decide the scheme and host every generated URL
+    # carries and the address the sign-in throttle counts against, so believing ANY peer lets whoever can reach
+    # a pod choose both — and outside Development the app REFUSES to start with trustProxyHeaders on and
+    # neither of these set. The default is the usual private range a cluster's pod CIDR falls in; narrow it to
+    # your actual CIDR, or name the ingress controller's addresses in knownProxies instead. Comma-separated.
+    # Get this wrong and sign-in fails with a bare 400, the same symptom as trustProxyHeaders being off.
+    knownProxyNetworks: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fd00::/8"
+    knownProxies: ""
     # Leave false in production and run migrations as a one-off step; with multiple replicas, startup migration
     # would race. See docs/deploy/README.md.
     applyMigrationsAtStartup: false
