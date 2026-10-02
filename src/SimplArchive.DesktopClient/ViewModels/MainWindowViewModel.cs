@@ -1090,7 +1090,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         return new FolderPickerViewModel(_api, context, bulk: true);
     }
 
-    // ---- Search (metadata, ADR "Metadata search (first slice)") ---------------------------------------
 
     // ---- Refinement panel (ADR "Search-refinement UI", phase 2) ---------------------------------------
 
@@ -1435,89 +1434,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
 
     // The corner: current user's DisplayName + photo (or initials); the email that used to show here is gone.
     [ObservableProperty][NotifyPropertyChangedFor(nameof(UserInitials))] private string _userDisplayName = string.Empty;
-    // ---- Workflow + tasks (ADR "Workflow / document state model", 0009) -------------------------------
-    // ---- In-app notifications bell (ADR "Notification viewer + click-through") -----------------------
-
-    // ---- Tag catalog admin (ADR "Tag controlled vocabulary") --------------------------------------------
-    public ObservableCollection<TagCatalogRow> TagCatalogAdmin { get; } = [];
-    [ObservableProperty] private string _newTagName = string.Empty;
-    [ObservableProperty] private string _newTagColor = string.Empty;
-
-    private async Task LoadTagCatalogAsync()
-    {
-        if (_api is null)
-        {
-            return;
-        }
-
-        TagCatalogAdmin.Clear();
-        try
-        {
-            foreach (var t in (await _api.Documents.GetTagCatalogWithColorsAsync()).Items)
-            {
-                TagCatalogAdmin.Add(new TagCatalogRow(t));
-            }
-        }
-        catch (Exception) { /* not readable */ }
-    }
-
-    [RelayCommand]
-    private async Task CreateTag()
-    {
-        if (_api is null || string.IsNullOrWhiteSpace(NewTagName))
-        {
-            return;
-        }
-
-        try
-        {
-            await _api.Documents.CreateTagAsync(NewTagName.Trim(), string.IsNullOrWhiteSpace(NewTagColor) ? null : NewTagColor.Trim());
-            NewTagName = string.Empty;
-            NewTagColor = string.Empty;
-            await LoadTagCatalogAsync();
-        }
-        catch (Exception e) { Status = e is ApiActionException a ? a.Message : "Could not add the tag."; }
-    }
-
-    [RelayCommand]
-    private async Task SaveTag(TagCatalogRow? row)
-    {
-        if (_api is null || row is null)
-        {
-            return;
-        }
-
-        try
-        {
-            await _api.Documents.UpdateTagAsync(row.Source, row.Name.Trim(), string.IsNullOrWhiteSpace(row.Color) ? "" : row.Color!.Trim());
-            await LoadTagCatalogAsync();
-        }
-        catch (Exception e) { Status = e is ApiActionException a ? a.Message : "Could not update the tag."; }
-    }
-
-    [RelayCommand]
-    private async Task RetireTag(TagCatalogRow? row)
-    {
-        if (_api is null || row is null)
-        {
-            return;
-        }
-
-        try { await _api.Documents.RetireTagAsync(row.Source); await LoadTagCatalogAsync(); }
-        catch (Exception e) { Status = e is ApiActionException a ? a.Message : "Could not retire the tag."; }
-    }
-
-    [RelayCommand]
-    private async Task MergeTag(TagCatalogRow? row)
-    {
-        if (_api is null || row?.MergeTarget is not { } target || target.Id == row.Id)
-        {
-            return;
-        }
-
-        try { await _api.Documents.MergeTagAsync(row.Source, target.Id); await LoadTagCatalogAsync(); }
-        catch (Exception e) { Status = e is ApiActionException a ? a.Message : "Could not merge the tags."; }
-    }
 
     private void ClearDetail()
     {

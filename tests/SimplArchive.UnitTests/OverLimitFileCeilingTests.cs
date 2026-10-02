@@ -269,7 +269,9 @@ public class OverLimitFileCeilingTests
         // each of them -- more lines in this file, not fewer. One is code; four are the comment saying why a
         // bare assignment to a status line is there, without which it is exactly the kind of line a later
         // reader tidies away.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 1568,
+        // 1568 -> 1484 (#941): the tag-catalog admin moved to its own partial, and three banners that
+        // described NOTHING went with it — each naming a feature whose code had already left.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 1484,
 
         // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
         // the one authenticated ApiCore. Four areas left it:
