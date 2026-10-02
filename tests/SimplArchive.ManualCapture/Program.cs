@@ -5,14 +5,20 @@ using SimplArchive.ManualCapture;
 //
 //   dotnet run --project tests/SimplArchive.ManualCapture -- [--desktop] [--web] [--out <dir>]
 //
-//   --desktop   capture the Avalonia desktop screens (cheap, self-contained — the PR gate)
-//   --web       capture the Blazor web screens (heavy — Testcontainers + Chrome; main only)
+//   --desktop        capture the Avalonia desktop screens from the FIXTURE (cheap, self-contained — the PR gate)
+//   --desktop-live    capture the desktop screens classified Capture.Live against the real seeded app (#1358;
+//                     Testcontainers, no Chrome; main only). What the PUBLISHED manual uses for those screens.
+//   --web            capture the Blazor web screens (heavy — Testcontainers + Chrome; main only)
 //   (neither)   capture both
 //   --out <dir> output directory (default: manual/screenshots)
 
+var desktopLive = args.Contains("--desktop-live");
+// `--desktop` is a prefix of `--desktop-live`, so ask for the exact flag: Contains on the array is an exact
+// match per element, but reading it as "the desktop path" when only --desktop-live was given would run the
+// fixture capture too and OVERWRITE the live figure with the fixture one — silently, and in that order.
 var desktop = args.Contains("--desktop");
 var web = args.Contains("--web");
-if (!desktop && !web)
+if (!desktop && !web && !desktopLive)
 {
     desktop = web = true;
 }
@@ -27,6 +33,13 @@ Console.WriteLine($"[manual-capture] output → {outDir}");
 if (desktop)
 {
     await DesktopCapture.RunAsync(outDir);
+}
+
+// AFTER the fixture pass, deliberately: where both run, the live figure is the one that must survive, and the
+// published manual's screens are the live ones.
+if (desktopLive)
+{
+    await LiveDesktopCapture.RunAsync(outDir);
 }
 
 if (web)

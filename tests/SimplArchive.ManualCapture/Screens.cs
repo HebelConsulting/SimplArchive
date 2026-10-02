@@ -8,7 +8,30 @@ namespace SimplArchive.ManualCapture;
 // extra CLI args appended after `--screenshot <out> --demo`. `Window` selects a dedicated-window hook instead.
 // `Pdf` (a repo-relative path) is passed as `--pdf`, so a real PDF renders in the preview pane instead of the
 // placeholder text.
-public sealed record DesktopScreen(string Name, string[] Flags, DesktopWindow Window = DesktopWindow.Main, string? Pdf = null);
+public sealed record DesktopScreen(
+    string Name,
+    string[] Flags,
+    DesktopWindow Window = DesktopWindow.Main,
+    string? Pdf = null,
+    Capture Capture = Capture.Fixture,
+    string? WhyFixture = null);
+
+/// <summary>Where a published desktop figure's DATA comes from (#1358).</summary>
+public enum Capture
+{
+    /// <summary>
+    /// A hand-written populator in the client's own screenshot hooks. Fast and Docker-free — and unable to
+    /// fail when the product moves, which is the whole reason this enum exists. Every one of these must say
+    /// WHY in <c>WhyFixture</c>, so a fixture screen can never be mistaken for a live one.
+    /// </summary>
+    Fixture,
+
+    /// <summary>
+    /// Captured against the real seeded app, like every web figure. The figure then cannot describe a dataset
+    /// the product does not have.
+    /// </summary>
+    Live,
+}
 
 public enum DesktopWindow
 {
@@ -29,30 +52,30 @@ public static class Screens
     // Desktop — the Avalonia fat client. Each maps to an existing demo populator in DesktopClient/Program.cs.
     public static readonly IReadOnlyList<DesktopScreen> Desktop =
     [
-        new("logon", [], DesktopWindow.Logon),
-        new("workbench", [], Pdf: "src/SimplArchive.Api/DemoData/sample-invoice.pdf"),
-        new("search", ["--search"]),
-        new("search-hit-overlay", ["--hitoverlay", "--fullscreen"]),
-        new("intray", ["--intray"]),
-        new("tasks", ["--workflow", "--tasks"]),
-        new("users", ["--users"]),
-        new("audit", ["--audit"]),
-        new("recycle-bin", ["--recyclebin"]),
-        new("tenant", ["--tenant"]),
-        new("checkout", ["--checkout"]),
-        new("server-manager", [], DesktopWindow.Servers),
+        new("logon", [], DesktopWindow.Logon, WhyFixture: "Pre-authentication by definition — there is no session to drive it from."),
+        new("workbench", [], Pdf: "src/SimplArchive.Api/DemoData/sample-invoice.pdf", Capture: Capture.Live),
+        new("search", ["--search"], WhyFixture: "Needs a query whose hits are stable; live search ordering is the next slice."),
+        new("search-hit-overlay", ["--hitoverlay", "--fullscreen"], WhyFixture: "Needs OCR word boxes for a specific page — the heaviest live surface, deliberately last."),
+        new("intray", ["--intray"], WhyFixture: "Needs scanned pages staged in the intray, which the seed does not file."),
+        new("tasks", ["--workflow", "--tasks"], WhyFixture: "Needs workflow tasks assigned to the captured user; the seed creates none."),
+        new("users", ["--users"], WhyFixture: "Live-capturable; not yet migrated (this slice is the workbench only)."),
+        new("audit", ["--audit"], WhyFixture: "Needs audit entries whose timestamps would churn the figure on every run."),
+        new("recycle-bin", ["--recyclebin"], WhyFixture: "Needs soft-deleted documents, which the seed does not leave behind."),
+        new("tenant", ["--tenant"], WhyFixture: "Live-capturable; not yet migrated (this slice is the workbench only)."),
+        new("checkout", ["--checkout"], WhyFixture: "Needs a document checked out BY the captured user."),
+        new("server-manager", [], DesktopWindow.Servers, WhyFixture: "A pre-session window over local configuration — no app to capture from."),
         // The sort & rotate dialog over the checked-in sample batch — its mis-rotated page 4 shown mid-fix,
         // which is the figure the manual's page-operations section stands on (#527).
-        new("sort-rotate", [], DesktopWindow.SortDialog, Pdf: "src/SimplArchive.Api/wwwroot/download/samples/SimplArchive-Patch3-Sample-Batch.pdf"),
-        new("contacts", ["--contacts"]),
-        new("calendar", ["--calendar"]),
+        new("sort-rotate", [], DesktopWindow.SortDialog, Pdf: "src/SimplArchive.Api/wwwroot/download/samples/SimplArchive-Patch3-Sample-Batch.pdf", WhyFixture: "A dialog over a fixed sample batch; its mis-rotated page is what the figure is of."),
+        new("contacts", ["--contacts"], WhyFixture: "Live-capturable; not yet migrated (this slice is the workbench only)."),
+        new("calendar", ["--calendar"], WhyFixture: "Live-capturable; not yet migrated, and dated rows need the frozen clock honoured."),
         // The structured contact editor with the "Advanced: the stored item" disclosure OPEN. Its own window,
         // because neither of the two tabs above can show it — and the disclosure is the part of this feature a
         // reader is least likely to guess at, since its whole point is the properties the form does not show.
-        new("contact-editor", [], DesktopWindow.ContactDialog),
+        new("contact-editor", [], DesktopWindow.ContactDialog, WhyFixture: "A dialog with its raw disclosure open; no list view can show it."),
         // The Bookings… dialog on a meeting room — reservations above, the new-booking row below, times TYPED.
         // Synthetic fixed-date rows (WindowShots.cs), so the figure does not churn with the calendar.
-        new("bookings", [], DesktopWindow.BookingDialog),
+        new("bookings", [], DesktopWindow.BookingDialog, WhyFixture: "Deliberately synthetic fixed-date rows, so the figure does not churn with the calendar."),
     ];
 
     // Web — the Blazor workbench. Tab labels match the bottom tab bar (.wb-tab). The demo admin holds every right,

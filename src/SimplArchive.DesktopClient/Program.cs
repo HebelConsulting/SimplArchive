@@ -419,6 +419,17 @@ internal static class Program
             return;
         }
 
+        // The manual's LIVE workbench figure, rendered against a running app (#1358):
+        // `--live-screenshot <out.png> <baseUrl> <accessToken>`. Sibling of --screenshot, whose fixture path
+        // stays as the PR gate's Docker-free render smoke; this one is what the published manual uses.
+        var liveShotIndex = Array.IndexOf(args, "--live-screenshot");
+        if (liveShotIndex >= 0 && liveShotIndex + 3 < args.Length)
+        {
+            Views.ScreenshotRenderer.RenderLive(
+                args[liveShotIndex + 1], args[liveShotIndex + 2], args[liveShotIndex + 3]);
+            return;
+        }
+
         // Headless test of the PDF->bitmap preview pipeline (Docnet/PDFium -> Avalonia): `--render-pdf <in.pdf> <out.png>`.
         var renderPdfIndex = Array.IndexOf(args, "--render-pdf");
         if (renderPdfIndex >= 0 && renderPdfIndex + 2 < args.Length)

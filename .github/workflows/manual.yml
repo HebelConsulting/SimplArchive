@@ -152,6 +152,16 @@ jobs:
         if: ${{ github.event_name == 'push' }}
         run: dotnet run --project tests/SimplArchive.ManualCapture --no-build -- --web
 
+      # The desktop screens classified Capture.Live, against the same real seeded app (#1358) — so the PUBLISHED
+      # desktop figures stop coming from a hand-written fixture that cannot fail when the product moves. Needs
+      # Docker and no Chrome, and Docker is already up for the step above: incremental cost, not new cost.
+      #
+      # AFTER the fixture pass deliberately. The fixture step above writes every desktop PNG including the live
+      # ones, so this must overwrite them rather than be overwritten — the published figure is the live one.
+      - name: Capture desktop screens from the live app
+        if: ${{ github.event_name == 'push' }}
+        run: dotnet run --project tests/SimplArchive.ManualCapture --no-build -- --desktop-live
+
       # A regenerated PNG whose every pixel is within ±1 of the committed one is raster noise, not a change
       # (#832) — revert those BEFORE the compile, so neither the PNG nor the PDF that embeds it re-commits
       # over nothing. A real UI change moves pixels by far more and still commits.

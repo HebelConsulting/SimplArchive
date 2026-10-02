@@ -1,9 +1,11 @@
+using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Avalonia.LogicalTree;
+using SimplArchive.DesktopClient.Services;
 using SimplArchive.DesktopClient.ViewModels;
 
 namespace SimplArchive.DesktopClient.Views;
@@ -34,6 +36,88 @@ namespace SimplArchive.DesktopClient.Views;
 /// </remarks>
 internal static class ScreenshotRenderer
 {
+    /// <summary>
+    /// Renders the workbench from a RUNNING app (#1358): <c>--live-screenshot &lt;out&gt; &lt;baseUrl&gt; &lt;token&gt;</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The published manual's figure comes from here; <see cref="Render"/>'s fixture path stays as the PR gate's
+    /// Docker-free render smoke. Both produce a PNG of the same screen, and only one of them can be wrong about
+    /// what the product does.
+    /// </para>
+    /// <para>
+    /// <b>It pumps rather than awaits, and that is forced.</b> The selection that loads the detail, preview and
+    /// comment thread is a property-changed hook firing through <c>Safe.Fire</c> — a setter cannot be awaited —
+    /// so there is no Task to wait on. So: run the dispatcher, ask the view-model whether the panes arrived, and
+    /// FAIL on timeout rather than capturing a half-loaded screen. A figure of a spinner is worse than no
+    /// figure, because it looks like the product.
+    /// </para>
+    /// </remarks>
+    internal static void RenderLive(string path, string baseUrl, string accessToken)
+    {
+        AppBuilder.Configure<App>()
+            .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+            .UseSkia()
+            .WithInterFont()
+            .SetupWithoutStarting();
+
+        // Every per-area client reads this (ApiCore), so it must be set before the first one is constructed.
+        DesktopClientOptions.ApiBaseUrl = baseUrl.TrimEnd('/');
+
+        var viewModel = new MainWindowViewModel();
+        PumpUntil(viewModel.PopulateWorkbenchFromLiveAppAsync(accessToken), TimeSpan.FromMinutes(2),
+            "signing in and opening the repository");
+
+        var window = new MainWindow { DataContext = viewModel };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        // The selection's own loads land after the first arrange, so the wait is here rather than before Show():
+        // the panes have to be populated AND laid out before the frame is worth anything.
+        PumpUntil(() => viewModel.LiveShotPanesArrived, TimeSpan.FromMinutes(2),
+            $"the detail pane to show '{MainWindowViewModel.LiveShotDocument}'");
+
+        var frame = window.CaptureRenderedFrame()
+            ?? throw new InvalidOperationException(
+                "The headless platform produced no frame, so no figure was written. A capture that silently "
+                + "wrote nothing is how a stale PNG ships (the skipped-capture lesson).");
+
+        frame.Save(path);
+        Console.WriteLine($"live capture → {path}");
+    }
+
+    /// <summary>Runs the dispatcher until <paramref name="task"/> completes, surfacing its failure.</summary>
+    private static void PumpUntil(Task task, TimeSpan timeout, string what)
+    {
+        PumpUntil(() => task.IsCompleted, timeout, what);
+
+        // GetAwaiter().GetResult() rather than .Wait(), so a server refusal arrives as itself rather than
+        // wrapped in an AggregateException whose message names nothing.
+        task.GetAwaiter().GetResult();
+    }
+
+    private static void PumpUntil(Func<bool> done, TimeSpan timeout, string what)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (!done())
+        {
+            Dispatcher.UIThread.RunJobs();
+            if (DateTime.UtcNow > deadline)
+            {
+                // Loudly, with the elapsed budget named: a capture that times out silently and writes a PNG of
+                // whatever had arrived is how a manual comes to show a half-loaded screen.
+                throw new TimeoutException(
+                    $"Live capture gave up after {timeout.TotalSeconds:N0}s waiting for {what}. The app is "
+                    + "reachable (the token was accepted) or this would have failed differently — so something "
+                    + "the figure needs never arrived.");
+            }
+
+            Thread.Sleep(25);
+        }
+
+        Dispatcher.UIThread.RunJobs();
+    }
+
     internal static void Render(string path, bool demo, string? pdfPath = null)
     {
         AppBuilder.Configure<App>()
