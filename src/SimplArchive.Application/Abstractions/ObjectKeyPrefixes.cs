@@ -47,6 +47,18 @@ public static class ObjectKeyPrefixes
     /// <summary>A user's WebDAV scratch area: <c>tenants/{tenantId}/users/{userId}/temp/</c>.</summary>
     public static string UserTemp(Guid tenantId, Guid userId) => $"{User(tenantId, userId)}temp/";
 
+    /// <summary>
+    /// Where the conditional-write capability probe writes its throwaway object (#1427).
+    /// </summary>
+    /// <remarks>
+    /// TENANT-ROOTED like everything else, because the bucket is derived from the key (<c>BucketFor</c>) and a
+    /// key that is not would resolve to no bucket at all — even though the probe is about the STORE rather
+    /// than about any tenant's data. It deliberately sits outside <c>UserInbox</c>: a probe object inside an
+    /// intray would be listed by the very sweep it exists to enable, and briefly shown to the user as a file
+    /// they did not put there.
+    /// </remarks>
+    public static string CapabilityProbe(Guid tenantId) => $"{Tenant(tenantId)}.probe/";
+
     /// <summary>A user's WebDAV check-out scratch: <c>tenants/{tenantId}/users/{userId}/checkout-scratch/</c>.</summary>
     public static string UserCheckoutScratch(Guid tenantId, Guid userId) => $"{User(tenantId, userId)}checkout-scratch/";
 

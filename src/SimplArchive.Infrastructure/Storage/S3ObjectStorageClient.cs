@@ -435,6 +435,70 @@ public class S3ObjectStorageClient : IObjectStorageClient
     public Task PutObjectAsync(string objectKey, Stream content, string contentType, CancellationToken cancellationToken = default) =>
         PutObjectAsync(objectKey, content, contentType, metadata: new Dictionary<string, string>(), cancellationToken);
 
+    /// <summary>Compare-and-set overwrite — lease renewal and takeover (#1427).</summary>
+    public async Task<bool> TryPutIfMatchAsync(string objectKey, string eTag, Stream content, string contentType,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _internalClient.PutObjectAsync(
+                new PutObjectRequest
+                {
+                    BucketName = BucketFor(objectKey),
+                    Key = objectKey,
+                    InputStream = content,
+                    ContentType = contentType,
+                    AutoCloseStream = false,
+                    // The SDK wants the quoted form S3 returns; a caller holding a listing's ETag may have
+                    // either, so normalise here rather than at four call sites.
+                    IfMatch = eTag.StartsWith('"') ? eTag : $"\"{eTag}\"",
+                },
+                cancellationToken);
+
+            return true;
+        }
+        catch (AmazonS3Exception e) when (e.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+        {
+            // Somebody changed it since we looked: a renewal that lost its lease, or a takeover that lost the
+            // race. Both are ordinary.
+            return false;
+        }
+    }
+
+    /// <summary>Conditional write — the storage-side claim the intray ingest sweep needs (#1427).</summary>
+    /// <remarks>
+    /// <c>If-None-Match: *</c> is the S3 precondition for "only if absent". The loser gets 412, which is the
+    /// ORDINARY outcome here (another instance claimed the file), so it is translated to false rather than
+    /// allowed to surface as an exception.
+    /// </remarks>
+    public async Task<bool> TryPutIfAbsentAsync(string objectKey, Stream content, string contentType,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Claiming object {ObjectKey} with a conditional write.", objectKey);
+        try
+        {
+            await _internalClient.PutObjectAsync(
+                new PutObjectRequest
+                {
+                    BucketName = BucketFor(objectKey),
+                    Key = objectKey,
+                    InputStream = content,
+                    ContentType = contentType,
+                    AutoCloseStream = false,
+                    IfNoneMatch = "*",
+                },
+                cancellationToken);
+
+            return true;
+        }
+        catch (AmazonS3Exception e) when (e.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+        {
+            // Somebody else holds the claim. Not an error: it is how exclusion reports itself.
+            _logger.LogDebug("Object {ObjectKey} is already claimed by another instance.", objectKey);
+            return false;
+        }
+    }
+
     public async Task PutObjectAsync(string objectKey, Stream content, string contentType,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
     {

@@ -270,6 +270,10 @@ public static class DependencyInjection
         services.AddScoped<Notifications.TenantSmtpSettingsResolver>();
         services.AddScoped<IEmailSender, Notifications.SmtpEmailSender>();
         services.AddHostedService<Notifications.EmailNotificationWorker>();
+
+        // One answer per process, so the probe is a singleton: it measures the STORE, which does not
+        // change under a running app, and a scoped one would re-probe on every sweep.
+        services.AddSingleton<Intray.ConditionalWriteProbe>();
         services.AddScoped<IWellKnownMaskSeeder, WellKnownMaskSeeder>();
 
         // Search (ADR 0011/0249): OpenSearch full-text when OpenSearch:Url is configured, else the Postgres

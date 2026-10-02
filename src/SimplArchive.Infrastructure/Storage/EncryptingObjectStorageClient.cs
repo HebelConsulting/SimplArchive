@@ -48,6 +48,31 @@ public sealed class EncryptingObjectStorageClient(
     public Task PutObjectAsync(string objectKey, Stream content, string contentType, CancellationToken cancellationToken = default) =>
         PutObjectAsync(objectKey, content, contentType, new Dictionary<string, string>(), cancellationToken);
 
+    /// <summary>The conditional claim write (#1427) — passed straight through, deliberately unencrypted.</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A claim carries no content, by construction.</b> Its body is empty and all of its meaning is in the
+    /// KEY, which is the one part no encryption touches — so there is nothing here to protect and nothing a
+    /// reader could learn from the bytes that the key does not already say.
+    /// </para>
+    /// <para>
+    /// <b>Encrypting it would have been actively wrong, which is worth recording.</b> The first version of this
+    /// method did: it minted a DEK and wrote the ciphertext. But the conditional overload carries no metadata
+    /// dictionary, so the wrapped DEK had nowhere to ride — leaving an object that IS ciphertext while carrying
+    /// none of the metadata this decorator's read path uses to know that. It would have been written
+    /// successfully and been unreadable, and the mixed state it created is exactly what
+    /// <c>GetPresignedCiphertextUrlAsync</c> has to refuse. An empty object needs no key.
+    /// </para>
+    /// </remarks>
+    public Task<bool> TryPutIfAbsentAsync(string objectKey, Stream content, string contentType,
+        CancellationToken cancellationToken = default) =>
+        inner.TryPutIfAbsentAsync(objectKey, content, contentType, cancellationToken);
+
+    /// <summary>Lease renewal/takeover, passed through for the same reason as the claim above.</summary>
+    public Task<bool> TryPutIfMatchAsync(string objectKey, string eTag, Stream content, string contentType,
+        CancellationToken cancellationToken = default) =>
+        inner.TryPutIfMatchAsync(objectKey, eTag, content, contentType, cancellationToken);
+
     public async Task PutObjectAsync(string objectKey, Stream content, string contentType,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
     {

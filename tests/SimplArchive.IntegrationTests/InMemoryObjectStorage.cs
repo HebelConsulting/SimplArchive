@@ -20,6 +20,56 @@ internal sealed class InMemoryObjectStorage : IObjectStorageClient
 {
     public Dictionary<string, byte[]> Objects { get; } = [];
 
+    /// <summary>When set, conditional writes are ACCEPTED unconditionally — a store that ignores the header.</summary>
+    /// <remarks>
+    /// The case ConditionalWriteProbe exists to catch (#1427), and the only way to test it: a store that
+    /// refuses conditional writes fails loudly, while one that ignores them answers 200 to every writer and
+    /// silently provides no exclusion at all.
+    /// </remarks>
+    public bool IgnoresConditionalWrites { get; set; }
+
+    /// <summary>Per-key version counter, standing in for an ETag so compare-and-set can be exercised.</summary>
+    private readonly Dictionary<string, int> _versions = [];
+
+    /// <summary>Last-modified per key, settable so a test can age a claim without waiting.</summary>
+    public Dictionary<string, DateTimeOffset> Modified { get; } = [];
+
+    public Task<bool> TryPutIfAbsentAsync(string objectKey, Stream content, string contentType,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IgnoresConditionalWrites && Objects.ContainsKey(objectKey))
+        {
+            return Task.FromResult(false);
+        }
+
+        Write(objectKey, content);
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> TryPutIfMatchAsync(string objectKey, string eTag, Stream content, string contentType,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IgnoresConditionalWrites && ETagOf(objectKey) != eTag)
+        {
+            return Task.FromResult(false);
+        }
+
+        Write(objectKey, content);
+        return Task.FromResult(true);
+    }
+
+    public string ETagOf(string objectKey) =>
+        _versions.TryGetValue(objectKey, out var v) ? v.ToString() : string.Empty;
+
+    private void Write(string objectKey, Stream content)
+    {
+        using var buffer = new MemoryStream();
+        content.CopyTo(buffer);
+        Objects[objectKey] = buffer.ToArray();
+        _versions[objectKey] = _versions.TryGetValue(objectKey, out var v) ? v + 1 : 1;
+        Modified[objectKey] = DateTimeOffset.UtcNow;
+    }
+
     // 1-based index of the upload that should throw; 0 disables. Stands in for the store going away partway
     // through — a network drop, a full disk, an expired credential.
     public int FailOnPut { get; set; }
@@ -72,7 +122,14 @@ internal sealed class InMemoryObjectStorage : IObjectStorageClient
     public Task<IReadOnlyList<StorageObject>> ListObjectsAsync(string prefix, CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<StorageObject>>(
             Objects.Where(o => o.Key.StartsWith(prefix, StringComparison.Ordinal))
-                .Select(o => new StorageObject(o.Key, o.Value.Length, DateTimeOffset.UnixEpoch))
+                // UnixEpoch unless a conditional write recorded a real timestamp — so every test written
+                // before leases existed keeps the "very old" listing it was written against (the ingest
+                // sweep's arrival window reads this), while a claim object reports when it was actually taken.
+                .Select(o => new StorageObject(
+                    o.Key,
+                    o.Value.Length,
+                    Modified.TryGetValue(o.Key, out var when) ? when : DateTimeOffset.UnixEpoch,
+                    ETagOf(o.Key)))
                 .ToList());
 
     // Presigned URLs are never fetched by these tests — nothing runs an HTTP client against them — so a constant

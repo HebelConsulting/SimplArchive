@@ -183,6 +183,73 @@ public interface IObjectStorageClient
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default) =>
         PutObjectAsync(objectKey, content, contentType, cancellationToken);
 
+    /// <summary>
+    /// Writes an object ONLY if that key does not already exist, and reports whether this caller wrote it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Mutual exclusion for a sweep whose state lives in storage</b> (#1427). Every other periodic sweep
+    /// claims its work with one <c>ExecuteUpdate</c> that compare-and-swaps a database column, so the database
+    /// picks the winner (ADR 0836). The intray ingest sweep cannot: its "already done" marker is an OBJECT, and
+    /// list-then-put is two operations that no read-after-write consistency makes atomic. Two instances both
+    /// listed before either wrote, so one dropped file became two documents — a duplicate the user explains to
+    /// themselves as having dropped it twice.
+    /// </para>
+    /// <para>
+    /// <b>Returns false rather than throwing</b>, because losing is the ordinary case: another instance got
+    /// there first and this one has nothing to do. An exception would make the normal path the exceptional one.
+    /// </para>
+    /// <para>
+    /// <b>Not every S3-compatible store honours this</b>, and the failure is silent: a store that IGNORES
+    /// <c>If-None-Match</c> answers 200 to both writers and restores the duplicate exactly. So the capability is
+    /// PROBED before the sweep is allowed to run — see <c>ConditionalWriteProbe</c>. Measured on the pinned
+    /// SeaweedFS: the second conditional write answers 412 and the first writer's bytes survive.
+    /// </para>
+    /// </remarks>
+    /// <remarks>
+    /// Defaulted so the test fakes that implement this interface keep compiling — but defaulted to a REFUSAL
+    /// rather than to a plain write. A default that just wrote would hand every fake the appearance of mutual
+    /// exclusion while providing none, which is the failure this method exists to remove, reproduced in the
+    /// one place nobody would look for it.
+    /// </remarks>
+    Task<bool> TryPutIfAbsentAsync(string objectKey, Stream content, string contentType,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException(
+            $"{GetType().Name} does not implement conditional writes, so it cannot be used where one claim must "
+            + "exclude another (#1427). Implement TryPutIfAbsentAsync with real exclusion semantics.");
+
+    /// <summary>
+    /// Overwrites an object ONLY if it still carries <paramref name="eTag"/>, and reports whether it did.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The other half of the storage-side lease (#1427). <see cref="TryPutIfAbsentAsync"/> decides who takes an
+    /// UNHELD claim; this decides who may touch one that is already held — which is needed twice: the holder
+    /// renews its own lease with it, and another instance takes over a lease whose holder has gone.
+    /// </para>
+    /// <para>
+    /// <b>Why a conditional overwrite rather than delete-then-create.</b> Deleting a stale claim and racing to
+    /// re-create it looks equivalent and is not: a slow reclaimer's DELETE can land AFTER a third instance has
+    /// already created a fresh claim, wiping it, after which both believe they hold the lease — the duplicate
+    /// this whole issue is about, reintroduced by its own fix. Conditioning on the exact ETag the reclaimer
+    /// SAW makes that unrepresentable.
+    /// </para>
+    /// <para>
+    /// <b>It is also how a holder learns it was dispossessed.</b> A renewal that returns false means somebody
+    /// judged this lease stale and took it, so the holder must abandon its work rather than finish and write a
+    /// second document.
+    /// </para>
+    /// <para>
+    /// Measured on the pinned SeaweedFS: overwriting with the current ETag answers 200, with a stale one 412,
+    /// and the refused write leaves the object alone.
+    /// </para>
+    /// </remarks>
+    Task<bool> TryPutIfMatchAsync(string objectKey, string eTag, Stream content, string contentType,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException(
+            $"{GetType().Name} does not implement conditional overwrites, so it cannot arbitrate a lease "
+            + "takeover (#1427). Implement TryPutIfMatchAsync with real compare-and-set semantics.");
+
     // Lists every object under a key prefix — the S3-backed intray (`{tenantId}/users/{userId}/inbox/`) enumerates
     // itself this way. See ADR "S3-backed inbox".
     Task<IReadOnlyList<StorageObject>> ListObjectsAsync(string prefix, CancellationToken cancellationToken = default);

@@ -79,6 +79,12 @@ public sealed class IntrayIngestSweepWorker(
         var storage = scope.ServiceProvider.GetRequiredService<IObjectStorageClient>();
         var pipeline = scope.ServiceProvider.GetRequiredService<IntrayIngestPipeline>();
 
+        // REFUSED WITHOUT WORKING CONDITIONAL WRITES (#1427). The sweep's exclusion is a claim object taken
+        // with If-None-Match; a store that ignores that header answers 200 to every instance and each one
+        // ingests the same file, filing it as that many documents. Probed once, and the probe logs Fatal with
+        // the remedy — stopping loudly is recoverable, silently duplicating everything is not.
+        var probe = scope.ServiceProvider.GetRequiredService<ConditionalWriteProbe>();
+
         // Every active user's own intray. The listing IS the emptiness check, so there is no cheaper pre-filter
         // to apply first — which is also why this polls in minutes rather than seconds.
         var users = await dbContext.Users
@@ -86,6 +92,16 @@ public sealed class IntrayIngestSweepWorker(
             .Where(u => u.IsActive)
             .Select(u => new { u.Id, u.TenantId })
             .ToListAsync(cancellationToken);
+
+        // The probe needs a tenant to root its key against (the bucket is derived from the key), so it runs
+        // with the first tenant this sweep is about to touch. The answer is cached after the first call, so
+        // this costs two writes once per process rather than once per sweep.
+        if (users.Count > 0
+            && !await probe.SupportedAsync(
+                Application.Abstractions.ObjectKeyPrefixes.CapabilityProbe(users[0].TenantId), cancellationToken))
+        {
+            return;
+        }
 
         foreach (var user in users)
         {
@@ -108,7 +124,33 @@ public sealed class IntrayIngestSweepWorker(
                     continue;
                 }
 
+                // CLAIM BEFORE INGESTING (#1427). Both instances list before either writes anything, so the
+                // marker check above cannot exclude anything on its own — it is a read-then-act, and the
+                // result was one dropped file becoming two documents. The lease is a separate object taken
+                // with a conditional create, so the storage layer picks the winner.
+                var claimKey = $"{prefix}{name}{IntrayIngestLease.ClaimSuffix}";
+                await using var lease = await IntrayIngestLease.TryAcquireAsync(
+                    storage, logger, claimKey,
+                    objects.FirstOrDefault(o => o.Key == claimKey),
+                    TimeProvider.System, cancellationToken);
+
+                if (lease is null)
+                {
+                    continue; // another instance holds a live lease on this item
+                }
+
                 var processed = await pipeline.RunAsync(user.TenantId, user.Id, prefix, name, cancellationToken);
+
+                // DISPOSSESSED WHILE WORKING: another instance judged this lease stale and took the item, so
+                // it is already being ingested elsewhere and anything written here is the second copy. The
+                // pipeline has run, but the lease is what decides whether this instance may claim the result.
+                if (!lease.Held)
+                {
+                    logger.LogWarning(
+                        "Finished ingesting {Item} without holding its lease — another instance took it, so "
+                        + "this result is discarded to avoid a duplicate.", name);
+                    continue;
+                }
 
                 // Worth a line only when something actually changed: nothing ran (empty), or the item came back
                 // under its own name, is the overwhelmingly common case and would drown the log.
@@ -122,7 +164,8 @@ public sealed class IntrayIngestSweepWorker(
     }
 
     private static bool IsSidecar(string name) =>
-        name.EndsWith(IntrayIngestPipeline.MarkerSuffix, StringComparison.OrdinalIgnoreCase)
+        name.EndsWith(IntrayIngestLease.ClaimSuffix, StringComparison.OrdinalIgnoreCase)
+        || name.EndsWith(IntrayIngestPipeline.MarkerSuffix, StringComparison.OrdinalIgnoreCase)
         || name.EndsWith(IntrayIngestPipeline.SignedSuffix, StringComparison.OrdinalIgnoreCase)
         || name.EndsWith(".mask.json", StringComparison.OrdinalIgnoreCase)
         || name.Contains(".preview.", StringComparison.OrdinalIgnoreCase)
