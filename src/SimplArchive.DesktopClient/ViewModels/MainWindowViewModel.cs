@@ -1315,17 +1315,18 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
             ReportError(string.Format(Strings.Get("StErrLoad2"), document.Name, e.Message));
         }
     }
+    // ---- Retention schedule — extracted to MainWindowViewModel.Retention.cs (#941) --------------
 
-
-    // ---- Retention schedule (ADR "Retention policies (auto-disposition)") ---------------------------
+    // Gates the Retention TabItem's visibility (set from whoami on login), the same shape as
+    // CanViewAuditLog below: the gate stays with the shell that owns the tab strip, while the tab's own
+    // state lives in its partial.
     [ObservableProperty] private bool _canManageClassification;
 
-    public ObservableCollection<RetentionRowViewModel> RetentionItems { get; } = [];
-
-    [ObservableProperty] private bool _retentionRequiresReview;
-
-    // The view code-behind provides the "extend retention" date dialog (a native window can't be built here).
-    public Func<string, Task<string?>>? ExtendRetentionDialog { get; set; }
+    // ---- Upload conflict dialogs: the three questions only a VIEW can ask ----------------------------
+    //
+    // Callbacks rather than constructor arguments, deliberately (ADR 0730): each needs a window, and a
+    // window does not exist when the view-model is built. They sat under the retention banner, which is how a
+    // reader came to meet duplicate-upload handling while looking for disposition rules.
 
     // Set by the view: shows the upload-time duplicate modal (ADR "Duplicate document detection") and returns the
     // user's choice (reference / file / cancel), or null if dismissed.
@@ -1344,75 +1345,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     public sealed record DuplicatePromptRequest(string FileName, IReadOnlyList<DocumentsClient.DuplicateInfo> Duplicates);
     public sealed record DuplicatePromptResult(string Action, Guid TargetId);
 
-    [RelayCommand]
-    public async Task LoadRetentionScheduleAsync()
-    {
-        if (_api is null)
-        {
-            return;
-        }
-
-        try
-        {
-            var schedule = await _api.LegalHolds.GetRetentionScheduleAsync();
-            RetentionRequiresReview = schedule.RequiresReview;
-            RetentionItems.Clear();
-            foreach (var item in schedule.Items)
-            {
-                RetentionItems.Add(new RetentionRowViewModel(item.DocumentId, item.DocumentName, item.RetentionYears, item.DispositionDate, item.Overdue, item.SuspendedByHold, item.RetentionOverrideUntil, item));
-            }
-        }
-        catch (Exception)
-        {
-            ReportError(Strings.Get("StErrLoadRetention"));
-        }
-    }
-
-    [RelayCommand]
-    private async Task DisposeRetention(RetentionRowViewModel? row)
-    {
-        if (_api is null || row is null)
-        {
-            return;
-        }
-
-        try
-        {
-            await _api.LegalHolds.DisposeRetentionAsync(row.Item);
-            Status = string.Format(Strings.Get("StDisposed"), row.DocumentName);
-            await LoadRetentionScheduleAsync();
-        }
-        catch (ApiActionException e)
-        {
-            ReportError(e.Message);
-        }
-    }
-
-    [RelayCommand]
-    private async Task ExtendRetention(RetentionRowViewModel? row)
-    {
-        if (_api is null || row is null || ExtendRetentionDialog is null)
-        {
-            return;
-        }
-
-        if (await ExtendRetentionDialog(row.DocumentName) is not { } until)
-        {
-            return;
-        }
-
-        try
-        {
-            await _api.LegalHolds.ExtendRetentionAsync(row.Item, until);
-            Status = string.Format(Strings.Get("StExtendedRetention"), row.DocumentName);
-            await LoadRetentionScheduleAsync();
-        }
-        catch (ApiActionException e)
-        {
-            ReportError(e.Message);
-        }
-    }
-
+    // ---- Create a repository -------------------------------------------------------------------
     public async Task CreateRepositoryAsync(string name)
     {
         if (_api is null)
@@ -1432,8 +1365,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         }
     }
 
-    // The corner: current user's DisplayName + photo (or initials); the email that used to show here is gone.
+
+    // ---- The signed-in user's identity, as the app bar shows it ---------------------------------
     [ObservableProperty][NotifyPropertyChangedFor(nameof(UserInitials))] private string _userDisplayName = string.Empty;
+
+    // ---- Detail pane + selection: clearing, and the gate every row command shares ----------------
 
     private void ClearDetail()
     {
