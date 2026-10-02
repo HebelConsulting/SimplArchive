@@ -3,10 +3,12 @@ using SimplArchive.Application.Abstractions;
 
 namespace SimplArchive.Infrastructure.Notifications;
 
-// The IEmailSender used when no SMTP host is configured (ADR "Email notifications (SMTP)") — logs the message
-// and drops it. Registered instead of SmtpEmailSender for tests / SMTP-less deployments; since the
-// EmailNotificationWorker is only registered when SMTP is configured, this sender only ever runs if something
-// calls IEmailSender directly.
+// Logs a message and drops it. NO LONGER REGISTERED BY DEFAULT (#1337): an SMTP account can now arrive at
+// runtime from a tenant, so the container cannot decide at startup that mail is impossible — and dropping was
+// the wrong answer anyway, since a notification somebody was asked to act on vanished with an Information line
+// as its only trace. SmtpEmailSender now refuses instead, and the message stays queued for the retry path.
+//
+// Kept for a test or a deployment that wants mail explicitly discarded, which must now be wired on purpose.
 public sealed class NullEmailSender : IEmailSender
 {
     private readonly ILogger<NullEmailSender> _logger;

@@ -12,12 +12,12 @@ namespace SimplArchive.Infrastructure.Notifications;
 // so EmailNotificationDispatcher leaves that notification un-emailed for the next sweep to retry.
 public sealed class SmtpEmailSender : IEmailSender
 {
-    private readonly SmtpOptions _options;
+    private readonly TenantSmtpSettingsResolver _accounts;
     private readonly ILogger<SmtpEmailSender> _logger;
 
-    public SmtpEmailSender(IOptions<SmtpOptions> options, ILogger<SmtpEmailSender> logger)
+    public SmtpEmailSender(TenantSmtpSettingsResolver accounts, ILogger<SmtpEmailSender> logger)
     {
-        _options = options.Value;
+        _accounts = accounts;
         _logger = logger;
     }
 
@@ -31,9 +31,20 @@ public sealed class SmtpEmailSender : IEmailSender
     public async Task SendAsync(string toAddress, string toName, string subject, string body,
         IReadOnlyList<string> envelopeCertificatePems, CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("Sending mail to {Recipient}.", toAddress);
+        // WHOSE ACCOUNT, resolved per message from the ambient tenant (#1337) — the dispatcher sets it before
+        // each send. A tenant with its own submission server uses it entirely; one without falls back to the
+        // installation's.
+        var account = await _accounts.ResolveAsync(cancellationToken)
+            ?? throw new InvalidOperationException(
+                "No SMTP account is configured — neither for this tenant nor for the installation — so this "
+                + "message cannot be submitted. It stays queued and the retry path will carry it; configure "
+                + "the tenant's outbound mail, or the installation's Smtp section. (A send that silently "
+                + "DROPPED here would lose a notification somebody was asked to act on, with an Information "
+                + "line as the only trace.)");
+
+        _logger.LogDebug("Sending mail to {Recipient} through {Account}.", toAddress, account.Source);
         var message = new MimeMessage();
-        message.From.Add(new MailboxAddress(_options.FromName, _options.FromAddress));
+        message.From.Add(new MailboxAddress(account.FromName, account.FromAddress));
         message.To.Add(new MailboxAddress(toName, toAddress));
         message.Subject = subject;
         message.Body = new TextPart("plain") { Text = body };
@@ -48,16 +59,13 @@ public sealed class SmtpEmailSender : IEmailSender
             TryEnvelopeBody(message, envelopeCertificatePems, _logger);
         }
 
-        // Registered only when Smtp:Host is configured (see AddInfrastructure), so Host is non-null here.
-        var host = _options.Host ?? throw new InvalidOperationException("SMTP host is not configured.");
-
         using var client = new SmtpClient();
-        var secureOption = _options.UseStartTls ? SecureSocketOptions.StartTls : SecureSocketOptions.Auto;
-        await client.ConnectAsync(host, _options.Port, secureOption, cancellationToken);
+        var secureOption = account.UseStartTls ? SecureSocketOptions.StartTls : SecureSocketOptions.Auto;
+        await client.ConnectAsync(account.Host, account.Port, secureOption, cancellationToken);
 
-        if (!string.IsNullOrEmpty(_options.User))
+        if (!string.IsNullOrEmpty(account.User))
         {
-            await client.AuthenticateAsync(_options.User, _options.Password ?? string.Empty, cancellationToken);
+            await client.AuthenticateAsync(account.User, account.Password ?? string.Empty, cancellationToken);
         }
 
         try

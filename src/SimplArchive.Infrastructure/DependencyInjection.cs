@@ -256,15 +256,20 @@ public static class DependencyInjection
         // SMTP-less deployments don't send). The dispatcher is registered either way so it's directly testable.
         services.AddOptions<Notifications.SmtpOptions>().Bind(configuration.GetSection("Smtp"));
         services.AddScoped<IEmailNotificationDispatcher, Notifications.EmailNotificationDispatcher>();
-        if (!string.IsNullOrWhiteSpace(configuration["Smtp:Host"]))
-        {
-            services.AddScoped<IEmailSender, Notifications.SmtpEmailSender>();
-            services.AddHostedService<Notifications.EmailNotificationWorker>();
-        }
-        else
-        {
-            services.AddScoped<IEmailSender, Notifications.NullEmailSender>();
-        }
+
+        // ALWAYS the real sender and worker now that an account can be a TENANT's (#1337). The old gate read
+        // the installation's Smtp:Host and, finding none, wired a log-and-drop sender and no worker at all —
+        // which would have made this feature do nothing in precisely the deployment it was built for, since
+        // the normal one runs no relay of its own and brings a provider account per tenant.
+        //
+        // Where neither the tenant nor the installation has an account, the sender throws and the message STAYS
+        // QUEUED for the retry path to carry, rather than being dropped (owner-decided). That is a behaviour
+        // change for an installation that configured no mail anywhere: it now learns, through the ordinary
+        // retry Warnings, that notifications cannot be sent. Silence was the previous answer and it is the
+        // worse one — the notification was lost either way, and nobody was told.
+        services.AddScoped<Notifications.TenantSmtpSettingsResolver>();
+        services.AddScoped<IEmailSender, Notifications.SmtpEmailSender>();
+        services.AddHostedService<Notifications.EmailNotificationWorker>();
         services.AddScoped<IWellKnownMaskSeeder, WellKnownMaskSeeder>();
 
         // Search (ADR 0011/0249): OpenSearch full-text when OpenSearch:Url is configured, else the Postgres

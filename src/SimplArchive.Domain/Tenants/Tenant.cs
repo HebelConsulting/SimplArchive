@@ -107,6 +107,32 @@ public class Tenant : IConcurrencyTracked
 
     public string? AuditWebhookLastError { get; set; }
 
+    // Per-tenant outbound SMTP (#1337). The normal deployment runs no relay of its own: it authenticates
+    // against an ordinary provider's submission server, and that account is naturally per tenant, because each
+    // tenant's mail should leave from the tenant's own domain.
+    //
+    // ALL-OR-NOTHING, KEYED ON HOST. A non-empty SmtpHost means this tenant's account is used entirely — host,
+    // port, TLS, credentials and from-address; empty means the installation's global Smtp options, unchanged,
+    // which is what keeps this additive for every deployment that has one. Per-field fallback was considered
+    // and rejected: it can compose a configuration nobody chose — a tenant's host reached with the
+    // installation's password — which fails at 03:00 as an authentication error nobody can place.
+    //
+    // The PASSWORD is encrypted at rest through ITransitEncryptor, exactly like AuditWebhookSecret and
+    // TotpSecret, and is never echoed back by a read: the API serves whether one is set, never the value.
+    public string? SmtpHost { get; set; }
+
+    public int SmtpPort { get; set; } = 587;
+
+    public bool SmtpUseStartTls { get; set; }
+
+    public string? SmtpUser { get; set; }
+
+    public string? SmtpPassword { get; set; }
+
+    public string? SmtpFromAddress { get; set; }
+
+    public string? SmtpFromName { get; set; }
+
     // Per-tenant storage quota (ADR "Per-tenant storage quota"). Null = unlimited (production default). When set,
     // the version-finalize path refuses an upload that would push StorageUsedBytes past this limit
     // (409 STORAGE_QUOTA_EXCEEDED). Enforced app-level (portable across S3/SeaweedFS), not a native bucket quota.

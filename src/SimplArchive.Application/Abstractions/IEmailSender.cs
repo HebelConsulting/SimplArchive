@@ -1,7 +1,10 @@
 namespace SimplArchive.Application.Abstractions;
 
 // Sends a plain-text email (ADR "Email notifications (SMTP)"). Implemented by SmtpEmailSender (MailKit) when an
-// SMTP host is configured, else NullEmailSender (logs and drops) so tests / SMTP-less deployments still run.
+// Implemented by SmtpEmailSender, which resolves WHOSE account to submit through per message — the ambient
+// tenant's own, or the installation's (#1337). It is registered unconditionally: an account can now arrive at
+// runtime from a tenant, so gating the registration on the installation's configuration would have silently
+// disabled the feature on exactly the deployment it was built for.
 public interface IEmailSender
 {
     Task SendAsync(string toAddress, string toName, string subject, string body, CancellationToken cancellationToken = default);
