@@ -36,7 +36,9 @@ public class ApiSettings : CommandSettings
 }
 
 /// <summary>
-/// Settings for a command acting as a signed-in USER — the session <c>saconsole login</c> produced.
+/// Settings for a command acting INSIDE A TENANT — the session <c>saconsole login</c> produced: a user through
+/// the device flow, or a tenant service account through <c>--client-id</c> (ADR 0870). Either way the
+/// commands follow the same rels, and the server answers what that principal may do.
 /// </summary>
 /// <remarks>
 /// A distinct type for the same reason <see cref="PlatformAdminSettings"/> is one (ADR 0822): which principal
@@ -44,7 +46,7 @@ public class ApiSettings : CommandSettings
 /// command that silently reached for whichever credential happened to be in the environment would be an
 /// escalation surprise rather than a failure.
 /// </remarks>
-public class UserSessionSettings : ApiSettings
+public class TenantSessionSettings : ApiSettings
 {
     /// <summary>The access token from the environment — never an option, so it cannot land in shell history.</summary>
     public string ResolvedToken => Environment.GetEnvironmentVariable(TokenVariable) ?? string.Empty;

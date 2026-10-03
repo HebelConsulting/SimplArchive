@@ -3,6 +3,7 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SimplArchive.Api.Documents;
 using SimplArchive.Api.Errors.Exceptions.Modules;
 using SimplArchive.Api.Hypermedia;
 using SimplArchive.Application.Abstractions;
@@ -31,7 +32,7 @@ public class ModulesController : ControllerBase
     private readonly SimplArchiveDbContext _dbContext;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly ICurrentUserAccessor _currentUserAccessor;
-    private readonly IUserSystemRightsResolver _userSystemRights;
+    private readonly DocumentAccessService _access;
     private readonly IObjectStorageClient _objectStorage;
     private readonly IReadOnlyList<ModuleLoader.LoadedModule> _modules;
     private readonly ModuleActivationService _activation;
@@ -43,7 +44,7 @@ public class ModulesController : ControllerBase
         SimplArchiveDbContext dbContext,
         ICurrentTenantAccessor currentTenantAccessor,
         ICurrentUserAccessor currentUserAccessor,
-        IUserSystemRightsResolver userSystemRights,
+        DocumentAccessService access,
         IObjectStorageClient objectStorage,
         IReadOnlyList<ModuleLoader.LoadedModule> modules,
         ModuleActivationService activation,
@@ -54,7 +55,7 @@ public class ModulesController : ControllerBase
         _dbContext = dbContext;
         _currentTenantAccessor = currentTenantAccessor;
         _currentUserAccessor = currentUserAccessor;
-        _userSystemRights = userSystemRights;
+        _access = access;
         _objectStorage = objectStorage;
         _modules = modules;
         _activation = activation;
@@ -166,26 +167,26 @@ public class ModulesController : ControllerBase
     // rows — bounded like the tenant-settings groups, not like a document listing.
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken cancellationToken) =>
-        await IsTenantAdminAsync(cancellationToken)
+        await CanAdministerModulesAsync(cancellationToken)
             ? Ok(await BuildListAsync(cancellationToken))
             : Forbid();
 
     [HttpHead]
     public async Task<IActionResult> Head(CancellationToken cancellationToken) =>
-        await IsTenantAdminAsync(cancellationToken) ? NoContent() : Forbid();
+        await CanAdministerModulesAsync(cancellationToken) ? NoContent() : Forbid();
 
     /// <summary>The filed license artefacts: documents wearing the well-known Module-license mask, newest
     /// first — what the Activate/Renew dialog offers. Capped, not cursor-paginated: a tenant holds a few
     /// licenses, and the newest fifty is already forty-eight more than the realistic case.</summary>
     [HttpGet("license-documents")]
     public async Task<IActionResult> ListLicenseDocuments(CancellationToken cancellationToken) =>
-        await IsTenantAdminAsync(cancellationToken)
+        await CanAdministerModulesAsync(cancellationToken)
             ? Ok(await BuildLicenseDocumentListAsync(cancellationToken))
             : Forbid();
 
     [HttpHead("license-documents")]
     public async Task<IActionResult> HeadLicenseDocuments(CancellationToken cancellationToken) =>
-        await IsTenantAdminAsync(cancellationToken) ? NoContent() : Forbid();
+        await CanAdministerModulesAsync(cancellationToken) ? NoContent() : Forbid();
 
     /// <summary>
     /// Rebuilds one of the module's projections from documents (ADR 0738) — the operator guarantee that a
@@ -201,7 +202,7 @@ public class ModulesController : ControllerBase
         [FromServices] IEnumerable<SimplArchive.ModuleAbi.IModuleProjectionRebuilder> rebuilders,
         CancellationToken cancellationToken)
     {
-        if (!await IsTenantAdminAsync(cancellationToken))
+        if (!await CanAdministerModulesAsync(cancellationToken))
         {
             return Forbid();
         }
@@ -236,7 +237,7 @@ public class ModulesController : ControllerBase
     [HttpPut("{moduleId}/license")]
     public async Task<IActionResult> PutLicense(string moduleId, [FromBody] ActivateModuleRequest request, CancellationToken cancellationToken)
     {
-        if (!await IsTenantAdminAsync(cancellationToken))
+        if (!await CanAdministerModulesAsync(cancellationToken))
         {
             return Forbid();
         }
@@ -247,9 +248,13 @@ public class ModulesController : ControllerBase
         var module = loaded?.Module
             ?? throw new ModuleNotInstalledException(moduleId);
 
+        // The licence is READ through the caller's own rights (ADR 0870). A tenant admin bypasses them anyway;
+        // a narrowly-granted service account must not be able to point this at any document in the tenant
+        // and have its content parsed — a refusal that echoes the parser's complaint leaks what it read.
+        // Unreadable answers 404 like absent, so the id's existence is not disclosed either.
         var document = await _dbContext.Documents
             .SingleOrDefaultAsync(d => d.Id == request.LicenseDocumentId, cancellationToken);
-        if (document is null)
+        if (document is null || !await _access.CanReadContentAsync(document.Id, cancellationToken))
         {
             return NotFound();
         }
@@ -291,7 +296,7 @@ public class ModulesController : ControllerBase
     [HttpGet("{moduleId}/settings")]
     public async Task<IActionResult> GetSettings(string moduleId, CancellationToken cancellationToken)
     {
-        if (!await IsTenantAdminAsync(cancellationToken))
+        if (!await CanAdministerModulesAsync(cancellationToken))
         {
             return Forbid();
         }
@@ -302,7 +307,7 @@ public class ModulesController : ControllerBase
     [HttpHead("{moduleId}/settings")]
     public async Task<IActionResult> HeadSettings(string moduleId, CancellationToken cancellationToken)
     {
-        if (!await IsTenantAdminAsync(cancellationToken))
+        if (!await CanAdministerModulesAsync(cancellationToken))
         {
             return Forbid();
         }
@@ -324,7 +329,7 @@ public class ModulesController : ControllerBase
     public async Task<IActionResult> PutSettings(
         string moduleId, [FromBody] PutModuleSettingsRequest request, CancellationToken cancellationToken)
     {
-        if (!await IsTenantAdminAsync(cancellationToken))
+        if (!await CanAdministerModulesAsync(cancellationToken))
         {
             return Forbid();
         }
@@ -454,7 +459,7 @@ public class ModulesController : ControllerBase
         [FromServices] IEnumerable<SimplArchive.ModuleAbi.IModuleProjectionRebuilder> rebuilders,
         CancellationToken cancellationToken)
     {
-        if (!await IsTenantAdminAsync(cancellationToken))
+        if (!await CanAdministerModulesAsync(cancellationToken))
         {
             return Forbid();
         }
@@ -805,7 +810,8 @@ public class ModulesController : ControllerBase
         return Encoding.UTF8.GetString(buffer.ToArray());
     }
 
-    private async Task<bool> IsTenantAdminAsync(CancellationToken cancellationToken) =>
-        _currentUserAccessor.UserId is Guid userId
-        && (await _userSystemRights.GetEffectiveSystemRightsAsync(userId, cancellationToken)).IsTenantAdmin;
+    // A tenant administrator, or a service account granted CanManageModules (ADR 0870) — one question,
+    // answered where every other system right is.
+    private Task<bool> CanAdministerModulesAsync(CancellationToken cancellationToken) =>
+        _access.CanAdministerModulesAsync(cancellationToken);
 }

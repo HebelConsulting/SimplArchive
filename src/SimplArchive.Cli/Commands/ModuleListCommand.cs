@@ -13,10 +13,10 @@ namespace SimplArchive.Cli.Commands;
 /// mistyped a module id was sent to a second error. Every other command here needs a module id too, and
 /// nothing told anybody what the ids are.
 /// </remarks>
-public sealed class ModuleListCommand(IAnsiConsole console) : AsyncCommand<UserSessionSettings>
+public sealed class ModuleListCommand(IAnsiConsole console) : AsyncCommand<TenantSessionSettings>
 {
     protected override async Task<int> ExecuteAsync(
-        CommandContext context, UserSessionSettings settings, CancellationToken cancellationToken)
+        CommandContext context, TenantSessionSettings settings, CancellationToken cancellationToken)
     {
         using var http = CertificateEndpoint.Client(settings);
         var api = new SimplArchiveApi(http);
@@ -40,7 +40,7 @@ public sealed class ModuleListCommand(IAnsiConsole console) : AsyncCommand<UserS
         {
             var id = row.TryGetProperty("moduleId", out var m) ? m.GetString() ?? string.Empty : string.Empty;
             var name = row.TryGetProperty("displayName", out var d) ? d.GetString() ?? string.Empty : string.Empty;
-            var active = row.TryGetProperty("isActive", out var a)
+            var active = row.TryGetProperty("active", out var a)
                 && a.ValueKind == System.Text.Json.JsonValueKind.True;
 
             // CONFIGURABLE IS READ OFF THE RELS, not guessed from the module id: the `settings` rel is

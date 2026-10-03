@@ -8,7 +8,7 @@ using Spectre.Console.Cli;
 
 namespace SimplArchive.Cli.Commands;
 
-public sealed class CertificateEnrolSettings : UserSessionSettings
+public sealed class CertificateEnrolSettings : TenantSessionSettings
 {
     [CommandArgument(0, "<file>")]
     [Description("The certificate to enrol — PEM (.pem/.crt) or DER (.cer/.der). A chain is accepted.")]

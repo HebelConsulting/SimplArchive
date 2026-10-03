@@ -74,6 +74,13 @@ public class ServiceAccount : ITenantScoped, IConcurrencyTracked
     // the same one that made blocking and releasing two rights rather than one in the first place.
     public bool CanBlockResources { get; set; }
 
+    // Activate, renew and configure industry modules, and administer what a module gates on its caller being
+    // allowed to (ABI 1.4 `CanAdministerModulesAsync` — e.g. enrolling another user's certificate). A USER has
+    // no such column: for a person this is the tenant-admin bypass, and splitting it off there would be a new
+    // decision. It exists here because a machine has no IsTenantAdmin and an unattended setup (a demo reset,
+    // a provisioning pipeline) otherwise needs a scripted human login to reach these endpoints (ADR 0870).
+    public bool CanManageModules { get; set; }
+
     // Data-classification clearance (ADR "Sensitivity clearance enforcement"). A ServiceAccount can't belong to
     // a group, so its effective clearance is just this value. Default 0.
     public int ClearanceRank { get; set; }

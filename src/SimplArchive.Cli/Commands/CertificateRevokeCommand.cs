@@ -6,7 +6,7 @@ using Spectre.Console.Cli;
 
 namespace SimplArchive.Cli.Commands;
 
-public sealed class CertificateRevokeSettings : UserSessionSettings
+public sealed class CertificateRevokeSettings : TenantSessionSettings
 {
     [CommandOption("--serial")]
     [Description("The certificate's serial — what a certification authority names it by.")]

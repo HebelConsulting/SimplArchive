@@ -113,6 +113,15 @@ public sealed class DocumentAccessService(
         return false;
     }
 
+    /// <summary>
+    /// May the caller administer industry modules — activate, renew, configure, rebuild, and whatever a module
+    /// reserves for its administrators (ABI 1.4)? A person: the tenant-admin bypass, exactly as before. A
+    /// service account: its own <c>CanManageModules</c> column, since a machine has no IsTenantAdmin and an
+    /// unattended setup otherwise needs a scripted human login (ADR 0870).
+    /// </summary>
+    public Task<bool> CanAdministerModulesAsync(CancellationToken cancellationToken) =>
+        HasSystemRightAsync(r => r.IsTenantAdmin, s => s.CanManageModules, cancellationToken);
+
     /// <summary>The caller's effective CanExport — User own∪groups, or the ServiceAccount's own column.</summary>
     public Task<bool> HasExportRightAsync(CancellationToken cancellationToken) =>
         HasSystemRightAsync(r => r.CanExport, s => s.CanExport, cancellationToken);

@@ -67,11 +67,14 @@ public sealed class AdminClient(ApiCore core)
         bool CanManageRepositories, bool CanManageMasks, bool CanManageServiceAccounts, bool CanImport, bool CanExport,
         // Ground a bookable resource (ADR 0778). Defaulted so existing construction sites keep compiling —
         // and note there is no release counterpart: a machine may ground, never certify airworthy again.
-        bool CanBlockResources = false);
+        bool CanBlockResources = false,
+        // Administer industry modules (ADR 0870). Defaulted for the same reason.
+        bool CanManageModules = false);
 
     public sealed record ServiceAccountInfo(Guid Id, string Name, string ClientId, bool IsActive, bool CanManage,
         bool CanManageRepositories, bool CanManageMasks, bool CanManageServiceAccounts, bool CanImport, bool CanExport,
         bool CanBlockResources = false,
+        bool CanManageModules = false,
         LinkMap? Links = null)
     {
         public string? Href(string rel) => Links?.Href(rel);
@@ -570,13 +573,16 @@ public sealed class AdminClient(ApiCore core)
         return new GrantableServiceAccountRights(
             Read(g, "canManageRepositories"), Read(g, "canManageMasks"),
             Read(g, "canManageServiceAccounts"), Read(g, "canImport"), Read(g, "canExport"),
-            Read(g, "canBlockResources"));
+            Read(g, "canBlockResources"), Read(g, "canManageModules"));
     }
 
     // Create a service account with its rights; returns the one-time client_id + client_secret (shown once).
-    public async Task<ServiceAccountSecret> CreateServiceAccountAsync(string name, SystemRightsData rights, CancellationToken cancellationToken = default)
+    // `canManageModules` is a parameter rather than a SystemRightsData field because a person has no such right
+    // — for a user it is the tenant-admin bypass (ADR 0870). Not defaulted: on a full-replace PUT, a forgotten
+    // argument would silently REVOKE it.
+    public async Task<ServiceAccountSecret> CreateServiceAccountAsync(string name, SystemRightsData rights, bool canManageModules, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsJsonAsync(await _core.RootHrefAsync("serviceAccounts", cancellationToken), ToServiceAccountBody(name, rights), cancellationToken);
+        using var response = await _core.Http.PostAsJsonAsync(await _core.RootHrefAsync("serviceAccounts", cancellationToken), ToServiceAccountBody(name, rights, canManageModules), cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException($"A service account named '{name}' already exists.");
@@ -593,10 +599,10 @@ public sealed class AdminClient(ApiCore core)
     }
 
     // Edit an existing account's name + rights (PUT, ADR 0534) — escalation-capped server-side like create.
-    public async Task UpdateServiceAccountAsync(ServiceAccountInfo account, string name, SystemRightsData rights, CancellationToken cancellationToken = default)
+    public async Task UpdateServiceAccountAsync(ServiceAccountInfo account, string name, SystemRightsData rights, bool canManageModules, CancellationToken cancellationToken = default)
     {
         // PUT at the account's own address (ADR 0719); whether it may be edited is CanManage's answer.
-        using var response = await _core.Http.PutAsJsonAsync(RequireHref(account, "self"), ToServiceAccountBody(name, rights), cancellationToken);
+        using var response = await _core.Http.PutAsJsonAsync(RequireHref(account, "self"), ToServiceAccountBody(name, rights, canManageModules), cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException($"A service account named '{name}' already exists.");
@@ -647,6 +653,7 @@ public sealed class AdminClient(ApiCore core)
             B("canManage"),
             B("canManageRepositories"), B("canManageMasks"), B("canManageServiceAccounts"), B("canImport"), B("canExport"),
             B("canBlockResources"),
+            B("canManageModules"),
             ApiCore.ParseLinks(e));
     }
 
@@ -809,7 +816,7 @@ public sealed class AdminClient(ApiCore core)
 
 
     // The create/update body — the five grantable rights, camelCase over the wire (name + booleans).
-    private static object ToServiceAccountBody(string name, SystemRightsData rights) => new
+    private static object ToServiceAccountBody(string name, SystemRightsData rights, bool canManageModules) => new
     {
         name,
         canManageRepositories = rights.CanManageRepositories,
@@ -818,6 +825,7 @@ public sealed class AdminClient(ApiCore core)
         canImport = rights.CanImport,
         canExport = rights.CanExport,
         canBlockResources = rights.CanBlockResources,
+        canManageModules,
     };
 
 

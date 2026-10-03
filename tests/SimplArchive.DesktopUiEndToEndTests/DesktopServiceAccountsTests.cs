@@ -26,7 +26,7 @@ public class DesktopServiceAccountsTests
 
         // Create with CanExport → a one-time client_id + client_secret comes back.
         var name = "dt-sa-" + suffix;
-        var secret = await client.Admin.CreateServiceAccountAsync(name, Rights(canExport: true));
+        var secret = await client.Admin.CreateServiceAccountAsync(name, Rights(canExport: true), canManageModules: false);
         Assert.NotEmpty(secret.ClientId);
         Assert.NotEmpty(secret.ClientSecret);
 
@@ -38,7 +38,7 @@ public class DesktopServiceAccountsTests
 
         // Edit (PUT): rename + add CanImport → reads back.
         var newName = "dt-sa-edited-" + suffix;
-        await client.Admin.UpdateServiceAccountAsync(created, newName, Rights(canExport: true, canImport: true));
+        await client.Admin.UpdateServiceAccountAsync(created, newName, Rights(canExport: true, canImport: true), canManageModules: false);
         var edited = (await client.Admin.GetServiceAccountsAsync()).Single(a => a.Id == created.Id);
         Assert.Equal(newName, edited.Name);
         Assert.True(edited.CanImport);

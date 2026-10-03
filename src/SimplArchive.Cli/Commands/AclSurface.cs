@@ -7,7 +7,7 @@ using Spectre.Console.Cli;
 namespace SimplArchive.Cli.Commands;
 
 /// <summary>What every <c>acl</c> command needs: which document, which principal, which rights (#1504).</summary>
-public class AclSettings : UserSessionSettings
+public class AclSettings : TenantSessionSettings
 {
     [CommandArgument(0, "<document>")]
     [Description("The document, by id.")]

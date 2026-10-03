@@ -3420,6 +3420,9 @@
   <data name="SaRightBlockResources" xml:space="preserve">
     <value>Block resources</value>
   </data>
+  <data name="SaRightManageModules" xml:space="preserve">
+    <value>Manage modules</value>
+  </data>
   <data name="SaRightRepositories" xml:space="preserve">
     <value>Manage repositories</value>
   </data>

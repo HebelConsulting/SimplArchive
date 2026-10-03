@@ -38,7 +38,7 @@ public partial class ServiceAccountsWindow : Window
 
         await RunAsync(vm, async () =>
         {
-            var secret = await vm.Client.Admin.CreateServiceAccountAsync(vm.NewName.Trim(), vm.NewRights());
+            var secret = await vm.Client.Admin.CreateServiceAccountAsync(vm.NewName.Trim(), vm.NewRights(), vm.NewCanManageModules);
             vm.ResetNewForm();
             await vm.LoadAsync();
             await new ServiceAccountSecretDialog(secret.ClientId, secret.ClientSecret).ShowDialog(this);
@@ -59,6 +59,7 @@ public partial class ServiceAccountsWindow : Window
         var result = await new ServiceAccountEditDialog(row.Name,
             row.Info.CanExport, row.Info.CanImport, row.Info.CanManageRepositories,
             row.Info.CanManageMasks, row.Info.CanManageServiceAccounts, row.Info.CanBlockResources,
+            row.Info.CanManageModules,
             grantable).ShowDialog<ServiceAccountEditDialog.Result?>(this);
         if (result is null)
         {
@@ -74,7 +75,7 @@ public partial class ServiceAccountsWindow : Window
                 // Named rather than positional: the defaulted rights are a long tail, and counting commas to
                 // reach one is how the wrong flag gets set with nothing failing to build (ADR 0778).
                 CanBlockResources: result.CanBlockResources);
-            await vm.Client.Admin.UpdateServiceAccountAsync(row.Info, result.Name, rights);
+            await vm.Client.Admin.UpdateServiceAccountAsync(row.Info, result.Name, rights, result.CanManageModules);
             await vm.LoadAsync();
         });
     });

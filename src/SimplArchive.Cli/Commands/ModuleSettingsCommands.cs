@@ -6,7 +6,7 @@ using Spectre.Console.Cli;
 
 namespace SimplArchive.Cli.Commands;
 
-public class ModuleSettingsSettings : UserSessionSettings
+public class ModuleSettingsSettings : TenantSessionSettings
 {
     [CommandArgument(0, "<module>")]
     [Description("The module, by id — e.g. encryption. List them: saconsole module list")]

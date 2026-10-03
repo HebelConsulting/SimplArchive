@@ -43,6 +43,9 @@ regexes = [
   # The module-settings E2E fixture's login password (#1082). Same class as intrayocr1234 above: a
   # throwaway value seeded into a Testcontainers database that lives for one test run.
   '''modsettings1234''',
+  # ModuleAdministrationByServiceAccountTests' throwaway manager password (ADR 0870). Same class again: replaced
+  # by the class's shared fixture value, but the first spelling lives on in the branch history.
+  '''modsa-mgr-1234''',
   # SaConsoleTests' PLACEHOLDER private key (#1353). `saconsole me certificate register` refuses a file
   # holding key material before it is sent, and the test proves that by handing it a PEM that begins
   # `-----BEGIN PRIVATE KEY-----` — which is precisely what the private-key rule looks for. The body is the

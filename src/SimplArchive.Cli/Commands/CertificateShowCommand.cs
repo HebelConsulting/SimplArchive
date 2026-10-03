@@ -15,10 +15,10 @@ namespace SimplArchive.Cli.Commands;
 /// clients — it simply decides whether content arrives readable. So "what is set?" has to be cheap and
 /// unambiguous, in the same spirit as <c>whoami</c>.
 /// </remarks>
-public sealed class CertificateShowCommand(IAnsiConsole console) : AsyncCommand<UserSessionSettings>
+public sealed class CertificateShowCommand(IAnsiConsole console) : AsyncCommand<TenantSessionSettings>
 {
     protected override async Task<int> ExecuteAsync(
-        CommandContext context, UserSessionSettings settings, CancellationToken cancellationToken)
+        CommandContext context, TenantSessionSettings settings, CancellationToken cancellationToken)
     {
         var status = await CertificateEndpoint.ReadAsync(settings, cancellationToken);
 
@@ -80,7 +80,7 @@ internal static class CertificateEndpoint
     /// <summary>The rel the caller's own resource advertises for it.</summary>
     internal const string Rel = "smimeCertificate";
 
-    internal static HttpClient Client(UserSessionSettings settings)
+    internal static HttpClient Client(TenantSessionSettings settings)
     {
         var http = new HttpClient { BaseAddress = new Uri(settings.ResolvedUrl.TrimEnd('/') + "/") };
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", settings.ResolvedToken);
@@ -99,7 +99,7 @@ internal static class CertificateEndpoint
     }
 
     internal static async Task<JsonElement> ReadAsync(
-        UserSessionSettings settings, CancellationToken cancellationToken)
+        TenantSessionSettings settings, CancellationToken cancellationToken)
     {
         using var http = Client(settings);
         var api = new SimplArchiveApi(http);

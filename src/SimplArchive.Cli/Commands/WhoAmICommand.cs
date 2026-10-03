@@ -14,10 +14,10 @@ namespace SimplArchive.Cli.Commands;
 /// only defence is that the answer to "which one am I pointed at?" is cheap, obvious and always available.
 /// So it ships WITH the environment fallback rather than after it.
 /// </remarks>
-public sealed class WhoAmICommand(IAnsiConsole console) : AsyncCommand<UserSessionSettings>
+public sealed class WhoAmICommand(IAnsiConsole console) : AsyncCommand<TenantSessionSettings>
 {
     protected override async Task<int> ExecuteAsync(
-        CommandContext context, UserSessionSettings settings, CancellationToken cancellationToken)
+        CommandContext context, TenantSessionSettings settings, CancellationToken cancellationToken)
     {
         using var http = new HttpClient { BaseAddress = new Uri(settings.ResolvedUrl.TrimEnd('/') + "/") };
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", settings.ResolvedToken);

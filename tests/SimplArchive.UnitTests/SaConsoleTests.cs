@@ -153,4 +153,42 @@ public sealed class SaConsoleTests
         // must not be mistaken for a bundle.
         CertificateRegisterCommand.RefusePrivateKey([0x30, 0x82, 0x03, 0x1f, 0x30, 0x82], "/tmp/holder.der");
     }
+    [Fact] // ADR 0870: an unattended service-account login takes its secret from the environment only
+    public void A_service_account_login_without_its_secret_says_where_the_secret_goes()
+    {
+        var previous = Environment.GetEnvironmentVariable(LoginCommand.ClientSecretVariable);
+        Environment.SetEnvironmentVariable(LoginCommand.ClientSecretVariable, null);
+        try
+        {
+            var result = new LoginCommand.Settings { Url = "https://archive.example.com", ClientId = "setup" }.Validate();
+
+            Assert.False(result.Successful);
+            Assert.Contains(LoginCommand.ClientSecretVariable, result.Message);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(LoginCommand.ClientSecretVariable, previous);
+        }
+    }
+
+    [Fact] // the device flow needs no secret, so a missing one must not refuse it
+    public void A_user_login_needs_no_secret()
+    {
+        Assert.True(new LoginCommand.Settings { Url = "https://archive.example.com" }.Validate().Successful);
+    }
+
+    // The API serialises ModuleResource.Active as `active`. The CLI read `isActive`, a field that never
+    // existed, so `module list` called every module "not active" and the settings refusal blamed activation
+    // for an ACTIVE module that merely declares no settings. Pinned against the server's own spelling.
+    [Theory]
+    [InlineData(true, "declares nothing to configure")]
+    [InlineData(false, "is not active")]
+    public void The_settings_refusal_reads_the_active_flag_the_server_sends(bool active, string expected)
+    {
+        var row = System.Text.Json.JsonDocument.Parse(
+            $$"""{"moduleId":"m","{{System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(nameof(SimplArchive.Api.Controllers.ModulesController.ModuleResource.Active))}}":{{(active ? "true" : "false")}},"links":[]}""").RootElement;
+
+        var refusal = Assert.Throws<CliException>(() => ModuleSurface.SettingsHref(row, "m"));
+        Assert.Contains(expected, refusal.Message);
+    }
 }

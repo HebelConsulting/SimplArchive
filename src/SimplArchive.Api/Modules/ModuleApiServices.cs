@@ -43,6 +43,9 @@ internal sealed class ModuleCallerContext(DocumentAccessService access, ICurrent
     public Task<bool> IsTenantAdminAsync(CancellationToken cancellationToken = default) =>
         access.IsTenantAdminAsync(cancellationToken);
 
+    public Task<bool> CanAdministerModulesAsync(CancellationToken cancellationToken = default) =>
+        access.CanAdministerModulesAsync(cancellationToken);
+
     public async Task<ModuleCallerIdentity?> GetIdentityAsync(CancellationToken cancellationToken = default)
     {
         // The human-readable half of the accessors above (ABI 0.2, #1014): a user has both halves, a

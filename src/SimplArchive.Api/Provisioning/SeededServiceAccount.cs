@@ -17,12 +17,48 @@ namespace SimplArchive.Api.Provisioning;
 // that says nothing about volumes.
 public static class SeededServiceAccount
 {
-    // Adds the account + its OpenIddict application + a full ACL entry on the tenant's repository root. A no-op
-    // unless <sectionPrefix>:ServiceAccount:ClientId/ClientSecret are both configured. Does NOT save — the caller
-    // owns the transaction boundary, since it is mid-way through seeding a tenant.
+    // Adds the account + its OpenIddict application + a full ACL entry on the tenant's repository root — the
+    // MIGRATION principal's shape, which the demo and interop tenants share. A no-op unless
+    // <sectionPrefix>:ServiceAccount:ClientId/ClientSecret are both configured. Does NOT save — the caller owns
+    // the transaction boundary, since it is mid-way through seeding a tenant.
+    public static Task<bool> AddIfConfiguredAsync(
+        IServiceProvider services, SimplArchiveDbContext dbContext, IConfiguration configuration,
+        string sectionPrefix, ProvisionedTenant provisioned) =>
+        AddIfConfiguredAsync(services, dbContext, configuration, sectionPrefix, provisioned.TenantId,
+            grantOn: provisioned.RepositoryId,
+            rights: account =>
+            {
+                account.CanManageRepositories = true;
+                account.CanManageMasks = true;
+                account.CanImport = true;
+                account.CanExport = true;
+                // A migration writes departmental mailboxes WITH their address claims (#703), so the seeded
+                // interop principal holds the routing right the way it holds the others it works with.
+                account.CanManageMailRouting = true;
+            },
+            // The grant is the half that is easy to forget and impossible to diagnose from the error:
+            // repository listing is per-item ACL filtered, so an account holding only system rights sees an
+            // EMPTY archive and a migration fails with "repository not found" — which reads as a wrong name
+            // rather than as missing permissions. CanManagePermissions is additionally what lets an export
+            // carry ACLs at all (ADR 0539).
+            grant: entry =>
+            {
+                entry.CanSee = true;
+                entry.CanReadContent = true;
+                entry.CanEditContent = true;
+                entry.CanEditIndexData = true;
+                entry.CanCreateSubItems = true;
+                entry.CanDelete = true;
+                entry.CanMove = true;
+                entry.CanAnnotate = true;
+                entry.CanManagePermissions = true;
+            });
+
+    // The general form: what differs per seeded principal — its system rights, where it is granted and what —
+    // is passed in, so a narrowly-scoped account (ADR 0870) does not inherit the migration principal's reach.
     public static async Task<bool> AddIfConfiguredAsync(
         IServiceProvider services, SimplArchiveDbContext dbContext, IConfiguration configuration,
-        string sectionPrefix, ProvisionedTenant provisioned)
+        string sectionPrefix, Guid tenantId, Guid grantOn, Action<ServiceAccount> rights, Action<AclEntry> grant)
     {
         var clientId = configuration[$"{sectionPrefix}:ServiceAccount:ClientId"];
         var clientSecret = configuration[$"{sectionPrefix}:ServiceAccount:ClientSecret"];
@@ -50,43 +86,26 @@ public static class SeededServiceAccount
         var serviceAccount = new ServiceAccount
         {
             Id = Guid.NewGuid(),
-            TenantId = provisioned.TenantId,
+            TenantId = tenantId,
             Name = configuration[$"{sectionPrefix}:ServiceAccount:Name"] ?? sectionPrefix.ToLowerInvariant(),
             OpenIddictApplicationClientId = clientId,
             IsActive = true,
-            CanManageRepositories = true,
-            CanManageMasks = true,
-            CanImport = true,
-            CanExport = true,
-            // A migration writes departmental mailboxes WITH their address claims (#703), so the seeded
-            // interop principal holds the routing right the way it holds the others it works with.
-            CanManageMailRouting = true,
             CreatedAt = DateTimeOffset.UtcNow,
         };
+        rights(serviceAccount);
 
         dbContext.ServiceAccounts.Add(serviceAccount);
 
-        // The grant is the half that is easy to forget and impossible to diagnose from the error: repository
-        // listing is per-item ACL filtered, so an account holding only system rights sees an EMPTY archive and a
-        // migration fails with "repository not found" — which reads as a wrong name rather than as missing
-        // permissions. CanManagePermissions is additionally what lets an export carry ACLs at all (ADR 0539).
-        dbContext.AclEntries.Add(new AclEntry
+        var entry = new AclEntry
         {
             Id = Guid.NewGuid(),
-            TenantId = provisioned.TenantId,
-            DocumentId = provisioned.RepositoryId,
+            TenantId = tenantId,
+            DocumentId = grantOn,
             ServiceAccountId = serviceAccount.Id,
-            CanSee = true,
-            CanReadContent = true,
-            CanEditContent = true,
-            CanEditIndexData = true,
-            CanCreateSubItems = true,
-            CanDelete = true,
-            CanMove = true,
-            CanAnnotate = true,
-            CanManagePermissions = true,
             CreatedAt = DateTimeOffset.UtcNow,
-        });
+        };
+        grant(entry);
+        dbContext.AclEntries.Add(entry);
 
         return true;
     }

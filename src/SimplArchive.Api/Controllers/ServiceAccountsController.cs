@@ -98,6 +98,13 @@ public class ServiceAccountsController : ControllerBase
         /// airworthy again (owner decision 2026-09-09).
         /// </summary>
         public bool CanBlockResources { get; set; }
+
+        /// <summary>
+        /// May activate, renew and configure industry modules, and administer what a module reserves for its
+        /// administrators (ABI 1.4 <c>CanAdministerModulesAsync</c>) — for a person that is the tenant-admin
+        /// bypass, which a machine does not have (ADR 0870).
+        /// </summary>
+        public bool CanManageModules { get; set; }
     }
 
     public class CreateServiceAccountResource : ServiceAccountResource
@@ -157,6 +164,13 @@ public class ServiceAccountsController : ControllerBase
         /// airworthy again (owner decision 2026-09-09).
         /// </summary>
         public bool CanBlockResources { get; set; }
+
+        /// <summary>
+        /// May activate, renew and configure industry modules, and administer what a module reserves for its
+        /// administrators (ABI 1.4 <c>CanAdministerModulesAsync</c>) — for a person that is the tenant-admin
+        /// bypass, which a machine does not have (ADR 0870).
+        /// </summary>
+        public bool CanManageModules { get; set; }
     }
 
     public class CreateServiceAccountRequest
@@ -179,6 +193,13 @@ public class ServiceAccountsController : ControllerBase
         /// airworthy again (owner decision 2026-09-09).
         /// </summary>
         public bool CanBlockResources { get; set; }
+
+        /// <summary>
+        /// May activate, renew and configure industry modules, and administer what a module reserves for its
+        /// administrators (ABI 1.4 <c>CanAdministerModulesAsync</c>) — for a person that is the tenant-admin
+        /// bypass, which a machine does not have (ADR 0870).
+        /// </summary>
+        public bool CanManageModules { get; set; }
     }
 
     // Edit an existing account's name + rights (ADR 0534). Same shape as create minus the secret — a plain
@@ -203,6 +224,13 @@ public class ServiceAccountsController : ControllerBase
         /// airworthy again (owner decision 2026-09-09).
         /// </summary>
         public bool CanBlockResources { get; set; }
+
+        /// <summary>
+        /// May activate, renew and configure industry modules, and administer what a module reserves for its
+        /// administrators (ABI 1.4 <c>CanAdministerModulesAsync</c>) — for a person that is the tenant-admin
+        /// bypass, which a machine does not have (ADR 0870).
+        /// </summary>
+        public bool CanManageModules { get; set; }
     }
 
     public class RotateSecretResource : HypermediaResource
@@ -230,7 +258,8 @@ public class ServiceAccountsController : ControllerBase
             || (request.CanManageServiceAccounts && !caller.CanManageServiceAccounts)
             || (request.CanImport && !caller.CanImport)
             || (request.CanExport && !caller.CanExport)
-            || (request.CanBlockResources && !caller.CanBlockResources))
+            || (request.CanBlockResources && !caller.CanBlockResources)
+            || (request.CanManageModules && !caller.CanManageModules))
         {
             throw InsufficientRightsToGrantException.OnServiceAccount();
         }
@@ -252,6 +281,7 @@ public class ServiceAccountsController : ControllerBase
             CanImport = request.CanImport,
             CanExport = request.CanExport,
             CanBlockResources = request.CanBlockResources,
+            CanManageModules = request.CanManageModules,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -296,6 +326,7 @@ public class ServiceAccountsController : ControllerBase
             CanImport = serviceAccount.CanImport,
             CanExport = serviceAccount.CanExport,
             CanBlockResources = serviceAccount.CanBlockResources,
+            CanManageModules = serviceAccount.CanManageModules,
             Links = [new Link("self", $"/api/service-accounts/{serviceAccount.Id}", "GET")],
         };
 
@@ -349,6 +380,7 @@ public class ServiceAccountsController : ControllerBase
                 CanImport = caller.CanImport,
                 CanExport = caller.CanExport,
                 CanBlockResources = caller.CanBlockResources,
+                CanManageModules = caller.CanManageModules,
             },
             Links = links,
         });
@@ -426,7 +458,11 @@ public class ServiceAccountsController : ControllerBase
             || (request.CanManageMasks && !caller.CanManageMasks)
             || (request.CanManageServiceAccounts && !caller.CanManageServiceAccounts)
             || (request.CanImport && !caller.CanImport)
-            || (request.CanExport && !caller.CanExport))
+            || (request.CanExport && !caller.CanExport)
+            // CanBlockResources was capped on Create only (ADR 0778), which let a PUT hand it out uncapped —
+            // and the same shape would hand out module administration (ADR 0870).
+            || (request.CanBlockResources && !caller.CanBlockResources)
+            || (request.CanManageModules && !caller.CanManageModules))
         {
             throw InsufficientRightsToGrantException.OnServiceAccount();
         }
@@ -456,6 +492,7 @@ public class ServiceAccountsController : ControllerBase
                     serviceAccount.CanImport = request.CanImport;
                     serviceAccount.CanExport = request.CanExport;
                     serviceAccount.CanBlockResources = request.CanBlockResources;
+                    serviceAccount.CanManageModules = request.CanManageModules;
                     return Task.CompletedTask;
                 },
                 afterCommit: () => _audit.RecordAsync(
@@ -567,6 +604,7 @@ public class ServiceAccountsController : ControllerBase
             CanImport = serviceAccount.CanImport,
             CanExport = serviceAccount.CanExport,
             CanBlockResources = serviceAccount.CanBlockResources,
+            CanManageModules = serviceAccount.CanManageModules,
 
             // ONE rel for this address; the method says which action (ADR 0719). `edit[PUT]` and
             // `revoke[DELETE]` sat beside `self[GET]` on the same URL and said nothing the method did not
@@ -596,7 +634,8 @@ public class ServiceAccountsController : ControllerBase
         bool CanManageServiceAccounts,
         bool CanImport,
         bool CanExport,
-        bool CanBlockResources);
+        bool CanBlockResources,
+        bool CanManageModules);
 
     private async Task<CallerRights?> GetCallerRightsAsync(CancellationToken cancellationToken)
     {
@@ -605,7 +644,7 @@ public class ServiceAccountsController : ControllerBase
             return await _dbContext.ServiceAccounts
                 .Where(s => s.Id == serviceAccountId)
                 .Select(s => new CallerRights(s.CanManageRepositories, s.CanManageMasks, s.CanManageServiceAccounts, s.CanImport, s.CanExport,
-                    s.CanBlockResources))
+                    s.CanBlockResources, s.CanManageModules))
                 .SingleOrDefaultAsync(cancellationToken);
         }
 
@@ -617,7 +656,9 @@ public class ServiceAccountsController : ControllerBase
             // A tenant admin holds every system right implicitly, so the cap must read it that way here too —
             // otherwise an admin could not grant a service account a right they themselves undeniably hold.
             return new CallerRights(r.CanManageRepositories, r.CanManageMasks, r.CanManageServiceAccounts, r.CanImport, r.CanExport,
-                r.IsTenantAdmin || r.CanBlockResources);
+                r.IsTenantAdmin || r.CanBlockResources,
+                // A person holds this only as the tenant-admin bypass: there is no user column (ADR 0870).
+                r.IsTenantAdmin);
         }
 
         return null;

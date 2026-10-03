@@ -42,5 +42,10 @@ public static class ModuleAbiVersion
     /// returning null, which is the additive shape this doc demands: every module built against 1.2 or
     /// earlier compiles and runs unchanged, and one that wants the surface opts in (core #1502).
     /// </para>
-    public const int Minor = 3;
+    /// <para>
+    /// 1.4 adds <see cref="IModuleCallerContext.CanAdministerModulesAsync"/> — default-implemented as
+    /// <c>IsTenantAdminAsync</c>, so a 1.3 module and a 1.3 test double are unaffected; the host answers it
+    /// with a service account's <c>CanManageModules</c> right as well (core ADR 0870).
+    /// </para>
+    public const int Minor = 4;
 }

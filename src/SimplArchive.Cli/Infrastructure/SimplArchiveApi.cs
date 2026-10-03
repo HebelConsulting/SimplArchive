@@ -19,7 +19,26 @@ public sealed class SimplArchiveApi(HttpClient http)
 
     /// <summary>Client-credentials token for a platform administrator (ADR 0206).</summary>
     public async Task AuthenticateAsPlatformAdministratorAsync(
-        string clientId, string clientSecret, CancellationToken cancellationToken)
+        string clientId, string clientSecret, CancellationToken cancellationToken) =>
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await RequestClientCredentialsTokenAsync(
+            clientId, clientSecret,
+            "Check --client-id, and that the secret belongs to a PlatformAdministrator rather than a service account.",
+            cancellationToken));
+
+    /// <summary>
+    /// Client-credentials token for a TENANT service account (ADR 0870) — the unattended counterpart of
+    /// the device flow, for a setup no person is present for. Returned rather than installed: <c>login</c>
+    /// exports it, exactly as it exports a user's.
+    /// </summary>
+    public Task<string> RequestServiceAccountTokenAsync(
+        string clientId, string clientSecret, CancellationToken cancellationToken) =>
+        RequestClientCredentialsTokenAsync(
+            clientId, clientSecret,
+            "Check --client-id and SACONSOLE_CLIENT_SECRET, and that the service account has not been revoked.",
+            cancellationToken);
+
+    private async Task<string> RequestClientCredentialsTokenAsync(
+        string clientId, string clientSecret, string hint, CancellationToken cancellationToken)
     {
         using var request = new FormUrlEncodedContent(new Dictionary<string, string>
         {
@@ -34,9 +53,7 @@ public sealed class SimplArchiveApi(HttpClient http)
         if (!response.IsSuccessStatusCode)
         {
             // The secret is never echoed, not even on failure — an error message is a place credentials leak.
-            throw new CliException(
-                $"The installation refused these platform-administrator credentials ({(int)response.StatusCode}). "
-                + "Check --client-id, and that the secret belongs to a PlatformAdministrator rather than a service account.");
+            throw new CliException($"The installation refused these credentials ({(int)response.StatusCode}). {hint}");
         }
 
         var token = JsonDocument.Parse(body).RootElement.TryGetProperty("access_token", out var value)
@@ -48,7 +65,7 @@ public sealed class SimplArchiveApi(HttpClient http)
             throw new CliException("The token endpoint answered without an access_token. The installation may not be a SimplArchive Api.");
         }
 
-        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return token;
     }
 
     public async Task<JsonElement> GetAsync(string path, CancellationToken cancellationToken)

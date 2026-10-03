@@ -6,7 +6,7 @@ using Spectre.Console.Cli;
 
 namespace SimplArchive.Cli.Commands;
 
-public sealed class CertificateRegisterSettings : UserSessionSettings
+public sealed class CertificateRegisterSettings : TenantSessionSettings
 {
     [CommandArgument(0, "<file>")]
     [Description("The certificate file to register — PEM (.pem/.crt) or DER (.cer/.der).")]

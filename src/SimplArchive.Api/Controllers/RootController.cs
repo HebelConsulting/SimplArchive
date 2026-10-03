@@ -120,6 +120,11 @@ public class RootController : ControllerBase
                 // its href belongs here rather than being composed by each client.
                 new Link("externalLinks", "/api/external-links", "GET"),
                 new Link("tenantSettings", "/api/tenant-settings", "GET"),
+                // The industry-module collection (ADR 0870). tenant-settings advertises it too, but that resource
+                // is tenant-admin only — and a service account granted CanManageModules is the one caller that
+                // needs `modules` while being refused the settings around it. A collection root, advertised to
+                // everyone like the rest; the collection itself answers who may read it.
+                new Link("modules", "/api/modules", "GET"),
 
                 // The tenant's mail domains (#667). Advertised unconditionally, like tenantSettings beside it:
                 // the LIST is readable by anyone in the tenant — which domains your own organisation receives

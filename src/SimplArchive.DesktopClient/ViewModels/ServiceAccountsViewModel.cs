@@ -41,6 +41,7 @@ public sealed partial class ServiceAccountsViewModel : ObservableObject
     [ObservableProperty] private bool _newCanManageMasks;
     [ObservableProperty] private bool _newCanManageServiceAccounts;
     [ObservableProperty] private bool _newCanBlockResources;
+    [ObservableProperty] private bool _newCanManageModules;
 
     [ObservableProperty] private string _status = string.Empty;
     [ObservableProperty] private bool _busy;
@@ -77,6 +78,7 @@ public sealed partial class ServiceAccountsViewModel : ObservableObject
         NewName = string.Empty;
         NewCanExport = NewCanImport = NewCanManageRepositories = NewCanManageMasks = NewCanManageServiceAccounts = false;
         NewCanBlockResources = false;
+        NewCanManageModules = false;
     }
 }
 
@@ -107,5 +109,6 @@ public sealed class ServiceAccountRowViewModel
         if (Info.CanManageMasks) { yield return Strings.Get("SaRightMasks"); }
         if (Info.CanManageServiceAccounts) { yield return Strings.Get("SaRightServiceAccounts"); }
         if (Info.CanBlockResources) { yield return Strings.Get("SaRightBlockResources"); }
+        if (Info.CanManageModules) { yield return Strings.Get("SaRightManageModules"); }
     }
 }

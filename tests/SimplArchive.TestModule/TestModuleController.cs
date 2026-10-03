@@ -27,6 +27,9 @@ public sealed class TestModuleController : ControllerBase
 
         public bool IsTenantAdmin { get; set; }
 
+        // ABI 1.4 (ADR 0870): the module-administration bar — differs from IsTenantAdmin for a service account.
+        public bool CanAdministerModules { get; set; }
+
         /// <summary>The caller as a person would name them (ABI 0.2, #1014) — null when unresolved.</summary>
         public string? CallerDisplayName { get; set; }
 
@@ -145,6 +148,7 @@ public sealed class TestModuleController : ControllerBase
             UserId = caller.UserId,
             ServiceAccountId = caller.ServiceAccountId,
             IsTenantAdmin = await caller.IsTenantAdminAsync(cancellationToken),
+            CanAdministerModules = await caller.CanAdministerModulesAsync(cancellationToken),
             CallerDisplayName = identity?.DisplayName,
             CallerEmail = identity?.Email,
             Links =

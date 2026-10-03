@@ -8,7 +8,7 @@ namespace SimplArchive.DesktopClient.Views;
 // can't grant (403); this dialog just collects the intended state. Also used to seed the create form.
 public partial class ServiceAccountEditDialog : Window
 {
-    public ServiceAccountEditDialog() : this("", false, false, false, false, false, false)
+    public ServiceAccountEditDialog() : this("", false, false, false, false, false, false, false)
     {
     }
 
@@ -30,6 +30,7 @@ public partial class ServiceAccountEditDialog : Window
     /// </remarks>
     public ServiceAccountEditDialog(string name, bool canExport, bool canImport,
         bool canManageRepositories, bool canManageMasks, bool canManageServiceAccounts, bool canBlockResources,
+        bool canManageModules,
         Services.AdminClient.GrantableServiceAccountRights? grantable = null)
     {
         InitializeComponent();
@@ -40,6 +41,7 @@ public partial class ServiceAccountEditDialog : Window
         MasksBox.IsChecked = canManageMasks;
         ServiceAccountsBox.IsChecked = canManageServiceAccounts;
         BlockResourcesBox.IsChecked = canBlockResources;
+        ManageModulesBox.IsChecked = canManageModules;
 
         // Null means the caller did not supply the cap (the design-time ctor, and any caller not yet updated):
         // leave the editor as it was rather than silently disabling everything, which would read as "you may
@@ -52,6 +54,7 @@ public partial class ServiceAccountEditDialog : Window
             MasksBox.IsEnabled = cap.CanManageMasks;
             ServiceAccountsBox.IsEnabled = cap.CanManageServiceAccounts;
             BlockResourcesBox.IsEnabled = cap.CanBlockResources;
+            ManageModulesBox.IsEnabled = cap.CanManageModules;
         }
 
         Opened += (_, _) => NameBox.Focus();
@@ -68,11 +71,12 @@ public partial class ServiceAccountEditDialog : Window
         Close(new Result(name,
             ExportBox.IsChecked == true, ImportBox.IsChecked == true,
             RepositoriesBox.IsChecked == true, MasksBox.IsChecked == true, ServiceAccountsBox.IsChecked == true,
-            BlockResourcesBox.IsChecked == true));
+            BlockResourcesBox.IsChecked == true, ManageModulesBox.IsChecked == true));
     }
 
     private void OnCancel(object? sender, RoutedEventArgs e) => Close(null);
 
     public sealed record Result(string Name, bool CanExport, bool CanImport,
-        bool CanManageRepositories, bool CanManageMasks, bool CanManageServiceAccounts, bool CanBlockResources);
+        bool CanManageRepositories, bool CanManageMasks, bool CanManageServiceAccounts, bool CanBlockResources,
+        bool CanManageModules);
 }

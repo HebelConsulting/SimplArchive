@@ -7,7 +7,8 @@ using Spectre.Console.Cli;
 namespace SimplArchive.Cli.Commands;
 
 /// <summary>
-/// Signs a USER in through the device authorization grant (ADR 0823) and prints the session as shell exports.
+/// Signs a USER in through the device authorization grant (ADR 0823) — or, with <c>--client-id</c>, a tenant
+/// SERVICE ACCOUNT through client credentials (ADR 0870) — and prints the session as shell exports.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -30,8 +31,29 @@ namespace SimplArchive.Cli.Commands;
 /// </remarks>
 public sealed class LoginCommand(IAnsiConsole console) : AsyncCommand<LoginCommand.Settings>
 {
+    /// <summary>Environment variable carrying a service account's secret — never an option.</summary>
+    public const string ClientSecretVariable = "SACONSOLE_CLIENT_SECRET";
+
     public sealed class Settings : ApiSettings
     {
+        /// <summary>
+        /// Sign in as this tenant service account instead of a person (ADR 0870). For an unattended setup —
+        /// a demo reset, a provisioning pipeline — where nobody is present to approve a device code. The secret
+        /// comes ONLY from <see cref="ClientSecretVariable"/>: an unattended script is exactly where a secret
+        /// on argv ends up in a process list and a log.
+        /// </summary>
+        [CommandOption("--client-id <ID>")]
+        [Description("Sign in as this tenant service account (client credentials). The secret is read from $SACONSOLE_CLIENT_SECRET.")]
+        public string? ClientId { get; init; }
+
+        public override ValidationResult Validate() => this switch
+        {
+            _ when base.Validate() is { Successful: false } failed => failed,
+            { ClientId: { Length: > 0 } } when string.IsNullOrEmpty(Environment.GetEnvironmentVariable(ClientSecretVariable)) =>
+                ValidationResult.Error($"--client-id needs the service account's secret in ${ClientSecretVariable}."),
+            _ => ValidationResult.Success(),
+        };
+
         [CommandOption("--no-export")]
         [Description("Print only the confirmation, not the shell exports (for a human, not for eval).")]
         public bool NoExport { get; init; }
@@ -43,27 +65,11 @@ public sealed class LoginCommand(IAnsiConsole console) : AsyncCommand<LoginComma
         var human = AnsiConsole.Create(new AnsiConsoleSettings { Out = new AnsiConsoleOutput(Console.Error) });
 
         using var http = new HttpClient { BaseAddress = new Uri(settings.ResolvedUrl.TrimEnd('/') + "/") };
-        var flow = new DeviceFlow(http);
 
-        var authorization = await flow.RequestAsync(cancellationToken);
-
-        human.WriteLine();
-        human.MarkupLine($"  Code            [bold]{Markup.Escape(authorization.UserCode)}[/]");
-        human.MarkupLine($"  Approve it at   [blue]{Markup.Escape(authorization.VerificationUriComplete ?? authorization.VerificationUri)}[/]");
-        if (authorization.VerificationUriComplete is not null)
-        {
-            // Both are shown when they differ: the complete URI is the convenient one, and the bare one is
-            // what to type on a phone that cannot follow a link from a terminal.
-            human.MarkupLine($"  or enter it at  [blue]{Markup.Escape(authorization.VerificationUri)}[/]");
-        }
-
-        human.WriteLine();
-        human.MarkupLine("  [dim]Check the code on that page matches the one above before approving.[/]");
-        human.WriteLine();
-
-        var token = await human.Status()
-            .StartAsync("Waiting for approval…", async _ =>
-                await flow.PollAsync(authorization, _ => { }, cancellationToken));
+        var token = settings.ClientId is { Length: > 0 } clientId
+            ? await new SimplArchiveApi(http).RequestServiceAccountTokenAsync(
+                clientId, Environment.GetEnvironmentVariable(ClientSecretVariable)!, cancellationToken)
+            : await ApproveDeviceCodeAsync(http, human, cancellationToken);
 
         // Prove the token works AND name who it belongs to, before announcing success. A login that reports
         // success and then fails on the first real command has told the administrator the wrong thing about
@@ -74,7 +80,12 @@ public sealed class LoginCommand(IAnsiConsole console) : AsyncCommand<LoginComma
         // shows the freshly minted token can read the root AND the resource the root points at.
         var me = await api.GetAsync(
             await new Hypermedia(api).RootHrefAsync("whoami", cancellationToken), cancellationToken);
-        var who = me.TryGetProperty("userName", out var name) ? name.GetString() : null;
+        // A service account has no display name on whoami; its id is what an administrator can look up.
+        var who = me.TryGetProperty("userName", out var name) && name.GetString() is { } userName
+            ? userName
+            : me.TryGetProperty("serviceAccountId", out var sa) && sa.ValueKind == System.Text.Json.JsonValueKind.String
+                ? $"service account {sa.GetString()}"
+                : null;
         var tenant = me.TryGetProperty("tenantName", out var t) ? t.GetString() : null;
 
         human.MarkupLine($"  [green]Signed in[/] as {Markup.Escape(who ?? "(unknown)")}"
@@ -94,5 +105,30 @@ public sealed class LoginCommand(IAnsiConsole console) : AsyncCommand<LoginComma
         console.WriteLine($"export {ApiSettings.TokenVariable}='{token}'");
         console.WriteLine($"export {ApiSettings.UrlVariable}='{settings.ResolvedUrl.TrimEnd('/')}'");
         return 0;
+    }
+
+    private static async Task<string> ApproveDeviceCodeAsync(HttpClient http, IAnsiConsole human, CancellationToken cancellationToken)
+    {
+        var flow = new DeviceFlow(http);
+
+        var authorization = await flow.RequestAsync(cancellationToken);
+
+        human.WriteLine();
+        human.MarkupLine($"  Code            [bold]{Markup.Escape(authorization.UserCode)}[/]");
+        human.MarkupLine($"  Approve it at   [blue]{Markup.Escape(authorization.VerificationUriComplete ?? authorization.VerificationUri)}[/]");
+        if (authorization.VerificationUriComplete is not null)
+        {
+            // Both are shown when they differ: the complete URI is the convenient one, and the bare one is
+            // what to type on a phone that cannot follow a link from a terminal.
+            human.MarkupLine($"  or enter it at  [blue]{Markup.Escape(authorization.VerificationUri)}[/]");
+        }
+
+        human.WriteLine();
+        human.MarkupLine("  [dim]Check the code on that page matches the one above before approving.[/]");
+        human.WriteLine();
+
+        return await human.Status()
+            .StartAsync("Waiting for approval…", async _ =>
+                await flow.PollAsync(authorization, _ => { }, cancellationToken));
     }
 }

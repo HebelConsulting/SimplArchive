@@ -7,7 +7,7 @@ using Spectre.Console.Cli;
 
 namespace SimplArchive.Cli.Commands;
 
-public sealed class ModuleActivateSettings : UserSessionSettings
+public sealed class ModuleActivateSettings : TenantSessionSettings
 {
     // Both spellings, ONE value placeholder: Spectre's `|` separates alias forms, and giving each its own
     // <FILE> throws CommandTemplateException("Multiple option values are not supported") — at RUNTIME, on

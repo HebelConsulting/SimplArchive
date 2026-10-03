@@ -6,7 +6,7 @@ using Spectre.Console.Cli;
 
 namespace SimplArchive.Cli.Commands;
 
-public sealed class CertificateImportSettings : UserSessionSettings
+public sealed class CertificateImportSettings : TenantSessionSettings
 {
     [CommandArgument(0, "<manifest>")]
     [Description("The CA's manifest: what it issued, and what it revoked.")]

@@ -6,7 +6,7 @@ using Spectre.Console.Cli;
 
 namespace SimplArchive.Cli.Commands;
 
-public sealed class ModuleRebuildSettings : UserSessionSettings
+public sealed class ModuleRebuildSettings : TenantSessionSettings
 {
     [CommandArgument(0, "<module>")]
     [Description("The module whose projection to rebuild, by id — e.g. encryption.")]

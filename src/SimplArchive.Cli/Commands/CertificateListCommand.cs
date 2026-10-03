@@ -6,7 +6,7 @@ using Spectre.Console.Cli;
 
 namespace SimplArchive.Cli.Commands;
 
-public sealed class CertificateListSettings : UserSessionSettings
+public sealed class CertificateListSettings : TenantSessionSettings
 {
     [CommandOption("--holder")]
     [Description("Only this holder's, by e-mail. Omitted lists the whole tenant's (an administrator's view).")]

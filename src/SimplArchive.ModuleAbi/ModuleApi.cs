@@ -56,6 +56,19 @@ public interface IModuleCallerContext
     Task<bool> IsTenantAdminAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Whether the caller may administer modules (ABI 1.4, core ADR 0870) — the bar the core's own module
+    /// administration uses (activate, renew, configure). A user: the tenant-admin bypass, exactly
+    /// <see cref="IsTenantAdminAsync"/>. A service account: the <c>CanManageModules</c> right a tenant
+    /// administrator granted it, so an unattended setup can do what a module reserves for its administrators
+    /// (enrolling another user's certificate) without a scripted human login.
+    /// </summary>
+    /// <remarks>Gate a module's ADMINISTRATIVE acts on this rather than on <see cref="IsTenantAdminAsync"/>;
+    /// that one stays the literal question "is this a tenant administrator". DEFAULT-IMPLEMENTED so a host
+    /// or test double built against 1.3 still compiles — the default answers as 1.3 would have.</remarks>
+    Task<bool> CanAdministerModulesAsync(CancellationToken cancellationToken = default) =>
+        IsTenantAdminAsync(cancellationToken);
+
+    /// <summary>
     /// The caller's human-readable identity (ABI 0.2, #1014): a user's display name and e-mail, a service
     /// account's name with no e-mail. What lets a handler prefill "who is acting" into a field a person
     /// will read — the GUIDs above are for machines. Null when no principal is resolved (which a module

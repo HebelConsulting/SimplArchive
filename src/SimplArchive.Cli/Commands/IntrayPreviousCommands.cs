@@ -31,10 +31,10 @@ internal static class IntrayPreviousSurface
 /// <summary>
 /// Lists what an intray overwrite set aside and how long is left to recover it (#799).
 /// </summary>
-public sealed class IntrayPreviousListCommand(IAnsiConsole console) : AsyncCommand<UserSessionSettings>
+public sealed class IntrayPreviousListCommand(IAnsiConsole console) : AsyncCommand<TenantSessionSettings>
 {
     protected override async Task<int> ExecuteAsync(
-        CommandContext context, UserSessionSettings settings, CancellationToken cancellationToken)
+        CommandContext context, TenantSessionSettings settings, CancellationToken cancellationToken)
     {
         using var http = CertificateEndpoint.Client(settings);
         var api = new SimplArchiveApi(http);
@@ -80,7 +80,7 @@ public sealed class IntrayPreviousListCommand(IAnsiConsole console) : AsyncComma
 /// <summary>Puts a set-aside copy back into the intray (#799).</summary>
 public sealed class IntrayPreviousRestoreCommand(IAnsiConsole console) : AsyncCommand<IntrayPreviousRestoreCommand.Settings>
 {
-    public sealed class Settings : UserSessionSettings
+    public sealed class Settings : TenantSessionSettings
     {
         [CommandArgument(0, "<name>")]
         public string Name { get; init; } = string.Empty;

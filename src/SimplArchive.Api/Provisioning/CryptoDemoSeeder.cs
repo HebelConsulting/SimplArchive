@@ -118,6 +118,8 @@ public static class CryptoDemoSeeder
 
         await dbContext.SaveChangesAsync();
 
+        await AddModuleSetupAsync(services, dbContext, configuration, provisioned, admin.Id, now);
+
         // A couple of documents so IMAP serves content immediately — through the same finalizer path an
         // interactive upload takes (ADR 0545), reusing demo resources (content is irrelevant to the
         // encryption proof; that the bytes arrive as application/pkcs7-mime is the point).
@@ -133,5 +135,50 @@ public static class CryptoDemoSeeder
         await DemoDataSeeder.AddDocumentAsync(dbContext, storage, assembly, provisioned.TenantId,
             provisioned.RepositoryId, "Salary review 2026", admin.Id, now, basicEntryVersion.Id,
             "DemoOfferV1.pdf", ".pdf", "application/pdf", new DateOnly(2026, 1, 14), finalizer);
+    }
+
+    // The unattended setup principal (ADR 0870): the nightly reset wipes every enrolment (certificates are
+    // documents), so something has to activate the Encryption Module and re-enrol the readers each morning
+    // with nobody present — and a scripted human login was rejected as MFA-fragile. A no-op unless
+    // CryptoDemo:ServiceAccount:ClientId/ClientSecret are configured, like every seeded principal.
+    //
+    // NARROW on purpose. CanManageModules and nothing else at system level, and its grant confined to one
+    // folder that BREAKS inheritance: the repository's grants (florian/thomas/alex) do not reach in, and its
+    // own grant does not reach out to the board minutes. It files the licence here, and the module's
+    // "Reader certificates" folder is placed here through the module's parent setting. CanManagePermissions
+    // on this folder only is what lets it grant the module's own principal (`Module: Encryption`, created at
+    // activation, so it cannot be granted at seed time) — and it can grant no more than it holds.
+    //
+    // The folder's id is DemoId.For(tenant, "folder/administration"); crypto-seed.sh derives the same UUIDv5.
+    private static async Task AddModuleSetupAsync(
+        IServiceProvider services, SimplArchiveDbContext dbContext, IConfiguration configuration,
+        ProvisionedTenant provisioned, Guid adminId, DateTimeOffset now)
+    {
+        if (string.IsNullOrWhiteSpace(configuration["CryptoDemo:ServiceAccount:ClientId"]))
+        {
+            return;
+        }
+
+        var folderMaskVersion = await dbContext.MaskVersions
+            .SingleAsync(v => v.MaskId == WellKnownMaskIds.Folder && v.IsCurrent);
+        var administration = await DemoDataSeeder.AddFolderAsync(dbContext, provisioned.TenantId,
+            provisioned.RepositoryId, "Administration", adminId, now, folderMaskVersion.Id, "administration");
+        // Broken with no entry copied down: a break snapshots what is in force at that moment, and the
+        // repository's grants are exactly what must not be inherited here.
+        administration.BreaksInheritance = true;
+
+        await SeededServiceAccount.AddIfConfiguredAsync(services, dbContext, configuration, "CryptoDemo",
+            provisioned.TenantId, grantOn: administration.Id,
+            rights: account => account.CanManageModules = true,
+            grant: entry =>
+            {
+                entry.CanSee = true;
+                entry.CanReadContent = true;
+                entry.CanEditContent = true;
+                entry.CanEditIndexData = true;
+                entry.CanCreateSubItems = true;
+                entry.CanManagePermissions = true;
+            });
+        await dbContext.SaveChangesAsync();
     }
 }

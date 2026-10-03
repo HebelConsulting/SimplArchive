@@ -13,10 +13,10 @@ namespace SimplArchive.Cli.Commands;
 /// register the first one from here and would have to finish the job in a different client. A verb that can
 /// only be performed once is not a verb.
 /// </remarks>
-public sealed class CertificateDeleteCommand(IAnsiConsole console) : AsyncCommand<UserSessionSettings>
+public sealed class CertificateDeleteCommand(IAnsiConsole console) : AsyncCommand<TenantSessionSettings>
 {
     protected override async Task<int> ExecuteAsync(
-        CommandContext context, UserSessionSettings settings, CancellationToken cancellationToken)
+        CommandContext context, TenantSessionSettings settings, CancellationToken cancellationToken)
     {
         using var http = CertificateEndpoint.Client(settings);
         var api = new SimplArchiveApi(http);

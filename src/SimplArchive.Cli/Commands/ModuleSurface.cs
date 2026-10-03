@@ -60,7 +60,7 @@ internal static class ModuleSurface
             return href;
         }
 
-        var active = row.TryGetProperty("isActive", out var flag) && flag.ValueKind == JsonValueKind.True;
+        var active = row.TryGetProperty("active", out var flag) && flag.ValueKind == JsonValueKind.True;
 
         throw new CliException(active
             ? $"'{moduleId}' is active but declares nothing to configure, so it has no settings."
