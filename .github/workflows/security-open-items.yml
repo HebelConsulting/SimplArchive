@@ -1,0 +1,35 @@
+# Is every line of the manual's "What is still open" still open? (issue #1592)
+#
+# The security appendix shipped in v0.36.0 telling readers images were unsigned — in the release that signed them —
+# because nothing asks whether a manual SENTENCE is still true; manual.yml only asks whether the document compiles.
+# Each line now cites the issue tracking it (ManualOpenItemsCiteAnIssueTests), and this fails when one of those
+# issues has CLOSED while its line still says "open". A schedule, like seed-drift.yml: it needs the network and has
+# nothing to do with whether a given change is sound, and a failed job arrives as a notification where a report
+# would sit unread.
+name: Security open items
+
+on:
+  schedule:
+    # Mondays, 06:40 UTC — beside seed drift, off the hour.
+    - cron: '40 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  open-items:
+    # PRIVATE ONLY. The cited issues live on the private repository; the public mirror carries the manual and this
+    # file, and would otherwise run the check against a repository where none of those issues exist.
+    if: ${{ github.repository == 'HebelConsulting/SimplArchivePrivate' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Judged by EXIT CODE: 1 = a cited issue is closed (the manual is stale), 2 = could not tell. Both fail the
+      # job; the log says which.
+      - name: Every line of §20.4 cites an issue that is still open
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/check-security-open-items.sh manual/manual.typ

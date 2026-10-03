@@ -736,14 +736,21 @@ you may see; a folder you have no rights to simply is not there, rather than bei
     see @encryptedreads],
 )
 
-== One password for your devices
+== Two passwords for your devices
 
-Every protocol above uses the *same DAV password*, issued from *WebDAV…* in the account menu. It is separate
-from your sign-in password on purpose: a device holds it indefinitely, so it is the one you revoke when a phone
-is lost — without changing how you sign in.
+Your devices use *two* app passwords, not one, and neither is your sign-in password:
 
-Revoking it disconnects every device at once. There is no per-device credential today; if you need one device
-cut off, reissue and re-enter the password on the ones you keep.
+- the *DAV password* — issued from *WebDAV…* in the account menu — for the file manager (*WebDAV*), the
+  calendar (*CalDAV*) and the address book (*CardDAV*);
+- the *IMAP password* — issued from *Email access (IMAP)…* — for the mail program and the notes app.
+
+Both are separate from your sign-in password on purpose: a device holds them indefinitely, so they are what you
+revoke when a phone is lost — without changing how you sign in. *A lost device needs both revoked*: revoking
+the DAV password leaves that phone's mail and notes connected, and revoking the IMAP password leaves its files,
+calendar and contacts connected.
+
+Revoking either disconnects every device using it at once. There is no per-device credential today; if you need
+one device cut off, reissue the password and re-enter it on the devices you keep.
 
 == Encryption is not optional
 
@@ -1899,13 +1906,16 @@ is kept: a decision recorded is not a decision delivered, and only a test can te
   [*A02 Cryptographic failures*], [Passwords are stored only as hashes, and never logged. Secrets — database
    credentials, object-storage keys, token-signing certificates — come from a secrets manager when one is
    configured, with the database credential issued afresh at every start-up and the application never using the
-   database superuser. Transport security is relaxed only when the application is run in *development* mode:
+   database superuser. Outside development a secret the application must store — a one-time-code seed — is
+   encrypted by the secrets manager, and the start-up gate refuses to run without one rather than storing it in
+   plaintext. Transport security is relaxed only when the application is run in *development* mode:
    the relaxation is tied to that mode rather than to a setting, so there is no configuration switch that turns
    it off in a deployed installation.],
   [*A03 Injection*], [Data access is exclusively through a typed query layer: the application contains *no raw or
    string-concatenated SQL anywhere outside its schema migrations*. Output in both clients is framework-escaped, and the response-header
-   policy blocks inline script rather than allowing it. XML from the protocol endpoints is parsed with
-   document-type definitions disabled by framework default.],
+   policy blocks inline script rather than allowing it. XML from outside is parsed through one helper that
+   prohibits document-type definitions, resolves no external entities and expands none — by assertion, so a
+   changed framework default would not change it.],
   [*A04 Insecure design*], [Progressive throttling of credential guessing at every door that verifies one; an
    upload content check that refuses executables and scripts by their bytes as well as their names; storage
    quotas; connection caps on the mail endpoint; page-size clamps on every listing. The archive's own invariants
@@ -1915,22 +1925,29 @@ is kept: a decision recorded is not a decision delivered, and only a test can te
    development-grade setting is present — development certificates, bootstrap secrets, default storage
    credentials, an unstamped build — and there is *no flag to bypass it*. Responses carry a content-security
    policy, frame and referrer restrictions and content-type pinning; each header is set only if absent, so a
-   deployment that owns its own edge keeps ownership.],
+   deployment that owns its own edge keeps ownership. Forwarded headers from a reverse proxy are honoured only
+   from the proxies a deployment names, and the start-up gate refuses the option with none named.],
   [*A06 Vulnerable and outdated components*], [Every build scans the dependency tree for known vulnerabilities
    and fails on a finding; the container image is scanned separately; dependency updates are proposed
    automatically each week. A licence gate additionally fails the build on any dependency outside the allowed
    set.],
   [*A07 Identification and authentication failures*], [Standards-based sign-in with proof-key exchange for the
    interactive clients. Second factors are supported as time-based codes and as passkeys, including passwordless
-   sign-in, and an organisation can require them for everybody. Failed attempts are progressively refused per
-   account *and* per source, with blocks that expire on their own rather than needing an administrator.],
+   sign-in, and an organisation can require them for everybody. A chosen password must be at least twelve
+   characters and must not be, or merely decorate, one of the ten thousand most common breached passwords.
+   Failed attempts are progressively refused per account *and* per source, with blocks that expire on their own
+   rather than needing an administrator. Access tokens live fifteen minutes and refresh tokens thirty days.],
   [*A08 Software and data integrity failures*], [Uploaded content is re-read and hashed by the server rather
    than trusted from the client. Versions can be locked immutable in storage for a retention period. The audit
    log is hash-chained, so an altered or missing entry is detectable. Schema migrations are checked for
-   data-destroying operations, and a destructive one must be listed with a reason before the build will pass.],
-  [*A09 Security logging and monitoring failures*], [Every user-facing change is audited to an append-only,
-   hash-chained log with a retention policy, write-once archival segments, export, and signed streaming to a
-   SIEM. Requests carry a correlation identifier end to end, and every external seam can be traced in full
+   data-destroying operations, and a destructive one must be listed with a reason before the build will pass.
+   Published images are signed, carry build provenance and a software bill of materials, and the release notes
+   say how to verify all three.],
+  [*A09 Security logging and monitoring failures*], [Changes are audited to an append-only, hash-chained log
+   with a retention policy, write-once archival segments, export, and signed streaming to a SIEM — including a
+   refused sign-in, a sign-out and an account lockout. Coverage is *not* claimed to be complete: a build check
+   fails when a new change-making endpoint records nothing, and the endpoints that still record nothing are a
+   listed, justified backlog rather than an assumption. Requests carry a correlation identifier end to end, and every external seam can be traced in full
    detail when needed. Logs never contain a password, a token or a signed URL.],
   [*A10 Server-side request forgery*], [The two places that accept a caller-supplied URL — an organisation's
    audit webhook and a client's push endpoint — are checked when the URL is registered *and again at the moment
@@ -1947,10 +1964,11 @@ is kept: a decision recorded is not a decision delivered, and only a test can te
   inset: 6pt,
   [*Architecture*], [Layering is enforced by tests rather than convention; every architectural decision is
    recorded, including the ones later reversed.],
-  [*Authentication*], [Standards-based, second factors supported and enforceable, throttled. Password
-   *composition* rules are the one substantial item still open.],
-  [*Session management*], [Server-issued tokens with bounded lifetimes; signing out clears both the server's
-   session and the client's cached token.],
+  [*Authentication*], [Standards-based, second factors supported and enforceable, throttled; chosen passwords
+   meet a length and breach-list policy; failed and throttled sign-ins reach the audit trail.],
+  [*Session management*], [Server-issued tokens with bounded lifetimes — fifteen minutes for access, thirty days
+   for refresh; signing out clears both the server's session and the client's cached token. Detecting a
+   replayed refresh token is still open (see below).],
   [*Access control*], [Per-object, deny by default, and evaluated *server-side on every
    request* — the clients never decide it. They additionally hide an action the server did not advertise, so a
    user is rarely offered something that would be refused; but the hiding is courtesy, and the refusal is the
@@ -1969,21 +1987,17 @@ is kept: a decision recorded is not a decision delivered, and only a test can te
 
 == What is still open
 
-An assessment that reports nothing outstanding is one to distrust. These are tracked, and none of them is a
-remotely exploitable defect in the shipped configuration:
+An assessment that reports nothing outstanding is one to distrust. These are tracked, and neither is a remotely
+exploitable defect in the shipped configuration. Each names the issue that tracks it, and a weekly check fails
+when one of those issues closes while its line is still here — because this list once went on describing a
+product that had moved on, in the one chapter a reader opens to find out what is not done.
 
-- *Password composition* — no minimum length or breached-password check yet. Throttling bounds how fast a
-  password can be guessed; it does nothing about one that is already on a public list.
-- *Token lifetimes and refresh-token reuse detection* — lifetimes sit at framework defaults, and a replayed
-  refresh token is not yet detected as a replay.
-- *Two secrets at rest* — one-time-code seeds and external-link tokens are stored as issued unless a secrets
-  manager is configured. Reading them requires database access.
-- *Authentication events in the audit trail* — a failed sign-in is a log line, not yet an audit event.
-- *Supply-chain attestation* — images are scanned but not signed, and no bill of materials is published.
-- *Explicit XML hardening* — safe today by framework default rather than by assertion, which means nothing
-  would notice if the default changed.
-- *Proxy trust* — when the reverse-proxy header option is enabled it trusts any proxy, which is right for a
-  local test network and too broad for production.
+- *Refresh-token reuse and access-token revocation* (\#1578) — a replayed refresh token is not yet detected as a
+  replay, and an access token cannot be revoked before it expires. The fifteen-minute access lifetime bounds the
+  second; nothing yet bounds the first beyond the thirty-day refresh lifetime.
+- *External-link tokens at rest* (\#1579) — the token behind a link shared outside the system is stored as
+  issued, so reading it requires database access. Hashing it would remove the ability to show an existing link
+  again, which is why it is a decision rather than a fix.
 
 == How this stays true
 
