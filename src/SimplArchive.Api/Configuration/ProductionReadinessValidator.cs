@@ -100,6 +100,29 @@ public static class ProductionReadinessValidator
             violations.Add($"{invalid} — it is ignored, so it narrows nothing.");
         }
 
+        // PLAINTEXT SECRETS AT REST (#847, A02). With no OpenBao address the transit encryptor resolves to
+        // NullTransitEncryptor, which is a PASS-THROUGH: everything routed through it is stored exactly as
+        // given. That is the dev-grade trade the demo stack is built on, and it is the same class of setting
+        // as the dev certificates and the known MinIO credentials above.
+        //
+        // IT IS NOT ONLY TOTP, which is how this stayed small in people's heads — the comment at
+        // NullTransitEncryptor names the MFA ADR, and the list has grown underneath it. The tenant's SMTP
+        // password, the audit webhook's signing secret, a module's per-tenant settings and the mail ingest key
+        // all ride the same seam. A deployment should not learn which of those were plaintext from a breach.
+        //
+        // And the DOWNGRADE is silent in the other direction: decryption deliberately passes through anything
+        // without the vault prefix, so removing OpenBao from a working installation keeps serving while new
+        // secrets start being written in the clear, with nothing to mark where the change happened.
+        if (string.IsNullOrWhiteSpace(configuration["OpenBao:Address"]))
+        {
+            violations.Add(
+                "OpenBao:Address is not configured, so the transit encryptor is the pass-through "
+                + "NullTransitEncryptor and every secret it protects would be stored in PLAINTEXT — TOTP "
+                + "secrets, tenant SMTP passwords, audit-webhook signing secrets, module settings and the mail "
+                + "ingest key. Configure OpenBao (ADR 0338/0339) or run locally with "
+                + "ASPNETCORE_ENVIRONMENT=Development.");
+        }
+
         // The development Postgres password, unless a credential source (OpenBao) is composing the connection.
         var connectionString = configuration["ConnectionStrings:Default"] ?? "";
         if (string.IsNullOrWhiteSpace(configuration["OpenBao:Address"])

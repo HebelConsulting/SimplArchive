@@ -29,6 +29,10 @@ public class ProductionReadinessValidatorTests
         ["ObjectStorage:AccessKey"] = "AKIAREAL",
         ["ObjectStorage:SecretKey"] = "realsecretkey",
         ["ConnectionStrings:Default"] = "Host=pg;Port=5432;Database=simplarchive;Username=app;Password=s3cret",
+        // A clean production config now INCLUDES OpenBao (#847, A02). Without it the transit encryptor is a
+        // pass-through and every secret it protects is stored in plaintext, so its absence is a dev-grade
+        // setting like the others in this dictionary rather than an optional extra.
+        ["OpenBao:Address"] = "https://openbao.internal:8200",
     };
 
     [Fact]
@@ -203,5 +207,47 @@ public class ProductionReadinessValidatorTests
         Assert.Equal(2, ProxyTrust.KnownProxies(config).Count());
         Assert.True(ProxyTrust.NamesAnyProxy(config));
     }
-}
 
+    // ---- Plaintext secrets at rest (#847, A02) -------------------------------------------------------
+
+    [Fact]
+    public void Production_refuses_to_run_without_a_transit_encryptor()
+    {
+        var config = Config(new(CleanProduction) { ["OpenBao:Address"] = null });
+
+        var violations = ProductionReadinessValidator.Validate(config, new StubEnvironment(), "1.2.3");
+
+        Assert.Contains(violations, v => v.Contains("PLAINTEXT", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void The_refusal_names_every_secret_kind_that_would_be_plaintext()
+    {
+        // NOT a formatting assertion. This stayed small in everybody's head as "the TOTP thing" — the comment
+        // at NullTransitEncryptor still names only the MFA ADR — while the list grew underneath it to include
+        // the tenant SMTP password, the audit webhook's signing secret, module settings and the mail ingest
+        // key. An administrator reading this violation has to learn which secrets they have been storing in
+        // the clear, so the message enumerating them IS the fix.
+        var config = Config(new(CleanProduction) { ["OpenBao:Address"] = null });
+
+        var violation = Assert.Single(
+            ProductionReadinessValidator.Validate(config, new StubEnvironment(), "1.2.3"),
+            v => v.Contains("PLAINTEXT", StringComparison.Ordinal));
+
+        foreach (var kind in new[] { "TOTP", "SMTP", "webhook", "module settings", "ingest key" })
+        {
+            Assert.Contains(kind, violation, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public void Development_is_untouched_by_it()
+    {
+        // The demo stack, Compose and every test host run without OpenBao by design — the pass-through is what
+        // makes those work at all. The gate returns early in Development, and this pins that it stays that way.
+        var config = Config(new() { ["OpenBao:Address"] = null });
+
+        Assert.Empty(ProductionReadinessValidator.Validate(
+            config, new StubEnvironment { EnvironmentName = "Development" }));
+    }
+}

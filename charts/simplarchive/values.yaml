@@ -79,7 +79,11 @@ config:
     fromAddress: ""
     fromName: "SimplArchive"
   openBao:
-    address: ""                       # e.g. https://openbao.internal:8200 (recommended for secrets)
+    # REQUIRED outside Development (#847, A02): with no address the transit encryptor is a pass-through and
+    # every secret it protects is stored in PLAINTEXT — TOTP secrets, tenant SMTP passwords, audit-webhook
+    # signing secrets, module settings and the mail ingest key. The app REFUSES TO START without it, which is
+    # deliberate: a deployment should not learn which of those were in the clear from a breach.
+    address: ""                       # e.g. https://openbao.internal:8200
     roleId: ""                        # AppRole RoleId (non-secret)
     databaseConnectionTemplate: ""    # host/port/db, e.g. "Host=pg;Port=5432;Database=simplarchive"
   bootstrap:
