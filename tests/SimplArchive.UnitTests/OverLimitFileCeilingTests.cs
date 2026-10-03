@@ -269,10 +269,14 @@ public class OverLimitFileCeilingTests
         // each of them -- more lines in this file, not fewer. One is code; four are the comment saying why a
         // bare assignment to a status line is there, without which it is exactly the kind of line a later
         // reader tidies away.
-        // 1568 -> 1484 -> 1420 (#941): the tag-catalog admin and then the retention schedule moved to their
+        // 1568 -> 1484 -> 1420 -> 1397 (#941): the tag catalog, the retention schedule and the folder sort
+        // order moved to their own partials. The line count is the smaller half of each tranche — every one of
+        // the six banners read so far covered things it did not name, and those regained names of their own.
+        // Superseded comment follows for the first two:
+        // 1568 -> 1484 -> 1420: the tag-catalog admin and then the retention schedule moved to their
         // own partials; three banners that described NOTHING went with the first, and four concerns that had
         // been living under the retention banner regained names of their own with the second.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 1420,
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 1397,
 
         // DocumentsClient is GONE from this list: 1,235 -> 992, by #518's plan -- real per-area clients sharing
         // the one authenticated ApiCore. Four areas left it:

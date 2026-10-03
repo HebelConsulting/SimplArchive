@@ -723,14 +723,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
         ApplyContentSort();
     }
 
-    // ---- Folder detail pane: the open folder's persisted contents sort order (ADR "Per-folder contents sort
-    // order") — a "Contents sort order" field editable under an Edit toggle. -----------------------------
-    public string FolderSortText => _folderSortOrder switch
-    {
-        1 => Strings.Get("FolderSortDocDate"),
-        2 => Strings.Get("FolderSortCreated"),
-        _ => Strings.Get("FolderSortName"),
-    };
+    // ---- Folder contents sort order — extracted to MainWindowViewModel.FolderSortOrder.cs (#941) ----
+
+    // ---- Detail pane: the subject's glyph, and whether it is a folder ---------------------------
 
     // A folder is open and no document is selected → show the folder detail pane instead of the placeholder.
     // The pane describes a SUBJECT — a selected row, else the open folder — so a folder gets the document's pane
@@ -749,25 +744,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     private bool _detailIsFolder;
 
 
-    private int _detailSortOrder;
-
-    // Staged like every other edited field, so Cancel discards it and Save commits it with the rest.
-    [ObservableProperty] private int _editSortOrder;
-
-    public string DetailSortText => _detailSortOrder switch
-    {
-        1 => Strings.Get("FolderSortDocDate"),
-        2 => Strings.Get("FolderSortCreated"),
-        _ => Strings.Get("FolderSortName"),
-    };
-
-    // The tree context menu's "Contents sort order" entry: the order is a field in the ONE detail pane now
-    // (issue #408), so this opens that edit rather than a mode of its own — one edit, one Save, wherever you
-    // started from. The old toggle (its own Edit/Save/Cancel and its own save path) is gone with it.
-    [RelayCommand]
-    private void BeginFolderSortEdit() => BeginEditCommand.Execute(null);
-
-    // The folder currently shown in the contents pane — the drop target for a drag onto empty space.
+    // ---- The open folder, the breadcrumb, and creating a folder in it ---------------------------
     public Guid? CurrentFolderId => _currentFolderId;
 
     // Rebuilds the breadcrumb from a tree node's ancestry (root → … → node).
