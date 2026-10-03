@@ -24,6 +24,11 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # KEYLESS SIGNING (#847, A08). cosign exchanges this job's OIDC token for a short-lived certificate
+      # bound to the workflow's identity, so there is no signing key to hold, rotate or leak — the thing a
+      # managed key exists to go wrong. It is a job-scoped grant and buys nothing else: an OIDC token names
+      # this workflow and cannot write anything.
+      id-token: write
     # Every custom image: the API, the OCR sidecar, and the MTA (ADR 0630). Kubernetes pulls them — it cannot
     # `build ./ocr` or `build ./postfix` the way Compose does, so an image the chart references must be
     # published here or the chart installs a Deployment that can never start.
@@ -61,6 +66,7 @@ jobs:
             type=sha
 
       - name: Build + push
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.context }}
@@ -95,3 +101,15 @@ jobs:
           # along. Nothing that can pull these images today stops being able to.
           provenance: mode=max
           sbom: true
+
+      # The DIGEST, so the signature names the exact bytes rather than a tag that can be moved afterwards —
+      # which is the whole difference between signing an artefact and signing a label.
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign the image keylessly
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          # Every tag metadata-action produced points at the same digest, so one signature covers them all.
+          cosign sign --yes "ghcr.io/hebelconsulting/${{ matrix.image }}@${DIGEST}"
