@@ -11,12 +11,22 @@ namespace SimplArchive.Infrastructure.Search;
 // Registered only when OpenSearch is configured. Oldest-first, deduped by document (current state indexed
 // once), setting the tenant context per row so the indexer's tenant-filtered queries resolve. A row is
 // deleted only when its sync succeeds — so an OpenSearch outage retries rather than losing the event
-// (at-least-once). Single-instance: multi-pod claim-locking (SKIP LOCKED) is out of scope; SyncAsync is
-// idempotent, so a rare double-process is harmless.
+// (at-least-once).
+//
+// It CLAIMS each document's rows before syncing (#1587, ADR 0836). This used to say "single-instance", and that
+// stopped being true with ADR 0808: both app instances run this worker, and the old read-then-commit-the-batch
+// shape made one contended row discard the deletes for every other document in the batch — across tenants —
+// behind a warning that named neither. Now each document is claimed (a compare-and-swap on `ClaimedAt IS NULL`),
+// synced and completed on its own, so contention costs the loser one skipped document and nothing else.
 public sealed class SearchIndexWorker : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(3);
     private const int BatchSize = 100;
+
+    // How long a claim may stand before it is taken to belong to a process that died between the sync and the
+    // delete. Far above one document's sync; reclaiming re-syncs an idempotent document, so erring long only
+    // delays a crashed row by minutes.
+    public static readonly TimeSpan ClaimLifetime = TimeSpan.FromMinutes(5);
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly SearchReindexState _reindexState;
@@ -79,22 +89,20 @@ public sealed class SearchIndexWorker : BackgroundService
         var tenantAccessor = scope.ServiceProvider.GetRequiredService<CurrentTenantAccessor>();
         var indexer = scope.ServiceProvider.GetRequiredService<IDocumentIndexer>();
 
-        // Oldest-first, ordered CLIENT-SIDE over a keys-only projection — SQLite cannot translate a
-        // DateTimeOffset ORDER BY (the RepositoryExporter precedent), and this worker's drain pass is now
-        // exercised against SQLite by the #661 pause test. The projection is two columns over a table that
-        // is empty in the steady state; the second query fetches only the chosen batch.
-        var keys = (await dbContext.SearchIndexOutbox
-                .Select(o => new { o.Id, o.EnqueuedAt })
+        await ReclaimAbandonedClaimsAsync(dbContext, cancellationToken);
+
+        // Unclaimed rows, oldest-first, ordered CLIENT-SIDE over a keys-only projection — SQLite cannot translate a
+        // DateTimeOffset ORDER BY (the RepositoryExporter precedent), and this drain pass is exercised against
+        // SQLite. AsNoTracking is load-bearing (ADR 0836): the claims below are ExecuteUpdates the ChangeTracker
+        // never sees, and nothing here may be saved through it.
+        var batch = (await dbContext.SearchIndexOutbox.AsNoTracking()
+                .Where(o => o.ClaimedAt == null)
+                .Select(o => new { o.Id, o.DocumentId, o.TenantId, o.EnqueuedAt })
                 .ToListAsync(cancellationToken))
             .OrderBy(o => o.EnqueuedAt)
             .ThenBy(o => o.Id)
             .Take(BatchSize)
-            .Select(o => o.Id)
             .ToList();
-
-        var batch = await dbContext.SearchIndexOutbox
-            .Where(o => keys.Contains(o.Id))
-            .ToListAsync(cancellationToken);
 
         if (batch.Count == 0)
         {
@@ -102,30 +110,96 @@ public sealed class SearchIndexWorker : BackgroundService
             return false;
         }
 
-        var deletedAny = false;
         var indexedCount = 0;
         foreach (var group in batch.GroupBy(o => o.DocumentId))
         {
-            var rows = group.ToList();
-            var tenantId = rows[0].TenantId;
-            tenantAccessor.TenantId = tenantId == Guid.Empty ? null : tenantId;
+            var ids = group.Select(o => o.Id).ToList();
+            var tenantId = group.First().TenantId;
 
-            _logger.LogDebug("Syncing document {DocumentId} in tenant {TenantId} to the search index.", group.Key, tenantId);
-            if (await indexer.SyncAsync(group.Key, cancellationToken))
+            // THE CLAIM: `ClaimedAt IS NULL` is both what the read selected and what this swaps, so the other
+            // instance's sweep that got here first leaves nothing to win and this one moves on.
+            var now = DateTimeOffset.UtcNow;
+            var won = await dbContext.SearchIndexOutbox
+                .Where(o => ids.Contains(o.Id) && o.ClaimedAt == null)
+                .ExecuteUpdateAsync(set => set.SetProperty(o => o.ClaimedAt, now), cancellationToken);
+            if (won == 0)
             {
-                dbContext.SearchIndexOutbox.RemoveRange(rows);
-                deletedAny = true;
+                _logger.LogDebug("Document {DocumentId} is being indexed by another instance; skipping.", group.Key);
+                continue;
+            }
+
+            tenantAccessor.TenantId = tenantId == Guid.Empty ? null : tenantId;
+            _logger.LogDebug("Syncing document {DocumentId} in tenant {TenantId} to the search index.", group.Key, tenantId);
+
+            bool synced;
+            try
+            {
+                synced = await indexer.SyncAsync(group.Key, cancellationToken);
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                // Named, and confined to this document: the old shape's one failure took the whole batch with it
+                // and logged "loop failed" about nothing in particular.
+                _logger.LogWarning(e, "Indexing document {DocumentId} in tenant {TenantId} failed; it will be retried.",
+                    group.Key, tenantId);
+                synced = false;
+            }
+
+            if (synced)
+            {
+                // Only the rows this sweep read: one enqueued for the same document AFTER the read is newer than
+                // what was just indexed, and must survive to be synced again.
+                await dbContext.SearchIndexOutbox
+                    .Where(o => ids.Contains(o.Id))
+                    .ExecuteDeleteAsync(cancellationToken);
                 indexedCount++;
             }
-            // else: leave the rows for the next poll (retry — e.g. OpenSearch briefly unreachable)
+            else
+            {
+                // Released rather than left to the lease, so a transient failure (OpenSearch briefly away) retries
+                // at the next poll instead of five minutes later.
+                await dbContext.SearchIndexOutbox
+                    .Where(o => ids.Contains(o.Id))
+                    .ExecuteUpdateAsync(set => set.SetProperty(o => o.ClaimedAt, (DateTimeOffset?)null), cancellationToken);
+            }
         }
 
-        if (deletedAny)
+        if (indexedCount > 0)
         {
-            await dbContext.SaveChangesAsync(cancellationToken);
             _logger.LogInformation("Synced {Count} document(s) to the search index.", indexedCount);
         }
 
-        return deletedAny;
+        return indexedCount > 0;
+    }
+
+    /// <summary>Puts claims nobody finished back in the queue, so a process killed mid-sync strands nothing.</summary>
+    /// <remarks>
+    /// The cutoff is applied in MEMORY, not in SQL: SQLite — the test provider — cannot compare a
+    /// <c>DateTimeOffset</c> in SQL (the <c>EmailNotificationDispatcher</c> precedent). The claimed set is the rows
+    /// being worked on right now, so reading it whole costs nothing. Two instances reclaiming the same row both set
+    /// it back to null, which is the same outcome twice.
+    /// </remarks>
+    private async Task ReclaimAbandonedClaimsAsync(SimplArchiveDbContext dbContext, CancellationToken cancellationToken)
+    {
+        var claimed = await dbContext.SearchIndexOutbox.AsNoTracking()
+            .Where(o => o.ClaimedAt != null)
+            .Select(o => new { o.Id, o.ClaimedAt })
+            .ToListAsync(cancellationToken);
+
+        var cutoff = DateTimeOffset.UtcNow - ClaimLifetime;
+        var stale = claimed.Where(o => o.ClaimedAt < cutoff).Select(o => o.Id).ToList();
+        if (stale.Count == 0)
+        {
+            return;
+        }
+
+        var reclaimed = await dbContext.SearchIndexOutbox
+            .Where(o => stale.Contains(o.Id) && o.ClaimedAt != null)
+            .ExecuteUpdateAsync(set => set.SetProperty(o => o.ClaimedAt, (DateTimeOffset?)null), cancellationToken);
+
+        _logger.LogWarning(
+            "Reclaimed {Count} search-index claim(s) older than {Lifetime} — a previous sweep did not finish them. "
+            + "The documents will be indexed again, which is harmless: indexing is idempotent.",
+            reclaimed, ClaimLifetime);
     }
 }

@@ -18,4 +18,10 @@ public sealed class SearchIndexOutbox
     public Guid TenantId { get; set; }
 
     public DateTimeOffset EnqueuedAt { get; set; }
+
+    // Null = pending. Set by a worker's CLAIM (one compare-and-swap on `ClaimedAt IS NULL`) before it syncs the
+    // document, so the second app instance (ADR 0808) skips the row instead of colliding on its delete (#1587,
+    // ADR 0836). Also the claim's LIFETIME: a claim older than the worker's lease belonged to a process that died
+    // between the sync and the delete, and is put back.
+    public DateTimeOffset? ClaimedAt { get; set; }
 }
