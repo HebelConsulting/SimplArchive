@@ -985,7 +985,7 @@ macOS Dock, an overlay on the Windows taskbar — so a window you have minimised
 = Administration & account
 
 Administrators manage *users & groups*#idx("Users & groups") and the *rights* granted to them, configure *tenant* settings#idx("Tenant"), and review
-the tamper-evident *audit trail*#idx("Audit trail") of every security-relevant action. They also curate catalogues (sensitivity
+the tamper-evident *audit trail*#idx("Audit trail"). They also curate catalogues (sensitivity
 labels, tags), set the *storage quota*#idx("Storage quota"), and run *import / export*. Every user manages their own *account security* —
 password, multi-factor authentication (authenticator app or passkeys), and profile photo.
 
@@ -1004,6 +1004,23 @@ have just signed in somewhere with the code showing, wait for the next one rathe
 
 #pair("screenshots/web-audit.png", "screenshots/desktop-audit.png",
   [The audit trail — an append-only, hash-chained log — in the web (left) and desktop (right) clients.])
+
+What reaches that trail is worth being precise about, because an audit trail is read by people deciding whether
+something happened — and a trail believed to hold everything is one nobody checks. It records *sign-in and
+account events* (signing in, signing out, a refused credential, an account walled up after repeated attempts),
+*document acts* (filing, versioning, moving, deleting, restoring, rights changes, legal holds, disposition),
+*administration* (users, groups, tenant settings, service accounts, certificate enrolment) and the
+*deliberately dangerous* ones — impersonation, purge, encryption-key rotation and retirement.
+
+It is *not* a record of literally every write. A small, named and shrinking set of operations still mutate
+without recording — chiefly some document sub-items such as appointment and contact edits — and the project
+tracks that set explicitly rather than claiming coverage it does not have. If an entry's absence would be
+evidence for you, confirm that the act you care about is one of the recorded kinds rather than assuming
+silence means it did not happen.
+
+A refused sign-in and a lockout are recent additions. Before them the trail carried only successful sign-ins,
+so a reader could see that somebody *got in* and not that somebody had been trying for an hour — which is the
+question an investigation actually asks.
 
 Among the tenant settings is the account your notifications *leave through*#idx("Outbound mail"). Most installations run no mail
 relay of their own and authenticate against an ordinary provider — and such an account is naturally per tenant,
