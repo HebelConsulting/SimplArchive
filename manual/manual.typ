@@ -1999,6 +1999,14 @@ product that had moved on, in the one chapter a reader opens to find out what is
   issued, so reading it requires database access. Hashing it would remove the ability to show an existing link
   again, which is why it is a decision rather than a fix.
 
+Recently closed, and listed so that their absence above is not mistaken for an omission: chosen passwords must
+meet a minimum length and are checked against a list of commonly used ones; token lifetimes are set
+deliberately rather than left at framework defaults; a production installation refuses to start without a
+secrets manager, so second-factor seeds and the other stored secrets are never kept in plaintext; refused
+sign-ins and lockouts are audit events; published images are signed and carry provenance and a bill of
+materials; XML is parsed with external entities refused by assertion, and a test fails if a parser is added
+without it; and an installation behind a reverse proxy must name the proxies it trusts.
+
 == How this stays true
 
 Every one of the claims above is held by something that runs on each change: a test, a gate, or both. The build
