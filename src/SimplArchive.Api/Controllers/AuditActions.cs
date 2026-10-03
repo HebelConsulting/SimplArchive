@@ -285,6 +285,28 @@ public static class AuditActions
     /// </para>
     /// </remarks>
     public const string LoginFailed = "Auth.LoginFailed";
+
+    /// <summary>Credential guessing against a known account was walled up by the throttle (#1569, ADR 0716).</summary>
+    /// <remarks>
+    /// <para>
+    /// The register's phrase for why this matters is <i>"a lockout with no audit trail cannot be investigated
+    /// afterwards"</i>. The refused attempts beside it are <see cref="LoginFailed"/>; this is the moment they
+    /// crossed a threshold and the account stopped answering — which is what somebody asking "why could I not
+    /// sign in at 09:40" needs, and what a reader reconstructing an attack needs to place in time.
+    /// </para>
+    /// <para>
+    /// <b>ONCE PER BLOCK, not once per refused attempt</b>, and that distinction is the whole design. While a
+    /// block holds, every further attempt is refused — an attacker hammering would otherwise write hundreds of
+    /// identical events and bury the trail they are in. The surface therefore records this only on the failure
+    /// that CAUSED the block, which it detects by re-asking the throttle immediately after recording that
+    /// failure: once blocked, no later attempt reaches that path at all.
+    /// </para>
+    /// <para>
+    /// Same boundary as <see cref="LoginFailed"/>: only for a KNOWN user, because an <c>AuditEvent</c> is
+    /// tenant-scoped and an address matching no user has no tenant to be filed in.
+    /// </para>
+    /// </remarks>
+    public const string LockedOut = "Auth.LockedOut";
     // A device authorization grant was answered by a person (RFC 8628, ADR 0823). Approving hands a token —
     // renewable, where offline_access was asked for — to a machine the approver may not be sitting at, which
     // is the same class of act as issuing a protocol password above. The REFUSAL is recorded too: a grant

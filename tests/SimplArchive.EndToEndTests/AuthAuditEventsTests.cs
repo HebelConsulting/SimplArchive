@@ -132,4 +132,32 @@ public class AuthAuditEventsTests(E2EApiFactory factory)
         // attempt lands nowhere, and counting one tenant would pass while it was filed in another.
         return await db.AuditEvents.IgnoreQueryFilters().CountAsync();
     }
+
+    [Fact]
+    public async Task A_lockout_is_filed_ONCE_however_many_attempts_follow_it()
+    {
+        // #1569. The event that matters is the moment the account stopped answering — "a lockout with no audit
+        // trail cannot be investigated afterwards" is the register's own phrasing.
+        var (_, _, tenantId) = await factory.SeedServiceAccountAsync(canManageRepositories: false);
+        var email = $"lockout-{Guid.NewGuid():N}@e2e.local";
+        var userId = await factory.SeedUserAsync(tenantId, email, "correct-horse-1234", "Locked Out");
+
+        // Guess until the wall goes up, then keep guessing well past it. THE SECOND HALF IS THE TEST: while a
+        // block holds every attempt is refused, so a naive implementation recording per refusal would write a
+        // pile of identical events and bury the trail somebody is trying to read.
+        for (var attempt = 0; attempt < 14; attempt++)
+        {
+            using var _ = await PostCredentialsAsync(email, $"wrong-{attempt}");
+        }
+
+        var actions = await ActionsForAsync(tenantId, userId);
+
+        Assert.Equal(1, actions.Count(a => a.StartsWith(AuditActions.LockedOut, StringComparison.Ordinal)));
+
+        // …and the refusals that led to it are all there, which is what makes the one event placeable in time.
+        Assert.True(
+            actions.Count(a => a.StartsWith(AuditActions.LoginFailed, StringComparison.Ordinal)) > 1,
+            "The refused attempts before the block should each be recorded — the lockout alone says when the "
+            + $"door shut and nothing about the knocking. Got: {string.Join(", ", actions)}");
+    }
 }

@@ -234,8 +234,7 @@ public class LoginModel : PageModel
         if (verification == PasswordVerificationResult.Failed)
         {
             _logger.LogWarning("Failed login for user {UserId}: incorrect password", user.Id);
-            await RecordFailureAsync(normalizedEmail);
-            await RecordRefusedCredentialAsync(user, "password");
+            await RecordFailureAsync(normalizedEmail, user, "password");
             Error = SimplArchive.Localization.Strings.Get("LoginErrInvalidCreds");
             PreparePasskeyLoginOption();
 
@@ -343,11 +342,9 @@ public class LoginModel : PageModel
 
             // Counted against the same identity as the password step, deliberately: six digits are the easier
             // half to guess, and reaching this step means the attacker already holds the password.
-            await RecordFailureAsync(user.NormalizedEmail);
-
             // …and the audit detail says SECOND FACTOR rather than password, because to an investigator those
             // are different events: this one means somebody already got past the password.
-            await RecordRefusedCredentialAsync(user, "second factor");
+            await RecordFailureAsync(user.NormalizedEmail, user, "second factor");
 
             Error = SimplArchive.Localization.Strings.Get("LoginErrInvalidCode");
             // Re-issue a fresh ticket + re-render the challenge (incl. the passkey option) for a retry.
@@ -722,6 +719,52 @@ public class LoginModel : PageModel
     private Task RecordFailureAsync(string normalizedEmail) =>
         _throttle.RecordFailureAsync(
             SimplArchive.Api.Security.SignInSurface.Login, normalizedEmail, ClientAddress, HttpContext.RequestAborted);
+
+    /// <summary>
+    /// Records the failure, and — if it was the one that WALLED THE ACCOUNT UP — files that in the trail too
+    /// (#1569).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Once per block, not once per refused attempt.</b> While a block holds, every further attempt is
+    /// refused by <see cref="ThrottleAllowsAsync"/> and returns before reaching here, so an attacker hammering
+    /// cannot write hundreds of identical events and bury the trail they are in. Asking the throttle again
+    /// straight after recording the failure is what detects the TRANSITION: this attempt was allowed a moment
+    /// ago, and now is not, so this failure is the one that crossed the threshold.
+    /// </para>
+    /// <para>
+    /// <b>The throttle is unchanged, which was the point of choosing this shape</b> (#1569, owner-decided). It
+    /// counts fingerprinted keys and deliberately does not know whose account it is walling up — a counter
+    /// store that could be read for the list of accounts currently under attack is a worse trade. Asking it a
+    /// question it already answers keeps that property; handing it a tenant resolver would have given back
+    /// exactly the knowledge it was built without. The cost is one extra counter read, on failures only.
+    /// </para>
+    /// <para>
+    /// The consequence to know: the TOKEN endpoint is not covered by this. A blocked service account's
+    /// lockout still reaches no trail, because that door is throttled in middleware where there is no user —
+    /// recorded on #1569 rather than left to be discovered.
+    /// </para>
+    /// </remarks>
+    private async Task RecordFailureAsync(string normalizedEmail, User user, string factor)
+    {
+        await RecordFailureAsync(normalizedEmail);
+        await RecordRefusedCredentialAsync(user, factor);
+
+        var after = await _throttle.CheckAsync(
+            SimplArchive.Api.Security.SignInSurface.Login, normalizedEmail, ClientAddress, HttpContext.RequestAborted);
+        if (after.Allowed)
+        {
+            return;
+        }
+
+        await _audit.RecordForActorAsync(
+            AuditActorType.User,
+            user.Id,
+            user.DisplayName,
+            user.TenantId,
+            AuditActions.LockedOut,
+            details: $"after a refused {factor}; blocked for {after.RetryAfter.TotalSeconds:N0}s");
+    }
 
     /// <summary>Files a refused credential in the user's own audit trail (#847, A07/A09).</summary>
     /// <remarks>
