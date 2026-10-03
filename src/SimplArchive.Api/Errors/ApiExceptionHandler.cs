@@ -71,6 +71,13 @@ public class ApiExceptionHandler : IExceptionHandler
             // instead. The two thumbprints that identify the fault are in the Error line, not in the reply.
             SimplArchive.Infrastructure.Storage.AtRestKeyChangedException changed =>
                 (changed.ErrorCode, changed.ApiStatusCode, changed.ApiDetail),
+            // The store holds encrypted objects and this process has no encryption service (#1582). A
+            // CONFIGURATION fault, not a missing artefact — which is exactly how it used to surface, because
+            // the degradation handlers that turn "could not produce a preview/text layout" into a quiet null
+            // caught it along with everything else. A find box that can never match, and nothing on screen
+            // saying why.
+            SimplArchive.Infrastructure.Storage.EncryptedObjectWithoutEncryptionServiceException unconfigured =>
+                (unconfigured.ErrorCode, unconfigured.ApiStatusCode, unconfigured.ApiDetail),
             _ => ("INTERNAL_ERROR", StatusCodes.Status500InternalServerError, "An unexpected error occurred."),
         };
 

@@ -145,7 +145,10 @@ public class RenditionService : IDocumentPreviewService
             var renditionUrl = await _objectStorageClient.GetPresignedPreviewUrlAsync(renditionKey, expiry, fileName, cancellationToken: cancellationToken);
             return renditionUrl is null ? null : new DocumentPreview(renditionUrl, IsConverted: true);
         }
-        catch (Exception e)
+        // Same carve-out as the text-layout service (#1582): a store this process cannot decrypt is a
+        // misconfigured installation, not a rendition that could not be produced, and "No preview available"
+        // is the wrong sentence for it — it reads as a limitation of the file.
+        catch (Exception e) when (e is not EncryptedObjectWithoutEncryptionServiceException)
         {
             // Falling back to the original is pointless here — the browser can't render the raw file (that's
             // why we convert it), so it would just show a blank pane. Return null instead; the caller omits
@@ -210,7 +213,7 @@ public class RenditionService : IDocumentPreviewService
 
             return new PreviewPages(urls, IsConverted: true);
         }
-        catch (Exception e)
+        catch (Exception e) when (e is not EncryptedObjectWithoutEncryptionServiceException)
         {
             _logger.LogWarning(e, "Failed to produce multi-page preview for {ObjectKey}; falling back to the single preview.", objectKey);
             return null;

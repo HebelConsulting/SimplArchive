@@ -89,7 +89,12 @@ public sealed class DocumentTextLayoutService : IDocumentTextLayoutService
             await _objectStorageClient.PutObjectAsync(sidecarKey, payload, "application/json", cancellationToken);
             return layout;
         }
-        catch (Exception e)
+        // NOT the encryption-configuration refusal (#1582). Everything else here is honestly "this document
+        // has no usable text layer", which the caller renders as a find box that matches nothing — but a store
+        // this process cannot DECRYPT is a misconfigured installation, and flattening it into "no text" sends
+        // a reader looking for a missing OCR pass while the real cause sits in an Error line nobody is reading.
+        // The one exception that must reach the boundary is the one that names something an operator can fix.
+        catch (Exception e) when (e is not EncryptedObjectWithoutEncryptionServiceException)
         {
             _logger.LogWarning(e, "Failed to produce a text layout for {ObjectKey}; no overlay will be offered.", objectKey);
             return null;

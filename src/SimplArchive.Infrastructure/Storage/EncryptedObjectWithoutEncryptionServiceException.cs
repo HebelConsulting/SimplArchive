@@ -25,4 +25,25 @@ public sealed class EncryptedObjectWithoutEncryptionServiceException(string obje
 {
     /// <summary>The object that could not be served.</summary>
     public string ObjectKey { get; } = objectKey;
+
+    /// <summary>Error code for the API boundary, beside its at-rest siblings (#1582).</summary>
+    public string ErrorCode => "ENCRYPTION_SERVICE_NOT_CONFIGURED";
+
+    /// <summary>503: the installation can be fixed, and the object is intact meanwhile.</summary>
+    /// <remarks>
+    /// Not 500. Nothing is broken and nothing is lost — the store was written under an encryption service this
+    /// process is no longer pointed at, so the read becomes possible again the moment the configuration is
+    /// restored. 503 is the status that says "this server cannot serve it RIGHT NOW", which is the true one.
+    /// </remarks>
+    public int ApiStatusCode => 503;
+
+    /// <summary>
+    /// What the caller is told. The object key stays out of it — it is in the Error log line, which is where
+    /// an operator is already looking — but the CAUSE is named, because "no text layout" sent a reader hunting
+    /// for a missing text layer when the installation was misconfigured (#1582).
+    /// </summary>
+    public string ApiDetail =>
+        "This installation stores content encrypted at rest but is not configured with an encryption service, "
+        + "so it cannot read it back. Nothing is lost: restore the Encryption:ServiceUrl this store was "
+        + "written under. Quote this to an administrator rather than retrying.";
 }
