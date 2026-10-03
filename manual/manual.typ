@@ -367,6 +367,19 @@ If someone else already has the document checked out, your editor is told the fi
 read-only, rather than letting you edit for ten minutes and failing at the save. Documents you are not allowed to
 edit, and documents frozen by a legal hold, behave in the mount exactly as they do in the app: they refuse.
 
+=== When something in the Intray is overwritten
+
+The *Intray* holds bare files rather than documents#idx("Intray"): no versions, no history — which is what makes it quick to drop
+things into, and what makes an overwrite final in a way it never is for a filed document. That matters because a
+program can overwrite one without meaning to. One office suite saved correctly into an Intray item and then, six
+seconds later, rolled its own save back by moving an *empty* backup slot over the file.
+
+Nothing is lost when that happens. Every write that replaces an Intray item first *sets the outgoing bytes aside*,
+and an administrator can list what was set aside for you and restore any of it. So if an Intray item has turned
+empty or wrong after a save, say so rather than starting again — the previous bytes are almost certainly still
+there. Filed documents need none of this: they keep every version by design, which is the argument for filing
+anything you would mind losing.
+
 #note[
   *A warning from your own software is not a fault in ours.* Some commercial vendors treat a WebDAV connection to
   a site that is not on their own allow-list as suspicious, or refuse it outright. That is a policy decision in
@@ -960,6 +973,9 @@ and overdue reviews escalate.
 dispose of documents once their retention period ends (with review before disposition, if required). Deleted
 documents rest in the *Recycle bin*#idx("Recycle bin"), from which an administrator can restore them or purge them permanently.
 
+On the desktop the number of tasks waiting for you also rides on the application icon itself#idx("Task count") — a badge on the
+macOS Dock, an overlay on the Windows taskbar — so a window you have minimised still tells you there is something to do.
+
 #pair("screenshots/web-tasks.png", "screenshots/desktop-tasks.png",
   [The Tasks tab — a reviewer's approval queue — in the web (left) and desktop (right) clients.])
 
@@ -978,11 +994,28 @@ account you are signed in as, the photo you currently have with a crop to replac
 changing your password. Two-factor authentication, passkeys and the WebDAV password stay as their own entries in
 that menu, since each is a separate credential rather than part of your profile.
 
+One thing to expect from the authenticator code#idx("Two-factor authentication"): it is *single-use*. A six-digit code is accepted once and then
+refused for the rest of the half-minute it remains on screen, which is what "one-time password" means and what stops
+a code read over your shoulder — or relayed by a page pretending to be this one — being used again behind you. If you
+have just signed in somewhere with the code showing, wait for the next one rather than retyping it.
+
 #pair("screenshots/web-users.png", "screenshots/desktop-users.png",
   [Users & groups administration in the web (left) and desktop (right) clients.])
 
 #pair("screenshots/web-audit.png", "screenshots/desktop-audit.png",
   [The audit trail — an append-only, hash-chained log — in the web (left) and desktop (right) clients.])
+
+Among the tenant settings is the account your notifications *leave through*#idx("Outbound mail"). Most installations run no mail
+relay of their own and authenticate against an ordinary provider — and such an account is naturally per tenant,
+because each tenant's mail should come from its own domain. Fill in a server and the port, encryption, user name,
+password and sender address appear with it; leave the server empty and the installation's own account is used, which
+is what every existing deployment keeps doing.
+
+The password is write-only. No screen ever shows it back to you: the pane says whether one is stored, and an empty
+box on saving means *keep the one you have* rather than *clear it*, so changing the port does not silently wipe the
+credential. *Send test message* is offered whether or not this tenant has its own account — with none it proves the
+installation's, which is what your mail would really use. The point of it is to fail in front of somebody who can
+fix it, rather than at three in the morning inside a reminder nobody receives.
 
 #pair("screenshots/web-tenant.png", "screenshots/desktop-tenant.png",
   [Tenant settings in the web (left) and desktop (right) clients.])
@@ -1104,6 +1137,35 @@ when you have no certificate yet:
 Everything else these products do, including what their protection does and does not claim, is described in
 *their own manuals*: they are separate products with their own releases, and documenting them twice is how the
 two come to disagree.
+
+=== What encryption here does not claim <quantumboundary>
+
+One question is worth answering wherever encryption is described, because the honest answer is not the one the
+word "encrypted" suggests: *this is quantum-migratable, not quantum-resistant*#idx("Quantum").
+
+The *content* holds up. Documents and messages are encrypted with AES-256, and a quantum computer does not
+break it — the best known attack halves the effective key strength, which leaves 256-bit AES at a level still
+considered safe. The bulk of what is stored is therefore fine.
+
+What does not hold up is every *asymmetric* step beside it: wrapping a content key under a hardware-held key,
+and addressing an envelope to somebody's certificate. Those rest on RSA and elliptic-curve mathematics, which a
+sufficiently capable quantum computer breaks outright.
+
+The consequence has a name — *harvest now, decrypt later*. An adversary who copies today's wrapped keys and
+envelopes can decrypt them on the day such a machine exists. For a chat message that is academic. For an
+*archive*, whose whole purpose is to keep documents readable for decades, the time the content must stay
+protected plausibly overlaps the time that machine might appear, so it is worth stating plainly rather than
+leaving in the small print.
+
+*Migratable* is the claim that is true. The content keys never have to change: moving to post-quantum
+protection means re-wrapping those keys under a new scheme, not re-encrypting a single document — and in the
+Encryption Service the rolling key generations that already exist are exactly the machinery that would do it.
+What is missing today is not the design but the parts: hardware security modules, card vendors and mail
+clients have not shipped post-quantum support yet.
+
+The two paid products' own manuals carry this in more detail, each for its own half. It is repeated here
+because a reader of *this* manual may never open those, and a boundary nobody states is one a reader assumes
+does not exist.
 
 // ─────────────────────────────────────────────────────────────────────────────
 #pagebreak()
