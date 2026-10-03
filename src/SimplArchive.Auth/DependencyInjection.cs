@@ -96,6 +96,29 @@ public static class DependencyInjection
                 var leeway = configuration.GetValue<int?>("OpenIddict:RefreshTokenReuseLeewaySeconds");
                 options.SetRefreshTokenReuseLeeway(TimeSpan.FromSeconds(leeway ?? 30));
 
+                // LIFETIMES, from ADR 0083 — which chose 15 minutes and 30 days and was then never
+                // implemented, so OpenIddict's own defaults (~1 h / 14 d) applied and the drift was
+                // undocumented (#847, A07).
+                //
+                // The short access token is the half that matters, and the reason is what ADR 0083 did NOT
+                // get: its revocation denylist was never built, so there is no way to invalidate an issued
+                // access token at all. Signing out clears the cookie and the client's copy; a token already
+                // in someone's hands keeps working until it expires on its own. That window WAS about an
+                // hour. Fifteen minutes does not make revocation exist, but it is the only lever that
+                // currently shortens the gap, and it shortens it four-fold.
+                //
+                // The longer refresh token is not a relaxation: rotation is on, reuse past the leeway above
+                // is refused, and a stolen refresh token is detectable in a way a stolen access token is
+                // not. Trading a longer refresh for a shorter access is the standard shape, and it costs
+                // only that clients refresh more often — which they already do, silently.
+                //
+                // Configurable because a deployment may have a reason to differ and finding out mid-incident
+                // that it cannot is the wrong time; the DEFAULTS are the ADR's numbers.
+                var accessMinutes = configuration.GetValue<int?>("OpenIddict:AccessTokenLifetimeMinutes");
+                var refreshDays = configuration.GetValue<int?>("OpenIddict:RefreshTokenLifetimeDays");
+                options.SetAccessTokenLifetime(TimeSpan.FromMinutes(accessMinutes ?? 15));
+                options.SetRefreshTokenLifetime(TimeSpan.FromDays(refreshDays ?? 30));
+
                 // RFC 8693 token exchange, used only for User impersonation (ADR "User impersonation") — a
                 // CanImpersonate admin exchanges their access token for one representing a target User.
                 options.AllowCustomFlow(ImpersonationConstants.TokenExchangeGrantType);
