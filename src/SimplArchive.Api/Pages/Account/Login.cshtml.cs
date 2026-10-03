@@ -565,7 +565,7 @@ public class LoginModel : PageModel
             return Page();
         }
 
-        if (string.IsNullOrWhiteSpace(Code) || !_mfa.VerifyTotp(secret, Code))
+        if (string.IsNullOrWhiteSpace(Code) || !await _mfa.VerifyTotpAsync(user.Id, secret, Code, HttpContext.RequestAborted))
         {
             Error = SimplArchive.Localization.Strings.Get("LoginErrInvalidCode");
             RenderEnrollStep(secret, user.Email); // keep the same ticket/secret so the user can retry
@@ -621,7 +621,7 @@ public class LoginModel : PageModel
     // A valid TOTP, or a matching unused recovery code (consumed on success).
     private async Task<bool> VerifySecondFactorAsync(User user, string code)
     {
-        if (_mfa.VerifyTotp(await _transit.DecryptAsync(user.TotpSecret!), code))
+        if (await _mfa.VerifyTotpAsync(user.Id, await _transit.DecryptAsync(user.TotpSecret!), code, HttpContext.RequestAborted))
         {
             return true;
         }

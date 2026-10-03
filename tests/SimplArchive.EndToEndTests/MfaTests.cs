@@ -48,8 +48,13 @@ public class MfaTests
         // A wrong code at enable-time would have failed.
         Assert.Equal(HttpStatusCode.BadRequest, (await user.PostAsJsonAsync("/api/users/me/mfa/enable", new { code = "000000" })).StatusCode);
 
-        // A fresh login now requires the second factor and accepts a current TOTP.
-        var totpToken = await _factory.GetUserTokenAsync(email, password, () => totp.ComputeTotp());
+        // A fresh login now requires the second factor and accepts a current TOTP — but NOT the one that was
+        // just spent enabling MFA a few lines up. A TOTP code is single-use (#847, A02): the enable call burned
+        // that timestep, and presenting the same digits again is exactly the replay the burn exists to refuse.
+        // The next step's code is still inside the verification window (one step either way), so this asks for
+        // a code that is current and unspent rather than sleeping 30 seconds to get one.
+        var totpToken = await _factory.GetUserTokenAsync(
+            email, password, () => totp.ComputeTotp(DateTime.UtcNow.AddSeconds(30)));
         Assert.False(string.IsNullOrEmpty(totpToken));
 
         // A recovery code also logs in (single-use).

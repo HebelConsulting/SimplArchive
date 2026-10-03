@@ -107,7 +107,7 @@ public class UserMfaController(
             throw new MfaNotEnrolledException();
         }
 
-        if (!mfa.VerifyTotp(await transit.DecryptAsync(user.TotpSecret, cancellationToken), request.Code))
+        if (!await mfa.VerifyTotpAsync(user.Id, await transit.DecryptAsync(user.TotpSecret, cancellationToken), request.Code, cancellationToken))
         {
             throw new InvalidMfaCodeException();
         }
