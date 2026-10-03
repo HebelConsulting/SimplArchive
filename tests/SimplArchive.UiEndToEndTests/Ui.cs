@@ -335,4 +335,44 @@ internal static partial class Ui
 
     private static string Base64Url(byte[] bytes) =>
         Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    /// <summary>
+    /// Polls <paramref name="condition"/> until it holds, or fails naming what never happened.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For asserting an OUTCOME that a one-shot check would race.</b> Playwright's own <c>Expect</c> already
+    /// retries anything it can see in the DOM; this is its equivalent for a fact only the SERVER has — "the
+    /// subscription exists", "the reminder was stored" — which a bare <c>Assert</c> reads exactly once, at
+    /// whatever instant the test happens to reach it.
+    /// </para>
+    /// <para>
+    /// <b>Why these assertions used to wait on a snackbar instead.</b> The toast was never the thing under
+    /// test; it was a convenient synchronisation point that happened to appear when the work finished. But a
+    /// MudBlazor snackbar is transient — it is rendered, then removed on a timer — so a run slow enough to miss
+    /// the window fails a test whose actual subject succeeded, and the failure names the toast rather than
+    /// anything a reader can act on. Three tests in <c>ui-2</c> were unreliable for exactly that, and a test
+    /// whose red proves nothing cannot prove much when it is green either.
+    /// </para>
+    /// </remarks>
+    public static async Task EventuallyAsync(
+        Func<Task<bool>> condition, string because, int timeoutMs = 30_000, int pollMs = 100)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (true)
+        {
+            if (await condition())
+            {
+                return;
+            }
+
+            if (DateTime.UtcNow > deadline)
+            {
+                Assert.Fail($"Waited {timeoutMs / 1000}s and {because} never became true.");
+            }
+
+            await Task.Delay(pollMs);
+        }
+    }
 }
+

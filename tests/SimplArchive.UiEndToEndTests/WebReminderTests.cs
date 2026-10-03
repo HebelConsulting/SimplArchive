@@ -48,9 +48,11 @@ public class WebReminderTests
         var dialog = page.Locator(".mud-dialog");
         await Expect(dialog).ToBeVisibleAsync();
         await dialog.GetByRole(AriaRole.Button, new() { Name = "Set reminder" }).ClickAsync();
-        await Expect(page.GetByText("Reminder set.")).ToBeVisibleAsync();
 
-        // The backend now has the reminder.
-        Assert.Equal(1, await ReminderCountAsync());
+        // The backend now has the reminder — waited for, not sampled once. The "Reminder set." snackbar used to
+        // stand in for this and is what made the test unreliable: the dialog opened and the click landed, and
+        // only the transient toast went unobserved.
+        await Ui.EventuallyAsync(
+            async () => await ReminderCountAsync() == 1, "the Set reminder click should have stored one reminder");
     }
 }

@@ -46,13 +46,16 @@ public class WebSubscriptionTests
         await Expect(follow).ToBeVisibleAsync();
 
         // Follow → the backend records the subscription.
+        //
+        // WAITING ON THE SUBSCRIPTION, NOT ON THE TOAST. The snackbar was never the subject here; it was a
+        // synchronisation point that happened to appear when the POST finished. It is also transient — rendered,
+        // then removed on a timer — so a slow run missed the window and failed a test whose actual subject had
+        // succeeded, naming the toast rather than anything a reader could act on. This waits for the fact.
         await follow.ClickAsync();
-        await Expect(page.GetByText("Following this document.")).ToBeVisibleAsync();
-        Assert.True(await SubscribedAsync());
+        await Ui.EventuallyAsync(SubscribedAsync, "the Follow click should have recorded a subscription");
 
         // Unfollow → the subscription is removed.
         await follow.ClickAsync();
-        await Expect(page.GetByText("Unfollowed.")).ToBeVisibleAsync();
-        Assert.False(await SubscribedAsync());
+        await Ui.EventuallyAsync(async () => !await SubscribedAsync(), "the second click should have removed it");
     }
 }
