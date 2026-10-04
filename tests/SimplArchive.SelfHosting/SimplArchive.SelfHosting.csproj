@@ -35,4 +35,11 @@
     <PackageReference Include="SSH.NET" Version="2026.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Staged into the self-hosted Api's Modules directory when a Strict tenant is configured: every mode that
+         delivers envelopes refuses to start unless a loaded module answers the reader-certificate capability
+         (ADR 0890), and this module answers it per reader once a test activates it. -->
+    <ProjectReference Include="..\SimplArchive.TestModule\SimplArchive.TestModule.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+  </ItemGroup>
+
 </Project>

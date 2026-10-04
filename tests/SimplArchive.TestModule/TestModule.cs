@@ -22,6 +22,11 @@ public sealed class TestModule : IIndustryModule
     public static readonly Guid LogMaskId = Guid.Parse("7E57AB1E-0000-0000-0000-000000000003");
     public static readonly Guid LogItemMaskId = Guid.Parse("7E57AB1E-0000-0000-0000-000000000004");
 
+    /// <summary>A reader's X.509 certificate this module enrols — what <see cref="ReaderCertificates"/> answers from.</summary>
+    public static readonly Guid ReaderCertificateMaskId = Guid.Parse("7E57AB1E-0000-0000-0000-000000000005");
+    public const string ReaderCertificateHolderField = "Holder user";
+    public const string ReaderCertificateWithdrawnField = "Withdrawn";
+
     public string ModuleId => "test-module";
 
     public string DisplayName => "Test Module";
@@ -183,6 +188,14 @@ public sealed class TestModule : IIndustryModule
             // kind (DavProtocol). A module that names it anything else gets items the core cannot address.
             new ModuleFieldSeed("Event UID", "Text"),
         ]),
+        // A reader's certificate (ADR 0890): the PEM is the content, the holder a user id. Its own mask, apart
+        // from "Test Certificate" (a dossier's validity record, not an X.509 key), so neither fixture's assertions
+        // move.
+        new ModuleMaskSeed(ReaderCertificateMaskId, "Test Reader Certificate", IsFolderMask: false, IsBookable: false,
+        [
+            new ModuleFieldSeed(ReaderCertificateHolderField, "Text", IsRequired: false),
+            new ModuleFieldSeed(ReaderCertificateWithdrawnField, "Boolean", IsRequired: false),
+        ]),
     ];
 
     public IReadOnlyList<ModuleRootLink> RootLinks { get; } =
@@ -272,6 +285,50 @@ public sealed class TestModule : IIndustryModule
         new PerUserEnrolment("/api/modules/test-module/credential", "selfEnrolmentOpen")
         {
             TitleKey = "test.enrolment-title",
+        };
+
+    /// <summary>
+    /// The reader-certificate capability, answered the way a real enrolment module answers it (ADR 0890): from
+    /// this module's own documents.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every mode that delivers envelopes refuses to start unless a loaded module answers this, and with the
+    /// encryption service's registry retired an activated module is the ONLY source a Strict tenant's readers
+    /// have. So the Strict-tenant tests activate this module and file each reader's certificate through
+    /// <c>POST api/test-module/reader-certificates</c> — the path a real installation uses — rather than writing
+    /// the user row.
+    /// </para>
+    /// <para>
+    /// A tenant that has NOT activated it is never asked: its mode decides whether that means "lapsed licence"
+    /// (an enveloping mode) or "no module" (anything else), so loading this module costs no other tenant its
+    /// self-service certificate (ADR 0890's narrowing of ADR 0859).
+    /// </para>
+    /// </remarks>
+    public Func<ReaderCertificateContext, Task<IReadOnlyList<ReaderCertificate>>>? ReaderCertificates =>
+        async context =>
+        {
+            var holder = context.UserId.ToString();
+            var answer = new List<ReaderCertificate>();
+            foreach (var document in await context.Archive.GetByMaskAsync(ReaderCertificateMaskId))
+            {
+                if (!document.Fields.TryGetValue(ReaderCertificateHolderField, out var of) || of != holder
+                    || (document.Fields.TryGetValue(ReaderCertificateWithdrawnField, out var withdrawn) && withdrawn == "true"))
+                {
+                    continue;
+                }
+
+                if (await context.Archive.GetDocumentContentAsync(document.Id) is not { } bytes)
+                {
+                    continue;
+                }
+
+                var pem = System.Text.Encoding.UTF8.GetString(bytes);
+                using var certificate = System.Security.Cryptography.X509Certificates.X509Certificate2.CreateFromPem(pem);
+                answer.Add(new ReaderCertificate(pem, document.Name, certificate.NotAfter.ToUniversalTime()));
+            }
+
+            return answer;
         };
 
     public void ConfigureServices(IServiceCollection services)

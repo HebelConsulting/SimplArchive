@@ -41,14 +41,13 @@ public sealed class StrictEnvelopeDelivery(
     EncryptionModes modes,
     IObjectStorageClient storage,
     SmimeMessageEnveloper enveloper,
-    SimplArchive.Infrastructure.Encryption.MessageEnvelopeClient registry,
     SimplArchive.Infrastructure.Storage.AtRestKeyService atRestKeys,
     SimplArchive.Infrastructure.Modules.ModuleReaderCertificates moduleCertificates,
     Microsoft.Extensions.Logging.ILogger<StrictEnvelopeDelivery> logger)
 {
     // MEMOISED FOR THE REQUEST, which is all this class lives for (registered scoped). The resource builder
-    // asks ReaderCertificateAsync once per version, so a versions dialog asks several times — and since #1433
-    // the answer can cost an outbound call to the encryption service. Per-request is also the only caching
+    // asks ReaderCertificateAsync once per version, so a versions dialog asks several times — and the answer can
+    // cost a call into the module's hook. Per-request is also the only caching
     // that needs no policy: a certificate REVOKED between requests is re-read on the next one, so there is no
     // window in which a withdrawn reading certificate is still handed out.
     //
@@ -98,11 +97,11 @@ public sealed class StrictEnvelopeDelivery(
         return name is not null && modes.RefusesPlaintextDoors(name);
     }
 
-    /// <summary>This request's tenant NAME, which is what the mode map and the registry are both keyed by.</summary>
+    /// <summary>This request's tenant NAME, which is what the mode map is keyed by.</summary>
     /// <remarks>
     /// <para>
-    /// One query rather than two spellings of it: the mode lookup and the certificate registry ask the same
-    /// question, and a second copy is how they would come to disagree about which tenant this is.
+    /// One query rather than a spelling per membership question, so they cannot come to disagree about which
+    /// tenant this is.
     /// </para>
     /// <para>
     /// MEMOISED FOR THE REQUEST, like the certificate set above and for the same reason — this class is
@@ -158,17 +157,14 @@ public sealed class StrictEnvelopeDelivery(
     /// whose request fails, which is the affordance ADR 0543 exists to prevent.
     /// </para>
     /// <para>
-    /// <b>Two sources, and the second one is why this tier worked at all (#1433).</b> The user's own column is
-    /// asked first; where it is empty, the ENCRYPTION SERVICE's registry is asked. That is not a new idea — it
-    /// is the precedence <c>EmailNotificationDispatcher</c> has always used — and this path was simply missing
-    /// it, which made the strict tier unusable on a tenant configured the way ADR 0813 describes: self-service
-    /// is closed for exactly the tenants the envelope client serves, so nothing writes the column, and the
-    /// registry (which has a real <c>PUT …/certificate</c> door) was never consulted. Every reader got a
-    /// permanent 409.
+    /// <b>The Module, else the reader's own column — and never the encryption service's registry</b>, which is
+    /// retired (ADR 0890). It was added here by #1433 because ADR 0813 closes self-service on the tenants the
+    /// service governs, so the column was empty there by design; and it enveloped to whatever PEM was last
+    /// registered against an e-mail, which is how a re-issued card was silently never offered. Every enveloping
+    /// mode now requires a module answering (ADR 0890), so on such a tenant the Module is the source.
     /// </para>
     /// <para>
-    /// Both sources are VALIDATED the same way, because "unusable" has to mean the same thing wherever the
-    /// certificate came from — otherwise the rel's presence would depend on which source answered.
+    /// A column certificate is VALIDATED before it counts, so the rel's presence never rests on a PEM that fails.
     /// </para>
     /// </remarks>
     public async Task<IReadOnlyList<string>> ReaderCertificatePemsAsync(CancellationToken cancellationToken)
@@ -223,7 +219,7 @@ public sealed class StrictEnvelopeDelivery(
         SimplArchive.Infrastructure.Modules.ReaderCertificateOutcome.LicenceLapsed =>
             new Errors.Exceptions.Encryption.EncryptionModuleNotLicensedException(),
 
-        // A module answered "none", or there is no module and neither the column nor the registry had one.
+        // A module answered "none", or no module answered and the reader's column holds none.
         // Both are genuinely "you have no usable certificate here", which the reader can act on.
         _ => new Errors.Exceptions.Encryption.ContentCannotBeEnvelopedException(),
     };
@@ -269,27 +265,17 @@ public sealed class StrictEnvelopeDelivery(
             "No module answered for user {UserId} ({Outcome}); falling back to the core's own sources.",
             userId, _outcome);
 
-        var reader = await dbContext.Users
+        var own = await dbContext.Users
             .Where(u => u.Id == userId)
-            .Select(u => new { u.SmimeCertificatePem, u.Email })
+            .Select(u => u.SmimeCertificatePem)
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (Usable(reader?.SmimeCertificatePem) is { } own)
-        {
-            return [own];
-        }
-
-        // The registry, for the tenants whose identities are provisioned centrally — which is precisely the
-        // population whose self-service is closed. Asked only when the column is empty, so an installation that
-        // registers into the core pays nothing for this.
-        if (reader?.Email is not { Length: > 0 } email || await TenantNameAsync(cancellationToken) is not { } name)
-        {
-            return [];
-        }
-
-        return Usable(await registry.TryGetCertificatePemAsync(name, email, cancellationToken)) is { } registered
-            ? [registered]
-            : [];
+        // The reader's own column, and nothing after it. The encryption service's registry used to be asked next
+        // and is RETIRED (ADR 0890, SimplArchiveEncryptionService#23): it enveloped to whatever PEM was last
+        // registered against an e-mail, with no history and no revocation, so a re-issued card was silently never
+        // offered. A tenant whose mode envelopes cannot start without a module answering (ADR 0890), so on such a
+        // tenant this point is reached only for a licence lapsed or a module failing to answer.
+        return Usable(own) is { } usable ? [usable] : [];
     }
 
     /// <summary>The certificate if it parses, else null — the same judgement for both sources.</summary>

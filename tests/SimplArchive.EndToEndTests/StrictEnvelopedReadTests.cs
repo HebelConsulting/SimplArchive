@@ -305,23 +305,34 @@ public class StrictEnvelopedReadTests
     private sealed record Reader(HttpClient Api, Guid DocumentId, byte[]? Pkcs12, Guid TenantId, string Email, string RepositoryName, string DocumentName);
 
     /// <summary>
-    /// Writes the reader's certificate the way it actually arrives in this tier — from OUTSIDE.
+    /// Enrols (or, with null, withdraws) the reader's certificate the way it arrives in this tier — through the
+    /// MODULE (ADR 0890).
     /// </summary>
     /// <remarks>
-    /// Not through <c>PUT /api/me/smime-certificate</c>, which REFUSES here by design: self-service is closed
-    /// for any tenant the envelope client is enabled for, because those identities are provisioned by the
-    /// encryption service rather than pasted by their owner (ADR 0813). A strict tenant is encryption-enabled
-    /// by definition, so the self-service endpoint can never be its registration path — writing the column
-    /// directly is what that service does, and the test would otherwise be exercising a door the tier closes.
+    /// The service's registry is retired, self-service is closed on a tenant the service governs (ADR 0813), and
+    /// where a module answers it is the only source (ADR 0842) — so the factory activated the TestModule for the
+    /// Strict tenant, and its enrolment route is what a real installation's provisioning looks like.
     /// </remarks>
     private async Task RegisterCertificateAsync(Guid tenantId, string email, string? pem)
     {
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
-        var user = await db.Users.IgnoreQueryFilters(["TenantFilter"])
-            .SingleAsync(u => u.TenantId == tenantId && u.NormalizedEmail == email.ToUpperInvariant());
-        user.SmimeCertificatePem = pem;
-        await db.SaveChangesAsync();
+        Guid userId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            userId = await scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>().Users
+                .IgnoreQueryFilters(["TenantFilter"])
+                .Where(u => u.TenantId == tenantId && u.NormalizedEmail == email.ToUpperInvariant())
+                .Select(u => u.Id)
+                .SingleAsync();
+        }
+
+        if (pem is null)
+        {
+            await _factory.WithdrawReaderCertificatesAsync(tenantId, userId);
+        }
+        else
+        {
+            await _factory.EnrolReaderCertificateAsync(tenantId, userId, pem);
+        }
     }
 
     /// <summary>A tenant, a reader (optionally with a registered certificate), and a document to read.</summary>

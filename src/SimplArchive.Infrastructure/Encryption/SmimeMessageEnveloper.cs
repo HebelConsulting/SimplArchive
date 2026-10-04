@@ -6,10 +6,9 @@ using MimeKit.Cryptography;
 namespace SimplArchive.Infrastructure.Encryption;
 
 /// <summary>
-/// Envelopes a built MIME message's body to the user's own stored certificate (#1332) — the in-process
-/// sibling of <see cref="MessageEnvelopeClient"/>: same CMS EnvelopedData shape, no sidecar, because
-/// enveloping to a known certificate is software crypto and the encryption service exists for the HSM
-/// half, not this. The top-level headers stay readable (standard S/MIME); the body becomes
+/// Envelopes a built MIME message's body to the reader's certificates (#1332) — in-process, with no sidecar,
+/// because enveloping to a known certificate is software crypto and the encryption service exists for the HSM
+/// half, not this. Its sibling — the service's <c>/enveloped</c> route — is retired (ADR 0890). The top-level headers stay readable (standard S/MIME); the body becomes
 /// <c>application/pkcs7-mime</c>.
 /// </summary>
 public sealed class SmimeMessageEnveloper(ILogger<SmimeMessageEnveloper> logger)

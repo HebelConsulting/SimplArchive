@@ -27,12 +27,26 @@ public sealed class SelfHostedAppFixture : IAsyncLifetime
     private const string PlatformAdminClientId = "desktop-e2e-platform-admin";
     private const string PlatformAdminClientSecret = "desktop-e2e-platform-secret";
 
-    private readonly SelfHostedApp _app = new()
+    // The vendor key for the staged TestModule (ADR 0890): generated per run, its public half handed to the Api,
+    // its private half signing the Strict tenant's licence — so activation verifies for real, with no key in the repo.
+    private readonly System.Security.Cryptography.ECDsa _testModuleVendorKey =
+        System.Security.Cryptography.ECDsa.Create(System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
+
+    private readonly SelfHostedApp _app;
+
+    public SelfHostedAppFixture() => _app = new SelfHostedApp
     {
         StrictTenantName = StrictTenantName,
         PlatformAdminClientId = PlatformAdminClientId,
         PlatformAdminClientSecret = PlatformAdminClientSecret,
+        TestModuleVerifyKeyPem = _testModuleVendorKey.ExportSubjectPublicKeyInfoPem(),
     };
+
+    /// <summary>A licence for the TestModule, signed for <paramref name="tenantId"/> — what the tenant files to activate it.</summary>
+    public string SignTestModuleLicence(Guid tenantId) => System.Text.Json.JsonSerializer.Serialize(
+        new SimplArchive.ModuleAbi.TenantLicense(["test-module"], tenantId, DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)),
+            SimplArchive.ModuleAbi.ModuleAbiVersion.Major, string.Empty).Sign(_testModuleVendorKey),
+        new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
 
     /// <summary>The stub encryption service, so a test can provision a reader's certificate as the real one would.</summary>
     public EncryptionServiceStub EncryptionService => _app.EncryptionService
@@ -55,7 +69,11 @@ public sealed class SelfHostedAppFixture : IAsyncLifetime
 
     public Task InitializeAsync() => _app.StartAsync();
 
-    public async Task DisposeAsync() => await _app.DisposeAsync();
+    public async Task DisposeAsync()
+    {
+        await _app.DisposeAsync();
+        _testModuleVendorKey.Dispose();
+    }
 }
 
 [CollectionDefinition(Name)]

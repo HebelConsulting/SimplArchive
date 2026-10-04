@@ -134,7 +134,7 @@ public class NotificationsAskTheModuleTests
         var sender = new CapturingSender();
 
         await new SimplArchive.Infrastructure.Notifications.EmailNotificationDispatcher(
-            db, sender, InertEnvelopeClient(), NullLogger<SimplArchive.Infrastructure.Notifications.EmailNotificationDispatcher>.Instance,
+            db, sender, NullLogger<SimplArchive.Infrastructure.Notifications.EmailNotificationDispatcher>.Instance,
             NoOpAuditRecorder.Instance, new ModuleScopeFactory(connection, module)).DispatchPendingAsync();
 
         return sender.Certificates;
@@ -142,16 +142,6 @@ public class NotificationsAskTheModuleTests
 
     private static SimplArchiveDbContext Context(SqliteConnection connection) =>
         new(new DbContextOptionsBuilder<SimplArchiveDbContext>().UseSqlite(connection).Options, new CurrentTenantAccessor());
-
-    /// <summary>No Encryption:ServiceUrl, so the registry answers nothing — the column/module is the story.</summary>
-    private static SimplArchive.Infrastructure.Encryption.MessageEnvelopeClient InertEnvelopeClient() =>
-        new(new InertHttpClientFactory(), new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
-            NullLogger<SimplArchive.Infrastructure.Encryption.MessageEnvelopeClient>.Instance);
-
-    private sealed class InertHttpClientFactory : IHttpClientFactory
-    {
-        public HttpClient CreateClient(string name) => new();
-    }
 
     private sealed class CapturingSender : IEmailSender
     {

@@ -31,28 +31,19 @@ namespace SimplArchive.SelfHosting;
 /// does on every write, so it has to work for the read under test to mean anything.
 /// </para>
 /// <para>
-/// <b>The certificate route answers 404 until a caller registers one</b>, which keeps the shipped contract
-/// (no certificate → the core refuses rather than serving plaintext) exercised by default.
+/// <b>No certificate registry.</b> The real service's <c>/api/users/{email}/certificate</c> and
+/// <c>/enveloped</c> routes are retired (ADR 0890) and the core no longer calls them, so this stub does not
+/// serve them: a reader's certificates come from the Module or the reader's own column.
 /// </para>
 /// </remarks>
 public sealed class EncryptionServiceStub : IAsyncDisposable
 {
     private readonly HttpListener _listener = new();
     private readonly RSA _kek = RSA.Create(2048);
-    private readonly Dictionary<string, string> _certificates = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? _stopping;
 
     /// <summary>Where the Api should point <c>Encryption:ServiceUrl</c>.</summary>
     public string Url { get; private set; } = string.Empty;
-
-    /// <summary>Registers a reader's certificate, as the real service's provisioning door would.</summary>
-    public void RegisterCertificate(string email, string certificatePem)
-    {
-        lock (_certificates)
-        {
-            _certificates[email] = certificatePem;
-        }
-    }
 
     public void Start()
     {
@@ -214,45 +205,6 @@ public sealed class EncryptionServiceStub : IAsyncDisposable
             context.Response.StatusCode = (int)HttpStatusCode.OK;
             context.Response.ContentType = "application/pkcs7-mime";
             await context.Response.OutputStream.WriteAsync(encoded);
-            return;
-        }
-
-        if (path.StartsWith("/api/users/", StringComparison.Ordinal) && path.EndsWith("/certificate", StringComparison.Ordinal))
-        {
-            var email = Uri.UnescapeDataString(path["/api/users/".Length..^"/certificate".Length]);
-
-            if (context.Request.HttpMethod == "PUT")
-            {
-                using var reader = new StreamReader(context.Request.InputStream);
-                RegisterCertificate(email, await reader.ReadToEndAsync());
-                context.Response.StatusCode = (int)HttpStatusCode.NoContent;
-                return;
-            }
-
-            string? pem;
-            lock (_certificates)
-            {
-                _certificates.TryGetValue(email, out pem);
-            }
-
-            if (pem is null)
-            {
-                // THE DEFAULT ANSWER, and it is load-bearing: no certificate means the core refuses rather
-                // than serving plaintext, so every run of a suite that switches this stub on exercises that
-                // contract merely by not registering anything.
-                context.Response.StatusCode = (int)HttpStatusCode.NotFound;
-                return;
-            }
-
-            // THE RAW PEM AS THE BODY, not JSON — `MessageEnvelopeClient` reads the response with
-            // `ReadAsStringAsync` and treats the whole body as the certificate. A JSON envelope here is
-            // accepted by the HTTP layer and then fails to parse as a certificate, so the core concludes the
-            // reader has none: the download rel disappears and the read refuses, with nothing naming the
-            // cause. Measured — the first version of this stub returned `{"certificatePem": …}`.
-            var bytes = Encoding.UTF8.GetBytes(pem);
-            context.Response.StatusCode = (int)HttpStatusCode.OK;
-            context.Response.ContentType = "application/x-pem-file";
-            await context.Response.OutputStream.WriteAsync(bytes);
             return;
         }
 

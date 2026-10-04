@@ -123,17 +123,10 @@ public sealed partial class E2EApiFactory : WebApplicationFactory<Program>, IAsy
 
     private string _storageUrl = "";
 
-    // A STUB encryption service for the IMAP envelope hook (SimplArchiveEncryptionService ADR 0007). Hosted for the
-    // whole collection with 404 as its default answer, which means every existing IMAP test continuously
-    // exercises the no-certificate → plaintext contract as a side effect of merely running. A test opts a
-    // user in via RegisterEncryptionRecipient; the stub then returns a marker message rather than real CMS —
-    // the core treats the bytes as opaque, so this tests the WIRING end to end while the crypto is proven in
-    // the service's own repository (its cross-implementation tests). Faking the crypto here would prove
-    // nothing those tests do not, and would couple this suite to another repo's packages.
+    // A STUB encryption service, hosted for the whole collection: the at-rest KEK oracle and the decrypt-and-envelope
+    // route (ADRs 0818/0862). It no longer serves the certificate registry or `/enveloped` — both retired with the
+    // registry (ADR 0890); a reader's certificates come from the Module or the reader's own column.
     private WebApplication? _encryptionStub;
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _encryptionRecipients = new(StringComparer.OrdinalIgnoreCase);
-
-    public const string EnvelopedMarkerHeader = "X-SimplArchive-Test-Enveloped";
 
     // The seeded ENCRYPTED demo tenant (ADR 0813/0825) — the one name given a mode, so tests reach
     // the per-tenant gate's positive path through it and every per-test tenant exercises the negative one.
@@ -158,8 +151,6 @@ public sealed partial class E2EApiFactory : WebApplicationFactory<Program>, IAsy
     public const string CryptoAdminEmail = "crypt@crypto.e2e.local";
     public const string CryptoPassword = "CryptoDemo-1234!";
 
-    public void RegisterEncryptionRecipient(string email) => _encryptionRecipients[email] = true;
-
     /// <summary>The stub's KEK keypairs, one per generation — real RSA, so the crypto facts are real.</summary>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, System.Security.Cryptography.RSA> _keks =
         new();
@@ -172,30 +163,6 @@ public sealed partial class E2EApiFactory : WebApplicationFactory<Program>, IAsy
 
     /// <summary>The thumbprint the stub publishes for a generation.</summary>
     public string KekThumbprint(string generation = "kek-v1") => ThumbprintOf(_keks[generation]);
-
-    // A certificate held by the SERVICE's registry rather than on the user row (#1433). That is how a strict
-    // tenant's identities actually arrive — self-service is closed for exactly those tenants (ADR 0813), and the
-    // service has the provisioning door (PUT /api/users/{email}/certificate) — so a test that planted the column
-    // instead would be testing a state no installation can reach.
-    //
-    // Returns the PKCS#12 so the test can OPEN what the server envelopes: proving the certificate was found is
-    // not the same as proving the envelope is addressed to its key.
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _registryCertificates =
-        new(StringComparer.OrdinalIgnoreCase);
-
-    public byte[] RegisterEncryptionCertificate(string email, string password = "reader")
-    {
-        using var key = System.Security.Cryptography.RSA.Create(2048);
-        var request = new System.Security.Cryptography.X509Certificates.CertificateRequest(
-            $"CN={email}", key, System.Security.Cryptography.HashAlgorithmName.SHA256,
-            System.Security.Cryptography.RSASignaturePadding.Pkcs1);
-        using var certificate = request.CreateSelfSigned(
-            DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(1));
-
-        _registryCertificates[email] = certificate.ExportCertificatePem();
-        return certificate.Export(
-            System.Security.Cryptography.X509Certificates.X509ContentType.Pkcs12, password);
-    }
 
     /// <summary>Raw storage access for tests that must see what the BUCKET holds — the at-rest tests'
     /// whole point is that stored bytes differ from served bytes (ADR 0818), which no API-level read can
@@ -210,30 +177,6 @@ public sealed partial class E2EApiFactory : WebApplicationFactory<Program>, IAsy
         builder.Logging.ClearProviders();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         var app = builder.Build();
-        app.MapPost("/api/users/{email}/enveloped", async (string email, HttpRequest request) =>
-        {
-            if (!_encryptionRecipients.ContainsKey(email))
-            {
-                return Results.NotFound();
-            }
-
-            using var body = new MemoryStream();
-            await request.Body.CopyToAsync(body);
-            var enveloped = "Subject: enveloped\r\n"
-                + $"{EnvelopedMarkerHeader}: {body.Length}\r\n"
-                + "Content-Type: application/pkcs7-mime; smime-type=enveloped-data; name=\"smime.p7m\"\r\n"
-                + "\r\nMIAGCSqGSIb3DQEHA6CAMIACAQA=\r\n";
-            return Results.Bytes(System.Text.Encoding.ASCII.GetBytes(enveloped), "message/rfc822");
-        });
-
-        // The registry lookup the core asks when a user's own column is empty — the source a strict tenant's
-        // identities actually live in (#1433). A real PEM, because the core VALIDATES it and then envelopes to
-        // it; a marker string would pass the fetch and fail the parse, which is the wrong half to stub.
-        app.MapGet("/api/users/{email}/certificate", (string email) =>
-            _registryCertificates.TryGetValue(email, out var pem)
-                ? Results.Text(pem, "application/x-pem-file")
-                : Results.NotFound());
-
         // The at-rest half (ADR 0818): unlike the envelope leg, these two answer with REAL crypto — an
         // in-memory RSA keypair standing in for the HSM. The decorator's whole write path runs through
         // kek/current at the CryptoDemo SEED, so a 404 here would fail every E2E boot; and the unwrap must

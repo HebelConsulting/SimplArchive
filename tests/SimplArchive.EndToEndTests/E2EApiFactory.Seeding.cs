@@ -79,6 +79,13 @@ public sealed partial class E2EApiFactory
         await scope.ServiceProvider.GetRequiredService<ISensitivityLabelSeeder>().EnsureDefaultLabelsAsync(tenant.Id);
         await scope.ServiceProvider.GetRequiredService<IObjectStorageClient>().EnsureTenantBucketAsync(tenant.Id);
 
+        // The Strict tenant's readers take their certificates from an ACTIVATED module (ADR 0890) — activated here,
+        // at creation, so no test sharing this tenant can observe it before and after (E2EApiFactory.StrictReaders).
+        if (name == StrictTenantName)
+        {
+            await ActivateReaderCertificateModuleAsync(tenant.Id);
+        }
+
         return tenant.Id;
     }
 

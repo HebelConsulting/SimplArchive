@@ -115,17 +115,48 @@ public sealed class ModuleReaderCertificates(
             }
         }
 
-        // Installed but not active for this tenant — the licence has lapsed or was never filed. That is NOT
-        // "no module": the tenant is in an enveloping mode and nothing can envelope, so it must refuse — and
-        // it is not "no certificate" either, which is why it has its own outcome (ADR 0842's four refusals).
-        //
-        // Warning, not Debug: the tenant is in a mode that needs a module and has none active, so every
+        // Installed but not active for this tenant. What that MEANS depends on the tenant's mode (ADR 0890,
+        // narrowing ADR 0859): where the tenant delivers envelopes, nothing can envelope, so the read refuses —
+        // LicenceLapsed, its own outcome among ADR 0842's four refusals, and it closes the column too. Where the
+        // tenant does NOT envelope, the module simply has nothing to say about it: answering LicenceLapsed there
+        // shut off the reader's own self-service certificate on every tenant of an installation that licensed the
+        // module for only one — the kiosk's public demo would have lost self-service S/MIME the moment the
+        // Encryption Module was loaded for its Crypto tenant.
+        if (await TenantDeliversEnvelopesAsync(cancellationToken) is false)
+        {
+            logger.LogDebug(
+                "A module that answers reader certificates is loaded but not active for this tenant, whose mode "
+                + "does not deliver envelopes; the core's own sources answer for user {UserId}.", userId);
+            return ReaderCertificateAnswer.NoModule;
+        }
+
+        // Warning, not Debug: this tenant's mode delivers envelopes and no module is active for it, so every
         // enveloped read refuses until an administrator files a licence. Nothing else in the system says so.
         logger.LogWarning(
-            "No module that answers reader certificates is ACTIVE for this tenant, so an enveloped read for "
-            + "user {UserId} must refuse. Installed and able to answer: {Modules}. File or renew the licence.",
+            "This tenant's encryption mode delivers envelopes, but no module that answers reader certificates is "
+            + "ACTIVE for it, so an enveloped read for user {UserId} must refuse. Installed and able to answer: "
+            + "{Modules}. File or renew the licence.",
             userId, string.Join(", ", modules.Select(m => m.Module.ModuleId)));
 
         return ReaderCertificateAnswer.LicenceLapsed;
+    }
+
+    /// <summary>
+    /// Whether the ambient tenant's mode delivers envelopes — null when it cannot be told (no tenant in scope, or no
+    /// mode map registered), which the caller treats as the old, SAFE answer: refuse.
+    /// </summary>
+    private async Task<bool?> TenantDeliversEnvelopesAsync(CancellationToken cancellationToken)
+    {
+        if (services.GetService(typeof(Application.Abstractions.ICurrentTenantAccessor))
+                is not Application.Abstractions.ICurrentTenantAccessor { TenantId: { } tenantId }
+            || services.GetService(typeof(Encryption.EncryptionModes)) is not Encryption.EncryptionModes modes)
+        {
+            return null;
+        }
+
+        var name = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.SingleOrDefaultAsync(
+            dbContext.Tenants.Where(t => t.Id == tenantId).Select(t => t.Name), cancellationToken);
+
+        return name is null ? null : modes.DeliversEnvelopes(name);
     }
 }

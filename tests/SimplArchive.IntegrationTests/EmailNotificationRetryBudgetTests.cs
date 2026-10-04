@@ -65,7 +65,7 @@ public class EmailNotificationRetryBudgetTests
                 new CurrentPlatformAdministratorAccessor(), new CurrentTenantAccessor(),
                 new CurrentImpersonationAccessor(), new CurrentSystemActorAccessor(), TimeProvider.System,
                 NullLogger<SimplArchive.Infrastructure.Audit.AuditRecorder>.Instance);
-            await new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, recorder, new NoModuleScopeFactory(act))
+            await new EmailNotificationDispatcher(act, sender, NullLogger<EmailNotificationDispatcher>.Instance, recorder, new NoModuleScopeFactory(act))
                 .DispatchPendingAsync();
         }
 
@@ -142,7 +142,7 @@ public class EmailNotificationRetryBudgetTests
         for (var i = 0; i < MaxEmailAttempts + 3; i++)
         {
             using var act = CreateContext(connection);
-            await new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, audit, new NoModuleScopeFactory(act))
+            await new EmailNotificationDispatcher(act, sender, NullLogger<EmailNotificationDispatcher>.Instance, audit, new NoModuleScopeFactory(act))
                 .DispatchPendingAsync();
         }
 
@@ -184,7 +184,7 @@ public class EmailNotificationRetryBudgetTests
         for (var i = 0; i < 3; i++)
         {
             using var act = CreateContext(connection);
-            await new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, new CountingAudit(), new NoModuleScopeFactory(act))
+            await new EmailNotificationDispatcher(act, sender, NullLogger<EmailNotificationDispatcher>.Instance, new CountingAudit(), new NoModuleScopeFactory(act))
                 .DispatchPendingAsync();
         }
 
@@ -223,7 +223,7 @@ public class EmailNotificationRetryBudgetTests
         for (var i = 0; i < MaxEmailAttempts + 2; i++)
         {
             using var act = CreateContext(connection);
-            await new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, new CountingAudit(), new NoModuleScopeFactory(act))
+            await new EmailNotificationDispatcher(act, sender, NullLogger<EmailNotificationDispatcher>.Instance, new CountingAudit(), new NoModuleScopeFactory(act))
                 .DispatchPendingAsync();
         }
 
@@ -240,15 +240,4 @@ public class EmailNotificationRetryBudgetTests
         Assert.Equal(0, pendingLeft); // nothing is left circling forever
     }
 
-    // An INERT envelope client for these tests: no Encryption:ServiceUrl configured, so EnabledFor is false
-    // and the certificate lookup answers null without touching the network — plaintext dispatch, the
-    // pre-#1334 behaviour these tests pin.
-    private static SimplArchive.Infrastructure.Encryption.MessageEnvelopeClient InertEnvelopeClient() =>
-        new(new InertHttpClientFactory(), new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
-            NullLogger<SimplArchive.Infrastructure.Encryption.MessageEnvelopeClient>.Instance);
-
-    private sealed class InertHttpClientFactory : IHttpClientFactory
-    {
-        public HttpClient CreateClient(string name) => new();
-    }
 }

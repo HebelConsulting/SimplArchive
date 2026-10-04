@@ -35,7 +35,7 @@ public class SmimeCertificateController : ControllerBase
     private readonly Concurrency.UserVerbs _users;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
-    private readonly MessageEnvelopeClient _envelopeClient;
+    private readonly EncryptionModes _modes;
     private readonly Encryption.TenantIngestKeyService _ingestKeys;
     private readonly IAuditRecorder _audit;
 
@@ -44,7 +44,7 @@ public class SmimeCertificateController : ControllerBase
         Concurrency.UserVerbs users,
         ICurrentUserAccessor currentUserAccessor,
         ICurrentTenantAccessor currentTenantAccessor,
-        MessageEnvelopeClient envelopeClient,
+        EncryptionModes modes,
         Encryption.TenantIngestKeyService ingestKeys,
         IAuditRecorder audit)
     {
@@ -52,7 +52,7 @@ public class SmimeCertificateController : ControllerBase
         _users = users;
         _currentUserAccessor = currentUserAccessor;
         _currentTenantAccessor = currentTenantAccessor;
-        _envelopeClient = envelopeClient;
+        _modes = modes;
         _ingestKeys = ingestKeys;
         _audit = audit;
     }
@@ -232,7 +232,7 @@ public class SmimeCertificateController : ControllerBase
             .Where(t => t.Id == _currentTenantAccessor.TenantId)
             .Select(t => t.Name)
             .SingleOrDefaultAsync(cancellationToken);
-        return tenantName is null || !_envelopeClient.EnabledFor(tenantName);
+        return tenantName is null || !_modes.ServiceGovernsMail(tenantName);
     }
 
     private async Task<T> StatusAsync<T>(User user, CancellationToken cancellationToken) where T : SmimeStatusResource, new()

@@ -101,7 +101,7 @@ public class EmailNotificationDispatcherTests
         int sent;
         using (var act = CreateContext(connection))
         {
-            var dispatcher = new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance, new NoModuleScopeFactory(act));
+            var dispatcher = new EmailNotificationDispatcher(act, sender, NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance, new NoModuleScopeFactory(act));
             sent = await dispatcher.DispatchPendingAsync();
         }
 
@@ -119,7 +119,7 @@ public class EmailNotificationDispatcherTests
         // A second pass sends nothing (the first is now stamped, the other was already emailed).
         using (var again = CreateContext(connection))
         {
-            var dispatcher = new EmailNotificationDispatcher(again, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance, new NoModuleScopeFactory(again));
+            var dispatcher = new EmailNotificationDispatcher(again, sender, NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance, new NoModuleScopeFactory(again));
             Assert.Equal(0, await dispatcher.DispatchPendingAsync());
         }
 
@@ -150,7 +150,7 @@ public class EmailNotificationDispatcherTests
         var sender = new RecordingEmailSender();
         using (var act = CreateContext(connection))
         {
-            var dispatcher = new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance, new NoModuleScopeFactory(act));
+            var dispatcher = new EmailNotificationDispatcher(act, sender, NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance, new NoModuleScopeFactory(act));
             Assert.Equal(1, await dispatcher.DispatchPendingAsync()); // only the non-muted one counts as sent
         }
 
@@ -191,7 +191,7 @@ public class EmailNotificationDispatcherTests
         var sender = new RecordingEmailSender();
         using (var act = CreateContext(connection))
         {
-            var dispatcher = new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance, new NoModuleScopeFactory(act));
+            var dispatcher = new EmailNotificationDispatcher(act, sender, NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance, new NoModuleScopeFactory(act));
             Assert.Equal(2, await dispatcher.DispatchPendingAsync());
         }
 
@@ -217,7 +217,7 @@ public class EmailNotificationDispatcherTests
         sender.FailFor.Add("bad@acme.test");
         using (var act = CreateContext(connection))
         {
-            var dispatcher = new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance, new NoModuleScopeFactory(act));
+            var dispatcher = new EmailNotificationDispatcher(act, sender, NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance, new NoModuleScopeFactory(act));
             Assert.Equal(1, await dispatcher.DispatchPendingAsync()); // only the good one counts as sent
         }
 
@@ -279,7 +279,7 @@ public class EmailNotificationDispatcherTests
         var sender = new RecordingEmailSender();
         using (var act = CreateContext(connection))
         {
-            var dispatcher = new EmailNotificationDispatcher(act, sender, InertEnvelopeClient(),
+            var dispatcher = new EmailNotificationDispatcher(act, sender,
                 NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance, new NoModuleScopeFactory(act));
             await dispatcher.DispatchPendingAsync();
         }
@@ -294,15 +294,4 @@ public class EmailNotificationDispatcherTests
         Assert.Null(toPlain.CertificatePem);
     }
 
-    // An INERT envelope client for these tests: no Encryption:ServiceUrl configured, so EnabledFor is false
-    // and the certificate lookup answers null without touching the network — plaintext dispatch, the
-    // pre-#1334 behaviour these tests pin.
-    private static SimplArchive.Infrastructure.Encryption.MessageEnvelopeClient InertEnvelopeClient() =>
-        new(new InertHttpClientFactory(), new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
-            NullLogger<SimplArchive.Infrastructure.Encryption.MessageEnvelopeClient>.Instance);
-
-    private sealed class InertHttpClientFactory : IHttpClientFactory
-    {
-        public HttpClient CreateClient(string name) => new();
-    }
 }

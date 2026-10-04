@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -81,12 +82,58 @@ public class ModuleReaderCertificatesTests
         Assert.Empty(answer.Certificates);
     }
 
+    // ADR 0890 narrows ADR 0859: an inactive module is a LAPSED LICENCE only where the tenant's mode delivers
+    // envelopes. Elsewhere the module has nothing to say about the tenant, and the reader's own column must keep
+    // working — or loading the Encryption Module for one tenant would silently end self-service S/MIME on every
+    // other (the kiosk's public demo beside its Crypto tenant).
+    [Theory]
+    [InlineData("Storage", ReaderCertificateOutcome.NoModule)]
+    [InlineData("None", ReaderCertificateOutcome.NoModule)]
+    [InlineData("Strict", ReaderCertificateOutcome.LicenceLapsed)]
+    [InlineData("StrictRehearsal", ReaderCertificateOutcome.LicenceLapsed)]
+    [InlineData("SealedDeliveryPermissive", ReaderCertificateOutcome.LicenceLapsed)]
+    public async Task An_inactive_module_is_a_lapsed_licence_only_where_the_tenant_delivers_envelopes(
+        string mode, ReaderCertificateOutcome expected)
+    {
+        await using var db = await FreshAsync();
+        var tenantId = Guid.NewGuid();
+        db.Tenants.Add(new SimplArchive.Domain.Tenants.Tenant { Id = tenantId, Name = "Demo", CreatedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+
+        var configuration = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Encryption:Modes:Demo"] = mode })
+            .Build();
+        var services = new StubServices
+        {
+            Modules = [new ModuleLoader.LoadedModule(new EnrollingModule(), "test://enc")],
+            Tenant = new CurrentTenantAccessor { TenantId = tenantId },
+            Modes = new SimplArchive.Infrastructure.Encryption.EncryptionModes(configuration),
+        };
+
+        var answer = await new ModuleReaderCertificates(
+            db, services, NullLogger<ModuleReaderCertificates>.Instance).ForAsync(Guid.NewGuid());
+
+        Assert.Equal(expected, answer.Outcome);
+        Assert.Empty(answer.Certificates);
+
+        // And the consequence the narrowing exists for: on a non-enveloping tenant the column is the source.
+        var source = ReaderCertificateSource.Resolve(answer, columnPem: "column-pem");
+        Assert.Equal(expected == ReaderCertificateOutcome.NoModule ? ["column-pem"] : [], source.Pems);
+    }
+
     /// <summary>The host provider, reduced to what this seam actually resolves from it.</summary>
     private sealed class StubServices : IServiceProvider
     {
         public IReadOnlyList<ModuleLoader.LoadedModule> Modules { get; init; } = [];
 
+        public CurrentTenantAccessor? Tenant { get; init; }
+
+        public SimplArchive.Infrastructure.Encryption.EncryptionModes? Modes { get; init; }
+
         public object? GetService(Type serviceType) =>
-            serviceType == typeof(IReadOnlyList<ModuleLoader.LoadedModule>) ? Modules : null;
+            serviceType == typeof(IReadOnlyList<ModuleLoader.LoadedModule>) ? Modules
+            : serviceType == typeof(SimplArchive.Application.Abstractions.ICurrentTenantAccessor) ? Tenant
+            : serviceType == typeof(SimplArchive.Infrastructure.Encryption.EncryptionModes) ? Modes
+            : null;
     }
 }

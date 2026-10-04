@@ -1131,14 +1131,13 @@ SimplArchive's encryption is extended by *two separate paid products*, and which
 you are trying to achieve. They are named here because the division is not where most people guess.
 
 *The Encryption Service*#idx("Encryption Service") encrypts *content where it is stored*, under keys held in
-hardware the operating organisation controls. It also keeps the *registry* of which certificate belongs to
-which person, for installations that provision identities centrally rather than letting people register their
-own.
+hardware the operating organisation controls.
 
 *The Encryption Module*#idx("Encryption Module") manages *certificates at the scale of an organisation*:
 several per person — one per device, so a smartcard in a computer and an identity on a phone can both be
 addressed at once — enrolment *on somebody else's behalf* and in bulk, *revocation*, and a *tenant policy*
-stating what makes a certificate acceptable at all (minimum key sizes, permitted curves).
+stating what makes a certificate acceptable at all (minimum key sizes, permitted curves). It is also *where a
+reader's certificates come from* wherever content is delivered as an envelope.
 
 What may surprise you is what is *not* in either list. *Addressing a document to your own certificate needs
 neither product.* This application can do that with the certificate you registered yourself — it is the same
@@ -1147,7 +1146,8 @@ protection of the stored bytes, and the means to run certificates for hundreds o
 
 Where the Service is installed, an administrator sets a *level per tenant*, so an archive that needs this can
 sit beside one that does not. Three of those levels concern you as a reader, and they differ in what happens
-when you have no certificate yet:
+when you have no certificate yet. The first needs only the Service; the other two deliver envelopes, so they
+also need the Module, which is where your certificates are enrolled:
 
 / Stored encrypted: Content is encrypted where it is kept. Nothing changes in how you read it.
 / Rehearsal: Every document is *also* offered as an envelope to whoever can open one, while every ordinary way
@@ -1525,8 +1525,8 @@ to do). The sentence comes from the certificate management itself, in your own l
 private key on the card outlives them — it keeps decrypting whatever was ever addressed to it.
 
 *Expiry is checked when a certificate is REGISTERED, and never again.* Both doors refuse one that has already
-lapsed: the archive's own registration answers `it expired <date>`, and so does the encryption service's
-registry. After that, nothing re-checks it. Content keeps being addressed to it, the card keeps opening it,
+lapsed: the archive's own registration answers `it expired <date>`, and so does enrolment in the Encryption
+Module. After that, nothing re-checks it. Content keeps being addressed to it, the card keeps opening it,
 and no warning appears — which is deliberate rather than an omission, because the alternative is worse: a
 reader whose renewal is a week late would stop receiving anything, and the key that opens their existing
 documents would still be in their pocket.

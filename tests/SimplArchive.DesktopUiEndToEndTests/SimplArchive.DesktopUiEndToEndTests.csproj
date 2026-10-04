@@ -47,6 +47,9 @@
          The desktop CLIENT still does not reference Domain and must not (ADR 0236: it is an Api client, not a
          second copy of the model) — a test asserting the two agree is exactly the thing that needs both. -->
     <ProjectReference Include="..\..\src\SimplArchive.Domain\SimplArchive.Domain.csproj" />
+    <!-- The module contract, to SIGN the TestModule's licence for the Strict tenant (ADR 0890) — the same
+         TenantLicense type a vendor signs with. A dependency-free contract assembly, so nothing else comes along. -->
+    <ProjectReference Include="..\..\src\SimplArchive.ModuleAbi\SimplArchive.ModuleAbi.csproj" />
     <!-- The shared self-host boot engine (ADR 0502) — one source of truth for standing up the real app. -->
     <ProjectReference Include="..\SimplArchive.SelfHosting\SimplArchive.SelfHosting.csproj" />
   </ItemGroup>

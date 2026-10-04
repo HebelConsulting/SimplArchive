@@ -9,13 +9,11 @@ namespace SimplArchive.UnitTests;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>A unit test because the tier cannot be hosted.</b> The E2E factory declares its tenants' modes in
-/// process-wide configuration read once at startup, and a <c>SealedDeliveryPermissive</c> entry would make
-/// <c>EncryptionModes.ThrowIfSealedDeliveryHasNoModule</c> refuse to start unless a loaded module answers
-/// <c>ReaderCertificates</c> — and making the test module answer it would make the module the ONLY
-/// certificate source (ADR 0842), closing the core's own column and registry and breaking every existing
-/// strict test that registers a certificate in one of them. So the decision was extracted to a pure function
-/// and the table is asserted here, exhaustively.
+/// <b>A unit test so every combination is asserted, not one tier per host.</b> It was written when the delivery
+/// tiers could not be hosted: <c>EncryptionModes</c> refuses an enveloping mode unless a loaded module answers
+/// <c>ReaderCertificates</c>, and a test module answering it would make the module the only source. Since ADR 0890
+/// that is simply true of every enveloping tenant, so the test hosts stage a module that answers per reader and the
+/// Strict tests enrol through it. The exhaustive table stays the guard.
 /// </para>
 /// <para>
 /// The defect this pins was invisible for the opposite reason: every layer was individually correct, and the

@@ -24,10 +24,14 @@ public class DesktopModulesTests
         var settings = await api.Admin.GetTenantSettingsAsync();
         var catalog = await api.Admin.GetModulesAsync(settings);
 
-        // The rel is advertised to a tenant admin, and the catalog answers even with nothing installed —
-        // an empty list is an answer, not an absence (the withhold-a-rel rule).
+        // The rel is advertised to a tenant admin, and the catalog answers with what is INSTALLED: this host stages
+        // the TestModule so its Strict tenant may start (ADR 0890), and the demo tenant signed in here never
+        // activated it — installed, not active, which is the state the catalog exists to show.
         Assert.NotNull(catalog);
-        Assert.Empty(catalog!.Items);
+        var installed = Assert.Single(catalog!.Items);
+        Assert.Equal("test-module", installed.ModuleId);
+        Assert.True(installed.Installed);
+        Assert.False(installed.Activated);
 
         // The dropdown's source is advertised where the collection was read (ADR 0557) — and it answers
         // too: no documents wear the Module-license mask in the demo seed.

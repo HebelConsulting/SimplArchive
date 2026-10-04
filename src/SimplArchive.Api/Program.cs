@@ -416,7 +416,7 @@ builder.Services.AddSingleton(machineCatalog);
 builder.Services.AddSingleton<IReadOnlyList<SimplArchive.Infrastructure.Modules.ModuleLoader.LoadedModule>>(modules);
 
 // HERE rather than with the other encryption-configuration rules at the top of this file, and the placement
-// is the point: whether this installation can perform the sealed-delivery tiers depends on a module
+// is the point: whether this installation can run an enveloping mode depends on a module
 // ANSWERING the reader-certificate capability (ADR 0834), which is not knowable until the modules above have
 // loaded and survived their startup seams. Asked at line ~66 it could only ever refuse — and it did, telling
 // an installation the Encryption Module "is not available yet" after that module existed.
@@ -424,10 +424,10 @@ builder.Services.AddSingleton<IReadOnlyList<SimplArchive.Infrastructure.Modules.
 // Deliberately the SURVIVORS (`modules` post-ModuleStartup): a module that threw on its startup seam is
 // dropped and must not count as able to perform a tier it will never be asked to perform.
 //
-// Per-TENANT activation is a separate, later question and stays one. A tenant configured for a delivery tier
+// Per-TENANT activation is a separate, later question and stays one. A tenant configured for an enveloping mode
 // whose module is loaded but not licensed gets no certificates, so the read refuses — which is the safe
 // direction, and the reason this gate asks only whether the capability exists at all.
-SimplArchive.Infrastructure.Encryption.EncryptionModes.ThrowIfSealedDeliveryHasNoModule(
+SimplArchive.Infrastructure.Encryption.EncryptionModes.ThrowIfEnvelopingModeHasNoModule(
     builder.Configuration, modules.Select(loaded => loaded.Module));
 
 // The DAV collection kinds the whole DAV layer reads — core kinds plus each module's declared kinds (ABI 0.24,

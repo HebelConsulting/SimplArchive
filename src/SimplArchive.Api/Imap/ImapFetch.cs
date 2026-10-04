@@ -25,7 +25,7 @@ internal static class ImapFetch
         var set = arguments[..setEnd];
         var items = ParseItems(arguments[(setEnd + 1)..], uidMode);
         var storage = scope.ServiceProvider.GetRequiredService<IObjectStorageClient>();
-        var envelope = scope.ServiceProvider.GetRequiredService<SimplArchive.Infrastructure.Encryption.MessageEnvelopeClient>();
+        var modes = scope.ServiceProvider.GetRequiredService<SimplArchive.Infrastructure.Encryption.EncryptionModes>();
         var selfEnveloper = scope.ServiceProvider.GetRequiredService<SimplArchive.Infrastructure.Encryption.SmimeMessageEnveloper>();
         var seen = await ImapMailboxes.SeenSetAsync(scope, selected.Messages);
 
@@ -46,7 +46,7 @@ internal static class ImapFetch
                 seen.Add(message.DocumentId);
             }
 
-            await WriteMessageAsync(session, storage, envelope, selfEnveloper, message, sequence, items,
+            await WriteMessageAsync(session, storage, modes, selfEnveloper, message, sequence, items,
                 seen.Contains(message.DocumentId), selected.DeletedDocumentIds.Contains(message.DocumentId));
         }
 
@@ -133,7 +133,7 @@ internal static class ImapFetch
     // ---- Response ------------------------------------------------------------------------------------
 
     private static async Task WriteMessageAsync(
-        ImapSession session, IObjectStorageClient storage, SimplArchive.Infrastructure.Encryption.MessageEnvelopeClient envelope,
+        ImapSession session, IObjectStorageClient storage, SimplArchive.Infrastructure.Encryption.EncryptionModes modes,
         SimplArchive.Infrastructure.Encryption.SmimeMessageEnveloper selfEnveloper,
         ImapMessageEntry message, int sequence, List<string> items, bool seen, bool deleted)
     {
@@ -147,19 +147,15 @@ internal static class ImapFetch
         // bytes (see ImapSearch): the server holds plaintext anyway, and matching against ciphertext would
         // silently turn every content search into "no results".
         //
-        // Precedence (#1332): the user's own stored certificate envelopes IN-PROCESS and wins over the
-        // sidecar hook — where both exist, the self-service certificate is the more specific claim about
-        // what this user's devices can open. Both fail open to plaintext, each with its own Warning.
+        // Enveloped IN-PROCESS to the reader's certificates — the module's answer, else the user's own column
+        // (ReaderCertificateSource). The encryption service's /enveloped endpoint used to be asked where no
+        // module answered; it is retired with the registry behind it (ADR 0890). Fails open to plaintext with a
+        // Warning when nothing can be addressed.
         async Task<byte[]> BytesAsync() => bytes ??=
             (session.ReaderCertificates.Envelopes
                 ? selfEnveloper.TryEnvelope(
                     await MessageBytesAsync(storage, message), session.ReaderCertificates.Pems, session.Email)
-                // The registry only where NO module answered (ADR 0842/0855). A module that answered "this
-                // reader holds none" has spoken, and asking the registry next would let a certificate the
-                // module revoked go on opening mail — the union ADR 0842 forbids.
-                : session.ReaderCertificates.MayConsultRegistry
-                    ? await envelope.TryEnvelopeAsync(session.TenantName, session.Email, await MessageBytesAsync(storage, message), CancellationToken.None)
-                    : null)
+                : null)
             ?? bytes ?? await MessageBytesAsync(storage, message);
 
         async Task<MimeMessage> MimeAsync() => mime ??= MimeMessage.Load(new MemoryStream(await BytesAsync()));
@@ -189,7 +185,7 @@ internal static class ImapFetch
                     // about every enveloped message — measure the served bytes instead, unconditionally there,
                     // because whether THIS user's message envelopes depends on a cert lookup the shortcut
                     // cannot see.
-                    parts.Add(!envelope.EnabledFor(session.TenantName) && !session.ReaderCertificates.Envelopes
+                    parts.Add(!modes.ServiceGovernsMail(session.TenantName) && !session.ReaderCertificates.Envelopes
                         && message.Extension.Equals(".eml", StringComparison.OrdinalIgnoreCase) && message.SizeBytes is { } size
                         ? $"RFC822.SIZE {size}"
                         : $"RFC822.SIZE {(await BytesAsync()).Length}");

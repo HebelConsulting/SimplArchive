@@ -43,17 +43,15 @@ public sealed class EmailNotificationDispatcher : IEmailNotificationDispatcher
 
     private readonly SimplArchiveDbContext _dbContext;
     private readonly IEmailSender _emailSender;
-    private readonly Encryption.MessageEnvelopeClient _envelopeClient;
     private readonly ILogger<EmailNotificationDispatcher> _logger;
     private readonly IAuditRecorder _audit;
 
     private readonly Microsoft.Extensions.DependencyInjection.IServiceScopeFactory _scopeFactory;
 
     public EmailNotificationDispatcher(SimplArchiveDbContext dbContext, IEmailSender emailSender,
-        Encryption.MessageEnvelopeClient envelopeClient, ILogger<EmailNotificationDispatcher> logger, IAuditRecorder audit,
+        ILogger<EmailNotificationDispatcher> logger, IAuditRecorder audit,
         Microsoft.Extensions.DependencyInjection.IServiceScopeFactory scopeFactory)
     {
-        _envelopeClient = envelopeClient;
         _dbContext = dbContext;
         _emailSender = emailSender;
         _logger = logger;
@@ -278,16 +276,9 @@ public sealed class EmailNotificationDispatcher : IEmailNotificationDispatcher
             .GetRequiredService<Modules.ModuleReaderCertificates>()
             .ForAsync(item.RecipientUserId, cancellationToken);
 
-        var source = Modules.ReaderCertificateSource.Resolve(fromModule, item.SmimeCertificatePem);
-        if (source.Envelopes || !source.MayConsultRegistry)
-        {
-            // Either the module (or the column) answered with certificates, or a module answered "none" —
-            // which closes the registry too, or a certificate the module revoked would go on opening mail.
-            return source.Pems;
-        }
-
-        return await _envelopeClient.TryGetCertificatePemAsync(item.TenantName, item.Email, cancellationToken)
-            is { Length: > 0 } registered ? [registered] : [];
+        // The module where one answers, else the reader's own column — never the encryption service's registry,
+        // which is retired (ADR 0890).
+        return Modules.ReaderCertificateSource.Resolve(fromModule, item.SmimeCertificatePem).Pems;
     }
 
     /// <summary>

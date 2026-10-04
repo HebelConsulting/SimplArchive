@@ -6,12 +6,10 @@ namespace SimplArchive.Api.Documents;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A pure decision over three booleans, deliberately separate from the resource builder, because the tier it
-/// exists for <b>cannot be hosted by the E2E suite</b>:
-/// <c>EncryptionModes.ThrowIfSealedDeliveryHasNoModule</c> refuses startup unless a loaded module answers
-/// <c>ReaderCertificates</c>, and making the test module answer it would make the module the ONLY certificate
-/// source (ADR 0842), closing the core's own two and breaking every existing strict test. So the table is
-/// asserted exhaustively here instead — the same recipe as
+/// A pure decision over three booleans, deliberately separate from the resource builder, so the whole table is
+/// asserted exhaustively rather than one tier at a time through a host. (It was extracted when the delivery tiers
+/// could not be hosted at all; since ADR 0890 the test module answers the reader-certificate capability, so every
+/// enveloping mode can start.) The same recipe as
 /// <see cref="StrictEnvelopeDelivery.RefusalFor"/>, whose own note says a cause-to-message table nobody tests
 /// is exactly how a collapsed message survives.
 /// </para>

@@ -40,6 +40,12 @@ public sealed class SelfHostedApp : IAsyncDisposable
     /// </remarks>
     public string? StrictTenantName { get; set; }
 
+    /// <summary>
+    /// The public key the staged TestModule verifies licences with (ADR 0890): a Strict tenant's readers take their
+    /// certificates from an ACTIVATED module, and activating it needs a licence the module accepts.
+    /// </summary>
+    public string? TestModuleVerifyKeyPem { get; init; }
+
     /// <summary>The stub encryption service, once started — null unless <see cref="StrictTenantName"/> is set.</summary>
     public EncryptionServiceStub? EncryptionService { get; private set; }
 
@@ -360,6 +366,38 @@ public sealed class SelfHostedApp : IAsyncDisposable
             EncryptionService = stub;
             env["Encryption__ServiceUrl"] = stub.Url;
             env[$"Encryption__Modes__{StrictTenantName}"] = "Strict";
+
+            // A Strict tenant needs a loaded module answering the reader-certificate capability, or the Api
+            // refuses to start (ADR 0890). The TestModule answers it per reader from its own documents: a Strict-
+            // tenant test activates it with a licence signed against TestModuleVerifyKeyPem and enrols the reader
+            // through the module. Other tenants keep their column (a lapsed licence closes it only where the mode
+            // envelopes). Staged the way the E2E factory stages it: its own directory under a fresh Modules root.
+            //
+            // Located by PATH, not by type: a normal project reference would pull the module's own package graph
+            // (EF Core's Npgsql 10) into this library, which pins Npgsql 9 for its consumers — NuGet refuses the
+            // downgrade. The csproj keeps a build-order-only reference, so the DLL exists for this configuration.
+            var configuration = new DirectoryInfo(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar)).Parent!.Name;
+            var testModuleDll = Path.Combine(repoRoot, "tests", "SimplArchive.TestModule", "bin", configuration, "net10.0",
+                "SimplArchive.TestModule.dll");
+            if (!File.Exists(testModuleDll))
+            {
+                throw new InvalidOperationException(
+                    $"The TestModule is not built at {testModuleDll}. A Strict tenant needs a loaded module answering "
+                    + "the reader-certificate capability (ADR 0890); build tests/SimplArchive.TestModule first.");
+            }
+
+            // The key the TestModule verifies its licence with — an environment variable for the reason the module
+            // itself gives (it runs in its own load context, so only the process environment reaches both sides).
+            // The holder of the private half signs the Strict tenant's licence; without it no licence verifies.
+            if (!string.IsNullOrWhiteSpace(TestModuleVerifyKeyPem))
+            {
+                env["SIMPLARCHIVE_TESTMODULE_VERIFY_KEY"] = TestModuleVerifyKeyPem;
+            }
+
+            var modulesRoot = Path.Combine(Path.GetTempPath(), $"simplarchive-selfhosted-modules-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(Path.Combine(modulesRoot, "test-module"));
+            File.Copy(testModuleDll, Path.Combine(modulesRoot, "test-module", Path.GetFileName(testModuleDll)));
+            env["Modules__Directory"] = modulesRoot;
         }
         foreach (var (k, v) in env)
         {

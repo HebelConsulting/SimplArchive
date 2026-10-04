@@ -133,6 +133,60 @@ public sealed class TestModuleController : ControllerBase
     [HttpHead("certificates")]
     public IActionResult HeadCertificates() => NoContent();
 
+    public sealed class ReaderCertificateRequest
+    {
+        public Guid UserId { get; set; }
+
+        public string CertificatePem { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// Enrols a reader's certificate (ADR 0890): filed as this module's own document, the PEM as its content —
+    /// the source <see cref="TestModule.ReaderCertificates"/> answers from. The module's principal must be granted
+    /// the parent, as for any module reading its own documents.
+    /// </summary>
+    [HttpPost("reader-certificates")]
+    public async Task<IActionResult> EnrolReaderCertificate(
+        [FromQuery] Guid parentId,
+        [FromBody] ReaderCertificateRequest request,
+        [FromServices] IModuleArchiveFacade facade,
+        CancellationToken cancellationToken)
+    {
+        var documentId = await facade.CreateContentDocumentAsync(
+            parentId,
+            TestModule.ReaderCertificateMaskId,
+            $"Reader certificate {Guid.NewGuid():N}",
+            System.Text.Encoding.UTF8.GetBytes(request.CertificatePem),
+            ".pem",
+            new Dictionary<string, string> { [TestModule.ReaderCertificateHolderField] = request.UserId.ToString() },
+            cancellationToken: cancellationToken);
+
+        return Ok(new { id = documentId });
+    }
+
+    [HttpHead("reader-certificates")]
+    public IActionResult HeadReaderCertificates() => NoContent();
+
+    /// <summary>Withdraws every certificate enrolled for a reader — the "lost their certificate" case.</summary>
+    [HttpPut("reader-certificates/withdrawn")]
+    public async Task<IActionResult> WithdrawReaderCertificates(
+        [FromQuery] Guid userId,
+        [FromServices] IModuleArchiveFacade facade,
+        CancellationToken cancellationToken)
+    {
+        foreach (var document in await facade.GetByMaskAsync(TestModule.ReaderCertificateMaskId, cancellationToken))
+        {
+            if (document.Fields.TryGetValue(TestModule.ReaderCertificateHolderField, out var holder)
+                && holder == userId.ToString())
+            {
+                await facade.SetFieldsAsync(document.Id,
+                    new Dictionary<string, string> { [TestModule.ReaderCertificateWithdrawnField] = "true" }, cancellationToken);
+            }
+        }
+
+        return NoContent();
+    }
+
     [HttpHead("settings-seen")]
     public IActionResult HeadSettingsSeen() => NoContent();
 

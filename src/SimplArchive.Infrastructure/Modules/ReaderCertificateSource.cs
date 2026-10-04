@@ -8,10 +8,11 @@ namespace SimplArchive.Infrastructure.Modules;
 /// <b>Two facts, not one, and the second is the one that is easy to lose.</b>
 /// <c>ModuleReaderCertificates.ForAsync</c> returns null when no active module answers the question and an
 /// EMPTY LIST when one did and this reader has none — a distinction ADR 0842 makes load-bearing, because
-/// where a module answers it is the ONLY source. Collapsing the two into "no certificates" makes an empty
-/// answer indistinguishable from silence, and the fetch then tries the encryption service's registry next:
-/// the module says "this reader holds none", the registry says "here is one", and a certificate the module
-/// has REVOKED goes on opening mail. That is the union ADR 0842 forbids, arrived at by accident.
+/// where a module answers it is the ONLY source. Collapsing the two into "no certificates" made an empty
+/// answer indistinguishable from silence, and the fetch then tried the encryption service's registry next:
+/// the module said "this reader holds none", the registry said "here is one", and a certificate the module
+/// had REVOKED went on opening mail. The registry is retired (ADR 0890), but the column is a second source
+/// too, so the distinction still decides whether it may be asked.
 /// </para>
 /// <para>
 /// The first draft of this change did exactly that. It is a record rather than two loose fields so the two
@@ -26,8 +27,8 @@ namespace SimplArchive.Infrastructure.Modules;
 /// </remarks>
 /// <param name="Pems">The certificates to envelope to — possibly none.</param>
 /// <param name="AnsweredByModule">
-/// True when an active module answered. The caller must then NOT consult any other source, whatever
-/// <paramref name="Pems"/> holds.
+/// True when an active module answered. No other source was consulted then, whatever <paramref name="Pems"/>
+/// holds.
 /// </param>
 public sealed record ReaderCertificateSource(IReadOnlyList<string> Pems, bool AnsweredByModule)
 {
@@ -36,15 +37,6 @@ public sealed record ReaderCertificateSource(IReadOnlyList<string> Pems, bool An
 
     /// <summary>True when this session envelopes in-process to the certificates above.</summary>
     public bool Envelopes => Pems.Count > 0;
-
-    /// <summary>
-    /// True when the encryption service's registry may still be asked — only when NO module answered.
-    /// </summary>
-    /// <remarks>
-    /// The whole reason this type exists. A module that answered has spoken for this reader, including when
-    /// it answered "none": asking further is how a revocation stops revoking.
-    /// </remarks>
-    public bool MayConsultRegistry => !AnsweredByModule;
 
     /// <summary>
     /// The module's answer where there is one, else the self-service column (#1332).
@@ -59,10 +51,10 @@ public sealed record ReaderCertificateSource(IReadOnlyList<string> Pems, bool An
 
             // A module spoke. Its answer stands even when it names nothing — and even when the "answer" was
             // a lapsed licence or a failure to ask, because none of those means "this reader has none"
-            // (ADR 0859; see MayConsultRegistry).
+            // (ADR 0859) — and asking the column next is how a revocation would stop revoking.
             ? new([.. fromModule.Certificates.Select(certificate => certificate.CertificatePem)], AnsweredByModule: true)
 
-            // No module enrols certificates on this installation, so the core resolves them as it always
-            // has: the self-service column, and then the registry (which the FETCH path asks).
+            // No module answered, so the self-service column is the only source left — the encryption service's
+            // registry used to come next and is retired (ADR 0890).
             : columnPem is { Length: > 0 } own ? new([own], AnsweredByModule: false) : None;
 }

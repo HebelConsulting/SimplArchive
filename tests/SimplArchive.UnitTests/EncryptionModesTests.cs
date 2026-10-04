@@ -298,17 +298,20 @@ public class EncryptionModesTests
         EncryptionModes.ThrowIfModeHasNoService(configuration);   // does not throw
     }
 
-    // ...but it IS refused while nothing performs its delivery. Same failure as #1406 and refused the same
-    // way: a mode with nothing behind it does not misbehave, it silently has no guarantee.
+    // Every ENVELOPING mode is refused while no module answers the reader-certificate capability (ADR 0890): with
+    // the service's registry retired, the Module is the only certificate source such a tenant has. Strict and
+    // StrictRehearsal joined the delivery tiers here — they used to ship "with the Service alone" (ADR 0866).
     [Theory]
+    [InlineData(EncryptionMode.Strict)]
+    [InlineData(EncryptionMode.StrictRehearsal)]
     [InlineData(EncryptionMode.SealedDeliveryPermissive)]
     [InlineData(EncryptionMode.SealedDeliveryStrict)]
-    public void A_delivery_tier_is_refused_when_no_module_answers_the_capability(EncryptionMode mode)
+    public void An_enveloping_mode_is_refused_when_no_module_answers_the_capability(EncryptionMode mode)
     {
         var configuration = Config((EncryptionModes.Section + ":T", mode.ToString()));
 
         var error = Assert.Throws<InvalidOperationException>(
-            () => EncryptionModes.ThrowIfSealedDeliveryHasNoModule(configuration, [Module(answers: false)]));
+            () => EncryptionModes.ThrowIfEnvelopingModeHasNoModule(configuration, [Module(answers: false)]));
 
         Assert.Contains("Encryption Module", error.Message);
         Assert.Contains($"{EncryptionModes.Section}:T", error.Message);
@@ -318,17 +321,21 @@ public class EncryptionModesTests
     // unconditional and told an installation the module "is not available yet" after it was mounted, loaded
     // and answering — a refusal nothing could satisfy.
     [Theory]
+    [InlineData(EncryptionMode.Strict)]
+    [InlineData(EncryptionMode.StrictRehearsal)]
     [InlineData(EncryptionMode.SealedDeliveryPermissive)]
     [InlineData(EncryptionMode.SealedDeliveryStrict)]
-    public void A_delivery_tier_is_permitted_once_a_module_answers_the_capability(EncryptionMode mode)
+    public void An_enveloping_mode_is_permitted_once_a_module_answers_the_capability(EncryptionMode mode)
     {
         var configuration = Config((EncryptionModes.Section + ":T", mode.ToString()));
 
         // does not throw
-        EncryptionModes.ThrowIfSealedDeliveryHasNoModule(configuration, [Module(answers: true)]);
+        EncryptionModes.ThrowIfEnvelopingModeHasNoModule(configuration, [Module(answers: true)]);
     }
 
     [Theory]
+    [InlineData(EncryptionMode.Strict)]
+    [InlineData(EncryptionMode.StrictRehearsal)]
     [InlineData(EncryptionMode.SealedDeliveryPermissive)]
     [InlineData(EncryptionMode.SealedDeliveryStrict)]
     public void A_module_that_answers_NOTHING_does_not_open_the_gate_for_another_that_does_not_either(EncryptionMode mode)
@@ -338,11 +345,13 @@ public class EncryptionModesTests
         // exactly where an off-by-one reading of the predicate would hide.
         var configuration = Config((EncryptionModes.Section + ":T", mode.ToString()));
 
-        Assert.Throws<InvalidOperationException>(() => EncryptionModes.ThrowIfSealedDeliveryHasNoModule(
+        Assert.Throws<InvalidOperationException>(() => EncryptionModes.ThrowIfEnvelopingModeHasNoModule(
             configuration, [Module(answers: false), Module(answers: false)]));
     }
 
     [Theory]
+    [InlineData(EncryptionMode.Strict)]
+    [InlineData(EncryptionMode.StrictRehearsal)]
     [InlineData(EncryptionMode.SealedDeliveryPermissive)]
     [InlineData(EncryptionMode.SealedDeliveryStrict)]
     public void One_answering_module_among_several_is_enough(EncryptionMode mode)
@@ -350,7 +359,7 @@ public class EncryptionModesTests
         var configuration = Config((EncryptionModes.Section + ":T", mode.ToString()));
 
         // does not throw
-        EncryptionModes.ThrowIfSealedDeliveryHasNoModule(
+        EncryptionModes.ThrowIfEnvelopingModeHasNoModule(
             configuration, [Module(answers: false), Module(answers: true), Module(answers: false)]);
     }
 
@@ -379,14 +388,13 @@ public class EncryptionModesTests
     [Theory]
     [InlineData(EncryptionMode.None)]
     [InlineData(EncryptionMode.Storage)]
-    [InlineData(EncryptionMode.Strict)]
     public void The_module_refusal_says_nothing_about_the_modes_that_do_not_need_one(EncryptionMode mode)
     {
         var configuration = Config((EncryptionModes.ServiceUrlKey, "http://enc"),
                                    (EncryptionModes.Section + ":T", mode.ToString()));
 
         // No module at all, because these modes do not need one — which is the point of the case.
-        EncryptionModes.ThrowIfSealedDeliveryHasNoModule(configuration, []);   // does not throw
+        EncryptionModes.ThrowIfEnvelopingModeHasNoModule(configuration, []);   // does not throw
     }
 
     /// <summary>
@@ -406,39 +414,30 @@ public class EncryptionModesTests
     /// </para>
     /// </remarks>
     /// <summary>
-    /// The delivery refusal names what an administrator can actually do instead.
+    /// The refusal names the module-free way out — <c>Storage</c> — and no longer offers the rehearsal as one.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// It used to claim <i>"nothing would envelope those reads"</i>, which stopped being true once the
-    /// certificate lookup grew a registry source and core kept a self-service endpoint that GENERATES an
-    /// identity. A refusal resting on a false premise is one the next reader disproves and then distrusts,
-    /// and this one is the first thing an evaluator meets.
-    /// </para>
-    /// <para>
-    /// Asserted on the message because the message IS the change — the behaviour is deliberately unchanged.
-    /// </para>
+    /// It used to call itself a LICENSING boundary and send an administrator to <c>StrictRehearsal</c>, which then
+    /// needed only the Service. Both stopped being true with ADR 0890: the registry the rehearsal enveloped from is
+    /// retired, so the rehearsal needs the Module too, and recommending it would send the reader from one refusal
+    /// straight into the next. Asserted on the message because the message IS the guidance.
     /// </remarks>
     [Fact]
-    public void The_delivery_refusal_is_honest_about_being_a_licence_and_names_the_alternative()
+    public void The_enveloping_refusal_names_Storage_as_the_module_free_way_out()
     {
         var configuration = Config(
             (EncryptionModes.DefaultSection, nameof(EncryptionMode.SealedDeliveryPermissive)));
 
         var refusal = Assert.Throws<InvalidOperationException>(
-            () => EncryptionModes.ThrowIfSealedDeliveryHasNoModule(configuration, []));
+            () => EncryptionModes.ThrowIfEnvelopingModeHasNoModule(configuration, []));
 
-        // It says what kind of boundary it is...
-        Assert.Contains("LICENSING", refusal.Message, StringComparison.Ordinal);
-
-        // ...and does not repeat the claim that was false.
-        Assert.DoesNotContain("nothing would envelope", refusal.Message, StringComparison.OrdinalIgnoreCase);
-
-        // ...and points at the mode that exercises delivery without the module.
-        Assert.Contains(nameof(EncryptionMode.StrictRehearsal), refusal.Message, StringComparison.Ordinal);
-
-        // ...while still refusing to let the tier run unlicensed, which is the part that must not change.
+        // It names what is configured, and what to do instead...
         Assert.Contains(nameof(EncryptionMode.SealedDeliveryPermissive), refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("Encryption Module", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains(nameof(EncryptionMode.Storage), refusal.Message, StringComparison.Ordinal);
+
+        // ...and does not recommend a mode that this very gate refuses.
+        Assert.DoesNotContain(nameof(EncryptionMode.StrictRehearsal), refusal.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -457,16 +456,15 @@ public class EncryptionModesTests
     }
 
     /// <summary>
-    /// It needs the Service and NOT the Module — which is what puts it on the right side of the line.
+    /// The rehearsal needs the Service AND the Module (ADR 0890 supersedes ADR 0866's "Service alone").
     /// </summary>
     /// <remarks>
-    /// It wraps at rest, so it cannot run without the encryption service; its certificates come from the same
-    /// chain <see cref="EncryptionMode.Strict"/> already uses (the reader's column, else the service's
-    /// registry), so it needs no module. That is the whole commercial placement: the rehearsal ships with the
-    /// Service, between <c>Storage</c> and <c>Strict</c>, and the Module sells what a card fleet needs on top.
+    /// It wraps at rest, so it cannot run without the encryption service; and it envelopes, so with the service's
+    /// registry retired its readers' certificates can only come from the Module. Both refusals are asserted, because
+    /// the second one is the change and the first one must not have been lost with it.
     /// </remarks>
     [Fact]
-    public void StrictRehearsal_demands_the_service_and_not_the_module()
+    public void StrictRehearsal_demands_the_service_and_the_module()
     {
         var withoutService = Config((EncryptionModes.DefaultSection, nameof(EncryptionMode.StrictRehearsal)));
 
@@ -475,8 +473,63 @@ public class EncryptionModesTests
             () => EncryptionModes.ThrowIfModeHasNoService(withoutService));
         Assert.Contains(nameof(EncryptionMode.StrictRehearsal), refusal.Message);
 
-        // And no module is demanded: a host with none still starts, exactly as it does for Strict.
-        EncryptionModes.ThrowIfSealedDeliveryHasNoModule(withoutService, []);
+        // And no module: refused too, exactly as for Strict.
+        var withService = Config((EncryptionModes.ServiceUrlKey, "http://enc"),
+                                 (EncryptionModes.DefaultSection, nameof(EncryptionMode.StrictRehearsal)));
+        Assert.Throws<InvalidOperationException>(() => EncryptionModes.ThrowIfEnvelopingModeHasNoModule(withService, []));
+    }
+
+    /// <summary>The module set IS the delivery set — asked of every mode, so a new one cannot drift between them.</summary>
+    [Fact]
+    public void Exactly_the_modes_that_deliver_envelopes_need_the_module()
+    {
+        foreach (var mode in Enum.GetValues<EncryptionMode>())
+        {
+            var configuration = Config((EncryptionModes.ServiceUrlKey, "http://enc"),
+                                       (EncryptionModes.Section + ":T", mode.ToString()));
+            var delivers = new EncryptionModes(configuration).DeliversEnvelopes("T");
+
+            var refused = Record.Exception(() => EncryptionModes.ThrowIfEnvelopingModeHasNoModule(configuration, []));
+
+            Assert.True(delivers == refused is InvalidOperationException,
+                $"{mode}: delivers envelopes = {delivers}, but the module gate {(refused is null ? "let it start" : "refused it")}.");
+        }
+    }
+
+    // ServiceGovernsMail is the predicate the retired registry client's EnabledFor answered (ADR 0890), moved
+    // here with its meaning unchanged: it closes core self-service (ADR 0813) and skips IMAP's stored-size
+    // shortcut. These are that client's EnabledFor cases, ported so the semantics keep their coverage.
+    [Fact]
+    public void ServiceGovernsMail_is_false_without_a_service()
+    {
+        Assert.False(Modes((EncryptionModes.DefaultSection, nameof(EncryptionMode.Strict))).ServiceGovernsMail("Acme"));
+    }
+
+    [Fact]
+    public void ServiceGovernsMail_is_false_for_a_tenant_whose_mode_does_not_envelope_mail()
+    {
+        var modes = Modes((EncryptionModes.ServiceUrlKey, "http://enc"), (EncryptionModes.Section + ":Crypto", "Strict"));
+
+        Assert.False(modes.ServiceGovernsMail("Acme"));   // no mode of its own, and no default
+        Assert.False(Modes((EncryptionModes.ServiceUrlKey, "http://enc"),
+            (EncryptionModes.DefaultSection, nameof(EncryptionMode.Storage))).ServiceGovernsMail("Acme"));
+    }
+
+    [Fact]
+    public void ServiceGovernsMail_matches_the_tenant_name_ignoring_case()
+    {
+        // Operator-typed configuration: "crypto" failing to match "Crypto" would fail silently into plaintext.
+        var modes = Modes((EncryptionModes.ServiceUrlKey, "http://enc"), (EncryptionModes.Section + ":crypto", "Strict"));
+
+        Assert.True(modes.ServiceGovernsMail("Crypto"));
+    }
+
+    [Fact]
+    public void ServiceGovernsMail_follows_the_installation_default_for_a_tenant_with_no_entry()
+    {
+        var modes = Modes((EncryptionModes.ServiceUrlKey, "http://enc"), (EncryptionModes.DefaultSection, "Strict"));
+
+        Assert.True(modes.ServiceGovernsMail("Acme"));
     }
 
     [Fact]

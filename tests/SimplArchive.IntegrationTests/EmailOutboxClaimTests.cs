@@ -23,17 +23,8 @@ public class EmailOutboxClaimTests
     private static SimplArchiveDbContext CreateContext(SqliteConnection connection) =>
         new(new DbContextOptionsBuilder<SimplArchiveDbContext>().UseSqlite(connection).Options, new CurrentTenantAccessor());
 
-    private static SimplArchive.Infrastructure.Encryption.MessageEnvelopeClient InertEnvelopeClient() =>
-        new(new InertHttpClientFactory(), new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
-            NullLogger<SimplArchive.Infrastructure.Encryption.MessageEnvelopeClient>.Instance);
-
-    private sealed class InertHttpClientFactory : IHttpClientFactory
-    {
-        public HttpClient CreateClient(string name) => new();
-    }
-
     private static EmailNotificationDispatcher Dispatcher(SimplArchiveDbContext context, IEmailSender sender) =>
-        new(context, sender, InertEnvelopeClient(), NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance, new NoModuleScopeFactory(context));
+        new(context, sender, NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance, new NoModuleScopeFactory(context));
 
     /// <summary>
     /// A sender that runs a SECOND sweep from inside the first one's send — the interleaving that matters.

@@ -187,6 +187,19 @@ public sealed class EncryptionModes(IConfiguration configuration)
             or EncryptionMode.StrictRehearsal;
 
     /// <summary>
+    /// True when the encryption service governs this tenant's mail: a service is configured AND the tenant's mode
+    /// envelopes mail.
+    /// </summary>
+    /// <remarks>
+    /// Moved here from the retired registry client (ADR 0890), whose <c>EnabledFor</c> answered exactly this and
+    /// two callers still ask it: core self-service certificates are CLOSED on such a tenant (ADR 0813 — identities
+    /// are provisioned centrally there), and IMAP's stored-size shortcut is skipped (the stored size describes the
+    /// plaintext). Unchanged in meaning; only its home moved, so the question no longer drags an HTTP client in.
+    /// </remarks>
+    public bool ServiceGovernsMail(string tenantName) =>
+        !string.IsNullOrEmpty(configuration[ServiceUrlKey]) && EnvelopesMail(tenantName);
+
+    /// <summary>
     /// Refuses to start while a retired key is still present, naming what to write instead.
     /// </summary>
     /// <remarks>
@@ -245,7 +258,7 @@ public sealed class EncryptionModes(IConfiguration configuration)
     /// <see cref="ModuleAbi.IIndustryModule.ReaderCertificates"/> — and modules are loaded long after this
     /// runs (`Program.cs` line ~66 versus ~400). Keeping it here meant it could only ever refuse, which is
     /// what it did: it said the module "is not available yet" after the module existed. So
-    /// <see cref="ThrowIfSealedDeliveryHasNoModule"/> is called separately, once the answer exists.
+    /// <see cref="ThrowIfEnvelopingModeHasNoModule"/> is called separately, once the answer exists.
     /// </para>
     /// </remarks>
     public static void ThrowIfMisconfigured(IConfiguration configuration)
@@ -326,45 +339,44 @@ public sealed class EncryptionModes(IConfiguration configuration)
     private static bool NeedsService(EncryptionMode mode) =>
         mode is EncryptionMode.Storage or EncryptionMode.Strict or EncryptionMode.StrictRehearsal;
 
-    /// <summary>Modes whose delivery is performed by the Encryption Module (ADR 0834).</summary>
+    /// <summary>
+    /// Modes that require the Encryption Module: every mode that DELIVERS ENVELOPES (ADR 0890).
+    /// </summary>
+    /// <remarks>
+    /// Deliberately the same set as <see cref="DeliversEnvelopes"/>, asked by mode rather than tenant: an envelope
+    /// is addressed to a reader's certificate, and since the service's legacy registry was retired (ADR 0890) the
+    /// Module is the only place a reader's certificates come from on a tenant the encryption service governs —
+    /// self-service is closed there (ADR 0813). A new mode is classified in
+    /// <c>Each_mode_answers_all_four_questions_explicitly</c> and in the module test beside it.
+    /// </remarks>
     private static bool NeedsModule(EncryptionMode mode) =>
-        mode is EncryptionMode.SealedDeliveryPermissive or EncryptionMode.SealedDeliveryStrict;
+        mode is EncryptionMode.Strict or EncryptionMode.StrictRehearsal
+            or EncryptionMode.SealedDeliveryPermissive or EncryptionMode.SealedDeliveryStrict;
 
     /// <summary>
-    /// Refuses a delivery-only mode without the Encryption Module, which is the product these tiers belong to.
+    /// Refuses a mode that delivers envelopes when no loaded module answers the reader-certificate capability.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>This is a LICENSING gate, and it is now written as one.</b> It said the delivery tiers could not be
-    /// performed without the module — <i>"nothing would envelope those reads"</i> — and that was true when it
-    /// was written (owner, 2026-09-28: the mode waits for the module rather than shipping an interim source
-    /// that would have to be retired). It is no longer true, and the claim is worth retiring rather than
-    /// leaving for the next reader to disprove.
+    /// <b>It used to cover only the two sealed-delivery tiers, and said so as a licensing boundary</b>: an
+    /// installation without the module could still envelope from the reader's own column or from the encryption
+    /// service's registry, so <see cref="EncryptionMode.Strict"/> and <see cref="EncryptionMode.StrictRehearsal"/>
+    /// shipped "with the Service alone" (ADR 0866).
     /// </para>
     /// <para>
-    /// <b>What changed.</b> <see cref="StrictEnvelopeDelivery"/>'s certificate lookup has no mode branch: it
-    /// asks the module, then the reader's own <c>SmimeCertificatePem</c>, then the service's registry. So an
-    /// installation with a service envelopes from the registry — which is what
-    /// <see cref="EncryptionMode.Strict"/> does on the public kiosk today, with no module anywhere — and an
-    /// installation with NEITHER still envelopes from the column, because core's self-service is open
-    /// precisely when no service governs the tenant, and it has a <c>POST</c> that GENERATES an identity.
-    /// Something would always envelope those reads. The refusal is a commercial boundary, not an
-    /// impossibility.
+    /// <b>The registry is retired (ADR 0890, SimplArchiveEncryptionService#23)</b>, because it enveloped to
+    /// certificates nobody held: one PEM per e-mail, replaced on register, no history and no revocation — the
+    /// kiosk's Crypto tenant decrypted with no card for exactly that reason. With it gone, a Service-only
+    /// installation has no certificate source for an enveloping tenant at all: the column is closed there by
+    /// ADR 0813, so every reader would get 409. Running like that is the silent failure #1406 refuses, so every
+    /// enveloping mode now requires the Module — which supersedes ADR 0866's "Service alone" claim.
     /// </para>
     /// <para>
-    /// <b>And the message must point somewhere useful</b>, because an administrator who wants to exercise
-    /// envelope delivery can: <see cref="EncryptionMode.StrictRehearsal"/> (ADR 0866) delivers to whoever can
-    /// open an envelope, keeps every other door serving, and needs the Service rather than the Module. A
-    /// refusal that only says "no" sends them to a sales conversation to answer a question the software could
-    /// have answered.
-    /// </para>
-    /// <para>
-    /// Still a refusal rather than a warning, and in Development too — for #1406's reason, unchanged: a tier
-    /// nobody is licensed for must not run silently, and a developer misled by it is exactly as misled as an
-    /// administrator.
+    /// <b>The way out is named</b>: the module-free mode that still encrypts is <see cref="EncryptionMode.Storage"/>.
+    /// Still a refusal rather than a warning, and in Development too, for #1406's reason.
     /// </para>
     /// </remarks>
-    public static void ThrowIfSealedDeliveryHasNoModule(
+    public static void ThrowIfEnvelopingModeHasNoModule(
         IConfiguration configuration, IEnumerable<ModuleAbi.IIndustryModule> modules)
     {
         // The question is about a LOADED module, which is why this no longer rides in
@@ -393,19 +405,14 @@ public sealed class EncryptionModes(IConfiguration configuration)
         }
 
         throw new InvalidOperationException(
-            $"{string.Join(", ", claimed)} — but these tiers belong to the Encryption Module (ADR 0834), and no "
-            + "module on this installation answers the reader-certificate capability.\n\n"
-            + "This is a LICENSING boundary rather than a technical one, and saying so is the point: an "
-            + "installation without the module could envelope these reads, from the reader's own certificate "
-            + "or the encryption service's registry. It is refused rather than ignored because a tier nobody "
-            + "is licensed for must not run silently.\n\n"
-            + "To exercise envelope delivery WITHOUT the module, use "
-            + $"{nameof(EncryptionMode.StrictRehearsal)} (ADR 0866): every read is also offered as an envelope "
-            + "to whoever can open one, every other door keeps serving, and it needs the encryption service "
-            + "rather than the module. It protects nothing beyond "
-            + $"{nameof(EncryptionMode.Storage)} — it is a readiness exercise, not a tier.\n\n"
-            + $"Otherwise mount the Encryption Module, or use {nameof(EncryptionMode.Storage)} or "
-            + $"{nameof(EncryptionMode.Strict)}.");
+            $"{string.Join(", ", claimed)} — but every mode that delivers envelopes requires the Encryption "
+            + "Module (ADR 0890), and no module on this installation answers the reader-certificate capability.\n\n"
+            + "An envelope is addressed to a reader's certificates, and the Module is where they come from: the "
+            + "encryption service's legacy registry is retired, and self-service certificates are closed on "
+            + "tenants the service governs (ADR 0813). Without the Module every reader of such a tenant would be "
+            + "refused, so the mode is refused here instead of running like that.\n\n"
+            + "Either mount the Encryption Module and activate it for the tenant, or set the mode to "
+            + $"{nameof(EncryptionMode.Storage)}, which encrypts at rest with the encryption service alone.");
     }
 
     private Dictionary<string, EncryptionMode> Map() =>

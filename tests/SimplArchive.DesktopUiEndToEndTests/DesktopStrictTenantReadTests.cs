@@ -146,43 +146,83 @@ public class DesktopStrictTenantReadTests
         var password = tenant.GetProperty("tenantAdministrator").GetProperty("password").GetString()!;
         var repositoryId = tenant.GetProperty("repository").GetProperty("id").GetGuid();
 
-        // The certificate lives in the SERVICE's registry, which is where a strict tenant's identities
-        // actually live (#1433): self-service is closed for exactly these tenants (ADR 0813), so registering
-        // over `PUT /api/me/smime-certificate` would be refused. This is that provisioning, through the stub's
-        // own door.
-        var (pem, withKey) = NewReaderCertificate(email);
-        _app.EncryptionService.RegisterCertificate(email, pem);
+        var tenantId = tenant.GetProperty("id").GetGuid();
+        var readerId = tenant.GetProperty("tenantAdministrator").GetProperty("id").GetGuid();
 
         var token = await Ui.GetUserTokenAsync(_app.BaseUrl, email, password);
         using var api = new HttpClient { BaseAddress = new Uri(_app.BaseUrl) };
         api.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
+        // THE READER'S CERTIFICATE COMES FROM THE MODULE (ADR 0890). The encryption service's registry is retired,
+        // self-service is closed on this tenant (ADR 0813), and a tenant whose mode delivers envelopes takes its
+        // readers' certificates from an ACTIVATED module only — so this is how a real installation provisions a
+        // reader: file the licence, activate, consent the module principal to its folder, enrol the certificate.
+        var (pem, withKey) = NewReaderCertificate(email);
+
+        var licenceId = await UploadSealedAsync(api, repositoryId, "test-module licence.json", ".json",
+            Encoding.UTF8.GetBytes(_app.SignTestModuleLicence(tenantId)));
+        (await api.PutAsJsonAsync("api/modules/test-module/license", new { licenseDocumentId = licenceId }))
+            .EnsureSuccessStatusCode();
+
+        var principalId = (await (await api.GetAsync("api/service-accounts")).Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("serviceAccounts").EnumerateArray()
+            .Single(account => account.GetProperty("name").GetString() == "Module: Test Module")
+            .GetProperty("id").GetGuid();
+        var certificateFolder = (await (await api.PostAsJsonAsync("api/repositories",
+                new { name = $"Reader certificates {Guid.NewGuid():N}" }))
+            .Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        (await api.PutAsJsonAsync($"api/documents/{certificateFolder}/acl-entries/service-accounts/{principalId}",
+            new { canSee = true, canReadContent = true, canEditContent = true, canEditIndexData = true, canCreateSubItems = true }))
+            .EnsureSuccessStatusCode();
+        (await api.PostAsJsonAsync($"api/test-module/reader-certificates?parentId={certificateFolder}",
+            new { userId = readerId, certificatePem = pem })).EnsureSuccessStatusCode();
+
+        var documentId = await UploadSealedAsync(api, repositoryId, "sealed.txt", ".txt", Encoding.UTF8.GetBytes(Marker));
+
+        // The DOWNLOAD rel, followed rather than composed: on a strict tenant it is the enveloped-content
+        // door, and that substitution is the thing under test.
+        var versions = await (await api.GetAsync($"api/documents/{documentId}/versions"))
+            .Content.ReadFromJsonAsync<JsonElement>();
+        var href = versions.GetProperty("versions").EnumerateArray().Last()
+            .GetProperty("links").EnumerateArray()
+            .First(l => l.GetProperty("rel").GetString() == "download")
+            .GetProperty("href").GetString()!;
+
+        Assert.Contains("enveloped-content", href, StringComparison.Ordinal);
+
+        return new StrictReader(token, href, withKey);
+    }
+
+    /// <summary>
+    /// Files <paramref name="content"/> as a new document, ENCRYPTED CLIENT-SIDE — how an upload to a gated tenant
+    /// actually works (ADR 0818).
+    /// </summary>
+    /// <remarks>
+    /// The presign stays a presign and the CLIENT wraps the bytes, attaching the wrapped DEK at finalize. This used
+    /// to be inline and claimed the encrypting decorator wrapped them on the way in — it does not, it never sees
+    /// them, and the object landed as PLAINTEXT, which made the test exercise the mixed-state path while claiming to
+    /// exercise encryption. Only an object carrying a wrapped DEK takes the route where the encryption service
+    /// decrypts and envelopes (ADR 0862). A helper because the licence the module is activated with is filed the
+    /// same way as the document under test.
+    /// </remarks>
+    private static async Task<Guid> UploadSealedAsync(
+        HttpClient api, Guid parentId, string name, string extension, byte[] content)
+    {
         var documentId = (await (await api.PostAsJsonAsync(
-                $"api/documents/{repositoryId}/children", new { name = "sealed.txt" }))
+                $"api/documents/{parentId}/children", new { name }))
             .Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
 
         var version = await (await api.PostAsJsonAsync(
-                $"api/documents/{documentId}/versions", new { fileExtension = ".txt" }))
+                $"api/documents/{documentId}/versions", new { fileExtension = extension }))
             .Content.ReadFromJsonAsync<JsonElement>();
-
-        // ENCRYPTED CLIENT-SIDE, which is how an upload to a gated tenant actually works (ADR 0818): the
-        // presign stays a presign and the CLIENT wraps the bytes, attaching the wrapped DEK at finalize. The
-        // comment here used to say the encrypting decorator wrapped them on the way in — it does not, it
-        // never sees them, and the object was landing as PLAINTEXT. Which made this test exercise the
-        // mixed-state path while claiming to exercise encryption.
-        //
-        // It matters now beyond tidiness: only an object carrying a wrapped DEK takes the route where the
-        // encryption service decrypts and envelopes (ADR 0862), so without this the desktop client would be
-        // opening an envelope the core built from plaintext it read itself.
-        var plaintext = Encoding.UTF8.GetBytes(Marker);
         var encryption = version.GetProperty("encryption");
 
         var dek = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
-        var blob = new byte[12 + plaintext.Length + 16];
+        var blob = new byte[12 + content.Length + 16];
         System.Security.Cryptography.RandomNumberGenerator.Fill(blob.AsSpan(0, 12));
         using (var aes = new System.Security.Cryptography.AesGcm(dek, 16))
         {
-            aes.Encrypt(blob.AsSpan(0, 12), plaintext, blob.AsSpan(12, plaintext.Length), blob.AsSpan(^16..));
+            aes.Encrypt(blob.AsSpan(0, 12), content, blob.AsSpan(12, content.Length), blob.AsSpan(^16..));
         }
 
         using var kek = System.Security.Cryptography.RSA.Create();
@@ -202,18 +242,7 @@ public class DesktopStrictTenantReadTests
             new { wrappedDek, kekGeneration = encryption.GetProperty("kekGeneration").GetString() }))
             .EnsureSuccessStatusCode();
 
-        // The DOWNLOAD rel, followed rather than composed: on a strict tenant it is the enveloped-content
-        // door, and that substitution is the thing under test.
-        var versions = await (await api.GetAsync($"api/documents/{documentId}/versions"))
-            .Content.ReadFromJsonAsync<JsonElement>();
-        var href = versions.GetProperty("versions").EnumerateArray().Last()
-            .GetProperty("links").EnumerateArray()
-            .First(l => l.GetProperty("rel").GetString() == "download")
-            .GetProperty("href").GetString()!;
-
-        Assert.Contains("enveloped-content", href, StringComparison.Ordinal);
-
-        return new StrictReader(token, href, withKey);
+        return documentId;
     }
 
     private static (string CertificatePem, X509Certificate2 WithKey) NewReaderCertificate(string email)
