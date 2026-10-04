@@ -6,16 +6,15 @@ namespace SimplArchive.Cli.Commands;
 /// <summary>Reaching a module's row and its settings, by rels (#1504).</summary>
 internal static class ModuleSurface
 {
-    /// <summary>root → tenant settings → modules. Every hop a rel.</summary>
-    internal static async Task<JsonElement> ListingAsync(SimplArchiveApi api, CancellationToken cancellationToken)
-    {
-        var hypermedia = new Hypermedia(api);
-        var tenantSettings = await hypermedia.RootHrefAsync("tenantSettings", cancellationToken);
-        var modules = Hypermedia.Href(
-            await hypermedia.LinksOfAsync(tenantSettings, cancellationToken), "modules", "The tenant settings");
-
-        return await api.GetAsync(modules, cancellationToken);
-    }
+    /// <summary>root → modules. The ROOT's rel, not tenant settings' (ADR 0870).</summary>
+    /// <remarks>
+    /// It used to walk root → tenant settings → modules, and tenant settings is tenant-ADMIN only — so a service
+    /// account granted <c>CanManageModules</c> held the right and could not reach the collection: every module
+    /// command answered 403 "needs a different principal". ADR 0870 put <c>modules</c> on the root for exactly that
+    /// caller, and this is the side that had not followed. Found on the kiosk's first unattended crypto seed.
+    /// </remarks>
+    internal static async Task<JsonElement> ListingAsync(SimplArchiveApi api, CancellationToken cancellationToken) =>
+        await api.GetAsync(await new Hypermedia(api).RootHrefAsync("modules", cancellationToken), cancellationToken);
 
     /// <summary>The rows, as the listing spells them.</summary>
     internal static IEnumerable<JsonElement> Rows(JsonElement listing) =>

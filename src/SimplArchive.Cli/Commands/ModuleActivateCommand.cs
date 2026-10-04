@@ -79,11 +79,9 @@ public sealed class ModuleActivateCommand(IAnsiConsole console) : AsyncCommand<M
         var hypermedia = new Hypermedia(api);
 
         // One read, many follows (ADR 0557): the modules resource carries every module's own `license` rel,
-        // so this is read ONCE and every activation below follows from that response.
-        var tenantSettings = await hypermedia.RootHrefAsync("tenantSettings", cancellationToken);
-        var modulesHref = Hypermedia.Href(
-            await hypermedia.LinksOfAsync(tenantSettings, cancellationToken), "modules", "The tenant settings");
-        var modules = await api.GetAsync(modulesHref, cancellationToken);
+        // so this is read ONCE and every activation below follows from that response. Reached from the ROOT
+        // (ModuleSurface.ListingAsync), so a service account administering modules can reach it too (ADR 0870).
+        var modules = await ModuleSurface.ListingAsync(api, cancellationToken);
 
         var targets = ModuleTargets.Resolve(modules, claims.ModuleIds, settings.Module);
         if (targets.Activatable.Count == 0)
