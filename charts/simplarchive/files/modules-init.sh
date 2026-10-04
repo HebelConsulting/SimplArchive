@@ -20,6 +20,19 @@ TARGET="${TARGET:-/modules}"
 FEED="${SA_MODULE_FEED:-https://nuget.pkg.github.com/HebelConsulting}"
 SA_MODULES="${SA_MODULES:-}"
 
+# …UNIONED with every SA_MODULES_<KEY> (ADR 0870's rollout). Each add-on overlay names ITS module in a key of
+# its own, because compose merges an overlay's environment by KEY: two overlays both setting SA_MODULES means
+# the later file silently replaces the earlier one's list, and that deployment boots with one module missing —
+# answering 404 MODULE_NOT_ACTIVE on its routes as though it were never installed. A separate key per overlay
+# cannot collide. SA_MODULES itself still works, so an installer older than this and a deployment setting the
+# list directly both keep their meaning. (SA_MODULES_ — with the S — so SA_MODULE_TOKEN/_FEED are never read.)
+for extra in $(env | busybox grep -E '^SA_MODULES_[A-Z0-9_]+=' | busybox sed -E 's/^[^=]*=//'); do
+    case " $SA_MODULES " in
+        *" $extra "*) ;;
+        *) SA_MODULES="${SA_MODULES:+$SA_MODULES }$extra" ;;
+    esac
+done
+
 die() { echo "modules-init: FAILED — $*" >&2; exit 1; }
 
 # WHICH modules this deployment installs is the deployment's choice; modules.env only says which VERSION.

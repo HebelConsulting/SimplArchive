@@ -434,6 +434,10 @@ modules:
       package: SimplArchive.FlightSchool
       version: 0.2.0
       sha512: "ekHTOUci6S2i4/g9QbWo7zMVl8M+uAUBzvEH6tBjsBWeb+lZiEtiOZ9troPewb7/74aQ/1KmElhktb1VyKtDvw=="
+    ENCRYPTION:
+      package: SimplArchive.Encryption
+      version: 0.1.0
+      sha512: "/q7jb0b1ot51hmG1xNPzyPa5KLgb/UGmqHy8TvhC8G9E+NMO7XLFUlYqVHYEQHTA+SvcEiSm0xpZTg6eT6y0VQ=="
 
   # Plain alpine: a .nupkg is a zip, so the installer needs no NuGet tooling and no SDK image.
   image:
