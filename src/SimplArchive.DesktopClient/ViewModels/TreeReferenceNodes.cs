@@ -41,11 +41,18 @@ public static class TreeReferenceNodes
         //
         // A reference node's Id is the TARGET folder's, so expanding it walks the target's subtree and
         // selecting it lists the target (ADR "Referenced folder in the tree").
+        //
+        // It CARRIES THE ROW'S LINKS — the target's own `children`, `references` and `self`, which the server
+        // advertises on every reference row unconditionally (#416). It was built from the target's id alone, and an
+        // id has no address (ADR 0543): selecting any folder shortcut in the tree threw "No advertised address for
+        // folder …", which the crash guard then reported as a lost connection. Reported on the flight school's
+        // Aerodrome shortcuts in My Documents; every folder shortcut in the tree had it. The web client already
+        // passed the row's links (BrowseService).
         return (await references.GetReferencesAsync(node.Href("references")))
             .Where(r => !r.HasVersions)
             .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
             .Select(r => new TreeNodeViewModel(
                 r.TargetId, r.Name, r.HasSubfolders, expand,
-                isReference: true, hasReferences: r.HasReferences, hasChildren: r.HasChildren));
+                isReference: true, hasReferences: r.HasReferences, hasChildren: r.HasChildren, links: r.Links));
     }
 }
