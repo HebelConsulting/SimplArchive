@@ -29,7 +29,7 @@ namespace SimplArchive.Cli.Commands;
 /// and, over SSH, in somebody's session log.
 /// </para>
 /// </remarks>
-public sealed class LoginCommand(IAnsiConsole console) : AsyncCommand<LoginCommand.Settings>
+public sealed class LoginCommand : AsyncCommand<LoginCommand.Settings>
 {
     /// <summary>Environment variable carrying a service account's secret — never an option.</summary>
     public const string ClientSecretVariable = "SACONSOLE_CLIENT_SECRET";
@@ -61,7 +61,7 @@ public sealed class LoginCommand(IAnsiConsole console) : AsyncCommand<LoginComma
 
     protected override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
-        // Everything readable goes to stderr; see the remarks. `console` is stdout and carries the exports.
+        // Everything readable goes to stderr; see the remarks. The exports go to the raw stdout, below.
         var human = AnsiConsole.Create(new AnsiConsoleSettings { Out = new AnsiConsoleOutput(Console.Error) });
 
         using var http = new HttpClient { BaseAddress = new Uri(settings.ResolvedUrl.TrimEnd('/') + "/") };
@@ -102,8 +102,13 @@ public sealed class LoginCommand(IAnsiConsole console) : AsyncCommand<LoginComma
 
         // STDOUT, and only this. Single-quoted so a URL with shell metacharacters cannot be re-interpreted;
         // neither value can contain a single quote (one is a bearer token, the other a URL we just used).
-        console.WriteLine($"export {ApiSettings.TokenVariable}='{token}'");
-        console.WriteLine($"export {ApiSettings.UrlVariable}='{settings.ResolvedUrl.TrimEnd('/')}'");
+        //
+        // Straight to the process's stdout, NOT through the injected IAnsiConsole: Spectre WRAPS long lines at the
+        // console width — 80 when stdout is not a terminal, which is exactly the eval/script case — so the token
+        // line broke, `eval` ran a bare `export`, and bash dumped the whole environment, a client secret included,
+        // into the caller's log (the kiosk's first v0.37.0 reset). A shell export line must arrive as one line.
+        Console.Out.WriteLine($"export {ApiSettings.TokenVariable}='{token}'");
+        Console.Out.WriteLine($"export {ApiSettings.UrlVariable}='{settings.ResolvedUrl.TrimEnd('/')}'");
         return 0;
     }
 

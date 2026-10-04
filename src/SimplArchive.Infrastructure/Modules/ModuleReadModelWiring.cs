@@ -42,6 +42,24 @@ public static class ModuleReadModelWiring
                 var moduleId = loaded.Module.ModuleId;
                 var contextType = set.ContextType;
                 contextTypes.Add(contextType);
+
+                // THE CONTEXT IS CONSTRUCTED WITH ITS OWN TYPED OPTIONS, explicitly — registered BEFORE AddDbContext,
+                // which only TryAdds the context type, so this descriptor is the one that resolves.
+                //
+                // Without it, a module context written with the documented non-generic constructor
+                // (`XContext(DbContextOptions options)`) is bound by DI to the non-generic `DbContextOptions`
+                // service — which every AddDbContext call ADDS, so with two modules loaded the last one registered
+                // wins and every other module's context is handed the wrong options. EF then throws ("must be a
+                // DbContextOptions<XContext>"). Measured on the first host to load two modules (the kiosk on
+                // v0.37.0, flight school + encryption): a flight-school transition answered 500 because module
+                // dispatch constructed the encryption read model. CanHostConstruct guarantees the single parameter
+                // a DbContextOptions<TContext> is assignable to, so this serves both documented shapes.
+                var typedOptions = typeof(DbContextOptions<>).MakeGenericType(contextType);
+                services.Add(new ServiceDescriptor(
+                    contextType,
+                    sp => Activator.CreateInstance(contextType, sp.GetRequiredService(typedOptions))!,
+                    ServiceLifetime.Scoped));
+
                 AddDbContextMethod.MakeGenericMethod(contextType).Invoke(null,
                 [
                     services,
