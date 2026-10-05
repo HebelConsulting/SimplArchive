@@ -131,6 +131,10 @@ public class TenantSettingsController : ControllerBase
         // Per-tenant bucket lifecycle (ADR "Per-tenant bucket policy knobs"): abort incomplete multipart uploads
         // after this many days (0 = disabled).
         public int IncompleteUploadCleanupDays { get; set; }
+        // Where the core files what it brings — the manuals folder first (ADR 0892). Null only for a tenant with no
+        // shared repository at all.
+        [System.Xml.Serialization.XmlElement(IsNullable = true)]
+        public Guid? StandardRepositoryId { get; set; }
         // Audit webhook / SIEM streaming (ADR "Audit webhook streaming"). The secret is never returned;
         // AuditWebhookConfigured just reports whether one is set.
         public string? AuditWebhookUrl { get; set; }
@@ -150,6 +154,13 @@ public class TenantSettingsController : ControllerBase
     public class UpdateGeneralSettingsRequest
     {
         public string Name { get; set; } = string.Empty;
+    }
+
+    // The tenant's standard repository (ADR 0892) — its own group because changing it MOVES the manuals folder, a
+    // structural act no other setting has, and so it carries an audit event of its own.
+    public class UpdateStandardRepositoryRequest
+    {
+        public Guid StandardRepositoryId { get; set; }
     }
 
     public class UpdateCaptureSettingsRequest
@@ -254,7 +265,16 @@ public class TenantSettingsController : ControllerBase
         }
 
         var tenant = await _dbContext.Tenants.SingleOrDefaultAsync(t => t.Id == _currentTenantAccessor.TenantId, cancellationToken);
-        return tenant is null ? NotFound() : Ok(ToResource(tenant));
+        if (tenant is null)
+        {
+            return NotFound();
+        }
+
+        // The tag of what the form was filled from (ADR 0794) — the write's response already carried one, but the READ
+        // did not, so a caller had nothing honest to send as If-Match until it had written once (found by ADR 0892's
+        // standard-repository test, which is the first caller to send one).
+        Concurrency.ConcurrencyHeaders.EmitETag(Response, tenant);
+        return Ok(ToResource(tenant));
     }
 
     [HttpHead]
@@ -349,6 +369,26 @@ public class TenantSettingsController : ControllerBase
             tenant.Name = request.Name.Trim();
             return Task.CompletedTask;
         }, cancellationToken, nameConflictPossible: true);
+
+    /// <summary>
+    /// Chooses the tenant's standard repository (ADR 0892) and, in the SAME transaction, moves the "SimplArchive
+    /// Manuals" folder into it — so the manuals are never in a repository that has stopped being the standard one.
+    /// </summary>
+    [HttpPut("standard-repository")]
+    public Task<IActionResult> UpdateStandardRepository([FromBody] UpdateStandardRepositoryRequest request, CancellationToken cancellationToken) =>
+        UpdateGroupAsync(AuditActions.TenantSettingsStandardRepositoryUpdated, async tenant =>
+        {
+            // A live shared root of THIS tenant (the tenant filter answers "this tenant"; the soft-delete filter "live").
+            if (!await _dbContext.Documents.AnyAsync(
+                    d => d.Id == request.StandardRepositoryId && d.ParentId == null && d.PersonalOfUserId == null,
+                    cancellationToken))
+            {
+                throw new InvalidStandardRepositoryException();
+            }
+
+            tenant.StandardRepositoryId = request.StandardRepositoryId;
+            await SimplArchive.Api.Manuals.StandardRepositoryChange.MoveUnderAsync(_dbContext, request.StandardRepositoryId, cancellationToken);
+        }, cancellationToken);
 
     [HttpPut("capture")]
     public Task<IActionResult> UpdateCapture([FromBody] UpdateCaptureSettingsRequest request, CancellationToken cancellationToken) =>
@@ -525,13 +565,15 @@ public class TenantSettingsController : ControllerBase
         string Name, string DefaultOcrLanguages, int AuditRetentionDays, int CheckoutTtlDays, int CheckoutWarningDays,
         WormLockMode WormLockMode, bool RequireMfa, bool AllowPasskeyLogin, bool RequireDispositionReview,
         bool RestrictTagsToCatalog, bool EnforceClearance,
-        long? StorageQuotaBytes, int IncompleteUploadCleanupDays, string? AuditWebhookUrl, bool HasWebhookSecret)
+        long? StorageQuotaBytes, int IncompleteUploadCleanupDays, string? AuditWebhookUrl, bool HasWebhookSecret,
+        Guid? StandardRepositoryId)
     {
         public static SettingsSnapshot From(Tenant t) => new(
             t.Name, t.DefaultOcrLanguages, t.AuditRetentionDays, t.CheckoutTtlDays, t.CheckoutWarningDays,
             t.WormLockMode, t.RequireMfa, t.AllowPasskeyLogin, t.RequireDispositionReview,
             t.RestrictTagsToCatalog, t.EnforceClearance,
-            t.StorageQuotaBytes, t.IncompleteUploadCleanupDays, t.AuditWebhookUrl, t.AuditWebhookSecret is not null);
+            t.StorageQuotaBytes, t.IncompleteUploadCleanupDays, t.AuditWebhookUrl, t.AuditWebhookSecret is not null,
+            t.StandardRepositoryId);
 
         // A human-readable list of "Field a→b" changes; empty when nothing changed. `secretProvided` distinguishes
         // "the URL/secret-presence didn't change" from "the same URL was saved with a fresh secret".
@@ -562,6 +604,7 @@ public class TenantSettingsController : ControllerBase
             Text("Storage quota", Quota(a.StorageQuotaBytes), Quota(b.StorageQuotaBytes));
             Scalar("Incomplete-upload cleanup days", a.IncompleteUploadCleanupDays, b.IncompleteUploadCleanupDays);
             Text("Audit webhook URL", a.AuditWebhookUrl ?? "(none)", b.AuditWebhookUrl ?? "(none)");
+            Scalar("Standard repository", a.StandardRepositoryId, b.StandardRepositoryId);
 
             // The secret is redacted: report only presence changes, plus an explicit "rotated" note when a fresh
             // secret was supplied for an already-configured webhook.
@@ -812,6 +855,7 @@ public class TenantSettingsController : ControllerBase
         StorageQuotaBytes = tenant.StorageQuotaBytes,
         StorageUsedBytes = tenant.StorageUsedBytes,
         IncompleteUploadCleanupDays = tenant.IncompleteUploadCleanupDays,
+        StandardRepositoryId = tenant.StandardRepositoryId,
         AuditWebhookUrl = tenant.AuditWebhookUrl,
         AuditWebhookConfigured = tenant.AuditWebhookSecret is not null,
         AuditWebhookConsecutiveFailures = tenant.AuditWebhookConsecutiveFailures,
@@ -827,6 +871,7 @@ public class TenantSettingsController : ControllerBase
             // the paths, are the compatibility surface (ADR 0543).
             new Link("settings-general", "/api/tenant-settings/general", "PUT"),
             new Link("settings-capture", "/api/tenant-settings/capture", "PUT"),
+            new Link("settings-standard-repository", "/api/tenant-settings/standard-repository", "PUT"),
             new Link("settings-security", "/api/tenant-settings/security", "PUT"),
             new Link("settings-records", "/api/tenant-settings/records", "PUT"),
             new Link("settings-checkout", "/api/tenant-settings/checkout", "PUT"),

@@ -362,6 +362,16 @@ public class DocumentBulkController : ControllerBase
             }
 
             var subtree = await CollectSubtreeAsync(id, document, cancellationToken);
+
+            // Skipped like a held document, before anything is marked: the standard repository cannot be deleted
+            // (ADR 0892), and letting SaveChanges refuse it would abandon every later item in the batch.
+            if (document.ParentId is null
+                && await SimplArchive.Infrastructure.Persistence.CoreOwnedDocumentInvariants.IsStandardRepositoryAsync(_dbContext, id, cancellationToken))
+            {
+                skipped++;
+                continue;
+            }
+
             if (await _legalHold.IsFrozenAsync(id, cancellationToken)
                 || await _legalHold.AnyDirectlyHeldAsync(subtree.Select(d => d.Id).ToList(), cancellationToken)
                 || subtree.Any(d => d.CheckedOutByUserId is { } h && h != _currentUserAccessor.UserId))

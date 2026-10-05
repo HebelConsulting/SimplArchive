@@ -556,6 +556,7 @@ using (var scope = app.Services.CreateScope())
             services.GetRequiredService<SimplArchive.Infrastructure.Modules.ModuleMaskSeeder>(),
             [.. services.GetRequiredService<IReadOnlyList<SimplArchive.Infrastructure.Modules.ModuleLoader.LoadedModule>>().Select(m => m.Module)],
             services.GetRequiredService<ILoggerFactory>().CreateLogger("SimplArchive.Infrastructure.Modules.ModuleMaskBackfill"));
+
     }
 
     var applicationManager = services.GetRequiredService<IOpenIddictApplicationManager>();
@@ -753,6 +754,9 @@ using (var scope = app.Services.CreateScope())
     // Encryption:Tenants so the encryption service can be exercised on a live stack beside an untouched
     // public demo. No-op unless the CryptoDemo:* config is present and the tenant doesn't already exist.
     await CryptoDemoSeeder.SeedIfConfiguredAsync(services, app.Configuration);
+
+    // Manuals for every tenant, last so the seeders' new tenants are included (ManualStartupFiling, ADR 0891).
+    await SimplArchive.Api.Manuals.ManualStartupFiling.FileEverywhereAsync(app.Services);
 }
 
 // Configure the HTTP request pipeline.

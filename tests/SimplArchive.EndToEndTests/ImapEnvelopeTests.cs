@@ -52,7 +52,8 @@ public class ImapEnvelopeTests
         // meaningful: an unlisted tenant would be served plaintext for the wrong reason.
         var email = CryptoUserEmail("thomas");
 
-        var raw = await FetchRawMessageAsync(email, E2EApiFactory.CryptoPassword, E2EApiFactory.CryptoTenantName);
+        // The seeded documents live in the repository's SampleData folder (ADR 0891), not at its root.
+        var raw = await FetchRawMessageAsync(email, E2EApiFactory.CryptoPassword, $"{E2EApiFactory.CryptoTenantName}/SampleData");
 
         Assert.DoesNotContain("application/pkcs7-mime", raw, StringComparison.Ordinal);
         // Positively plaintext: the synthetic message serves the document as a PDF attachment part.

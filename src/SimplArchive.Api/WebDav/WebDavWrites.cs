@@ -245,7 +245,7 @@ internal static class WebDavWrites
             var parentMaskId = await db.MaskVersions.Where(mv => mv.Id == parentDoc.MaskVersionId)
                 .Select(mv => (Guid?)mv.MaskId).FirstOrDefaultAsync(context.RequestAborted);
             var parentIsTypedFolder = parentMaskId is { } pm
-                && WellKnownMaskIds.TypedFolderRules.Any(r => r.FolderMaskId == pm);
+                && WellKnownMaskIds.AllExclusiveFolderRules.Any(r => r.FolderMaskId == pm);
 
             // Stamped with the Folder mask at creation, exactly as the API's create does — the finalizer
             // reclassifies it to Basic Entry / eMail once the bytes arrive (ADR "Folder mask on folders").
@@ -542,6 +542,19 @@ internal static class WebDavWrites
         if (!(await WebDavMiddleware.RightsAsync(services, user, document.Id)).CanDelete)
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+
+        // The tenant's standard repository cannot be deleted (ADR 0892). Refused HERE rather than left to SaveChanges'
+        // throw, because a mounted drive shows nothing but "the operation can't be completed" — so the administrator
+        // learns why from a Warning, as ADR 0626 asks of a refusal the client cannot explain.
+        if (document.ParentId is null
+            && await SimplArchive.Infrastructure.Persistence.CoreOwnedDocumentInvariants.IsStandardRepositoryAsync(db, document.Id, context.RequestAborted))
+        {
+            services.GetRequiredService<ILogger<WebDavMiddleware>>().LogWarning(
+                "WebDAV DELETE of {DocumentId} refused: it is the tenant's standard repository. Make another repository the "
+                + "standard one in the tenant settings first; Trace carries the exchange.", document.Id);
+            context.Response.StatusCode = StatusCodes.Status409Conflict;
             return;
         }
 

@@ -183,7 +183,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:IndexFieldViewModel">
                                 <Grid ColumnDefinitions="180,*" Margin="0,2">
-                                    <SelectableTextBlock Grid.Column="0" Text="{Binding FieldName}" Foreground="{DynamicResource WbMuted}" />
+                                    <SelectableTextBlock Grid.Column="0" Text="{Binding DisplayName}" Foreground="{DynamicResource WbMuted}" />
                                     <SelectableTextBlock Grid.Column="1" Text="{Binding Values}" TextWrapping="Wrap" IsVisible="{Binding ShowPlainText}" />
                                     <!-- A DocumentReference names another document (ADR 0773): each target opens
                                          IN the workbench. An unavailable one is drawn as plain text — the server
@@ -301,7 +301,7 @@
                         <TextBlock Grid.Column="0" Text="{loc:Tr MaskLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
                         <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding AvailableMasks}" SelectedItem="{Binding SelectedMaskChoice}">
                             <ComboBox.ItemTemplate>
-                                <DataTemplate x:DataType="vm:MaskChoiceViewModel"><TextBlock Text="{Binding Name}" /></DataTemplate>
+                                <DataTemplate x:DataType="vm:MaskChoiceViewModel"><TextBlock Text="{Binding DisplayName}" /></DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
                     </Grid>
@@ -318,7 +318,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:MaskFieldEditViewModel">
                                 <Grid ColumnDefinitions="180,*" Margin="0,3">
-                                    <SelectableTextBlock Grid.Column="0" Text="{Binding Label}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                    <SelectableTextBlock Grid.Column="0" Text="{Binding DisplayLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
                                     <Panel Grid.Column="1">
                                         <CalendarDatePicker IsVisible="{Binding IsDate}" HorizontalAlignment="Left" SelectedDate="{Binding DateValue}" Watermark="yyyy-MM-dd" />
                                         <!-- A DateTime field is a MOMENT (#660): a day picker alone was the pane bug the

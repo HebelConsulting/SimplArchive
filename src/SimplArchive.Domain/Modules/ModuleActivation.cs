@@ -60,5 +60,14 @@ public class ModuleActivation : ITenantScoped, IConcurrencyTracked
     /// </remarks>
     public string? VerifiedByKeyThumbprint { get; set; }
 
+    /// <summary>
+    /// The archived copy of the manual this module ships in its package (ABI 1.5, ADR 0891) — null until the core
+    /// first files it. A plain column, not a FK (the <see cref="LicenseDocumentId"/> precedent): the manual is
+    /// ordinary archive content an administrator may move, delete or purge, and none of that may cascade into or
+    /// be blocked by this row. A newer manual is added as a new version of THIS document, which is why the id is
+    /// remembered rather than found again by name.
+    /// </summary>
+    public Guid? ManualDocumentId { get; set; }
+
     public Guid ConcurrencyToken { get; set; }
 }

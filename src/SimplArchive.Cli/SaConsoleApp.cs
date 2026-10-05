@@ -171,9 +171,17 @@ public static class SaConsoleApp
 
             config.AddBranch("tenant", tenant =>
             {
-                tenant.SetDescription("Installation-level tenant administration (platform administrator).");
+                tenant.SetDescription("Tenant administration: provisioning (platform administrator) and the tenant's standard repository (tenant administrator).");
                 tenant.AddCommand<TenantCreateCommand>("create")
                     .WithDescription("Provision a tenant with its first administrator and repository.");
+                tenant.AddBranch("standard-repository", standard =>
+                {
+                    standard.SetDescription("Where SimplArchive files what it brings, its manuals first (ADR 0892).");
+                    standard.AddCommand<StandardRepositoryShowCommand>("show")
+                        .WithDescription("Show the tenant's standard repository.");
+                    standard.AddCommand<StandardRepositorySetCommand>("set")
+                        .WithDescription("Make another repository the standard one; the manuals folder moves with it.");
+                });
             });
         });
 

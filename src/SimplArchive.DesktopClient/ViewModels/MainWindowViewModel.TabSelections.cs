@@ -236,6 +236,7 @@ public sealed partial class MainWindowViewModel
     partial void OnTenantEditingGroupChanged(string? value)
     {
         OnPropertyChanged(nameof(IsEditingTenantGeneral));
+        OnPropertyChanged(nameof(IsEditingTenantStandardRepository));
         OnPropertyChanged(nameof(IsEditingTenantCapture));
         OnPropertyChanged(nameof(IsEditingTenantSecurity));
         OnPropertyChanged(nameof(IsEditingTenantRecords));
@@ -254,6 +255,7 @@ public sealed partial class MainWindowViewModel
     private string? _tenantEditingGroup;
 
     public bool IsEditingTenantGeneral => TenantEditingGroup == "general";
+    public bool IsEditingTenantStandardRepository => TenantEditingGroup == "standard-repository";
     public bool IsEditingTenantCapture => TenantEditingGroup == "capture";
     public bool IsEditingTenantSecurity => TenantEditingGroup == "security";
     public bool IsEditingTenantRecords => TenantEditingGroup == "records";
@@ -286,6 +288,7 @@ public sealed partial class MainWindowViewModel
         object body = group switch
         {
             "general" => new { name = TenantName.Trim() },
+            "standard-repository" => new { standardRepositoryId = TenantStandardRepository?.Id },
             "capture" => new
             {
                 // Preserve the catalog order for the "+"-joined default (a stable OCR priority).

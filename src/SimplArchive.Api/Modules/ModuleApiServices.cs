@@ -25,6 +25,9 @@ public static class ModuleApiServices
         // Records whether a module's on-demand sources are refreshing, and tells the tenant's admins when one
         // stops (ADR 0811). Invoked from both hook paths — the protocol read and the client-triggered open.
         services.AddScoped<ModuleContentHealthRecorder>();
+
+        // Files SimplArchive's own manual and the manual a module ships in its package (ABI 1.5, ADR 0891).
+        services.AddScoped<SimplArchive.Api.Manuals.ManualFiler>();
         return services;
     }
 }

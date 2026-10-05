@@ -71,7 +71,7 @@ public static class ChildCreationPolicy
         // A typed folder admits only its listed masks — a Notebook holds Sections and Notes, so "New subfolder"
         // there was an action the server always refused while both clients went on offering it. Its own creates
         // are reached by their own rels (`sections`, `notes`), which is why this asks only about the plain one.
-        if (WellKnownMaskIds.TypedFolderRules.FirstOrDefault(r => r.FolderMaskId == maskId) is { } rule)
+        if (WellKnownMaskIds.AllExclusiveFolderRules.FirstOrDefault(r => r.FolderMaskId == maskId) is { } rule)
         {
             return rule.Admits.Any(a => a.MaskId == WellKnownMaskIds.Folder);
         }

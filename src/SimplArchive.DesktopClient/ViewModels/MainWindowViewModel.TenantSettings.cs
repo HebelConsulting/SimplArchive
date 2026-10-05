@@ -113,6 +113,12 @@ public sealed partial class MainWindowViewModel
     [ObservableProperty] private string _tenantStatus = string.Empty;
     [ObservableProperty] private string _tenantCreated = string.Empty;
 
+    /// <summary>The shared repositories a standard one is chosen from (ADR 0892) — the tenant's own listing.</summary>
+    [ObservableProperty] private IReadOnlyList<TenantRepositoryOption> _tenantRepositoryOptions = [];
+
+    /// <summary>The tenant's standard repository, as chosen in the list above.</summary>
+    [ObservableProperty] private TenantRepositoryOption? _tenantStandardRepository;
+
     public bool HasTenantSettings => TenantSettingsLoaded;
 
     // The staged, ordered OCR codes while editing (edited via the same ordered picker as the detail pane).
@@ -129,6 +135,8 @@ public sealed partial class MainWindowViewModel
         try
         {
             var s = await _api.Admin.GetTenantSettingsAsync();
+            // The choices BEFORE the settings, so applying them can select the current one.
+            TenantRepositoryOptions = [.. (await _api.Documents.GetRepositoriesAsync()).Select(r => new TenantRepositoryOption(r.Id, r.Name))];
             ApplyTenantSettings(s);
             TenantEditingGroup = null;
             TenantSettingsLoaded = true;
@@ -145,6 +153,7 @@ public sealed partial class MainWindowViewModel
     {
         LastTenantSettings = s; // group saves follow this resource's settings-<group> rels (ADR 0543)
         TenantName = s.Name;
+        TenantStandardRepository = TenantRepositoryOptions.FirstOrDefault(r => r.Id == s.StandardRepositoryId);
         TenantAuditRetentionDays = s.AuditRetentionDays;
         TenantCheckoutTtlDays = s.CheckoutTtlDays;
         TenantCheckoutWarningDays = s.CheckoutWarningDays;
@@ -304,4 +313,10 @@ public sealed partial class MainWindowViewModel
         _tenantStagedOcrCodes = codes.ToList();
         TenantOcrDisplay = (_ocrLanguages?.Describe(_tenantStagedOcrCodes) ?? "");
     }
+}
+
+/// <summary>One shared repository on the Tenant tab's standard-repository chooser (ADR 0892).</summary>
+public sealed record TenantRepositoryOption(Guid Id, string Name)
+{
+    public override string ToString() => Name;
 }

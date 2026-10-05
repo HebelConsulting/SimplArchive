@@ -34,6 +34,12 @@ public sealed class WellKnownMaskDateFieldLedgerTests
         ["License.Valid until"] =
             "The end of the support contract — a calendar DAY the vendor signed (TenantLicense.SupportContractEnd "
             + "is a DateOnly in the licence itself), so there is no time to lose.",
+        ["Manual.Date of purchase"] =
+            "The day a product was bought, as on its receipt (ADR 0891) — a calendar day a person records, with no "
+            + "clock anybody kept or would trust.",
+        ["Manual.Warranty expiry"] =
+            "The last day of a product's warranty, as its terms state it (ADR 0891) — warranties run to a day, not "
+            + "to an instant in a zone.",
     };
 
     [Fact]

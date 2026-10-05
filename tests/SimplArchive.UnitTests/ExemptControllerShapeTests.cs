@@ -80,7 +80,9 @@ public partial class ExemptControllerShapeTests
         // verdict was re-read against the controller as it now stands rather than the number simply filled in:
         // all ten PUTs and `recompute-storage` write the TENANT row, and the two test deliveries write nothing
         // at all — so "reads only" remains true of the User pair the ledger judges.
-        ["TenantSettingsController.cs"] = 13,
+        // 14 since ADR 0892's standard-repository PUT — a TENANT setting under the tenant's contract, like the other
+        // groups; its one document effect (moving the manuals folder) is a callee of that contract, not a new edit.
+        ["TenantSettingsController.cs"] = 14,
         ["TenantsController.cs"] = 1,
         ["TokenController.cs"] = 1,
         ["TypedItemsController.cs"] = 2,

@@ -591,6 +591,23 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
             snackbar.Add(Strings.Get("StStaleReload"), Severity.Warning);
             return false;
         }
+        // A refusal with a reason — the standard repository, a personal space's standing folder — says why, in the
+        // user's language, instead of "could not delete" (ADR 0892). Same mapping the desktop uses.
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            string? code = null;
+            try
+            {
+                var problem = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                code = problem.TryGetProperty("errorCode", out var c) ? c.GetString() : null;
+            }
+            catch (System.Text.Json.JsonException)
+            {
+            }
+
+            snackbar.Add(SimplArchive.Localization.ApiErrorText.For(code), Severity.Warning);
+            return false;
+        }
         if (!response.IsSuccessStatusCode)
         {
             snackbar.Add(Strings.Get("StErrDeleteItem"), Severity.Error);

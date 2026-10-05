@@ -5286,4 +5286,52 @@
   <data name="StTestMailFailed" xml:space="preserve">
     <value>No se pudo enviar el mensaje de prueba: {0}</value>
   </data>
+  <data name="TenantGroupStandardRepository" xml:space="preserve">
+    <value>Repositorio estándar</value>
+  </data>
+  <data name="TenantStandardRepositoryLabel" xml:space="preserve">
+    <value>Repositorio</value>
+  </data>
+  <data name="TenantStandardRepositoryInfo" xml:space="preserve">
+    <value>Dónde archiva SimplArchive lo que aporta — sus manuales, en la carpeta 'SimplArchive Manuals'. Al elegir otro repositorio la carpeta se mueve con él. El repositorio estándar no se puede eliminar.</value>
+  </data>
+  <data name="ApiErrStandardRepositoryCannotBeDeleted" xml:space="preserve">
+    <value>Este es el repositorio estándar del inquilino y no se puede eliminar. Primero convierta otro repositorio en el estándar en la configuración del inquilino.</value>
+  </data>
+  <data name="ApiErrStandardRepositoryInvalid" xml:space="preserve">
+    <value>El repositorio estándar debe ser uno de los repositorios compartidos de este inquilino — no un espacio personal ni estar en la papelera.</value>
+  </data>
+  <data name="ApiErrCoreOwnedMask" xml:space="preserve">
+    <value>Solo SimplArchive asigna el tipo 'SimplArchive Documentation', a la única carpeta donde archiva sus manuales. Use una carpeta normal.</value>
+  </data>
+  <data name="WkMaskDocumentation" xml:space="preserve">
+    <value>Documentación de SimplArchive</value>
+  </data>
+  <data name="WkMaskManual" xml:space="preserve">
+    <value>Manual</value>
+  </data>
+  <data name="WkFieldBrand" xml:space="preserve">
+    <value>Marca</value>
+  </data>
+  <data name="WkFieldProductName" xml:space="preserve">
+    <value>Nombre del producto</value>
+  </data>
+  <data name="WkFieldArticleNumber" xml:space="preserve">
+    <value>Número de artículo</value>
+  </data>
+  <data name="WkFieldProductVersion" xml:space="preserve">
+    <value>Versión del producto</value>
+  </data>
+  <data name="WkFieldSerialNumbers" xml:space="preserve">
+    <value>Números de serie</value>
+  </data>
+  <data name="WkFieldDateOfPurchase" xml:space="preserve">
+    <value>Fecha de compra</value>
+  </data>
+  <data name="WkFieldWarrantyExpiry" xml:space="preserve">
+    <value>Vencimiento de la garantía</value>
+  </data>
+  <data name="WkFieldExpectedDurationOfUse" xml:space="preserve">
+    <value>Duración de uso prevista (años)</value>
+  </data>
 </root>

@@ -68,6 +68,13 @@ public static class TypedFolderSave
         Domain.Documents.SingleVersionMaskException x =>
             new Errors.Exceptions.Documents.SingleVersionMaskException(x.Message),
 
+        // The manuals feature's two refusals (ADRs 0891/0892): each says what to do instead, which a name clash
+        // or a generic conflict would hide.
+        Domain.Masks.CoreOwnedMaskException x =>
+            new Errors.Exceptions.Documents.CoreOwnedMaskException(x.Message),
+        Domain.Documents.StandardRepositoryProtectedException x =>
+            new Errors.Exceptions.Documents.StandardRepositoryProtectedException(x.Message),
+
         _ => null,
     };
 }

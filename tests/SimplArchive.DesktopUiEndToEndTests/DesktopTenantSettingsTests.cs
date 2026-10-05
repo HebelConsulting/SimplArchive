@@ -44,6 +44,12 @@ public class DesktopTenantSettingsTests
         // "silently switched it off", so every new tenant setting earns a round-trip assertion here.
         Assert.True(updated.ShowExternalLinkUrl);
 
+        // The standard repository (ADR 0892) reads back and survives every OTHER group's save — read-only here on
+        // purpose: changing the shared demo tenant's would move its manuals folder under other tests (ADR 0884); the
+        // write and the move are covered by StandardRepositoryTests on a tenant of its own.
+        Assert.NotNull(before.StandardRepositoryId);
+        Assert.Equal(before.StandardRepositoryId, updated.StandardRepositoryId);
+
         // #793 — flipped off above against a true default, so this asserts the write, not the seed.
         Assert.False(updated.ImapShowAllDocumentsDefault);
 

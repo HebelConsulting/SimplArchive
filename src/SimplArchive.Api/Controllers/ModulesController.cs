@@ -235,7 +235,9 @@ public class ModulesController : ControllerBase
     /// <summary>The activation act (ADRs 0740/0743): verify the filed license, seed the module's masks,
     /// upsert the activation row. Renewal is the same PUT with the newly filed license's id.</summary>
     [HttpPut("{moduleId}/license")]
-    public async Task<IActionResult> PutLicense(string moduleId, [FromBody] ActivateModuleRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> PutLicense(
+        string moduleId, [FromBody] ActivateModuleRequest request, [FromServices] SimplArchive.Api.Manuals.ManualFiler manuals,
+        CancellationToken cancellationToken)
     {
         if (!await CanAdministerModulesAsync(cancellationToken))
         {
@@ -283,6 +285,10 @@ public class ModulesController : ControllerBase
         await _audit.RecordAsync(AuditActions.ModuleActivated, "Module", activation.Id, module.ModuleId,
             $"Support contract through {activation.SupportContractEndDate:yyyy-MM-dd}; license document {document.Id}",
             cancellationToken: cancellationToken);
+
+        // The manual the module ships (ABI 1.5, ADR 0891) — after the activation is committed and recorded; a refusal
+        // is logged and never fails the activation.
+        await manuals.FileModuleManualAsync(module, cancellationToken);
 
         return Ok(ToResource(module.ModuleId, module.DisplayName, module.AbiMajorVersion, installed: true, activation,
             hasSettings: DeclaredSettings(module.ModuleId).Count > 0, build: loaded?.Build,

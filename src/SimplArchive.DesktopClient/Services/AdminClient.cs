@@ -208,6 +208,8 @@ public sealed class AdminClient(ApiCore core)
         // Outbound mail (#1337). No password: the server reports only whether one is stored.
         string? SmtpHost, int SmtpPort, bool SmtpUseStartTls, string? SmtpUser, bool SmtpPasswordSet,
         string? SmtpFromAddress, string? SmtpFromName,
+        // Where SimplArchive files what it brings — the manuals folder first (ADR 0892).
+        Guid? StandardRepositoryId,
         LinkMap? Links = null);
 
     public async Task<TenantSettingsInfo> GetTenantSettingsAsync(CancellationToken cancellationToken = default)
@@ -249,7 +251,11 @@ public sealed class AdminClient(ApiCore core)
 
         if (response.StatusCode == HttpStatusCode.BadRequest)
         {
-            throw new ApiActionException("Check the entered values (name, OCR languages, retention, webhook URL/secret).");
+            // The refusal's own code, localized, where it names one — the standard-repository refusal says what
+            // qualifies; anything else keeps the general hint.
+            throw new ApiActionException(await ApiCore.ErrorCodeAsync(response, cancellationToken) is "STANDARD_REPOSITORY_INVALID"
+                ? SimplArchive.Localization.ApiErrorText.For("STANDARD_REPOSITORY_INVALID")
+                : "Check the entered values (name, OCR languages, retention, webhook URL/secret).");
         }
 
         if (response.StatusCode == HttpStatusCode.Forbidden)
@@ -261,6 +267,7 @@ public sealed class AdminClient(ApiCore core)
         var j = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
         return ParseTenantSettings(j);
     }
+
 
     // ---- Industry modules (ADRs 0740/0741/0743) ----------------------------------------------------
 
@@ -756,6 +763,7 @@ public sealed class AdminClient(ApiCore core)
         j.TryGetProperty("smtpPasswordSet", out var sps) && sps.ValueKind == JsonValueKind.True,
         j.TryGetProperty("smtpFromAddress", out var sfa) && sfa.ValueKind == JsonValueKind.String ? sfa.GetString() : null,
         j.TryGetProperty("smtpFromName", out var sfn) && sfn.ValueKind == JsonValueKind.String ? sfn.GetString() : null,
+        j.TryGetProperty("standardRepositoryId", out var srid) && srid.ValueKind == JsonValueKind.String ? srid.GetGuid() : null,
         ApiCore.ParseLinks(j));
 
     private async Task SetRightsCoreAsync(string path, SystemRightsData rights, CancellationToken cancellationToken)

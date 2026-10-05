@@ -288,6 +288,25 @@ public sealed class TestModule : IIndustryModule
         };
 
     /// <summary>
+    /// The environment variable a test sets to stand in for a module UPGRADE — different manual bytes in the
+    /// package — without loading a second assembly. An environment variable rather than a static, because the host
+    /// loads this module into its own load context: a static set from the test's copy of this type would be a
+    /// different static (the verify key's precedent).
+    /// </summary>
+    public const string ManualEditionVariable = "SIMPLARCHIVE_TESTMODULE_MANUAL_EDITION";
+
+    /// <summary>
+    /// The manual this module ships (ABI 1.5, ADR 0891). Plain text rather than a PDF so filing it exercises the
+    /// core's path without queueing an OCR candidate for bytes that are not a real PDF.
+    /// </summary>
+    public ModuleManual? Manual =>
+        new("test-module-manual.txt", () => new MemoryStream(System.Text.Encoding.UTF8.GetBytes(
+            $"Test Module manual, edition {Environment.GetEnvironmentVariable(ManualEditionVariable) ?? "1"}\n"), writable: false))
+        {
+            ContentType = "text/plain",
+        };
+
+    /// <summary>
     /// The reader-certificate capability, answered the way a real enrolment module answers it (ADR 0890): from
     /// this module's own documents.
     /// </summary>

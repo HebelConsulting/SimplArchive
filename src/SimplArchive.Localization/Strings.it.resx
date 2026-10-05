@@ -5286,4 +5286,52 @@
   <data name="StTestMailFailed" xml:space="preserve">
     <value>Impossibile inviare il messaggio di prova: {0}</value>
   </data>
+  <data name="TenantGroupStandardRepository" xml:space="preserve">
+    <value>Archivio standard</value>
+  </data>
+  <data name="TenantStandardRepositoryLabel" xml:space="preserve">
+    <value>Archivio</value>
+  </data>
+  <data name="TenantStandardRepositoryInfo" xml:space="preserve">
+    <value>Dove SimplArchive archivia ciò che porta con sé — i suoi manuali, nella cartella 'SimplArchive Manuals'. Scegliendo un altro archivio la cartella viene spostata con esso. L'archivio standard non può essere eliminato.</value>
+  </data>
+  <data name="ApiErrStandardRepositoryCannotBeDeleted" xml:space="preserve">
+    <value>Questo è l'archivio standard del tenant e non può essere eliminato. Prima rendi standard un altro archivio nelle impostazioni del tenant.</value>
+  </data>
+  <data name="ApiErrStandardRepositoryInvalid" xml:space="preserve">
+    <value>L'archivio standard deve essere uno degli archivi condivisi di questo tenant — non uno spazio personale e non nel cestino.</value>
+  </data>
+  <data name="ApiErrCoreOwnedMask" xml:space="preserve">
+    <value>Solo SimplArchive stesso assegna il tipo 'SimplArchive Documentation', all'unica cartella in cui archivia i suoi manuali. Usa una cartella normale.</value>
+  </data>
+  <data name="WkMaskDocumentation" xml:space="preserve">
+    <value>Documentazione SimplArchive</value>
+  </data>
+  <data name="WkMaskManual" xml:space="preserve">
+    <value>Manuale</value>
+  </data>
+  <data name="WkFieldBrand" xml:space="preserve">
+    <value>Marca</value>
+  </data>
+  <data name="WkFieldProductName" xml:space="preserve">
+    <value>Nome del prodotto</value>
+  </data>
+  <data name="WkFieldArticleNumber" xml:space="preserve">
+    <value>Codice articolo</value>
+  </data>
+  <data name="WkFieldProductVersion" xml:space="preserve">
+    <value>Versione del prodotto</value>
+  </data>
+  <data name="WkFieldSerialNumbers" xml:space="preserve">
+    <value>Numeri di serie</value>
+  </data>
+  <data name="WkFieldDateOfPurchase" xml:space="preserve">
+    <value>Data di acquisto</value>
+  </data>
+  <data name="WkFieldWarrantyExpiry" xml:space="preserve">
+    <value>Scadenza della garanzia</value>
+  </data>
+  <data name="WkFieldExpectedDurationOfUse" xml:space="preserve">
+    <value>Durata d'uso prevista (anni)</value>
+  </data>
 </root>

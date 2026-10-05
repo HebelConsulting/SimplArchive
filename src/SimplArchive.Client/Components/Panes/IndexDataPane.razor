@@ -230,11 +230,11 @@
                            cannot be changed are enforced server-side, and are a different, smaller set. *@
                         @if (CurrentMaskMissingFromCatalogue)
                         {
-                            <MudSelectItem T="Guid?" Value="Detail.EditMaskId">@(Detail.MaskName ?? string.Empty)</MudSelectItem>
+                            <MudSelectItem T="Guid?" Value="Detail.EditMaskId">@SimplArchive.Localization.WellKnownLabels.For(Detail.MaskName)</MudSelectItem>
                         }
                         @foreach (var m in AvailableMasks)
                         {
-                            <MudSelectItem T="Guid?" Value="@((Guid?)m.Id)">@m.Name</MudSelectItem>
+                            <MudSelectItem T="Guid?" Value="@((Guid?)m.Id)">@SimplArchive.Localization.WellKnownLabels.For(m.Name)</MudSelectItem>
                         }
                     </MudSelect>
                 </div>
@@ -252,7 +252,7 @@
                 @foreach (var f in Detail.EditFields)
                 {
                     <div class="wb-mask-row">
-                        <span class="wb-mask-label">@f.Label</span>
+                        <span class="wb-mask-label">@f.DisplayLabel</span>
                         @if (f.Locked)
                         {
                             @* Visible but not editable (#703): a Mailbox's address list for a caller without
@@ -343,7 +343,7 @@
         else
         {
             <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
-                Mask: @(Detail.MaskName ?? "none")@(Detail.VersionNumber is { } vn ? $" · version {vn}" : "")
+                Mask: @(Detail.MaskName is null ? "none" : SimplArchive.Localization.WellKnownLabels.For(Detail.MaskName))@(Detail.VersionNumber is { } vn ? $" · version {vn}" : "")
             </MudText>
             @if (Detail.SensitivityId is not null)
             {
@@ -356,7 +356,7 @@
                         @foreach (var field in Detail.IndexData)
                         {
                             <tr>
-                                <td>@field.FieldName</td>
+                                <td>@SimplArchive.Localization.WellKnownLabels.For(field.FieldName)</td>
                                 <td>
                                     @if (field.IsUrl)
                                     {

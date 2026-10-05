@@ -1943,6 +1943,9 @@ namespace SimplArchive.Infrastructure.Migrations
                     b.Property<Guid>("LicenseDocumentId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ManualDocumentId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("ModuleId")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -2519,6 +2522,9 @@ namespace SimplArchive.Infrastructure.Migrations
 
                     b.Property<string>("SmtpUser")
                         .HasColumnType("text");
+
+                    b.Property<Guid?>("StandardRepositoryId")
+                        .HasColumnType("uuid");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");

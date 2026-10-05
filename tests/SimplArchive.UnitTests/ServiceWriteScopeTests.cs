@@ -67,6 +67,10 @@ public partial class ServiceWriteScopeTests
         ["PersonalMailboxProvisioner.cs"] = Provisioning,
         ["ArchiveIdentityMapper.cs"] = Provisioning,
         ["ModulePrincipal.cs"] = Provisioning,
+        // Files manuals at provisioning, activation and startup (ADR 0891): a heal that converges on the shipped
+        // bytes, serialised by a lock on the tenant row rather than by any caller's ETag.
+        ["ManualFiler.cs"] = Provisioning,
+        ["ManualsFolder.cs"] = Provisioning,
 
         ["EphemeralMailSweepWorker.cs"] = Background,
         ["EphemeralContentSweepWorker.cs"] = Background,

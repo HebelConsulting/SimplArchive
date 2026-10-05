@@ -58,6 +58,11 @@ public static class ApiErrorText
         "MAIL_ROUTING_RIGHT_REQUIRED" => Strings.Get("ApiErrMailRoutingRightRequired"),
         "USER_ADDRESS_CLAIM_NOT_ALLOWED" => Strings.Get("ApiErrUserAddressClaimNotAllowed"),
         "PERSONAL_SPACE_STRUCTURE" => Strings.Get("ApiErrPersonalSpaceStructure"),
+        // The manuals feature's refusals (ADRs 0891/0892): each names the remedy, which is what makes the refusal
+        // readable rather than a dead end — another standard repository first, or an ordinary folder.
+        "STANDARD_REPOSITORY_CANNOT_BE_DELETED" => Strings.Get("ApiErrStandardRepositoryCannotBeDeleted"),
+        "STANDARD_REPOSITORY_INVALID" => Strings.Get("ApiErrStandardRepositoryInvalid"),
+        "CORE_OWNED_MASK" => Strings.Get("ApiErrCoreOwnedMask"),
         "DOCUMENT_CHECKED_OUT" => Strings.Get("ApiErrDocumentCheckedOut"),
         "ETAG_MISMATCH" => Strings.Get("ApiErrEtagMismatch"),
         "IF_MATCH_REQUIRED" => Strings.Get("ApiErrIfMatchRequired"),

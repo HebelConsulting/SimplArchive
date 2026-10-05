@@ -226,6 +226,44 @@ public static class WellKnownMaskIds
     /// </remarks>
     public static readonly Guid Certificate = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E4A");
 
+    /// <summary>
+    /// The "SimplArchive Documentation" folder mask (ADR 0891): the mask of the tenant's "SimplArchive Manuals"
+    /// folder, directly under the standard repository (ADR 0892). The core FINDS that folder by this mask, never by
+    /// its name, so a renamed folder is still the one manuals go into.
+    /// </summary>
+    /// <remarks>
+    /// <b>Core-owned</b> (<see cref="CoreOwnedMasks"/>): only the core's own filing path may put it on a document,
+    /// nothing may take it off again, and at most one live document per tenant wears it — a second would make
+    /// "the manuals folder" ambiguous, and a removed one would make the core create a replacement beside it.
+    /// </remarks>
+    public static readonly Guid Documentation = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E4B");
+
+    /// <summary>
+    /// A product manual (ADR 0891) — SimplArchive's own and a module's, which the core files, and any third-party
+    /// manual a person keeps. Freely assignable for that reason; the Documentation folder admits nothing else.
+    /// </summary>
+    public static readonly Guid Manual = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E4C");
+
+    /// <summary>The Manual mask's field names (ADR 0891), in display order — the seeder's list and the core's filer
+    /// both read these, so the two cannot spell a field differently.</summary>
+    public static class ManualFields
+    {
+        public const string Brand = "Brand";
+        public const string ProductName = "Product name";
+        public const string ArticleNumber = "Article number";
+        public const string ProductVersion = "Product version";
+        public const string SerialNumbers = "Serial numbers";
+        public const string DateOfPurchase = "Date of purchase";
+        public const string WarrantyExpiry = "Warranty expiry";
+        public const string ExpectedDurationOfUse = "Expected duration of use (years)";
+    }
+
+    /// <summary>
+    /// The masks only the CORE assigns (ADR 0891): not offered by any picker, refused by SaveChanges when a document
+    /// gains one outside the core's own filing path, refused when one is changed or removed, at most one live per tenant.
+    /// </summary>
+    public static readonly IReadOnlySet<Guid> CoreOwnedMasks = new HashSet<Guid> { Documentation };
+
     /// <summary>A section INSIDE a notebook: a folder that holds notes and further sections (#564).</summary>
     /// <remarks>
     /// Fieldless, like the Notebook it lives in — it types the folder, and the fields live on the notes.
@@ -336,7 +374,7 @@ public static class WellKnownMaskIds
     /// </para>
     /// </remarks>
     public static readonly IReadOnlySet<Guid> FolderMasks =
-        new HashSet<Guid> { Folder, Repository, UserFolder, MyDocuments, Mailbox, ImapSpecial, ImapFolder, Notebook, NotebookSection, Addressbook, Calendar, MeetingRoom, Schedule, Blockers, Availability };
+        new HashSet<Guid> { Folder, Repository, UserFolder, MyDocuments, Mailbox, ImapSpecial, ImapFolder, Notebook, NotebookSection, Addressbook, Calendar, MeetingRoom, Schedule, Blockers, Availability, Documentation };
 
     /// <summary>
     /// The file extensions that make a well-known mask the automatic choice for an upload (#671).
@@ -455,7 +493,7 @@ public static class WellKnownMaskIds
         // certificate filed by hand — a CA's own certificate, kept for reference — is a legitimate document.
         // What the module projects is what the module ENROLLED, so a hand-filed one is simply not addressed to
         // anybody, rather than being a hole.
-        new HashSet<Guid> { Repository, UserFolder, MyDocuments, ImapSpecial, Notebook, Booking, Schedule, Blockers, Block, Availability, AvailabilityWindow };
+        new HashSet<Guid> { Repository, UserFolder, MyDocuments, ImapSpecial, Notebook, Booking, Schedule, Blockers, Block, Availability, AvailabilityWindow, Documentation };
 
     /// <summary>
     /// Masks whose documents take exactly ONE version, for their whole life (ADR 0848).
@@ -519,7 +557,7 @@ public static class WellKnownMaskIds
         new HashSet<Guid>
         {
             BasicEntry, EMail, Note, Contact, Appointment, Booking, License, Block, AvailabilityWindow,
-            Certificate,
+            Certificate, Manual,
         };
 
     /// <summary>
@@ -590,8 +628,27 @@ public static class WellKnownMaskIds
     /// question — admission asks "may this child be here at all?", capacity asks "is there already one?".
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Exclusive folders whose admitted masks may ALSO live anywhere else — the one-directional half of
+    /// <see cref="TypedFolderRules"/> (ADR 0891).
+    /// </summary>
+    /// <remarks>
+    /// The Documentation folder holds Manuals and nothing else, but a Manual is a document a person may file
+    /// wherever they keep things — a third-party product's manual beside its invoice. A row in the two-directional
+    /// table would make every Manual outside the manuals folder a containment violation, and would make the mask
+    /// impossible to offer to a picker. So this table contributes to <see cref="ExclusiveFolderMasks"/> and
+    /// <see cref="AdmittedChildMasks"/>, and deliberately NOT to <see cref="AllowedParentMasks"/>.
+    /// </remarks>
+    public static readonly IReadOnlyList<TypedFolderRule> OneWayExclusiveFolders =
+    [
+        new(Documentation, "SimplArchive Documentation", [(Manual, "Manual")]),
+    ];
+
+    /// <summary>Every exclusive folder's rule, both tables — what "does this folder take a plain subfolder" asks.</summary>
+    public static readonly IReadOnlyList<TypedFolderRule> AllExclusiveFolderRules = [.. TypedFolderRules, .. OneWayExclusiveFolders];
+
     public static readonly IReadOnlySet<Guid> ExclusiveFolderMasks =
-        TypedFolderRules.Select(r => r.FolderMaskId).ToHashSet();
+        TypedFolderRules.Concat(OneWayExclusiveFolders).Select(r => r.FolderMaskId).ToHashSet();
 
     /// <summary>Folder mask → the masks it admits as direct children. Only meaningful when exclusive.</summary>
     /// <remarks>
@@ -605,7 +662,7 @@ public static class WellKnownMaskIds
     // table like every other typed child, and no second admission shape remains to need it.
 
     public static readonly IReadOnlyDictionary<Guid, IReadOnlySet<Guid>> AdmittedChildMasks =
-        TypedFolderRules
+        TypedFolderRules.Concat(OneWayExclusiveFolders)
             .Select(rule => (
                 rule.FolderMaskId,
                 Admits: rule.Admits.Select(a => a.MaskId)

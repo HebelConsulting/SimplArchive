@@ -16,7 +16,7 @@ namespace SimplArchive.Api.Provisioning;
 //
 // It seeds the tenant with crypt (the tenant administrator) plus three plain users, florian, thomas and
 // alex — the people whose phones carry the S/MIME identities in the proof of concept — all IMAP/WebDAV-enabled
-// with the one configured password, and a couple of documents in the root repository so a mail client has
+// with the one configured password, and a couple of documents in the repository's SampleData folder so a mail client has
 // something to fetch right after every nightly reset. Ids are deterministic (DemoId, #781) for the same
 // reason the demo tenant's are: the kiosk reseeds from scratch nightly, and fresh GUIDs each morning would
 // hand every caching IMAP client a brand-new server wearing yesterday's names.
@@ -129,11 +129,19 @@ public static class CryptoDemoSeeder
         var basicEntryVersion = await dbContext.MaskVersions
             .SingleAsync(v => v.MaskId == WellKnownMaskIds.BasicEntry && v.IsCurrent);
 
+        // In their own SampleData folder rather than at the repository root (ADR 0891): the root carries what the
+        // installation itself puts there — the Administration folder and the module's manual — and demo content
+        // stays visibly demo content. Readers reach it by inheritance from the repository grants above.
+        var folderMaskVersion = await dbContext.MaskVersions
+            .SingleAsync(v => v.MaskId == WellKnownMaskIds.Folder && v.IsCurrent);
+        var sampleData = await DemoDataSeeder.AddFolderAsync(dbContext, provisioned.TenantId,
+            provisioned.RepositoryId, "SampleData", admin.Id, now, folderMaskVersion.Id, "sample-data");
+
         await DemoDataSeeder.AddDocumentAsync(dbContext, storage, assembly, provisioned.TenantId,
-            provisioned.RepositoryId, "Board minutes 2026-03", admin.Id, now, basicEntryVersion.Id,
+            sampleData.Id, "Board minutes 2026-03", admin.Id, now, basicEntryVersion.Id,
             "DemoInvoice.pdf", ".pdf", "application/pdf", new DateOnly(2026, 3, 3), finalizer);
         await DemoDataSeeder.AddDocumentAsync(dbContext, storage, assembly, provisioned.TenantId,
-            provisioned.RepositoryId, "Salary review 2026", admin.Id, now, basicEntryVersion.Id,
+            sampleData.Id, "Salary review 2026", admin.Id, now, basicEntryVersion.Id,
             "DemoOfferV1.pdf", ".pdf", "application/pdf", new DateOnly(2026, 1, 14), finalizer);
     }
 

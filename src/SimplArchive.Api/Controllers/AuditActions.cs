@@ -152,6 +152,7 @@ public static class AuditActions
     // action per group, so the trail reads as intent ("changed check-out policy") rather than "saved settings".
     public const string TenantSettingsGeneralUpdated = "Tenant.SettingsGeneralUpdated";
     public const string TenantSettingsCaptureUpdated = "Tenant.SettingsCaptureUpdated";
+    public const string TenantSettingsStandardRepositoryUpdated = "Tenant.SettingsStandardRepositoryUpdated";
     public const string TenantSettingsSecurityUpdated = "Tenant.SettingsSecurityUpdated";
     public const string TenantSettingsRecordsUpdated = "Tenant.SettingsRecordsUpdated";
     public const string TenantSettingsCheckoutUpdated = "Tenant.SettingsCheckoutUpdated";
@@ -197,6 +198,10 @@ public static class AuditActions
 
     // The KEYS whose values changed, never the values — a settings write can carry a credential (ADR 0772).
     public const string ModuleSettingsUpdated = "Module.SettingsUpdated";
+
+    // The core filed (or re-versioned) a manual — SimplArchive's own or the one a module ships in its package (ABI 1.5,
+    // ADR 0891). Actor: the module's own principal for a module's manual, System for the core's.
+    public const string ManualFiled = "Manual.Filed";
 
     // Booking (ADRs 0735/0744/0774, issue #1092). Recorded on every entrance, which is the whole point of
     // adding these: a booking made over CalDAV was already recorded as a DOCUMENT write ("Filed over CalDAV")

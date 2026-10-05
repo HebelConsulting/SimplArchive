@@ -47,5 +47,10 @@ public static class ModuleAbiVersion
     /// <c>IsTenantAdminAsync</c>, so a 1.3 module and a 1.3 test double are unaffected; the host answers it
     /// with a service account's <c>CanManageModules</c> right as well (core ADR 0870).
     /// </para>
-    public const int Minor = 4;
+    /// <para>
+    /// 1.5 adds <see cref="IIndustryModule.Manual"/> and <see cref="ModuleManual"/> — a module ships its manual in
+    /// its package and the core files it, versioning it when the bytes change (core ADR 0891). Default null, so a
+    /// 1.4 module is unaffected.
+    /// </para>
+    public const int Minor = 5;
 }

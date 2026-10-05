@@ -5286,4 +5286,52 @@
   <data name="StTestMailFailed" xml:space="preserve">
     <value>Die Testnachricht konnte nicht gesendet werden: {0}</value>
   </data>
+  <data name="TenantGroupStandardRepository" xml:space="preserve">
+    <value>Standardablage</value>
+  </data>
+  <data name="TenantStandardRepositoryLabel" xml:space="preserve">
+    <value>Ablage</value>
+  </data>
+  <data name="TenantStandardRepositoryInfo" xml:space="preserve">
+    <value>Wohin SimplArchive ablegt, was es mitbringt — seine Handbücher im Ordner 'SimplArchive Manuals'. Wählen Sie eine andere Ablage, wird dieser Ordner mitverschoben. Die Standardablage kann nicht gelöscht werden.</value>
+  </data>
+  <data name="ApiErrStandardRepositoryCannotBeDeleted" xml:space="preserve">
+    <value>Dies ist die Standardablage des Mandanten und kann nicht gelöscht werden. Machen Sie zuerst in den Mandanteneinstellungen eine andere Ablage zur Standardablage.</value>
+  </data>
+  <data name="ApiErrStandardRepositoryInvalid" xml:space="preserve">
+    <value>Die Standardablage muss eine der gemeinsamen Ablagen dieses Mandanten sein — kein persönlicher Bereich und nicht im Papierkorb.</value>
+  </data>
+  <data name="ApiErrCoreOwnedMask" xml:space="preserve">
+    <value>Nur SimplArchive selbst vergibt den Typ 'SimplArchive Documentation', an den einen Ordner, in den es seine Handbücher ablegt. Verwenden Sie einen gewöhnlichen Ordner.</value>
+  </data>
+  <data name="WkMaskDocumentation" xml:space="preserve">
+    <value>SimplArchive-Dokumentation</value>
+  </data>
+  <data name="WkMaskManual" xml:space="preserve">
+    <value>Handbuch</value>
+  </data>
+  <data name="WkFieldBrand" xml:space="preserve">
+    <value>Marke</value>
+  </data>
+  <data name="WkFieldProductName" xml:space="preserve">
+    <value>Produktname</value>
+  </data>
+  <data name="WkFieldArticleNumber" xml:space="preserve">
+    <value>Artikelnummer</value>
+  </data>
+  <data name="WkFieldProductVersion" xml:space="preserve">
+    <value>Produktversion</value>
+  </data>
+  <data name="WkFieldSerialNumbers" xml:space="preserve">
+    <value>Seriennummern</value>
+  </data>
+  <data name="WkFieldDateOfPurchase" xml:space="preserve">
+    <value>Kaufdatum</value>
+  </data>
+  <data name="WkFieldWarrantyExpiry" xml:space="preserve">
+    <value>Garantieablauf</value>
+  </data>
+  <data name="WkFieldExpectedDurationOfUse" xml:space="preserve">
+    <value>Erwartete Nutzungsdauer (Jahre)</value>
+  </data>
 </root>

@@ -54,6 +54,21 @@
             <InfoButton Text="@(Strings.Get("TenantNameInfo"))" />
         </div>
 
+        @* ---- Standard repository (ADR 0892) ------------------------------------------------------- *@
+        @* Where SimplArchive files what it brings, its manuals first; saving moves the manuals folder with it. *@
+        @GroupHeader("standard-repository", Strings.Get("TenantGroupStandardRepository"))
+        <div class="wb-setting-row mb-4">
+            <MudSelect T="Guid?" Label="@Strings.Get("TenantStandardRepositoryLabel")" @bind-Value="_tenantEdit.StandardRepositoryId"
+                       Disabled="@(!Editing("standard-repository"))" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1"
+                       ToStringFunc="@(id => _repositoryOptions.FirstOrDefault(r => r.Id == id)?.Name ?? string.Empty)">
+                @foreach (var repository in _repositoryOptions)
+                {
+                    <MudSelectItem T="Guid?" Value="@((Guid?)repository.Id)">@repository.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <InfoButton Text="@(Strings.Get("TenantStandardRepositoryInfo"))" />
+        </div>
+
         @* ---- Documents & capture ------------------------------------------------------------------ *@
         @GroupHeader("capture", Strings.Get("TenantGroupCapture"))
         <div class="wb-setting-row mb-3">
@@ -477,6 +492,7 @@
         {
             _tenant = await Http.GetFromJsonAsync<TenantSettingsDto>(await ApiRoot.RequireAsync("tenantSettings"));
             _tenantLinks = Links.RelMap(_tenant?.Links);
+            await LoadRepositoryOptionsAsync();
             if (_ocrCatalog.Count == 0)
             {
                 _ocrCatalog = (await Http.GetFromJsonAsync<OcrCatalogResponse>(await ApiRoot.RequireAsync("ocrLanguages")))?.Languages ?? [];
@@ -495,8 +511,25 @@
     private void SyncTenantEditFromTenant()
     {
         if (_tenant is null) return;
-        _tenantEdit = new TenantSettingsEdit { Name = _tenant.Name, AuditRetentionDays = _tenant.AuditRetentionDays, CheckoutTtlDays = _tenant.CheckoutTtlDays, CheckoutWarningDays = _tenant.CheckoutWarningDays, WormLockMode = _tenant.WormLockMode, RequireMfa = _tenant.RequireMfa, AllowPasskeyLogin = _tenant.AllowPasskeyLogin, RequireDispositionReview = _tenant.RequireDispositionReview, RestrictTagsToCatalog = _tenant.RestrictTagsToCatalog, EnforceClearance = _tenant.EnforceClearance, ImapShowAllDocumentsDefault = _tenant.ImapShowAllDocumentsDefault, AllowExternalLinks = _tenant.AllowExternalLinks, ShowExternalLinkUrl = _tenant.ShowExternalLinkUrl, ExternalLinkMaxDays = _tenant.ExternalLinkMaxDays, ExternalLinkDefaultAccesses = _tenant.ExternalLinkDefaultAccesses, StorageQuotaMb = _tenant.StorageQuotaBytes is { } b ? (int)(b / (1024 * 1024)) : null, IncompleteUploadCleanupDays = _tenant.IncompleteUploadCleanupDays, AuditWebhookUrl = _tenant.AuditWebhookUrl, AuditWebhookSecret = null, SmtpHost = _tenant.SmtpHost, SmtpPort = _tenant.SmtpPort == 0 ? 587 : _tenant.SmtpPort, SmtpUseStartTls = _tenant.SmtpUseStartTls, SmtpUser = _tenant.SmtpUser, SmtpPassword = null, SmtpFromAddress = _tenant.SmtpFromAddress, SmtpFromName = _tenant.SmtpFromName };
+        _tenantEdit = new TenantSettingsEdit { Name = _tenant.Name, AuditRetentionDays = _tenant.AuditRetentionDays, CheckoutTtlDays = _tenant.CheckoutTtlDays, CheckoutWarningDays = _tenant.CheckoutWarningDays, WormLockMode = _tenant.WormLockMode, RequireMfa = _tenant.RequireMfa, AllowPasskeyLogin = _tenant.AllowPasskeyLogin, RequireDispositionReview = _tenant.RequireDispositionReview, RestrictTagsToCatalog = _tenant.RestrictTagsToCatalog, EnforceClearance = _tenant.EnforceClearance, ImapShowAllDocumentsDefault = _tenant.ImapShowAllDocumentsDefault, AllowExternalLinks = _tenant.AllowExternalLinks, ShowExternalLinkUrl = _tenant.ShowExternalLinkUrl, ExternalLinkMaxDays = _tenant.ExternalLinkMaxDays, ExternalLinkDefaultAccesses = _tenant.ExternalLinkDefaultAccesses, StorageQuotaMb = _tenant.StorageQuotaBytes is { } b ? (int)(b / (1024 * 1024)) : null, IncompleteUploadCleanupDays = _tenant.IncompleteUploadCleanupDays, AuditWebhookUrl = _tenant.AuditWebhookUrl, AuditWebhookSecret = null, SmtpHost = _tenant.SmtpHost, SmtpPort = _tenant.SmtpPort == 0 ? 587 : _tenant.SmtpPort, SmtpUseStartTls = _tenant.SmtpUseStartTls, SmtpUser = _tenant.SmtpUser, SmtpPassword = null, SmtpFromAddress = _tenant.SmtpFromAddress, SmtpFromName = _tenant.SmtpFromName, StandardRepositoryId = _tenant.StandardRepositoryId };
         _tenantEditOcr = new HashSet<string>(_tenant.DefaultOcrLanguages.Split('+', StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    // The shared repositories the standard one is chosen from (ADR 0892) — the same listing the tree's roots come from.
+    private List<RepositorySummary> _repositoryOptions = [];
+
+    private async Task LoadRepositoryOptionsAsync()
+    {
+        var options = new List<RepositorySummary>();
+        var url = await ApiRoot.RequireAsync("repositories");
+        while (url is not null)
+        {
+            var page = await Http.GetFromJsonAsync<RepositoryListResponse>(url);
+            options.AddRange(page?.Repositories ?? []);
+            url = Links.Href(page?.Links, "next");
+        }
+
+        _repositoryOptions = options;
     }
 
     // One save per group (#530 tranche 10): PUT exactly the group's fields to the rel the server advertised.
@@ -507,6 +540,7 @@
         object body = group switch
         {
             "general" => new { name = _tenantEdit.Name },
+            "standard-repository" => new { standardRepositoryId = _tenantEdit.StandardRepositoryId },
             "capture" => new
             {
                 // Preserve the catalog order for the "+"-joined default (a stable priority).
@@ -545,7 +579,23 @@
 
         var resp = await Http.PutAsJsonAsync(href, body);
         if (resp.StatusCode == System.Net.HttpStatusCode.Conflict) { Snackbar.Add(Strings.Get("StTenantNameTaken"), Severity.Warning); return; }
-        if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest) { Snackbar.Add(Strings.Get("StTenantCheckFields"), Severity.Warning); return; }
+        if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest)
+        {
+            // The refusal's own code, localized, where it names one — the standard-repository refusal says what
+            // qualifies; anything else keeps the general hint.
+            string? code = null;
+            try
+            {
+                var problem = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                code = problem.TryGetProperty("errorCode", out var c) ? c.GetString() : null;
+            }
+            catch (System.Text.Json.JsonException)
+            {
+            }
+
+            Snackbar.Add(code == "STANDARD_REPOSITORY_INVALID" ? SimplArchive.Localization.ApiErrorText.For(code) : Strings.Get("StTenantCheckFields"), Severity.Warning);
+            return;
+        }
         if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("StErrSaveSettings"), Severity.Error); return; }
         _tenant = await resp.Content.ReadFromJsonAsync<TenantSettingsDto>();
         _tenantLinks = Links.RelMap(_tenant?.Links);
@@ -715,6 +765,9 @@
 
     private record TenantSettingsDto
     {
+        // Where SimplArchive files what it brings — the manuals folder first (ADR 0892).
+        public Guid? StandardRepositoryId { get; set; }
+
         // The settings resource advertises its maintenance actions plus one settings-<group> rel per
         // editable group (issue #416 / #530 tranche 10).
         public List<LinkResponse> Links { get; set; } = [];
@@ -773,6 +826,7 @@
     private class TenantSettingsEdit
     {
         public string Name { get; set; } = string.Empty;
+        public Guid? StandardRepositoryId { get; set; }
         // External links (ADR 0546).
         public bool ImapShowAllDocumentsDefault { get; set; }
         public bool AllowExternalLinks { get; set; }

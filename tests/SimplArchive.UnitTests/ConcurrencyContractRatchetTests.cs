@@ -164,6 +164,10 @@ public partial class ConcurrencyContractRatchetTests
         ["AclEntriesController.cs:Group"] =
             "Reads only: projects a group's Name onto an ACL row and walks ParentGroupId to find the "
             + "tenant-admin groups. The grants it writes are AclEntry rows, not group edits.",
+        ["TenantSettingsController.cs:Document"] =
+            "Reads only: the standard-repository PUT (ADR 0892) checks that the chosen document is a live shared "
+            + "root. The manuals folder it moves is moved by StandardRepositoryChange, inside the TENANT's verb "
+            + "contract — the action's precondition is the tenant's tag, which is what the administrator saw.",
         ["TenantSettingsController.cs:User"] =
             "Reads only: the outbound-mail test delivery (#1337) reads the CALLER's own row for an address to "
             + "send to — a test message goes to whoever asked for it, so there is an honest recipient and "

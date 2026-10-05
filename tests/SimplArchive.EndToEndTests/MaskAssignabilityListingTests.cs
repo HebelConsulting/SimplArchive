@@ -82,12 +82,15 @@ public class MaskAssignabilityListingTests
         // fields from the verified claims at activation). Asserted as the whole SET rather than as "contains",
         // because the bug being guarded is one of over-offering — a test that only checks what is present
         // cannot see it.
-        Assert.Equal(["Basic Entry", "Certificate", "License"], assignable);
+        //
+        // Manual joined with ADR 0891: SimplArchive files its own manuals wearing it, and a person keeps a third-party
+        // product's manual the same way — wherever they file it, which is why its folder's exclusivity is one-way.
+        Assert.Equal(["Basic Entry", "Certificate", "License", "Manual"], assignable);
 
         // And the ones that must never be offered, named individually so a regression says which.
         // Meeting room types a folder; the Booking mask is placement-constrained to rooms AND created by the
         // booking flow, never a picker (ADR 0735) — both would be over-offering, the bug this test exists for.
-        foreach (var refused in new[] { "Addressbook", "Calendar", "Notebook", "Section", "Mailbox", "Contact", "Appointment", "eMail", "Note", "Folder", "Meeting room", "Booking" })
+        foreach (var refused in new[] { "Addressbook", "Calendar", "Notebook", "Section", "Mailbox", "Contact", "Appointment", "eMail", "Note", "Folder", "Meeting room", "Booking", "SimplArchive Documentation" })
         {
             Assert.False(
                 masks[refused].GetProperty("isFreelyAssignable").GetBoolean(),

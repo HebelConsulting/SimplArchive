@@ -38,6 +38,19 @@
                     </StackPanel>
                     <TextBox Text="{Binding TenantName}" IsEnabled="{Binding IsEditingTenantGeneral}" />
 
+                    <!-- ==== Standard repository (ADR 0892) ========================================
+                         Where SimplArchive files what it brings — its manuals first. Saving moves the
+                         "SimplArchive Manuals" folder with it, in the same transaction. -->
+                    <v:TenantGroupHeader Title="{loc:Tr TenantGroupStandardRepository}" Group="standard-repository"
+                                         IsEditing="{Binding IsEditingTenantStandardRepository}" />
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="{loc:Tr TenantStandardRepositoryLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                        <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                ToolTip.Tip="{loc:Tr TenantStandardRepositoryInfo}" />
+                    </StackPanel>
+                    <ComboBox ItemsSource="{Binding TenantRepositoryOptions}" SelectedItem="{Binding TenantStandardRepository}"
+                              IsEnabled="{Binding IsEditingTenantStandardRepository}" MinWidth="280" HorizontalAlignment="Left" />
+
                     <!-- ==== Documents & capture ================================================== -->
                     <v:TenantGroupHeader Title="{loc:Tr TenantGroupCapture}" Group="capture"
                                          IsEditing="{Binding IsEditingTenantCapture}" />

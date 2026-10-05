@@ -87,6 +87,10 @@ public sealed class EditField
 
     public string Label { get; init; } = string.Empty;
 
+    /// <summary>What a person reads beside the editor — <see cref="Label"/> with a well-known name translated (ADR 0891).
+    /// <see cref="Label"/> stays the stored name, because proposals are keyed on it.</summary>
+    public string DisplayLabel { get; init; } = string.Empty;
+
     public string DataType { get; init; } = "Text";
 
     public bool Required { get; init; }
@@ -144,6 +148,7 @@ public sealed class EditField
         {
             FieldDefinitionId = f.Id,
             Label = f.IsRequired ? $"{f.Name} *" : f.Name,
+            DisplayLabel = f.IsRequired ? $"{SimplArchive.Localization.WellKnownLabels.For(f.Name)} *" : SimplArchive.Localization.WellKnownLabels.For(f.Name),
             DataType = f.DataType,
             Required = f.IsRequired,
             IsList = f.IsList,

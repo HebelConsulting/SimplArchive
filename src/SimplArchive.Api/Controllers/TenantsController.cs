@@ -125,6 +125,13 @@ public class TenantsController : ControllerBase
             administratorPassword: null,
             cancellationToken);
 
+        // SimplArchive's own manual, filed into the new tenant's standard repository at its founding (ADR 0891) — after
+        // the provisioning commit, in a scope of its own whose tenant is the new one. A refusal is logged, never thrown.
+        await SimplArchive.Api.Manuals.ManualStartupFiling.FileForTenantAsync(
+            HttpContext.RequestServices, provisioned.TenantId, [],
+            HttpContext.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("SimplArchive.Api.Manuals.ManualFiler"),
+            cancellationToken);
+
         var resource = new CreateTenantResource
         {
             Id = provisioned.TenantId,

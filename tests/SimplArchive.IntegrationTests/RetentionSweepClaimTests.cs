@@ -191,6 +191,55 @@ public class RetentionSweepClaimTests
         Assert.Contains(recorded, new[] { first.Id, second.Id });
     }
 
+    // The disposal claim bypasses SaveChanges, where the standard-repository invariant lives (ADR 0892) — so the claim
+    // itself has to exclude it. An expired root that IS the standard repository stays; an expired one that is not, goes.
+    [Fact]
+    public async Task The_sweep_never_disposes_the_standard_repository()
+    {
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var tenantAccessor = new CurrentTenantAccessor();
+        using (var setup = CreateContext(connection, tenantAccessor)) await setup.Database.EnsureCreatedAsync();
+
+        var tenant = new Tenant { Id = Guid.NewGuid(), Name = "Acme", CreatedAt = DateTimeOffset.UtcNow };
+        var user = new User { Id = Guid.NewGuid(), TenantId = tenant.Id, Email = "u@acme.test", DisplayName = "U", CreatedAt = DateTimeOffset.UtcNow };
+        var mask = new Mask { Id = Guid.NewGuid(), TenantId = tenant.Id, CreatedAt = DateTimeOffset.UtcNow };
+        var maskVersion = new MaskVersion
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant.Id,
+            MaskId = mask.Id,
+            Name = "Retained",
+            RetentionYears = 5,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+        var old = DateTimeOffset.UtcNow.AddYears(-10);
+        var standard = Doc(tenant.Id, user.Id, maskVersion.Id, "standard", old);
+        var other = Doc(tenant.Id, user.Id, maskVersion.Id, "other", old);
+        tenant.StandardRepositoryId = standard.Id;
+
+        using (var seed = CreateContext(connection, tenantAccessor))
+        {
+            seed.Tenants.Add(tenant);
+            seed.Users.Add(user);
+            seed.Masks.Add(mask);
+            seed.MaskVersions.Add(maskVersion);
+            seed.Documents.AddRange(standard, other);
+            await seed.SaveChangesAsync();
+        }
+
+        using (var act = CreateContext(connection, tenantAccessor))
+        {
+            var service = new RetentionService(act, tenantAccessor, new LegalHoldService(act), new NoOpIndexQueue(), new CountingAuditRecorder());
+            Assert.Equal(1, await service.SweepAsync());
+        }
+
+        using var read = CreateContext(connection, tenantAccessor);
+        var deleted = await read.Documents.IgnoreQueryFilters().Where(d => d.DeletedAt != null).Select(d => d.Id).ToListAsync();
+        Assert.Equal([other.Id], deleted);
+    }
+
     [Fact]
     public async Task Disposing_moves_the_concurrency_token_so_a_stale_editor_is_still_refused()
     {

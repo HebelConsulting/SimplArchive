@@ -306,6 +306,23 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             new FieldSpec("Revoked on", FieldDataType.DateTime, IsRequired: false),
         ], cancellationToken);
 
+        // The manuals folder and what it holds (ADR 0891). The folder mask is fieldless and CORE-OWNED — the core
+        // finds the tenant's "SimplArchive Manuals" folder by it, never by name. The Manual mask is a document any
+        // person may also use for a third-party product's manual, so every field is optional; for SimplArchive's
+        // own manuals the core fills the first four.
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.Documentation, "SimplArchive Documentation", [], cancellationToken);
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.Manual, "Manual",
+        [
+            new FieldSpec(WellKnownMaskIds.ManualFields.Brand, FieldDataType.Text, IsRequired: false),
+            new FieldSpec(WellKnownMaskIds.ManualFields.ProductName, FieldDataType.Text, IsRequired: false),
+            new FieldSpec(WellKnownMaskIds.ManualFields.ArticleNumber, FieldDataType.Text, IsRequired: false),
+            new FieldSpec(WellKnownMaskIds.ManualFields.ProductVersion, FieldDataType.Text, IsRequired: false),
+            new FieldSpec(WellKnownMaskIds.ManualFields.SerialNumbers, FieldDataType.Text, IsRequired: false, IsList: true),
+            new FieldSpec(WellKnownMaskIds.ManualFields.DateOfPurchase, FieldDataType.Date, IsRequired: false),
+            new FieldSpec(WellKnownMaskIds.ManualFields.WarrantyExpiry, FieldDataType.Date, IsRequired: false),
+            new FieldSpec(WellKnownMaskIds.ManualFields.ExpectedDurationOfUse, FieldDataType.Number, IsRequired: false),
+        ], cancellationToken);
+
         // After every mask exists, because containment is a relation BETWEEN masks: a Notebook's allowed parent
         // is the Mailbox, which is seeded eight lines below it, so doing this per-mask inside the loop above
         // would write a foreign key to a row that does not exist yet.

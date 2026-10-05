@@ -303,12 +303,23 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
         modelBuilder.Entity<TEntity>().HasQueryFilter("SoftDeleteFilter", (TEntity e) => e.DeletedAt == null);
     }
 
+    // The documents the core's own filing path may give a core-owned mask in this unit of work (ADR 0891) — see
+    // CoreOwnedDocumentInvariants for why a grant names a document rather than switching the rule off.
+    private readonly HashSet<Guid> _coreOwnedMaskGrants = [];
+
+    /// <summary>Allows <paramref name="documentId"/> to be given a core-owned mask (ADR 0891). Only the core's manual
+    /// filing calls this; every other path that assigns such a mask is refused by SaveChanges.</summary>
+    public void PermitCoreOwnedMask(Guid documentId) => _coreOwnedMaskGrants.Add(documentId);
+
+    internal bool IsCoreOwnedMaskPermitted(Guid documentId) => _coreOwnedMaskGrants.Contains(documentId);
+
     public override int SaveChanges()
     {
         GroupInvariants.ValidateAsync(this, CancellationToken.None).GetAwaiter().GetResult();
         PersonalRootName.FollowDisplayNameAsync(this, CancellationToken.None).GetAwaiter().GetResult();
         ProvisionBookableCollectionsAsync(CancellationToken.None).GetAwaiter().GetResult();
         ValidateDocumentsAsync(CancellationToken.None).GetAwaiter().GetResult();
+        CoreOwnedDocumentInvariants.EnforceStandardRepositoryAsync(this, CancellationToken.None).GetAwaiter().GetResult();
         SingleVersionMaskRule.ValidateAsync(this, CancellationToken.None).GetAwaiter().GetResult();
         ValidateFieldValuesAsync(CancellationToken.None).GetAwaiter().GetResult();
         ValidateRequiredFieldsAsync(CancellationToken.None).GetAwaiter().GetResult();
@@ -336,6 +347,7 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
         // write — sibling names, containment, cycles (#1097).
         await ProvisionBookableCollectionsAsync(cancellationToken);
         await ValidateDocumentsAsync(cancellationToken);
+        await CoreOwnedDocumentInvariants.EnforceStandardRepositoryAsync(this, cancellationToken);
         await SingleVersionMaskRule.ValidateAsync(this, cancellationToken);
         await ValidateFieldValuesAsync(cancellationToken);
         await ValidateRequiredFieldsAsync(cancellationToken);

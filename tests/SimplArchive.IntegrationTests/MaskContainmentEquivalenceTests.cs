@@ -143,7 +143,8 @@ public class MaskContainmentEquivalenceTests
         // room's calendar became the Schedule mask, admitted through the two-directional table.)
 
         if (!alsoTakesPlainFolders
-            && WellKnownMaskIds.TypedFolderRules.FirstOrDefault(r => r.FolderMaskId == parentMaskId) is { } parentRule
+            // Both exclusive tables: the one-way one (ADR 0891, the manuals folder) is exclusive the same way.
+            && WellKnownMaskIds.AllExclusiveFolderRules.FirstOrDefault(r => r.FolderMaskId == parentMaskId) is { } parentRule
             && !parentRule.Admits.Any(a => a.MaskId == childMaskId))
         {
             return false;

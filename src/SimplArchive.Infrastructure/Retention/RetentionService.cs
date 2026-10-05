@@ -183,7 +183,10 @@ public sealed class RetentionService : IRetentionService
             // in the recycle bin, instead of being told to reload. Disposal is a change the reader cares about, so
             // it invalidates their tag exactly as it did before.
             var claimed = await _dbContext.Documents
-                .Where(d => d.Id == candidate.Id && d.DeletedAt == null)
+                // …and never the tenant's standard repository (ADR 0892): this claim bypasses SaveChanges, where that
+                // invariant lives, so it has to be stated here as part of the compare-and-swap.
+                .Where(d => d.Id == candidate.Id && d.DeletedAt == null
+                    && !_dbContext.Tenants.Any(t => t.StandardRepositoryId == d.Id))
                 .ExecuteUpdateAsync(
                     set => set
                         .SetProperty(d => d.DeletedAt, DateTimeOffset.UtcNow)

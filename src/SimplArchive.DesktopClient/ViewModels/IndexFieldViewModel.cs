@@ -9,6 +9,9 @@ public sealed partial class IndexFieldViewModel
 {
     public required string FieldName { get; init; }
 
+    /// <summary>The field's name as a person reads it — a well-known one translated (ADR 0891).</summary>
+    public string DisplayName => SimplArchive.Localization.WellKnownLabels.For(FieldName);
+
     public required string Values { get; init; }
 
     /// <summary>A Url-typed field renders its values as LINKS that open the OS browser (ADR 0763) — the

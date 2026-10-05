@@ -137,8 +137,9 @@ public class WellKnownMaskFieldHealTests
             // 24 → 25 with Certificate (ADR 0844) — core-owned and GENERIC, so a module that enrols
             // certificates wears it rather than declaring its own and leaving a tenant holding one
             // "Certificate" mask per vendor. Core seeds it and does not yet write to it.
+            // 25 → 27 with SimplArchive Documentation + Manual (ADR 0891) — the manuals folder and what it holds.
             var maskCount = await db.Masks.IgnoreQueryFilters().CountAsync(m => m.TenantId == _tenantId);
-            Assert.Equal(25, maskCount); // + Certificate (ADR 0844)
+            Assert.Equal(27, maskCount); // + SimplArchive Documentation, Manual (ADR 0891)
             Assert.Equal(maskCount, await db.MaskVersions.IgnoreQueryFilters().CountAsync(v => v.TenantId == _tenantId));
         }
     }

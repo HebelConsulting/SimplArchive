@@ -146,6 +146,17 @@ public interface IIndustryModule
     PerUserEnrolment? PerUserCertificateEnrolment => null;
 
     /// <summary>
+    /// The manual this module ships in its package, which the core files into the archive (ABI 1.5, core ADR 0891).
+    /// </summary>
+    /// <remarks>
+    /// Null — the default — means the module ships none and nothing changes. A module that declares one gets a
+    /// core-owned setting on its form, <i>where the manual is filed</i>; once an administrator sets it, the core
+    /// files the manual there and adds a new version whenever the package carries different bytes. A
+    /// DEFAULT-IMPLEMENTED property, so a module built against 1.4 or earlier compiles and runs unchanged.
+    /// </remarks>
+    ModuleManual? Manual => null;
+
+    /// <summary>
     /// The external hosts this module's <see cref="IModuleHttpClient"/> may reach (ABI 0.6) — the allowlist
     /// the core's SSRF policy (ADR 0717) enforces on every request the module makes. A host not named here
     /// is refused before any request leaves the process, so a module's network egress is declared up front

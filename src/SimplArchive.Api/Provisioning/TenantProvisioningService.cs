@@ -242,6 +242,10 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
 
         _dbContext.Documents.Add(repository);
 
+        // The repository provisioning creates is the tenant's standard one (ADR 0892) — where the installation files
+        // what it brings, the manuals folder first among them.
+        tenant.StandardRepositoryId = repository.Id;
+
         _dbContext.AclEntries.Add(new AclEntry
         {
             Id = Guid.NewGuid(),

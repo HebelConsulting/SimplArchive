@@ -485,6 +485,13 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
             throw new ApiActionException("This item changed since you loaded it — refresh and try again.");
         }
 
+        // A refusal with a reason — the standard repository, a personal space's standing folder, a legal hold —
+        // is shown in the user's language rather than as a failed request (ADR 0892).
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ApiActionException(SimplArchive.Localization.ApiErrorText.For(await ApiCore.ErrorCodeAsync(response, cancellationToken)));
+        }
+
         response.EnsureSuccessStatusCode();
     }
 

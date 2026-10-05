@@ -10,7 +10,10 @@ namespace SimplArchive.DesktopClient.ViewModels;
 // no server — every real, selectable mask has it.
 public sealed record MaskChoiceViewModel(Guid? MaskId, string Name, SimplArchive.DesktopClient.Services.MasksClient.MaskOptionInfo? Mask = null)
 {
-    public override string ToString() => Name;
+    public override string ToString() => DisplayName;
+
+    /// <summary>The name as a person reads it — a well-known one translated (ADR 0891); <see cref="Name"/> stays stored.</summary>
+    public string DisplayName => SimplArchive.Localization.WellKnownLabels.For(Name);
 }
 
 // One editable index field in the mask edit mode — renders a type-aware editor bound to the field's DataType
@@ -84,6 +87,12 @@ public sealed partial class MaskFieldEditViewModel : ObservableObject
     public bool IsMultiLine => !Locked && (IsList || DataType == "MultiSelect");
     public bool IsSingleLine => Locked || (!IsDate && !IsDateTime && !IsBoolean && !IsMultiLine);
     public string Label => IsRequired ? $"{Name} *" : Name;
+
+    /// <summary>What a person reads beside the editor — a well-known field name translated (ADR 0891). <see cref="Label"/>
+    /// stays the stored name, because proposals are keyed on it.</summary>
+    public string DisplayLabel => IsRequired
+        ? $"{SimplArchive.Localization.WellKnownLabels.For(Name)} *"
+        : SimplArchive.Localization.WellKnownLabels.For(Name);
 
     // ---- Machine proposals (ABI 0.11, ADR 0769) --------------------------------------------------------
     // A picker beside this field's editor, offered when a machine proposal fills it. Typing stays primary

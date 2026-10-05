@@ -27,6 +27,7 @@ public static class DocumentMaskInvariants
 
         await EnforceStructuralMaskImmutableAsync(dbContext, document, maskId, cancellationToken);
         await EnforceRepositoryLockstepAsync(dbContext, document, maskId, cancellationToken);
+        await CoreOwnedDocumentInvariants.EnforceCoreOwnedMaskAsync(dbContext, document, maskId, cancellationToken);
     }
 
     /// <summary>

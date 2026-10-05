@@ -482,7 +482,27 @@ public sealed class RepositoryImporter
                 entity.BreaksInheritance = doc.BreaksInheritance;
             }
 
-            entity.MaskVersionId = doc.MaskVersionId is { } mv && maskVersionMap.TryGetValue(mv, out var mapped) ? mapped : Guid.Empty;
+            // A CORE-OWNED mask (the manuals folder's, ADR 0891) is not the archive's to give: only the core assigns
+            // it, and there is one such folder per tenant. An imported copy of a manuals folder therefore arrives as an
+            // ordinary folder (Guid.Empty takes the default) — and a document that already wears it, matched by origin
+            // on an updating import, keeps it untouched rather than being refused for "removing" it.
+            if (MaskIdOf(doc) is { } archivedMaskId && WellKnownMaskIds.CoreOwnedMasks.Contains(archivedMaskId))
+            {
+                // Kept ONLY on a document that already existed here and already wears it. A document this import
+                // created is new however it was stamped on the way in — an earlier phase may have given it the archived
+                // mask — and a new one gaining a core-owned mask is exactly what SaveChanges refuses.
+                var alreadyWore = _dbContext.Entry(entity).State != EntityState.Added
+                    && await _dbContext.MaskVersions.AnyAsync(v => v.Id == entity.MaskVersionId && v.MaskId == archivedMaskId, cancellationToken);
+                if (!alreadyWore)
+                {
+                    entity.MaskVersionId = Guid.Empty;
+                }
+            }
+            else
+            {
+                entity.MaskVersionId = doc.MaskVersionId is { } mv && maskVersionMap.TryGetValue(mv, out var mapped) ? mapped : Guid.Empty;
+            }
+
             // The document's sensitivity label (ADR "Classification in export/import") resolves by name against the
             // merged catalog; null (unlabelled) or an unknown label clears it.
             entity.SensitivityLabelId = doc.SensitivityLabel is { } sl && labelMap.TryGetValue(sl, out var labelId) ? labelId : null;

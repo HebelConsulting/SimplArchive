@@ -5286,4 +5286,52 @@
   <data name="StTestMailFailed" xml:space="preserve">
     <value>The test message could not be sent: {0}</value>
   </data>
+  <data name="TenantGroupStandardRepository" xml:space="preserve">
+    <value>Standard repository</value>
+  </data>
+  <data name="TenantStandardRepositoryLabel" xml:space="preserve">
+    <value>Repository</value>
+  </data>
+  <data name="TenantStandardRepositoryInfo" xml:space="preserve">
+    <value>Where SimplArchive files what it brings — its manuals, in the 'SimplArchive Manuals' folder. Choosing another repository moves that folder with it. The standard repository cannot be deleted.</value>
+  </data>
+  <data name="ApiErrStandardRepositoryCannotBeDeleted" xml:space="preserve">
+    <value>This is the tenant's standard repository and cannot be deleted. Make another repository the standard one in the tenant settings first.</value>
+  </data>
+  <data name="ApiErrStandardRepositoryInvalid" xml:space="preserve">
+    <value>The standard repository must be one of this tenant's shared repositories — not a personal space and not in the recycle bin.</value>
+  </data>
+  <data name="ApiErrCoreOwnedMask" xml:space="preserve">
+    <value>Only SimplArchive itself assigns the 'SimplArchive Documentation' type, to the one folder it files its manuals into. Use an ordinary folder.</value>
+  </data>
+  <data name="WkMaskDocumentation" xml:space="preserve">
+    <value>SimplArchive Documentation</value>
+  </data>
+  <data name="WkMaskManual" xml:space="preserve">
+    <value>Manual</value>
+  </data>
+  <data name="WkFieldBrand" xml:space="preserve">
+    <value>Brand</value>
+  </data>
+  <data name="WkFieldProductName" xml:space="preserve">
+    <value>Product name</value>
+  </data>
+  <data name="WkFieldArticleNumber" xml:space="preserve">
+    <value>Article number</value>
+  </data>
+  <data name="WkFieldProductVersion" xml:space="preserve">
+    <value>Product version</value>
+  </data>
+  <data name="WkFieldSerialNumbers" xml:space="preserve">
+    <value>Serial numbers</value>
+  </data>
+  <data name="WkFieldDateOfPurchase" xml:space="preserve">
+    <value>Date of purchase</value>
+  </data>
+  <data name="WkFieldWarrantyExpiry" xml:space="preserve">
+    <value>Warranty expiry</value>
+  </data>
+  <data name="WkFieldExpectedDurationOfUse" xml:space="preserve">
+    <value>Expected duration of use (years)</value>
+  </data>
 </root>
