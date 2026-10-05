@@ -451,24 +451,45 @@ public static partial class WebCapture
     // click timed out. Hence the fallback to the dialog's own close control, and hence this throws rather than
     // logging on failure — a capture that continues past an undismissed modal cannot do anything but fail
     // sixty seconds later, somewhere that looks unrelated.
-    /// <summary>A throwaway certificate to paste into the recipient field, so the figure shows a real subject.</summary>
+    /// <summary>A FIXED certificate to paste into the recipient field, so the figure shows a real subject (#1588).</summary>
     /// <remarks>
-    /// Generated rather than committed as a fixture: a certificate on disk expires, and an expired one is
-    /// REFUSED by the same validation the figure is meant to illustrate — so the capture would start failing on a
-    /// date nobody chose. The name is stable so the wait above can key on it.
+    /// <para>
+    /// Pinned, not generated. This used to mint a fresh self-signed certificate per capture, and a certificate's
+    /// serial and thumbprint are random by construction — so <c>web-external-link-certificate.png</c> changed on
+    /// every manual regeneration, a permanent churn that trains the release runbook's "look at every figure that
+    /// moved" check into a formality. Masking the region was rejected: the PEM and the thumbprint are what the
+    /// figure is FOR.
+    /// </para>
+    /// <para>
+    /// The reason it was generated was wrong. Its comment said a committed certificate would expire and then be
+    /// REFUSED by the validation the figure illustrates — but <c>RecipientCertificate.Validate</c> deliberately does
+    /// not check expiry. This one is valid until 2126 anyway, so nothing about it ever changes. PUBLIC material
+    /// only: it was minted once with <c>openssl req -x509 … -set_serial 0x1588 -days 36500</c> and its private key
+    /// was discarded, so it encrypts to nobody who could decrypt.
+    /// </para>
     /// </remarks>
-    private static string SampleRecipientCertificatePem()
-    {
-        using var key = System.Security.Cryptography.RSA.Create(2048);
-        var request = new System.Security.Cryptography.X509Certificates.CertificateRequest(
-            "CN=Auditor (external), O=Example Audit", key,
-            System.Security.Cryptography.HashAlgorithmName.SHA256,
-            System.Security.Cryptography.RSASignaturePadding.Pkcs1);
-        using var certificate = request.CreateSelfSigned(
-            DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(2));
-
-        return new string(System.Security.Cryptography.PemEncoding.Write("CERTIFICATE", certificate.RawData));
-    }
+    private static string SampleRecipientCertificatePem() =>
+        """
+        -----BEGIN CERTIFICATE-----
+        MIIDGjCCAgKgAwIBAgICFYgwDQYJKoZIhvcNAQELBQAwNTEbMBkGA1UEAwwSQXVk
+        aXRvciAoZXh0ZXJuYWwpMRYwFAYDVQQKDA1FeGFtcGxlIEF1ZGl0MCAXDTI2MTAw
+        NTEyMjQ1NVoYDzIxMjYwOTExMTIyNDU1WjA1MRswGQYDVQQDDBJBdWRpdG9yIChl
+        eHRlcm5hbCkxFjAUBgNVBAoMDUV4YW1wbGUgQXVkaXQwggEiMA0GCSqGSIb3DQEB
+        AQUAA4IBDwAwggEKAoIBAQCnmDx2IpmHb7/ab7Gf6xlLNW7yKUoIeA3P3Wj0o3P/
+        2LQLzy1AthlPpFyo6MR1hDOsvvqc99fuZpkT0T/cIR84LoO3eQPo9xceeypyOTFD
+        XrVYJul3P6jUXDNK4Xcq/eYy+Q6IBasT6XCAipCXSJMw38bOvS67+MZqKdzK+AaI
+        y7eYAf39gfHbFKzEPtKSDaVGK9DhbdXIp32JpL3rMqlTPzHTQQbVyJv8Xb+aP1AQ
+        enDR7JiyNQOs9mHoE29auDI84oyh34JjUfFg3mfzq7SjhaAJ3L9NgKrx+qd2tMWG
+        Pedm9nuYnYFPAFDOoivUHFI2GiDIq/8cFOpzknKolht/AgMBAAGjMjAwMB0GA1Ud
+        DgQWBBT8BoWu3gFxPR3YxMtP5s2ZBzqoljAPBgNVHRMBAf8EBTADAQH/MA0GCSqG
+        SIb3DQEBCwUAA4IBAQAq4k7ttYgQ2Yz8l061POGSLa38QV7r7Pd+GVvJDyAYkSu1
+        p6vWcZtAKkPm/g6X/97+SExKc6H56JrDgUPNsaVqx6oBYoKYrOyd0aNaEDGPg8/q
+        3utnkLgox9JOOsu2zbOcloiw4CPAezVJOk0zxMRBCAJEOBRW6PQ4AFBw8al+KyG5
+        InEHjymLXgzKpIF2U3aolcm0okjRvvNUKZKfituKInCcJTeBmQKP44asSd0d6t2b
+        8wmzaSbfOH8Lpkjz/TnDqPePekyITNYtmB4lypfwHshJmQtuets2hs8a5LrLx0h3
+        b3z80yLsLikJdpXxSDJDJw5sTbOWWHX5PHSgSEzr
+        -----END CERTIFICATE-----
+        """;
 
     private static async Task DismissAnyDialogAsync(IPage page)
     {
