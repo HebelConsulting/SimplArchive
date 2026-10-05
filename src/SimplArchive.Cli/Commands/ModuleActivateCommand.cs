@@ -89,9 +89,14 @@ public sealed class ModuleActivateCommand(IAnsiConsole console) : AsyncCommand<M
             throw new CliException(Describe.NothingToActivate(claims, targets));
         }
 
-        var documentId = await LicenceFiling.FileAsync(
+        var (documentId, outcome) = await LicenceFiling.FileAsync(
             api, hypermedia, parentId, settings.Name ?? Describe.DefaultName(claims), bytes, cancellationToken);
-        console.MarkupLine($"Filed the licence as document [blue]{documentId:D}[/].");
+        console.MarkupLine(outcome switch
+        {
+            LicenceFiling.Outcome.Filed => $"Filed the licence as document [blue]{documentId:D}[/].",
+            LicenceFiling.Outcome.NewVersion => $"Filed the licence as a new version of document [blue]{documentId:D}[/].",
+            _ => $"[blue]Unchanged[/] — document {documentId:D} already holds this licence.",
+        });
 
         foreach (var (moduleId, licenceHref) in targets.Activatable)
         {

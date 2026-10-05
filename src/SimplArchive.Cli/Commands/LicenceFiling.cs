@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using SimplArchive.Cli.Infrastructure;
 
@@ -11,9 +12,41 @@ namespace SimplArchive.Cli.Commands;
 /// THREE acts — ask for a version, put the bytes straight into object storage, then confirm the version.
 /// Keeping that out of the command leaves the command readable as what it does rather than how.
 /// </remarks>
-internal static class LicenceFiling
+public static class LicenceFiling
 {
-    internal static async Task<Guid> FileAsync(
+    /// <summary>What filing the licence did — reported to the operator, because a re-run deserves to know.</summary>
+    public enum Outcome
+    {
+        /// <summary>No document by that name existed under the parent; one was created and the licence filed.</summary>
+        Filed,
+
+        /// <summary>The document existed, and its current content differed or never arrived; filed as a new version.</summary>
+        NewVersion,
+
+        /// <summary>The document existed and already holds exactly these bytes; nothing was written.</summary>
+        Unchanged,
+    }
+
+    /// <summary>
+    /// Finds the licence document under <paramref name="parentId"/> by <paramref name="name"/>, or creates it, and
+    /// makes sure its current content is <paramref name="licence"/> (#1613).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Re-runnable, because a re-run is the recovery.</b> This used to POST the document unconditionally, and
+    /// both kiosk seeds name it with the day — so a same-day re-run answered <c>409 DOCUMENT_NAME_CONFLICT</c>, and
+    /// so did every retry after a half-finished run (the document created, its upload failed). That is the one
+    /// state a re-run exists for, and it was the one a re-run could not leave: FlightSchool#72 ended in a full
+    /// reset. The nightly wipe hid it, since it starts from nothing.
+    /// </para>
+    /// <para>
+    /// <b>An existing document is not "done".</b> A document whose upload never confirmed has no current content,
+    /// and activation refuses it — so "it exists, move on" would make the half-finished state permanent. The
+    /// current version's hash decides instead: the same bytes are left alone, anything else is filed as a new
+    /// version of the same document, which keeps the licence's history in one place.
+    /// </para>
+    /// </remarks>
+    public static async Task<(Guid DocumentId, Outcome Outcome)> FileAsync(
         SimplArchiveApi api,
         Hypermedia hypermedia,
         Guid parentId,
@@ -22,6 +55,22 @@ internal static class LicenceFiling
         CancellationToken cancellationToken)
     {
         var parent = await ResolveAsync(api, hypermedia, parentId, cancellationToken);
+        var childrenHref = Hypermedia.Href(Links(parent), "children", $"Document {parentId:D}");
+
+        if (await FindChildAsync(api, childrenHref, name, cancellationToken) is { } existingId)
+        {
+            var versionsHref = Hypermedia.Href(
+                Links(await ResolveAsync(api, hypermedia, existingId, cancellationToken)),
+                "versions", $"Document {existingId:D}");
+
+            if (await CurrentHashAsync(api, versionsHref, cancellationToken) == Convert.ToHexStringLower(SHA256.HashData(licence)))
+            {
+                return (existingId, Outcome.Unchanged);
+            }
+
+            await FileVersionAsync(api, versionsHref, licence, cancellationToken);
+            return (existingId, Outcome.NewVersion);
+        }
 
         // The capability, not a rel. `children` is advertised to anyone who may READ the collection, while
         // creating needs CanCreateSubItems — so ADR 0719 puts the narrower right on the resource as a flag,
@@ -35,7 +84,6 @@ internal static class LicenceFiling
                 + "File the licence in a repository or an ordinary folder.");
         }
 
-        var childrenHref = Hypermedia.Href(Links(parent), "children", $"Document {parentId:D}");
         var created = await api.PostAsync(childrenHref, new { name }, cancellationToken);
         var documentId = created.TryGetProperty("id", out var id) && id.TryGetGuid(out var value)
             ? value
@@ -45,12 +93,64 @@ internal static class LicenceFiling
         // does not. One extra GET on a one-shot administrative command is worth not depending on which link
         // set a create happens to return — and re-reading through the root's `document` rel is the sanctioned
         // id-to-resource turn, not a composed path.
-        var versionsHref = Links(created).TryGetValue("versions", out var advertised)
+        var createdVersionsHref = Links(created).TryGetValue("versions", out var advertised)
             ? advertised
             : Hypermedia.Href(
                 Links(await ResolveAsync(api, hypermedia, documentId, cancellationToken)),
                 "versions", $"Document {documentId:D}");
 
+        await FileVersionAsync(api, createdVersionsHref, licence, cancellationToken);
+        return (documentId, Outcome.Filed);
+    }
+
+    /// <summary>
+    /// The child of that name, or null — every page, following the listing's own <c>next</c> rel. Appending the
+    /// page size is following, not composing (ADR 0557): the server owns the path, the client the filter.
+    /// </summary>
+    private static async Task<Guid?> FindChildAsync(
+        SimplArchiveApi api, string childrenHref, string name, CancellationToken cancellationToken)
+    {
+        for (string? page = $"{childrenHref}?limit=200"; page is not null;)
+        {
+            var listing = await api.GetAsync(page, cancellationToken);
+            if (listing.TryGetProperty("children", out var rows))
+            {
+                foreach (var row in rows.EnumerateArray())
+                {
+                    if (string.Equals(row.GetProperty("name").GetString(), name, StringComparison.Ordinal))
+                    {
+                        return row.GetProperty("id").GetGuid();
+                    }
+                }
+            }
+
+            page = Links(listing).TryGetValue("next", out var next) ? next : null;
+        }
+
+        return null;
+    }
+
+    /// <summary>The hash of the newest CONFIRMED version, or null when none ever confirmed — the half-finished state.</summary>
+    private static async Task<string?> CurrentHashAsync(
+        SimplArchiveApi api, string versionsHref, CancellationToken cancellationToken)
+    {
+        var listing = await api.GetAsync(versionsHref, cancellationToken);
+        return listing.TryGetProperty("versions", out var rows)
+            ? rows.EnumerateArray()
+                .Where(v => v.GetProperty("status").GetString() == "Confirmed")
+                .OrderByDescending(v => v.TryGetProperty("versionNumber", out var n) && n.ValueKind == JsonValueKind.Number ? n.GetInt32() : 0)
+                .Select(v => v.TryGetProperty("sha256Hash", out var h) ? h.GetString() : null)
+                .FirstOrDefault()
+            : null;
+    }
+
+    /// <summary>
+    /// Content in THREE acts — the API never proxies file bytes: ask for a version, put the bytes straight into
+    /// object storage, then confirm the version.
+    /// </summary>
+    private static async Task FileVersionAsync(
+        SimplArchiveApi api, string versionsHref, byte[] licence, CancellationToken cancellationToken)
+    {
         var version = await api.PostAsync(versionsHref, new { fileExtension = ".json" }, cancellationToken);
         var versionId = version.GetProperty("id").GetGuid();
         var uploadUrl = version.GetProperty("uploadUrl").GetString()
@@ -61,17 +161,15 @@ internal static class LicenceFiling
         await SimplArchiveApi.UploadAsync(new Uri(uploadUrl), licence, cancellationToken);
 
         // Confirm by following the new version's OWN `self`, never by appending the id to the collection
-        // address — that is ADR 0557's "composing in disguise", and the first draft of this file did it. The
-        // rel is advertised as GET and the confirm is a PUT to the same address, which is ADR 0719 working
-        // as designed: one rel per resource, the METHOD says which action.
+        // address — that is ADR 0557's "composing in disguise". The rel is advertised as GET and the confirm is
+        // a PUT to the same address, which is ADR 0719 working as designed: one rel per resource, the METHOD
+        // says which action.
         //
         // Until this lands the version is Pending and the document has no current version — precisely what
         // activation then refuses as "no confirmed content version", so a failure here is worth telling
         // apart from a failed upload.
         var versionHref = Hypermedia.Href(Links(version), "self", $"The new version {versionId:D}");
         await api.PutAsync(versionHref, new { }, cancellationToken);
-
-        return documentId;
     }
 
     /// <summary>
