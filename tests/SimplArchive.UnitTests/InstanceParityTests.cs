@@ -374,7 +374,8 @@ public class InstanceParityTests
     private static bool SeedingOnly(string key) =>
         key.StartsWith("CryptoDemo__", StringComparison.Ordinal)
         || key.StartsWith("Demo__", StringComparison.Ordinal)
-        || key.StartsWith("Interop__", StringComparison.Ordinal);
+        || key.StartsWith("Interop__", StringComparison.Ordinal)
+        || key.StartsWith("FlightSchoolDemo__", StringComparison.Ordinal);
 
     private static string ServiceBlock(string text, string name)
     {

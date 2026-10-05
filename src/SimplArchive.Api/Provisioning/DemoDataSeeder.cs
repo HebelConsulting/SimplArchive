@@ -115,6 +115,11 @@ public static class DemoDataSeeder
         {
             await dbContext.SaveChangesAsync();
         }
+
+        // The Flight School repository and its unattended setup principal (FlightSchool#85). No-op unless
+        // FlightSchoolDemo:ServiceAccount:* is configured, which only the kiosk and the module's local demo do.
+        await FlightSchoolDemoSetup.AddIfConfiguredAsync(services, dbContext, configuration, provisioned.TenantId,
+            provisioned.AdministratorId, clock.GetUtcNow());
     }
 
     private static async Task SeedAsync(
