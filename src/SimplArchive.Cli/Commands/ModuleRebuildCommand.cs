@@ -40,16 +40,11 @@ public sealed class ModuleRebuildCommand(IAnsiConsole console) : AsyncCommand<Mo
     {
         using var http = CertificateEndpoint.Client(settings);
         var api = new SimplArchiveApi(http);
-        var hypermedia = new Hypermedia(api);
 
-        // root → tenant settings → modules → this module's row → its projections. Every hop a rel.
-        var tenantSettings = await hypermedia.RootHrefAsync("tenantSettings", cancellationToken);
-        var modules = Hypermedia.Href(
-            await hypermedia.LinksOfAsync(tenantSettings, cancellationToken), "modules", "The tenant settings");
-
-        var row = Row(await api.GetAsync(modules, cancellationToken), settings.Module)
-            ?? throw new CliException(
-                $"This installation has no module '{settings.Module}'. List them: saconsole module list");
+        // root → modules → this module's row → its projections. Every hop a rel, and the FIRST from the root:
+        // walking through tenant settings refused a service account holding CanManageModules with 403, the
+        // defect #1607 fixed for every other module command and this one kept.
+        var row = ModuleSurface.Row(await ModuleSurface.ListingAsync(api, cancellationToken), settings.Module);
 
         // A MISSING REL IS THE ANSWER (ADR 0543): projections are advertised only where the module is active,
         // which is the same gate the rebuild itself applies. Saying "not active" beats letting the POST 404.
@@ -84,26 +79,6 @@ public sealed class ModuleRebuildCommand(IAnsiConsole console) : AsyncCommand<Mo
         }
 
         return 0;
-    }
-
-    private static JsonElement? Row(JsonElement listing, string moduleId)
-    {
-        // `items`, as the modules listing spells it — read off the resource rather than guessed.
-        if (!listing.TryGetProperty("items", out var rows))
-        {
-            return null;
-        }
-
-        foreach (var row in rows.EnumerateArray())
-        {
-            if (row.TryGetProperty("moduleId", out var id)
-                && string.Equals(id.GetString(), moduleId, StringComparison.Ordinal))
-            {
-                return row;
-            }
-        }
-
-        return null;
     }
 
     private static IEnumerable<(string Name, string RebuildHref)> Projections(JsonElement resource)

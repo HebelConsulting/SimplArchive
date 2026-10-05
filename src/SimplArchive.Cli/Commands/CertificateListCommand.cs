@@ -81,7 +81,7 @@ public sealed class CertificateListCommand(IAnsiConsole console) : AsyncCommand<
     /// </remarks>
     private static string State(Enrolment row) => row switch
     {
-        { RevokedAt: { } when } => $"[red]revoked[/] {when:yyyy-MM-dd}",
+        { RevokedAt: { } when } => $"[red]revoked[/] {when.ToUniversalTime():yyyy-MM-dd HH:mm} UTC",
         { NotAfter: { } until } when until < DateTimeOffset.UtcNow => "[red]expired[/]",
         { FailsPolicy: { Length: > 0 } why } => $"[yellow]fails policy[/]: {Markup.Escape(why)}",
         { Usable: false } => "[red]not usable[/]",

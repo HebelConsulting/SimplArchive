@@ -18,18 +18,40 @@ namespace SimplArchive.Presentation;
 /// </remarks>
 public static class IndexInstant
 {
+    /// <summary>
+    /// The one stored shape of an instant: ISO-8601 with the SOURCE's own offset, second precision — what every
+    /// server-side writer of a <c>DateTime</c> field uses, so no writer can drop the time by choosing a format.
+    /// </summary>
+    /// <remarks>
+    /// The offset is kept rather than normalised to UTC because it is information: an e-mail's own zone says
+    /// where its sender was. Display converts to the viewer's zone either way.
+    /// </remarks>
+    public static string Store(DateTimeOffset instant) =>
+        instant.ToString("yyyy-MM-ddTHH:mm:sszzz", CultureInfo.InvariantCulture);
+
     /// <summary>The stored value for display: the instant on the VIEWER's clock, minute precision.</summary>
-    /// <remarks>Anything that does not parse is returned as it stands — display never invents a value.</remarks>
+    /// <remarks>
+    /// Anything that does not parse is returned as it stands — display never invents a value. That includes a
+    /// bare DAY: a field widened from <c>Date</c> to <c>DateTime</c> keeps the days it already held, and parsing
+    /// one would stamp it with a midnight in the parser's zone — a time nobody ever recorded, shown as a fact.
+    /// </remarks>
     public static string Display(string value, TimeZoneInfo zone) =>
-        DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var instant)
+        !IsBareDay(value) && DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var instant)
             ? instant.InZone(zone).ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)
             : value;
 
     /// <summary>The stored value split for a date picker + a time picker, on the viewer's clock.</summary>
-    public static (DateTime? Date, TimeSpan? Time) Split(string? value, TimeZoneInfo zone) =>
-        DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var instant)
-            ? (instant.InZone(zone).Date, instant.InZone(zone).TimeOfDay)
-            : (null, null);
+    /// <remarks>A bare day (see <see cref="Display"/>) keeps its day and leaves the clock empty.</remarks>
+    public static (DateTime? Date, TimeSpan? Time) Split(string? value, TimeZoneInfo zone) => value switch
+    {
+        { } day when IsBareDay(day) => (DateTime.ParseExact(day, "yyyy-MM-dd", CultureInfo.InvariantCulture), null),
+        _ when DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var instant) =>
+            (instant.InZone(zone).Date, instant.InZone(zone).TimeOfDay),
+        _ => (null, null),
+    };
+
+    private static bool IsBareDay(string value) =>
+        DateTime.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
 
     /// <summary>
     /// The pickers' answer back into the stored shape: ISO-8601 carrying the VIEWER's offset — a real
@@ -44,7 +66,6 @@ public static class IndexInstant
         }
 
         var local = day.Date + (time ?? TimeSpan.Zero);
-        var offset = zone.GetUtcOffset(local);
-        return new DateTimeOffset(local, offset).ToString("yyyy-MM-ddTHH:mm:sszzz", CultureInfo.InvariantCulture);
+        return Store(new DateTimeOffset(local, zone.GetUtcOffset(local)));
     }
 }

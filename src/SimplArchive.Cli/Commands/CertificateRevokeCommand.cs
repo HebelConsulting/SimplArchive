@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Text.Json;
 using SimplArchive.Cli.Infrastructure;
 using Spectre.Console;
@@ -17,7 +18,7 @@ public sealed class CertificateRevokeSettings : TenantSessionSettings
     public string? Thumbprint { get; init; }
 
     [CommandOption("--on")]
-    [Description("The revocation date (yyyy-MM-dd). Defaults to today, UTC.")]
+    [Description("When it was revoked: an instant (2026-10-05T14:30:00+02:00) or a day (yyyy-MM-dd, meaning its start in UTC). Defaults to now.")]
     public string? On { get; init; }
 
     public override ValidationResult Validate() => this switch
@@ -29,10 +30,26 @@ public sealed class CertificateRevokeSettings : TenantSessionSettings
         _ when string.IsNullOrWhiteSpace(Serial) == string.IsNullOrWhiteSpace(Thumbprint) =>
             ValidationResult.Error("Give exactly one of --serial or --thumbprint."),
 
-        _ when On is { Length: > 0 } on && !DateOnly.TryParse(on, out _) =>
-            ValidationResult.Error($"'{On}' is not a date. Use yyyy-MM-dd."),
+        _ when On is { Length: > 0 } && RevokedAt(On) is null =>
+            ValidationResult.Error($"'{On}' is neither an instant nor a date. Use 2026-10-05T14:30:00+02:00 or yyyy-MM-dd."),
 
         _ => ValidationResult.Success(),
+    };
+
+    /// <summary>
+    /// The moment <paramref name="on"/> names: an instant as written, or the start of a bare day in UTC.
+    /// </summary>
+    /// <remarks>
+    /// An instant WITHOUT an offset is refused rather than read in this machine's zone: the field stores a
+    /// point in time, and an operator's local clock is not something the archive can see or record.
+    /// </remarks>
+    internal static DateTimeOffset? RevokedAt(string on) => on switch
+    {
+        _ when DateOnly.TryParseExact(on, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day) =>
+            new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero),
+        _ when on.Contains('T') && (on.EndsWith('Z') || on.LastIndexOfAny(['+', '-']) > on.IndexOf('T'))
+            && DateTimeOffset.TryParse(on, CultureInfo.InvariantCulture, DateTimeStyles.None, out var instant) => instant,
+        _ => null,
     };
 }
 
@@ -79,14 +96,13 @@ public sealed class CertificateRevokeCommand(IAnsiConsole console) : AsyncComman
             return 0;
         }
 
-        var on = settings.On is { Length: > 0 } date
-            ? DateOnly.Parse(date).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc)
-            : DateTime.UtcNow;
+        var on = settings.On is { Length: > 0 } given
+            ? CertificateRevokeSettings.RevokedAt(given)!.Value
+            : DateTimeOffset.UtcNow;
 
-        await CertificateRevocation.SetRevokedOnAsync(
-            api, hypermedia, found.DocumentId, new DateTimeOffset(on, TimeSpan.Zero), cancellationToken);
+        await CertificateRevocation.SetRevokedOnAsync(api, hypermedia, found.DocumentId, on, cancellationToken);
 
-        console.MarkupLine($"[green]Revoked[/] {Markup.Escape(found.Label)} on {on:yyyy-MM-dd}.");
+        console.MarkupLine($"[green]Revoked[/] {Markup.Escape(found.Label)} on {on.ToUniversalTime():yyyy-MM-dd HH:mm:ss} UTC.");
         console.MarkupLine(
             "Content is no longer enveloped to it. A reader whose only certificate this was can no longer "
             + "open sealed documents until another is enrolled.");

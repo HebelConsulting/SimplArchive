@@ -594,7 +594,7 @@ internal static class ImapWrites
         var mime = MimeMessage.Load(new MemoryStream(bytes));
         // The correlation key: Apple's X-Universally-Unique-Identifier, else the Message-ID, else fresh.
         var uuid = mime.Headers["X-Universally-Unique-Identifier"] ?? mime.MessageId ?? Guid.NewGuid().ToString();
-        var modified = (mime.Date == default ? DateTimeOffset.UtcNow : mime.Date).UtcDateTime.ToString("yyyy-MM-dd");
+        var modified = SimplArchive.Presentation.IndexInstant.Store(mime.Date == default ? DateTimeOffset.UtcNow : mime.Date);
 
         var noteMaskVersionId = await db.MaskVersions
             .Where(v => v.MaskId == SimplArchive.Domain.Masks.WellKnownMaskIds.Note && v.IsCurrent)

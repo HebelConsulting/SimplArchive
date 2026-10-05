@@ -49,10 +49,10 @@ public sealed class CertificateManifest
         /// <summary>The serial the CA revoked. Upper-case hex, no separators.</summary>
         public string Serial { get; set; } = string.Empty;
 
-        /// <summary>When it was revoked. The date is what SimplArchive stores.</summary>
+        /// <summary>When it was revoked — stored as this instant, offset included.</summary>
         public DateTimeOffset At { get; set; }
 
-        /// <summary>The CA's reason, carried for the operator's log. SimplArchive stores a date only.</summary>
+        /// <summary>The CA's reason, carried for the operator's log. SimplArchive stores only the moment.</summary>
         public string? Reason { get; set; }
     }
 

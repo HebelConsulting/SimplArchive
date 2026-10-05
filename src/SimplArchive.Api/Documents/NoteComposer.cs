@@ -94,7 +94,7 @@ public sealed class NoteComposer
             TenantId = tenantId,
             DocumentId = document.Id,
             FieldDefinitionId = fieldIds["Modified"],
-            Value = now.UtcDateTime.ToString("yyyy-MM-dd"),
+            Value = SimplArchive.Presentation.IndexInstant.Store(now),
         });
 
         var versionId = Guid.NewGuid();

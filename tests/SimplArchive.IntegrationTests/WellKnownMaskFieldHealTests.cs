@@ -284,6 +284,52 @@ public class WellKnownMaskFieldHealTests
     }
 
     [Fact]
+    public async Task A_certificates_validity_and_revocation_heal_from_days_to_instants()
+    {
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var accessor = new CurrentTenantAccessor { TenantId = _tenantId };
+        using (var setup = Ctx(connection, accessor)) await setup.Database.EnsureCreatedAsync();
+        using (var db = Ctx(connection, accessor))
+        {
+            db.Tenants.Add(new Tenant { Id = _tenantId, Name = "Older", CreatedAt = DateTimeOffset.UtcNow });
+            await db.SaveChangesAsync();
+            await Seeder(db).EnsureWellKnownMasksAsync(_tenantId);
+        }
+
+        // A tenant seeded before 2026-10-05 holds the three as DATES, which dropped the time a certificate
+        // actually carries: it becomes valid and expires at a moment, and a CA revokes at one.
+        string[] instants = ["Valid from", "Valid until", "Revoked on"];
+        using (var db = Ctx(connection, accessor))
+        {
+            foreach (var field in await CertificateFields(db, instants))
+            {
+                field.DataType = FieldDataType.Date;
+            }
+
+            await db.SaveChangesAsync();
+        }
+
+        using (var db = Ctx(connection, accessor))
+        {
+            await Seeder(db).EnsureWellKnownMasksAsync(_tenantId);
+        }
+
+        using (var db = Ctx(connection, accessor))
+        {
+            var healed = await CertificateFields(db, instants);
+            Assert.Equal(instants.Length, healed.Count);
+            Assert.All(healed, f => Assert.Equal(FieldDataType.DateTime, f.DataType));
+        }
+
+        static Task<List<FieldDefinition>> CertificateFields(SimplArchiveDbContext db, string[] names) =>
+            db.FieldDefinitions.IgnoreQueryFilters()
+                .Where(f => names.Contains(f.Name)
+                    && db.MaskVersions.Any(v => v.Id == f.MaskVersionId && v.MaskId == WellKnownMaskIds.Certificate))
+                .ToListAsync();
+    }
+
+    [Fact]
     public async Task The_booking_masks_room_specific_name_heals_to_the_resource_agnostic_one()
     {
         // The Booking mask began life as "Room booking" (ADR 0744's meeting-room proof) and went

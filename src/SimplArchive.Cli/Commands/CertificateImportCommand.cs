@@ -177,14 +177,14 @@ public sealed class CertificateImportCommand(IAnsiConsole console) : AsyncComman
 
             if (dryRun)
             {
-                console.MarkupLine($"  would revoke serial [blue]{Markup.Escape(entry.Serial)}[/] on {entry.At:yyyy-MM-dd}");
+                console.MarkupLine($"  would revoke serial [blue]{Markup.Escape(entry.Serial)}[/] on {entry.At.ToUniversalTime():yyyy-MM-dd HH:mm:ss} UTC");
                 revoked++;
                 continue;
             }
 
             await CertificateRevocation.SetRevokedOnAsync(
                 api, hypermedia, enrolment.DocumentId, entry.At, cancellationToken);
-            console.MarkupLine($"  [green]revoked[/] serial {Markup.Escape(entry.Serial)} on {entry.At:yyyy-MM-dd}");
+            console.MarkupLine($"  [green]revoked[/] serial {Markup.Escape(entry.Serial)} on {entry.At.ToUniversalTime():yyyy-MM-dd HH:mm:ss} UTC");
             revoked++;
         }
 

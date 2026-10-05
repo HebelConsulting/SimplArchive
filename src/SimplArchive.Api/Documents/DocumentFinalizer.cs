@@ -817,7 +817,7 @@ public class DocumentFinalizer
 
         if (metadata.Date is { } date)
         {
-            AddValue("Date", date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+            AddValue("Date", SimplArchive.Presentation.IndexInstant.Store(date));
 
             // On the NEW version, which is the one being finalized — the document's date is resolved from its
             // current version (ADR 0503), so writing it to the old one would leave the pane showing the old
@@ -878,7 +878,7 @@ public class DocumentFinalizer
 
         if (metadata.Date is { } date)
         {
-            AddValue("Date", date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+            AddValue("Date", SimplArchive.Presentation.IndexInstant.Store(date));
             version.DocumentDate = DateOnly.FromDateTime(date.UtcDateTime);
             // The e-mail's own time-of-day, kept (ADR "Optional time on the document date"): the message Date
             // carries a precise instant, no longer truncated to the day.

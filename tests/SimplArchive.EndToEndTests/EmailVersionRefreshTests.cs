@@ -41,7 +41,8 @@ public class EmailVersionRefreshTests
 
         Assert.Equal("first@e2e.local", await FieldAsync(api, docId, "From"));
         Assert.Equal("The first message", await FieldAsync(api, docId, "Subject"));
-        Assert.Equal("2026-07-15", await FieldAsync(api, docId, "Date"));
+        // The full instant with the SENDER's offset — the Date field kept only the day before 2026-10-05.
+        Assert.Equal("2026-07-15T08:14:00+01:00", await FieldAsync(api, docId, "Date"));
 
         // A DIFFERENT message, filed as version 2 of the same document.
         await FileEmlAsync(api, repoId, parentId: docId,
@@ -50,7 +51,7 @@ public class EmailVersionRefreshTests
         // Every one of these was the FIRST message's value before the fix.
         Assert.Equal("second@e2e.local", await FieldAsync(api, docId, "From"));
         Assert.Equal("A later message", await FieldAsync(api, docId, "Subject"));
-        Assert.Equal("2026-08-20", await FieldAsync(api, docId, "Date"));
+        Assert.Equal("2026-08-20T09:30:00+00:00", await FieldAsync(api, docId, "Date"));
     }
 
     [Fact]

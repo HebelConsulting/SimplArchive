@@ -63,4 +63,24 @@ public class IndexInstantTests
         Assert.StartsWith("2026-09-04T00:00:00", composed);
         Assert.EndsWith("+02:00", composed);
     }
+    [Fact]
+    public void A_bare_day_in_a_widened_field_shows_as_the_day_it_is_not_as_an_invented_midnight()
+    {
+        // eMail.Date, Note.Modified and the certificate fields were Date before 2026-10-05 and still hold days.
+        // Parsing one would stamp it with a midnight in the PARSER's zone, so a Zurich viewer would read 00:00 or
+        // 02:00 depending on where the parser runs — either way a time nobody recorded.
+        Assert.Equal("2026-09-04", IndexInstant.Display("2026-09-04", Zurich));
+
+        var (date, time) = IndexInstant.Split("2026-09-04", Zurich);
+        Assert.Equal(new DateTime(2026, 9, 4), date);
+        Assert.Null(time);
+    }
+
+    [Fact]
+    public void Store_keeps_the_time_and_the_sources_own_offset()
+    {
+        var sent = new DateTimeOffset(2026, 10, 5, 14, 30, 15, TimeSpan.FromHours(-4));
+
+        Assert.Equal("2026-10-05T14:30:15-04:00", IndexInstant.Store(sent));
+    }
 }

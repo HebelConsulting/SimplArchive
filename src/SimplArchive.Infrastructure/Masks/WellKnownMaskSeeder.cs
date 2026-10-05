@@ -82,7 +82,9 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             new FieldSpec("To", FieldDataType.Text, IsRequired: true),
             new FieldSpec("Cc", FieldDataType.Text, IsRequired: false),
             new FieldSpec("Subject", FieldDataType.Text, IsRequired: true),
-            new FieldSpec("Date", FieldDataType.Date, IsRequired: false),
+            // An INSTANT: a message's Date header carries a time and a zone. Seeded as Date first, which kept
+            // only the day; widened in place on existing tenants by the heal below (owner, 2026-10-05).
+            new FieldSpec("Date", FieldDataType.DateTime, IsRequired: false),
             new FieldSpec("Entry ID", FieldDataType.Text, IsRequired: false),
             // Threading + provenance (ADR 0587). "Conversation ID" is RFC 5322 threading (References/In-Reply-To)
             // and is meaningful for any mail client; "Mailbox path" and "Reference" are the folder a message was
@@ -131,7 +133,7 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.Note, "Note",
         [
             new FieldSpec("Note UUID", FieldDataType.Text, IsRequired: true),
-            new FieldSpec("Modified", FieldDataType.Date, IsRequired: false),
+            new FieldSpec("Modified", FieldDataType.DateTime, IsRequired: false),
         ], cancellationToken);
 
         // The collection's DEFAULT colour is an ordinary optional field on the FOLDER mask (#564 slice 2,
@@ -295,9 +297,13 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             // Text, not a number: a serial is an arbitrary-length integer rendered as hex, routinely 20
             // bytes, and there is no numeric type here that holds one.
             new FieldSpec("Serial", FieldDataType.Text, IsRequired: false),
-            new FieldSpec("Valid from", FieldDataType.Date, IsRequired: false),
-            new FieldSpec("Valid until", FieldDataType.Date, IsRequired: false),
-            new FieldSpec("Revoked on", FieldDataType.Date, IsRequired: false),
+            // INSTANTS, not days: a certificate's validity is a pair of UTC moments, and a revocation list
+            // records the moment of revocation — a signature or an envelope made that same day is valid or not
+            // depending on which side of it it falls. Seeded as Date first; the heal below widens existing
+            // tenants in place, and every stored yyyy-MM-dd still parses (owner-decided 2026-10-05).
+            new FieldSpec("Valid from", FieldDataType.DateTime, IsRequired: false),
+            new FieldSpec("Valid until", FieldDataType.DateTime, IsRequired: false),
+            new FieldSpec("Revoked on", FieldDataType.DateTime, IsRequired: false),
         ], cancellationToken);
 
         // After every mask exists, because containment is a relation BETWEEN masks: a Notebook's allowed parent

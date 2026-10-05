@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using SimplArchive.Cli.Infrastructure;
 
@@ -46,7 +47,10 @@ internal static class CertificateRevocation
 
         var revokedOnId = FieldDefinitionId(await api.GetAsync(maskHref, cancellationToken), "Revoked on");
         var fields = CurrentFields(await api.GetAsync(indexHref, cancellationToken));
-        fields[revokedOnId] = [revokedAt.UtcDateTime.ToString("yyyy-MM-dd")];
+        // The INSTANT, with the offset it was given (the field is a DateTime, and the core's IndexInstant.Store
+        // keeps the source's zone the same way): the moment a CA revoked a certificate decides whether something
+        // done that same day came before it.
+        fields[revokedOnId] = [revokedAt.ToString("yyyy-MM-ddTHH:mm:sszzz", CultureInfo.InvariantCulture)];
 
         await api.PutWithETagAsync(
             indexHref,
