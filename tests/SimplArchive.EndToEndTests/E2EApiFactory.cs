@@ -533,7 +533,14 @@ public sealed partial class E2EApiFactory : WebApplicationFactory<Program>, IAsy
     // form → code → token. Returns the access token.
     // mfaCode, when supplied, computes the current TOTP (or a recovery code) for the MFA second step — used by
     // the MFA end-to-end test (ADR "MFA (interactive login, TOTP)"). Null = password-only (MFA disabled).
-    public async Task<string> GetUserTokenAsync(string email, string password, Func<string>? mfaCode = null)
+    public async Task<string> GetUserTokenAsync(string email, string password, Func<string>? mfaCode = null) =>
+        (await SignInBrowserAsync(email, password, mfaCode)).Token;
+
+    /// <summary>
+    /// The same web-client login, returning the BROWSER as well — the client holding the session cookie — so a test
+    /// can act as the browser afterwards (sign out through <c>/Account/Logout</c>, #1578) with the token it was given.
+    /// </summary>
+    public async Task<(HttpClient Browser, string Token)> SignInBrowserAsync(string email, string password, Func<string>? mfaCode = null)
     {
         var client = CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = true });
 
@@ -606,7 +613,7 @@ public sealed partial class E2EApiFactory : WebApplicationFactory<Program>, IAsy
         }));
         tokenResponse.EnsureSuccessStatusCode();
         var json = await tokenResponse.Content.ReadFromJsonAsync<JsonElement>();
-        return json.GetProperty("access_token").GetString()!;
+        return (client, json.GetProperty("access_token").GetString()!);
     }
 
     private static string Base64Url(byte[] bytes) =>

@@ -638,60 +638,9 @@ using (var scope = app.Services.CreateScope())
         }
     }
 
-    // Idempotently seeds the cross-platform desktop fat client's OpenIddict application — a public client
-    // using Authorization Code + PKCE with a fixed loopback redirect (RFC 8252 "OAuth for Native Apps"). See
-    // ADR "Cross-platform desktop fat client (Avalonia)".
-    // The desktop client's registration is HEALED, not merely created-if-absent. A plain
-    // create-if-null seed gives new permissions only to deployments that never had the client — so an
-    // existing install would keep the old permission set for ever and the refresh grant below would be
-    // refused with `unauthorized_client`, which reads as a client bug rather than as stale registration.
-    // Same shape as the well-known mask heal (#579) and the trap #664 recorded.
-    var desktopApp = await applicationManager.FindByClientIdAsync("simplarchive-desktop");
-    if (desktopApp is not null)
-    {
-        var descriptor = new OpenIddictApplicationDescriptor();
-        await applicationManager.PopulateAsync(descriptor, desktopApp);
-
-        var refreshGrant = OpenIddictConstants.Permissions.GrantTypes.RefreshToken;
-        var offlineScope = OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.OfflineAccess;
-        if (!descriptor.Permissions.Contains(refreshGrant) || !descriptor.Permissions.Contains(offlineScope))
-        {
-            descriptor.Permissions.Add(refreshGrant);
-            descriptor.Permissions.Add(offlineScope);
-            await applicationManager.UpdateAsync(desktopApp, descriptor);
-        }
-    }
-
+    // The desktop client (seeded and healed) and saconsole, each in its own file to keep this one under 1000 lines.
+    await SimplArchive.Api.Provisioning.DesktopClientSeeder.SeedAsync(applicationManager);
     await SimplArchive.Api.Provisioning.SaConsoleClientSeeder.SeedAsync(applicationManager);
-
-    if (desktopApp is null)
-    {
-        await applicationManager.CreateAsync(new OpenIddictApplicationDescriptor
-        {
-            ClientId = "simplarchive-desktop",
-            ClientType = OpenIddictConstants.ClientTypes.Public,
-            ConsentType = OpenIddictConstants.ConsentTypes.Implicit,
-            RedirectUris = { new Uri(SimplArchive.Api.Security.DesktopLoopback.RedirectUri) },
-            Permissions =
-            {
-                OpenIddictConstants.Permissions.Endpoints.Authorization,
-                OpenIddictConstants.Permissions.Endpoints.Token,
-                OpenIddictConstants.Permissions.GrantTypes.AuthorizationCode,
-                OpenIddictConstants.Permissions.ResponseTypes.Code,
-                OpenIddictConstants.Permissions.Scopes.Email,
-                OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.OpenId,
-                // Renewal without the user present: the grant, and the scope that asks for a refresh token.
-                OpenIddictConstants.Permissions.GrantTypes.RefreshToken,
-                OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.OfflineAccess,
-                // RFC 8693 token exchange for User impersonation (ADR "User impersonation").
-                OpenIddictConstants.Permissions.Prefixes.GrantType + SimplArchive.Auth.ImpersonationConstants.TokenExchangeGrantType,
-            },
-            Requirements =
-            {
-                OpenIddictConstants.Requirements.Features.ProofKeyForCodeExchange,
-            },
-        });
-    }
 
     // Env-driven idempotent bootstrap of the first PlatformAdministrator — the deployment-level chicken/egg
     // (a PlatformAdministrator can only be created by another PlatformAdministrator) needs one seeded out of

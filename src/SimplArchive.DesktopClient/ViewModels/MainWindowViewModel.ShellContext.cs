@@ -215,6 +215,21 @@ public sealed partial class MainWindowViewModel
         }
     }
 
+    /// <summary>
+    /// Ends the session: revokes its tokens on the SERVER, then drops the API client here and from every preview.
+    /// </summary>
+    /// <remarks>
+    /// The revocation (#1578, ADR 0895) is best-effort and runs in the background, so an offline sign-out is as
+    /// immediate as an online one. Its own method — in this file, not in <c>Logout</c> — because the window's main
+    /// file is on the over-limit debt list (#466) and may only shrink.
+    /// </remarks>
+    private void EndSession()
+    {
+        _ = _api?.Core.RevokeSessionAsync();
+        _api = null;
+        SetPreviewApi(null);
+    }
+
     /// <summary>Hands every preview surface the session's API client, or takes it away at sign-out.</summary>
     private void SetPreviewApi(SimplArchiveApiClient? api)
     {

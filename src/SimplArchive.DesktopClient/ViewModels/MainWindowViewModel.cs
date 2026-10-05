@@ -441,8 +441,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
     [RelayCommand]
     private void Logout()
     {
-        _api = null;
-        SetPreviewApi(null);
+        EndSession();
         IsLoggedIn = false;
         _forceLoginNext = true;
         _ = StopRealtimeNotificationsAsync(); // drop the live hub connection with the session

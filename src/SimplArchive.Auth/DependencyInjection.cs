@@ -55,6 +55,9 @@ public static class DependencyInjection
                 // discovery document it aborts sign-in with "There was an error signing in." See
                 // SimplArchive.Api's UserInfoController and ADR "Blazor Client-side login wiring".
                 options.SetUserInfoEndpointUris("connect/userinfo");
+                // RFC 7009 revocation (#1578): the desktop presents its tokens here when it signs out. Handled by
+                // OpenIddict itself — no passthrough — because revoking a token needs nothing of ours.
+                options.SetRevocationEndpointUris("connect/revoke");
 
                 options.AllowClientCredentialsFlow();
 
@@ -185,6 +188,16 @@ public static class DependencyInjection
             .AddValidation(options =>
             {
                 options.UseLocalServer();
+
+                // REVOCATION MEANS SOMETHING ON THE REQUEST PATH (#1578). OpenIddict stores every token it issues
+                // and marks a family revoked when a refresh token is reused past its leeway — measured: the stored
+                // access tokens were `revoked` while the token itself still answered 200, because a self-contained
+                // JWT was validated without ever consulting its entry. These two checks make the API ask: is this
+                // token's entry still valid, and is the authorization it belongs to? One indexed lookup each, on the
+                // database every request already needs — so it adds no dependency that could fail on its own, which
+                // is what ADR 0083's Valkey denylist would have done (superseded by ADR 0895).
+                options.EnableTokenEntryValidation();
+                options.EnableAuthorizationEntryValidation();
                 options.UseAspNetCore();
             });
 

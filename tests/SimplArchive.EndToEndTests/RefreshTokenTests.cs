@@ -86,6 +86,85 @@ public class RefreshTokenTests
         Assert.Equal(HttpStatusCode.BadRequest, afterLeeway.StatusCode);
     }
 
+    // REUSE DETECTION REVOKES THE WHOLE FAMILY — and, since #1578, that reaches the access tokens too. The refresh
+    // half was always OpenIddict's own behaviour and was simply never pinned: #1578 claimed it was missing, and a
+    // probe measured the rotated sibling refused with ID2018. The ACCESS half was the real gap — the stored entries
+    // were marked revoked while the token itself still answered 200, because nothing on the request path asked.
+    [Fact]
+    public async Task A_refresh_token_reused_past_the_leeway_revokes_its_whole_family_including_the_access_token()
+    {
+        var (email, password, _) = await SeedUserAsync();
+        var tokens = await SignInAsync(email, password);
+        var first = tokens.GetProperty("refresh_token").GetString()!;
+        var renewed = await RenewAsync(first);
+        var sibling = renewed.GetProperty("refresh_token").GetString()!;
+        var access = renewed.GetProperty("access_token").GetString()!;
+        Assert.Equal(HttpStatusCode.OK, await WhoAmIAsync(access));
+
+        await Task.Delay(TimeSpan.FromSeconds(2)); // past the test host's one-second leeway
+        using var client = _factory.CreateClient();
+        Assert.Equal(HttpStatusCode.BadRequest, (await PostRefreshAsync(client, first)).StatusCode);
+
+        // The family: the rotated refresh token the thief would try next, and the access token already issued.
+        Assert.Equal(HttpStatusCode.BadRequest, (await PostRefreshAsync(client, sibling)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, await WhoAmIAsync(access));
+    }
+
+    // The desktop's sign-out (ApiCore.RevokeSessionAsync): RFC 7009 revocation of both tokens, which used to be
+    // nothing at all — the tokens outlived the sign-out by up to 15 minutes and 30 days.
+    [Fact]
+    public async Task Revoking_the_tokens_ends_the_desktop_session_on_the_server_at_once()
+    {
+        var (email, password, _) = await SeedUserAsync();
+        var tokens = await SignInAsync(email, password);
+        var access = tokens.GetProperty("access_token").GetString()!;
+        var refresh = tokens.GetProperty("refresh_token").GetString()!;
+        Assert.Equal(HttpStatusCode.OK, await WhoAmIAsync(access));
+
+        using var client = _factory.CreateClient();
+        foreach (var (token, hint) in new[] { (refresh, "refresh_token"), (access, "access_token") })
+        {
+            using var revoked = await client.PostAsync("/connect/revoke", new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["token"] = token,
+                ["token_type_hint"] = hint,
+                ["client_id"] = DesktopClientId,
+            }));
+            Assert.Equal(HttpStatusCode.OK, revoked.StatusCode);
+        }
+
+        Assert.Equal(HttpStatusCode.Unauthorized, await WhoAmIAsync(access));
+        Assert.Equal(HttpStatusCode.BadRequest, (await PostRefreshAsync(client, refresh)).StatusCode);
+    }
+
+    // …and the other half of the owner's rule: a WEB sign-out ends the web client's sessions and leaves the same
+    // user's DESKTOP alone. Here rather than beside the web tests because only this class signs in as the desktop.
+    [Fact]
+    public async Task A_web_sign_out_leaves_the_same_users_desktop_session_alive()
+    {
+        var (email, password, _) = await SeedUserAsync();
+        var desktop = await SignInAsync(email, password);
+        var desktopAccess = desktop.GetProperty("access_token").GetString()!;
+
+        var (browser, webToken) = await _factory.SignInBrowserAsync(email, password);
+        using (browser)
+        {
+            using var _ = await browser.GetAsync("/Account/Logout");
+        }
+
+        Assert.Equal(HttpStatusCode.Unauthorized, await WhoAmIAsync(webToken));
+        Assert.Equal(HttpStatusCode.OK, await WhoAmIAsync(desktopAccess));
+        using var client = _factory.CreateClient();
+        Assert.Equal(HttpStatusCode.OK, (await PostRefreshAsync(client, desktop.GetProperty("refresh_token").GetString()!)).StatusCode);
+    }
+
+    private async Task<HttpStatusCode> WhoAmIAsync(string accessToken)
+    {
+        using var client = _factory.CreateAuthedClient(accessToken);
+        using var response = await client.GetAsync("/api/diagnostics/whoami");
+        return response.StatusCode;
+    }
+
     // A refresh token outlives the access token by design, so without a re-check a user deactivated ten minutes
     // ago would go on minting fresh access tokens until it expired. The token pipeline gets exactly one chance
     // to ask, and this is it.

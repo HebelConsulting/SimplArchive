@@ -33,7 +33,12 @@ namespace SimplArchive.Api.Pages.Account;
 /// restricted to a local URL and never to a caller-supplied host.
 /// </para>
 /// </remarks>
-public class LogoutModel(IAuditRecorder audit, SimplArchiveDbContext dbContext) : PageModel
+public class LogoutModel(
+    IAuditRecorder audit,
+    SimplArchiveDbContext dbContext,
+    IOpenIddictApplicationManager applications,
+    IOpenIddictAuthorizationManager authorizations,
+    IOpenIddictTokenManager tokens) : PageModel
 {
     public async Task<IActionResult> OnGetAsync(string? returnUrl = null)
     {
@@ -42,11 +47,44 @@ public class LogoutModel(IAuditRecorder audit, SimplArchiveDbContext dbContext) 
         // open-ended: "was anyone still signed in when this happened" becomes a guess (#847, A07/A09).
         await RecordSignOutAsync();
 
+        // And the tokens, also while the cookie still names whose they are (#1578, ADR 0895).
+        await RevokeWebSessionsAsync();
+
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
 
         // LOCAL ONLY. A returnUrl is caller-supplied, and honouring an absolute one would make this an open
         // redirect on an endpoint every user is sent to by name — the classic phishing hand-off.
         return LocalRedirect(Url.IsLocalUrl(returnUrl) ? returnUrl! : "/");
+    }
+
+    /// <summary>
+    /// Revokes this user's sessions of the WEB client — its authorizations and every token issued under them.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Signing out used to end the cookie and the client's copy while the tokens themselves stayed valid: an access
+    /// token in somebody else's hands kept working for up to 15 minutes, a refresh token for 30 days. With the API
+    /// now checking each request's token against its stored entry, revoking here takes effect on the next request.
+    /// </para>
+    /// <para>
+    /// <b>That client's sessions, not every session</b> (owner, 2026-10-05). This page is the WEB client's
+    /// sign-out, so it revokes what was issued to <c>blazor-client</c> for this user — every browser they are signed
+    /// in with — and leaves the desktop and saconsole alone. The desktop ends its own through the revocation
+    /// endpoint. There is no bearer token to revoke "the one being ended" by: this is a plain browser GET.
+    /// </para>
+    /// </remarks>
+    private async Task RevokeWebSessionsAsync()
+    {
+        var session = await HttpContext.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        if (session.Principal?.FindFirst(OpenIddictConstants.Claims.Subject)?.Value is not { } subject
+            || await applications.FindByClientIdAsync("blazor-client", HttpContext.RequestAborted) is not { } web
+            || await applications.GetIdAsync(web, HttpContext.RequestAborted) is not { } webId)
+        {
+            return;
+        }
+
+        await authorizations.RevokeAsync(subject, webId, status: null, type: null, HttpContext.RequestAborted);
+        await tokens.RevokeAsync(subject, webId, status: null, type: null, HttpContext.RequestAborted);
     }
 
     private async Task RecordSignOutAsync()

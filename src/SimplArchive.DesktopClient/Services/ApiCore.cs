@@ -233,6 +233,68 @@ public sealed class ApiCore
     /// <summary>The authenticated HttpClient every area client sends through.</summary>
     public HttpClient Http { get; }
 
+    /// <summary>
+    /// Ends this session on the SERVER as well as here: presents its refresh token and then its access token to the
+    /// standard revocation endpoint (RFC 7009), and forgets the stored session (#1578).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Signing out used to clear only this client's copy. The tokens themselves stayed valid on the server — the
+    /// access token until its 15 minutes ran out, the refresh token for its 30 days, and the stored session even
+    /// kept the refresh token after sign-out. Now both are revoked, and since the API checks each request's token
+    /// against its stored entry, a revoked access token fails at once rather than living out its lifetime.
+    /// </para>
+    /// <para>
+    /// <b>Best-effort, deliberately.</b> Signing out must work offline — a person closing a laptop on a train is
+    /// still entitled to leave — so a failure is logged at Warning, naming that the server-side session may outlive
+    /// this sign-out, and never blocks it. No token is ever written to the log.
+    /// </para>
+    /// <para>
+    /// <c>/connect/revoke</c> is a PROTOCOL endpoint at the root, like the <c>/connect/token</c> renewal beside it,
+    /// not an API resource — the hypermedia rule binds <c>api/…</c>, and protocol endpoints stay where the
+    /// specification puts them.
+    /// </para>
+    /// </remarks>
+    public async Task RevokeSessionAsync()
+    {
+        var session = _session.Value;
+        TokenSessions.Current.Clear(_apiRootUrl);
+        if (session is null)
+        {
+            return;
+        }
+
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        foreach (var (token, hint) in new[] { (session.RefreshToken, "refresh_token"), (session.AccessToken, "access_token") })
+        {
+            if (string.IsNullOrEmpty(token))
+            {
+                continue;
+            }
+
+            try
+            {
+                using var response = await http.PostAsync($"{_apiRootUrl.TrimEnd('/')}/connect/revoke", new FormUrlEncodedContent(
+                    new Dictionary<string, string>
+                    {
+                        ["token"] = token,
+                        ["token_type_hint"] = hint,
+                        ["client_id"] = DesktopClientOptions.ClientId,
+                    }));
+                if (!response.IsSuccessStatusCode)
+                {
+                    DesktopLog.Warn("Sign-out could not revoke the {Hint} on the server ({Status}); it stays valid until it expires",
+                        hint, (int)response.StatusCode);
+                }
+            }
+            catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+            {
+                DesktopLog.Warn("Sign-out could not reach the server to revoke the {Hint} ({Reason}); it stays valid until it expires",
+                    hint, e.Message);
+            }
+        }
+    }
+
     /// <summary>The API root's advertised href for <paramref name="rel"/> (cached after the first read).</summary>
     public async Task<string> RootHrefAsync(string rel, CancellationToken cancellationToken = default)
     {
