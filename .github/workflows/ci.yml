@@ -22,7 +22,9 @@ concurrency:
 
 jobs:
   fast:
-    timeout-minutes: 20
+    # 30, not 20: the job's normal 12–18 minutes and GitHub's ~2× runner variance met at 20 on 2026-10-06, when
+    # run #3398 was cancelled 0.3 s after every test had passed. Still short enough to stop a real hang.
+    timeout-minutes: 30
     name: Build + unit + integration
     runs-on: ubuntu-latest
     steps:
