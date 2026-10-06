@@ -1936,7 +1936,8 @@ is kept: a decision recorded is not a decision delivered, and only a test can te
    sign-in, and an organisation can require them for everybody. A chosen password must be at least twelve
    characters and must not be, or merely decorate, one of the ten thousand most common breached passwords.
    Failed attempts are progressively refused per account *and* per source, with blocks that expire on their own
-   rather than needing an administrator. Access tokens live fifteen minutes and refresh tokens thirty days.],
+   rather than needing an administrator. Access tokens live fifteen minutes and refresh tokens thirty days, and a
+   revoked token is refused on its very next request rather than at the end of its lifetime.],
   [*A08 Software and data integrity failures*], [Uploaded content is re-read and hashed by the server rather
    than trusted from the client. Versions can be locked immutable in storage for a retention period. The audit
    log is hash-chained, so an altered or missing entry is detectable. Schema migrations are checked for
@@ -1967,8 +1968,9 @@ is kept: a decision recorded is not a decision delivered, and only a test can te
   [*Authentication*], [Standards-based, second factors supported and enforceable, throttled; chosen passwords
    meet a length and breach-list policy; failed and throttled sign-ins reach the audit trail.],
   [*Session management*], [Server-issued tokens with bounded lifetimes — fifteen minutes for access, thirty days
-   for refresh; signing out clears both the server's session and the client's cached token. Detecting a
-   replayed refresh token is still open (see below).],
+   for refresh. Signing out revokes that client's tokens on the server, and every request checks its token
+   against the server's record, so a revoked token stops working at once. A refresh token used a second time is
+   treated as stolen: the whole session it belongs to is revoked, the access token included.],
   [*Access control*], [Per-object, deny by default, and evaluated *server-side on every
    request* — the clients never decide it. They additionally hide an action the server did not advertise, so a
    user is rarely offered something that would be refused; but the hiding is courtesy, and the refusal is the
@@ -1987,19 +1989,17 @@ is kept: a decision recorded is not a decision delivered, and only a test can te
 
 == What is still open
 
-An assessment that reports nothing outstanding is one to distrust. These are tracked, and neither is a remotely
+An assessment that reports nothing outstanding is one to distrust. This is tracked, and it is not a remotely
 exploitable defect in the shipped configuration. Each names the issue that tracks it, and a weekly check fails
 when one of those issues closes while its line is still here — because this list once went on describing a
 product that had moved on, in the one chapter a reader opens to find out what is not done.
 
-- *Refresh-token reuse and access-token revocation* (\#1578) — a replayed refresh token is not yet detected as a
-  replay, and an access token cannot be revoked before it expires. The fifteen-minute access lifetime bounds the
-  second; nothing yet bounds the first beyond the thirty-day refresh lifetime.
 - *External-link tokens at rest* (\#1579) — the token behind a link shared outside the system is stored as
   issued, so reading it requires database access. Hashing it would remove the ability to show an existing link
   again, which is why it is a decision rather than a fix.
 
-Recently closed, and listed so that their absence above is not mistaken for an omission: chosen passwords must
+Recently closed, and listed so that their absence above is not mistaken for an omission: a revoked or signed-out
+token is refused on its next request, and a refresh token used twice revokes its whole session; chosen passwords must
 meet a minimum length and are checked against a list of commonly used ones; token lifetimes are set
 deliberately rather than left at framework defaults; a production installation refuses to start without a
 secrets manager, so second-factor seeds and the other stored secrets are never kept in plaintext; refused
