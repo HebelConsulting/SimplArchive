@@ -190,6 +190,16 @@ public sealed class TestModuleController : ControllerBase
     [HttpHead("settings-seen")]
     public IActionResult HeadSettingsSeen() => NoContent();
 
+    /// <summary>The audit fixture (ABI 1.9, ADR 0900): one facade write (the floor records it) and one named event.</summary>
+    [HttpPost("documents/{documentId:guid}/mentor")]
+    public async Task<IActionResult> SetMentor(
+        Guid documentId, [FromBody] Dictionary<string, string> body, [FromServices] IModuleArchiveFacade archive, [FromServices] IModuleAudit audit)
+    {
+        await archive.SetFieldsAsync(documentId, new Dictionary<string, string> { ["Mentor"] = body["mentor"] });
+        await audit.RecordAsync("MentorSet", documentId, $"mentor is now {body["mentor"]}");
+        return NoContent();
+    }
+
     /// <summary>The reveal-once fixture (ABI 1.8, ADR 0899): an action outcome carrying a value shown once.</summary>
     [HttpPost("reveal")]
     public IActionResult Reveal() =>

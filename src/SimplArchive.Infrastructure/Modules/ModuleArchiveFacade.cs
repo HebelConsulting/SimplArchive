@@ -29,6 +29,7 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
     private Guid? _principalId;
     private bool _principalResolved;
     private readonly ILogger<ModuleArchiveFacade>? _logger;
+    private readonly IAuditRecorder? _audit;
 
     /// <summary>The longest a presigned content URL handed to a module may live (ABI 1.8, ADR 0899): long enough
     /// for a client to follow a redirect, short enough that a leaked URL is worth little.</summary>
@@ -43,9 +44,11 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         IObjectStorageClient? objectStorage = null,
         ITransitEncryptor? transit = null,
         IDocumentVersionFinalizer? finalizer = null,
-        ILogger<ModuleArchiveFacade>? logger = null)
+        ILogger<ModuleArchiveFacade>? logger = null,
+        IAuditRecorder? audit = null)
     {
         _logger = logger;
+        _audit = audit;
         _dbContext = dbContext;
         _currentUser = currentUser;
         _currentServiceAccount = currentServiceAccount;
@@ -169,6 +172,34 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
             .GroupBy(r => r.ResourceDocumentId)
             .ToDictionary(g => g.Key, g => g.First().UserId);
     }
+
+    /// <summary>
+    /// The audit FLOOR (ABI 1.9, ADR 0900): every write a MODULE makes through this facade is recorded, because the
+    /// facade is the one door every module write passes through (controllers, transitions, hooks, the escalation
+    /// sweep). Attributed to the request's caller; with no ambient principal (a background sweep) to the module as
+    /// a System actor, since <c>RecordAsync</c> would warn and drop the event (#1312). Core-internal use of the
+    /// facade (no module identity) is audited by its own caller and skipped here. Field NAMES, never values.
+    /// </summary>
+    private async Task AuditWriteAsync(string action, Guid tenantId, Guid documentId, string name, string? what, CancellationToken cancellationToken)
+    {
+        if (_audit is null || _identity?.ModuleId is not { } moduleId)
+        {
+            return;
+        }
+
+        var details = what is null ? $"by module {moduleId}" : $"by module {moduleId}: {what}";
+        if (_currentUser.UserId is null && _currentServiceAccount.ServiceAccountId is null)
+        {
+            await _audit.RecordForActorAsync(
+                SimplArchive.Domain.Audit.AuditActorType.System, Guid.Empty, $"Module {moduleId}", tenantId,
+                action, "Document", documentId, name, details, cancellationToken);
+            return;
+        }
+
+        await _audit.RecordAsync(action, "Document", documentId, name, details, tenantId, cancellationToken);
+    }
+
+    private static string FieldNames(IEnumerable<string> names) => $"fields {string.Join(", ", names.Order(StringComparer.Ordinal))}";
 
     /// <summary>
     /// A presigned URL for the current content (ABI 1.8, ADR 0899): the module-side form of "the Api never proxies
@@ -371,6 +402,7 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         AddFieldValues(document, maskVersion, fields);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await AuditWriteAsync(ModuleWriteAudit.Created, document.TenantId, document.Id, name, null, cancellationToken);
         return document.Id;
     }
 
@@ -410,6 +442,7 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await AuditWriteAsync(ModuleWriteAudit.IndexDataUpdated, document.TenantId, documentId, document.Name, FieldNames(fields.Keys), cancellationToken);
     }
 
     public async Task SetFieldListAsync(Guid documentId, string fieldName, IReadOnlyList<string> values, CancellationToken cancellationToken = default)
@@ -444,6 +477,7 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await AuditWriteAsync(ModuleWriteAudit.IndexDataUpdated, document.TenantId, documentId, document.Name, FieldNames([fieldName]), cancellationToken);
     }
 
     public async Task RenameDocumentAsync(Guid documentId, string name, CancellationToken cancellationToken = default)
@@ -454,6 +488,7 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         // The sibling-name invariant fires in SaveChanges like anyone else's rename (ABI 0.2, #1014).
         document.Name = name;
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await AuditWriteAsync(ModuleWriteAudit.Renamed, document.TenantId, documentId, name, null, cancellationToken);
     }
 
     public async Task CreateReferenceAsync(Guid targetDocumentId, Guid intoFolderId, CancellationToken cancellationToken = default)
@@ -473,6 +508,7 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
             CreatedAt = DateTimeOffset.UtcNow,
         });
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await AuditWriteAsync(ModuleWriteAudit.ReferenceAdded, target.TenantId, targetDocumentId, target.Name, $"into folder {intoFolderId}", cancellationToken);
     }
 
     public Task<Guid> StageContentAsync(
@@ -485,15 +521,23 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
             keyFor: (tenantId, storageFolderId, versionId) => ObjectKeyBuilder.ModuleStagedContentKey(tenantId, storageFolderId, versionId, extension),
             expiresAt, fields, replaceDocumentId, documentDate, documentTime, cancellationToken);
 
-    public Task<Guid> CreateContentDocumentAsync(
+    public async Task<Guid> CreateContentDocumentAsync(
         Guid parentFolderId, Guid maskId, string name, byte[] content, string extension,
         IReadOnlyDictionary<string, string>? fields = null, Guid? replaceDocumentId = null,
-        DateOnly? documentDate = null, TimeOnly? documentTime = null, CancellationToken cancellationToken = default) =>
+        DateOnly? documentDate = null, TimeOnly? documentTime = null, CancellationToken cancellationToken = default)
+    {
         // Permanent: the ordinary archive keyspace, no expiry — reference data the module files and reads back.
-        WriteContentAsync(
+        var id = await WriteContentAsync(
             parentFolderId, maskId, name, content, extension,
             keyFor: (tenantId, storageFolderId, versionId) => ObjectKeyBuilder.Build(tenantId, DateTimeOffset.UtcNow, storageFolderId, versionId, extension),
             expiresAt: null, fields, replaceDocumentId, documentDate, documentTime, cancellationToken);
+
+        // Audited, unlike the ephemeral staging above: permanent content is part of the archive (ADR 0900).
+        var tenantId = await _dbContext.Documents.Where(d => d.Id == id).Select(d => d.TenantId).SingleAsync(cancellationToken);
+        await AuditWriteAsync(
+            replaceDocumentId is null ? ModuleWriteAudit.Created : ModuleWriteAudit.VersionAdded, tenantId, id, name, null, cancellationToken);
+        return id;
+    }
 
     public async Task<bool> IsOfferedAsync(
         Guid resourceDocumentId, DateTimeOffset startsAt, DateTimeOffset endsAt, CancellationToken cancellationToken = default)
@@ -606,6 +650,7 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         // refusal — propagates to the module unchanged, which is what makes this the same door as every other
         // booking write rather than a quieter one beside it.
         await _finalizer.FileAsync(version, cancellationToken);
+        await AuditWriteAsync(ModuleWriteAudit.VersionAdded, document.TenantId, documentId, document.Name, null, cancellationToken);
     }
 
     /// <summary>

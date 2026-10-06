@@ -143,6 +143,7 @@ public static class DependencyInjection
 
         // The module seam's host side (ADR 0741): what a module's registered services may reach.
         services.AddScoped<ModuleAbi.IModuleArchiveFacade, Modules.ModuleArchiveFacade>();
+        services.AddScoped<ModuleAbi.IModuleAudit, Modules.ModuleAuditRecorder>();
         // WHICH module's code runs in this scope (ADR 0736) — set at the module boundaries, read by the
         // facade's consent gate.
         services.AddScoped<Modules.ModuleIdentityAccessor>();

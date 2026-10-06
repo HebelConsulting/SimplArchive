@@ -69,5 +69,9 @@ public static class ModuleAbiVersion
     /// redirects instead of proxying bytes) and <see cref="ModuleActionResult"/> (an action's outcome, optionally a
     /// value revealed once), core ADR 0899. A default member and new types only, so a 1.7 module is unaffected.
     /// </para>
-    public const int Minor = 8;
+    /// <para>
+    /// 1.9 adds <see cref="IModuleAudit"/> (a module's named audit events); the host now also audits every write a
+    /// module makes through the facade (core ADR 0900). A new interface only, so a 1.8 module is unaffected.
+    /// </para>
+    public const int Minor = 9;
 }

@@ -705,4 +705,53 @@ public class ModuleControllerTests
             rig.Owner.Dispose();
         }
     }
+
+    // ABI 1.9 (ADR 0900): every write a module makes through the facade is audited as the module's act (field
+    // NAMES, never values), a named event lands as {moduleId}.{action}, and the populate hook's ephemeral staging is
+    // left out as transitions leave it out.
+    [Fact]
+    public async Task A_modules_facade_writes_and_named_events_reach_the_audit_trail()
+    {
+        var rig = await RigAsync();
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", vendorKey.ExportSubjectPublicKeyInfoPem());
+        try
+        {
+            await ActivateAsync(rig, vendorKey);
+            var dossierName = $"Dossier {Guid.NewGuid():N}";
+            var dossierId = (await TestJson.Post(rig.Owner, $"/api/documents/{rig.RepoId}/children",
+                new { name = dossierName, maskId = SimplArchive.TestModule.TestModule.DossierMaskId })).GetProperty("id").GetGuid();
+
+            Assert.Equal(HttpStatusCode.NoContent,
+                (await rig.Admin.PostAsJsonAsync($"/api/test-module/documents/{dossierId}/mentor", new { mentor = "anna@e2e.local" })).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent,   // the populate hook stages ephemeral content: NOT audited
+                (await rig.Admin.PostAsync($"/api/documents/{dossierId}/machine/test-pilot/transitions/refresh", null)).StatusCode);
+
+            var viewerEmail = $"auditor-{Guid.NewGuid():N}@e2e.local";
+            await _factory.SeedUserAsync(rig.TenantId, viewerEmail, "audit-1234", "Auditor", canViewAuditLog: true);
+            using var viewer = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(viewerEmail, "audit-1234"));
+            var events = (await TestJson.Get(viewer, "/api/audit-events?limit=200")).GetProperty("events").EnumerateArray().ToList();
+            string? Details(JsonElement e) => e.TryGetProperty("details", out var d) ? d.GetString() : null;
+
+            // The floor: the write, by the module, naming the field and never its value.
+            var floor = Assert.Single(events, e => e.GetProperty("action").GetString() == "Document.IndexDataUpdated"
+                && Details(e)?.StartsWith("by module test-module", StringComparison.Ordinal) == true);
+            Assert.Equal("by module test-module: fields Mentor", Details(floor));
+            Assert.DoesNotContain("anna@", Details(floor), StringComparison.Ordinal);
+
+            // The named event, prefixed with the module id, with the module's own sentence.
+            var named = Assert.Single(events, e => e.GetProperty("action").GetString() == "test-module.MentorSet");
+            Assert.Equal("mentor is now anna@e2e.local", Details(named));
+
+            // The ephemeral staging left no "created by module" line behind.
+            Assert.DoesNotContain(events, e => e.GetProperty("action").GetString() == "Document.Created"
+                && Details(e)?.StartsWith("by module test-module", StringComparison.Ordinal) == true);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", null);
+            rig.Admin.Dispose();
+            rig.Owner.Dispose();
+        }
+    }
 }
