@@ -4,12 +4,19 @@
 # each for Apple Silicon (arm64) and Intel (x64). See ADR "macOS .dmg packaging for the desktop client".
 #
 #   - Self-contained: bundles the .NET runtime, so the target Mac needs no .NET installed.
-#   - Ad-hoc code-signed (`codesign -s -`): needs NO Apple Developer account, and satisfies the Apple
-#     Silicon loader's requirement that binaries carry *some* valid signature to launch.
+#   - SIGNED AND NOTARIZED when a Developer ID identity is available (ADR 0896): every Mach-O file signed with
+#     the hardened runtime and a timestamp, then the app with scripts/macos/SimplArchive.entitlements, then the
+#     .dmg, which is notarized and stapled so it opens without Gatekeeper's warning — offline too.
+#   - AD-HOC signed otherwise (`codesign -s -`), as every build was before ADR 0896: enough for the Apple
+#     Silicon loader to launch it, and Gatekeeper warns on first open. The script says so loudly.
 #   - Packaged with the built-in `hdiutil` (no Homebrew dependency); each .dmg contains the .app plus an
 #     /Applications symlink for drag-to-install.
-#   - UNSIGNED in the Developer-ID sense / NOT notarized — Gatekeeper warns on first open (this fits the
-#     certificates are paid and this build does not carry one; the workaround is printed at the end).
+#
+# Signing is driven by the ENVIRONMENT, never by arguments, so no secret reaches argv or shell history:
+#   MACOS_SIGN_IDENTITY   the identity in the keychain, e.g. "Developer ID Application: Name (TEAMID)"
+#   NOTARY_APPLE_ID, NOTARY_APP_PASSWORD, APPLE_TEAM_ID   notarytool's Apple ID route (no App Store Connect)
+#   REQUIRE_SIGNING=1     refuse to build an unsigned .dmg — the release sets this, so a release cannot ship
+#                         an ad-hoc build without saying so by failing.
 #
 # Usage:   scripts/package-macos-dmg.sh [version] [--upload]
 #            version   optional (default 0.1.0) — stamped into the bundle + the .dmg file names.
@@ -51,6 +58,63 @@ fi
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo_root"
 mkdir -p "$OUT_DIR"
+
+ENTITLEMENTS="scripts/macos/SimplArchive.entitlements"
+SIGN_IDENTITY="${MACOS_SIGN_IDENTITY:-}"
+if [[ -z "$SIGN_IDENTITY" ]]; then
+  if [[ "${REQUIRE_SIGNING:-0}" == 1 ]]; then
+    echo "error: REQUIRE_SIGNING=1 but MACOS_SIGN_IDENTITY is empty — refusing to build an unsigned .dmg." >&2
+    exit 1
+  fi
+  echo "==> No MACOS_SIGN_IDENTITY: building AD-HOC signed .dmgs (Gatekeeper will warn on first open)."
+elif [[ -z "${NOTARY_APPLE_ID:-}" || -z "${NOTARY_APP_PASSWORD:-}" || -z "${APPLE_TEAM_ID:-}" ]]; then
+  # A signed but un-notarized .dmg is WORSE than an ad-hoc one: Gatekeeper still refuses it, and it looks finished.
+  echo "error: MACOS_SIGN_IDENTITY is set but NOTARY_APPLE_ID / NOTARY_APP_PASSWORD / APPLE_TEAM_ID are not." >&2
+  exit 1
+fi
+
+# Developer ID signing, inside-out (ADR 0896). `codesign --deep` is NOT used: it signs nested code with the
+# outer call's options, which gives every dylib the app's entitlements, and Apple's notary rejects --deep
+# signatures outright. So every Mach-O file is signed on its own first, then the bundle seals the rest.
+sign_app() {
+  local app_dir="$1" exe="$2"
+  local file
+  while IFS= read -r -d '' file; do
+    # A string match, not `file … | grep -q`: under pipefail that pipe can report a MATCH as a failure, which
+    # here would silently skip signing a library and get the .dmg refused by the notary — only sometimes.
+    if [[ "$file" != "$app_dir/Contents/MacOS/$exe" && "$(file -b "$file")" == *Mach-O* ]]; then
+      codesign --force --timestamp --options runtime --sign "$SIGN_IDENTITY" "$file"
+    fi
+  done < <(find "$app_dir/Contents/MacOS" -type f -print0)
+  codesign --force --timestamp --options runtime --entitlements "$ENTITLEMENTS" --sign "$SIGN_IDENTITY" \
+    "$app_dir/Contents/MacOS/$exe"
+  codesign --force --timestamp --options runtime --entitlements "$ENTITLEMENTS" --sign "$SIGN_IDENTITY" "$app_dir"
+  codesign --verify --strict --deep --verbose=2 "$app_dir"
+}
+
+# Sign, notarize and staple the .dmg. The password reaches notarytool through its argv, which is unavoidable
+# for the Apple ID route; it is never echoed, and on CI the runner masks secrets in its log.
+notarize_dmg() {
+  local dmg="$1" out submission
+  codesign --force --timestamp --sign "$SIGN_IDENTITY" "$dmg"
+  echo "==> Notarizing $(basename "$dmg") (this waits for Apple, typically a few minutes)…"
+  if ! out="$(xcrun notarytool submit "$dmg" --apple-id "$NOTARY_APPLE_ID" --password "$NOTARY_APP_PASSWORD" \
+      --team-id "$APPLE_TEAM_ID" --wait 2>&1)"; then
+    echo "$out" >&2
+    exit 1
+  fi
+  grep -E "id:|status:" <<<"$out" || true   # informational only; must never fail the script
+  if [[ "$out" != *"status: Accepted"* ]]; then
+    # The notary says WHY in a log the submit output only links to; fetch it, or the refusal is unreadable.
+    submission="$(echo "$out" | sed -n 's/^ *id: //p' | head -1)"
+    xcrun notarytool log "$submission" --apple-id "$NOTARY_APPLE_ID" --password "$NOTARY_APP_PASSWORD" \
+      --team-id "$APPLE_TEAM_ID" >&2 || true
+    echo "error: notarization of $(basename "$dmg") was not accepted." >&2
+    exit 1
+  fi
+  xcrun stapler staple "$dmg"
+  spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
+}
 
 # Build one architecture: publish -> assemble the .app -> ad-hoc sign -> create the .dmg.
 build_one() {
@@ -105,16 +169,24 @@ build_one() {
 </plist>
 PLIST
 
-  # Ad-hoc signature (no Apple account). Required for the app to launch on Apple Silicon; harmless on Intel.
-  echo "==> [$arch_label] Ad-hoc signing…"
-  codesign --force --deep --sign - "$app_dir" 2>/dev/null \
-    || echo "   (codesign failed — the app is fully unsigned; it may be blocked on Apple Silicon.)"
+  if [[ -n "$SIGN_IDENTITY" ]]; then
+    echo "==> [$arch_label] Signing with the Developer ID (hardened runtime)…"
+    sign_app "$app_dir" "$EXE_NAME"
+  else
+    # Ad-hoc signature (no Apple account). Required for the app to launch on Apple Silicon; harmless on Intel.
+    echo "==> [$arch_label] Ad-hoc signing…"
+    codesign --force --deep --sign - "$app_dir" 2>/dev/null \
+      || echo "   (codesign failed — the app is fully unsigned; it may be blocked on Apple Silicon.)"
+  fi
 
   # /Applications symlink so the .dmg offers drag-to-install.
   ln -sf /Applications "$stage/Applications"
 
   echo "==> [$arch_label] Building ${dmg}…"
   hdiutil create -volname "${APP_NAME} ${VERSION}" -srcfolder "$stage" -ov -format UDZO "$dmg" >/dev/null
+  if [[ -n "$SIGN_IDENTITY" ]]; then
+    notarize_dmg "$dmg"
+  fi
 
   rm -rf "$publish_dir" "$stage"
   echo "==> [$arch_label] Done: $dmg"
@@ -152,9 +224,15 @@ if [[ "$UPLOAD" == 1 ]]; then
   echo "==> Uploaded $(basename "$arm_dmg") + $(basename "$x64_dmg") to ${release_repo} ${tag}."
 fi
 
+if [[ -n "$SIGN_IDENTITY" ]]; then
+  echo
+  echo "These .dmg installers are signed with the Developer ID, notarized and stapled."
+  exit 0
+fi
+
 cat <<'NOTE'
 
-These .dmg installers are UNSIGNED and not notarized, so macOS Gatekeeper will warn on first open.
+These .dmg installers are AD-HOC signed and not notarized, so macOS Gatekeeper will warn on first open.
 To run the app after dragging it to /Applications:
   - right-click SimplArchive.app -> Open (confirm once), or
   - clear the quarantine flag:  xattr -dr com.apple.quarantine /Applications/SimplArchive.app

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The hardened runtime's exceptions the desktop client needs, and nothing else (ADR 0896). Notarization requires
+  the hardened runtime; these three are what a self-contained .NET app with a smartcard reader breaks without.
+
+  - allow-jit, allow-unsigned-executable-memory: the .NET runtime compiles IL to native code at run time and
+    writes it into executable memory. Without them the app dies before its first window.
+  - disable-library-validation: the desktop loads the smartcard middleware's PKCS#11 library from the SYSTEM
+    (ADR 0831), signed by its vendor rather than by us. Library validation would refuse it, and card decryption
+    would break in signed builds only, while every unsigned build kept working.
+-->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.allow-jit</key><true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
+  <key>com.apple.security.cs.disable-library-validation</key><true/>
+</dict>
+</plist>

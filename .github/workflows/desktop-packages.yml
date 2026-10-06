@@ -27,6 +27,14 @@ name: Desktop packages
 on:
   push:
     tags: ["v*"]
+  # The SIGNING DRY-RUN (ADR 0896): builds, signs, notarizes and staples the .dmgs and uploads them as workflow
+  # artifacts — no release, no win/linux. How a signing change is proven before a tag depends on it.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version stamped into the dry-run build"
+        required: true
+        default: "0.0.1"
 
 jobs:
   # Every desktop package, on the one runner that can build them all (ADRs 0444/0478).
@@ -43,15 +51,61 @@ jobs:
           global-json-file: global.json
 
       - name: Package win-x64 + linux-x64
+        if: ${{ github.event_name == 'push' }}
         run: scripts/package-windows-linux.sh "${GITHUB_REF_NAME#v}"
 
-      - name: Package macOS .dmg (arm64 + x64)
-        run: scripts/package-macos-dmg.sh "${GITHUB_REF_NAME#v}"
+      # The Developer ID certificate goes into a THROWAWAY keychain that dies with the runner: never the login
+      # keychain, and never a file left on disk. A missing secret fails here, before anything is built (ADR 0896).
+      - name: Import the Developer ID certificate
+        id: identity
+        env:
+          MACOS_CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [ -n "$MACOS_CERT_P12_BASE64" ] && [ -n "$MACOS_CERT_PASSWORD" ] \
+            || { echo "::error::MACOS_CERT_P12_BASE64 / MACOS_CERT_PASSWORD are not set — a release will not ship unsigned."; exit 1; }
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password="$(openssl rand -base64 24)"
+          p12="$RUNNER_TEMP/developer-id.p12"
+          printf '%s' "$MACOS_CERT_P12_BASE64" | base64 --decode > "$p12"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$p12" -k "$keychain" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          rm -f "$p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain" >/dev/null
+          # Prepend to the search list rather than replace it, so codesign finds the identity AND the system roots.
+          read -r -a existing <<< "$(security list-keychains -d user | tr -d '"')"
+          security list-keychains -d user -s "$keychain" "${existing[@]}"
+          identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -1)"
+          [ -n "$identity" ] || { echo "::error::The imported certificate holds no 'Developer ID Application' identity."; exit 1; }
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+          echo "Signing as: $identity"
+
+      - name: Package macOS .dmg (arm64 + x64), signed and notarized
+        env:
+          REQUIRE_SIGNING: "1"
+          MACOS_SIGN_IDENTITY: ${{ steps.identity.outputs.identity }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_APP_PASSWORD: ${{ secrets.NOTARY_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          VERSION: ${{ github.event_name == 'push' && github.ref_name || inputs.version }}
+        run: scripts/package-macos-dmg.sh "${VERSION#v}"
+
+      - name: Keep the dry-run's .dmgs as workflow artifacts
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: signed-dmgs-${{ inputs.version }}
+          path: dist/*.dmg
+          if-no-files-found: error
 
       # Named explicitly rather than `dist/*`: a glob that finds three files uploads three files and reports
       # success, which is the shape that let three releases ship without their .dmgs. An unexpanded name here
       # fails the step instead.
       - name: Attach every package to the release
+        if: ${{ github.event_name == 'push' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -80,7 +134,7 @@ jobs:
   # — a red verify that looked exactly like the missing-asset verdict it exists to give.
   verify:
     timeout-minutes: 10
-    if: ${{ github.repository == 'HebelConsulting/SimplArchive' }}
+    if: ${{ github.repository == 'HebelConsulting/SimplArchive' && github.event_name == 'push' }}
     needs: [packages]
     runs-on: ubuntu-latest
     permissions:
