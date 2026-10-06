@@ -34,6 +34,17 @@ public interface IModuleArchiveFacade
     Task<byte[]?> GetDocumentContentAsync(Guid documentId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// A short-lived presigned URL for the current version's CONTENT (ABI 1.8, core ADR 0899), for a module that
+    /// hands the bytes to a client rather than reading them: a feed answers <c>302</c> to it, so the Api never
+    /// proxies a stored object. Null when the document has no confirmed version, the module's principal may not
+    /// see it, or the installation will not serve it as plaintext (the strict tier). <paramref name="ttl"/> is
+    /// clamped by the host to a few minutes. The URL is a credential: never log it.
+    /// </summary>
+    /// <remarks>Default-implemented so a module's 1.7 test double still compiles; the host implements it.</remarks>
+    Task<Uri?> GetDocumentContentUrlAsync(Guid documentId, TimeSpan ttl, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException($"{GetType().Name} does not implement the ABI 1.8 GetDocumentContentUrlAsync.");
+
+    /// <summary>
     /// The value an administrator configured for one of this module's declared <see cref="ModuleSetting"/>s
     /// (ABI 0.12, core ADR 0772), for the CURRENT tenant. Null when nothing is configured — which is a normal
     /// state, not an error: the module degrades to whatever it does without that integration, and should say

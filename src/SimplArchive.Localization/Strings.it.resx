@@ -5028,6 +5028,9 @@
   <data name="ModuleActionDone" xml:space="preserve">
     <value>{0} — fatto.</value>
   </data>
+  <data name="RevealOnceHint" xml:space="preserve">
+    <value>Copialo ora: non verrà mostrato di nuovo.</value>
+  </data>
   <data name="AccountSmime" xml:space="preserve">
     <value>E-mail cifrata (S/MIME)…</value>
   </data>

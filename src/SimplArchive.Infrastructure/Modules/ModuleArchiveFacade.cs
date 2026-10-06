@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Documents;
 using SimplArchive.Domain.Masks;
@@ -27,6 +28,11 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
     private readonly IDocumentVersionFinalizer? _finalizer;
     private Guid? _principalId;
     private bool _principalResolved;
+    private readonly ILogger<ModuleArchiveFacade>? _logger;
+
+    /// <summary>The longest a presigned content URL handed to a module may live (ABI 1.8, ADR 0899): long enough
+    /// for a client to follow a redirect, short enough that a leaked URL is worth little.</summary>
+    public static readonly TimeSpan ContentUrlCeiling = TimeSpan.FromMinutes(5);
 
     public ModuleArchiveFacade(
         SimplArchiveDbContext dbContext,
@@ -36,8 +42,10 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         IEffectiveRightsCalculator? rights = null,
         IObjectStorageClient? objectStorage = null,
         ITransitEncryptor? transit = null,
-        IDocumentVersionFinalizer? finalizer = null)
+        IDocumentVersionFinalizer? finalizer = null,
+        ILogger<ModuleArchiveFacade>? logger = null)
     {
+        _logger = logger;
         _dbContext = dbContext;
         _currentUser = currentUser;
         _currentServiceAccount = currentServiceAccount;
@@ -160,6 +168,44 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         return rows
             .GroupBy(r => r.ResourceDocumentId)
             .ToDictionary(g => g.Key, g => g.First().UserId);
+    }
+
+    /// <summary>
+    /// A presigned URL for the current content (ABI 1.8, ADR 0899): the module-side form of "the Api never proxies
+    /// stored bytes". Same consent gate as a content read; through <c>IObjectStorageClient</c>, so the at-rest
+    /// decorator applies and the strict tier answers null; the ttl is clamped to <see cref="ContentUrlCeiling"/>.
+    /// The URL is logged never, the document id at Debug.
+    /// </summary>
+    public async Task<Uri?> GetDocumentContentUrlAsync(Guid documentId, TimeSpan ttl, CancellationToken cancellationToken = default)
+    {
+        if (!await ModuleMaySeeAsync(documentId, cancellationToken))
+        {
+            return null;
+        }
+
+        var pointer = await _dbContext.Documents
+            .Where(d => d.Id == documentId)
+            .Select(d => d.CurrentVersionId)
+            .SingleOrDefaultAsync(cancellationToken);
+        var version = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, documentId, pointer, cancellationToken);
+        if (version is null)
+        {
+            return null;
+        }
+
+        if (_objectStorage is null)
+        {
+            throw new InvalidOperationException(
+                "Content URLs need an object-storage client; the host wires one — a test facade that presigns must supply it.");
+        }
+
+        var lifetime = ttl <= TimeSpan.Zero || ttl > ContentUrlCeiling ? ContentUrlCeiling : ttl;
+        var url = await _objectStorage.GetPresignedDownloadUrlAsync(version.ObjectKey, lifetime, cancellationToken: cancellationToken);
+        _logger?.LogDebug(
+            "Module {ModuleId} presigned the content of document {DocumentId} for {Lifetime}; issued: {Issued}",
+            _identity?.ModuleId, documentId, lifetime, url is not null);
+
+        return url;
     }
 
     public async Task<byte[]?> GetDocumentContentAsync(Guid documentId, CancellationToken cancellationToken = default)

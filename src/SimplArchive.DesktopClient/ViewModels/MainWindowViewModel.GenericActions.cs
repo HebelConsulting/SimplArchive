@@ -60,8 +60,16 @@ public partial class MainWindowViewModel
                 return;
             }
 
-            await _api.Documents.InvokeModuleActionAsync(action.CommitHref, action.ValueField, chosen);
-            Status = string.Format(CultureInfo.CurrentCulture, Strings.Get("ModuleActionDone"), action.Label);
+            var outcome = await _api.Documents.InvokeModuleActionAsync(action.CommitHref, action.ValueField, chosen);
+
+            // A value the module reveals ONCE (ABI 1.8, core ADR 0899) is shown before anything else and kept
+            // nowhere: not in Status, not in the activity log.
+            if (outcome.RevealValue is { } revealed && ShowRevealOnceAsync is { } show)
+            {
+                await show(outcome.RevealLabel ?? action.Label, revealed);
+            }
+
+            Status = outcome.Message ?? string.Format(CultureInfo.CurrentCulture, Strings.Get("ModuleActionDone"), action.Label);
             await ReloadDetailAsync();
         }
         catch (ApiActionException failure)
@@ -78,6 +86,10 @@ public partial class MainWindowViewModel
     /// button — loud, not silent.
     /// </summary>
     public Func<ModuleActionPickerViewModel, Task<bool>>? ShowModuleActionPickerAsync { get; set; }
+
+    /// <summary>Shows a value revealed once (label, value), with Copy. A settable callback for the same reason as the
+    /// picker (ADR 0730).</summary>
+    public Func<string, string, Task>? ShowRevealOnceAsync { get; set; }
 
     /// <summary>One Status row for the pane (#1062): the pretty name and, when unmet, the diagnoses. The
     /// display split lives in SimplArchive.Presentation so both clients answer identically (ADR 0650).</summary>

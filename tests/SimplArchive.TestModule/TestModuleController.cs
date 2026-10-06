@@ -190,6 +190,19 @@ public sealed class TestModuleController : ControllerBase
     [HttpHead("settings-seen")]
     public IActionResult HeadSettingsSeen() => NoContent();
 
+    /// <summary>The reveal-once fixture (ABI 1.8, ADR 0899): an action outcome carrying a value shown once.</summary>
+    [HttpPost("reveal")]
+    public IActionResult Reveal() =>
+        Ok(new ModuleActionResult("Issued.") { RevealOnce = new RevealedValue("Test secret", "s3cret-shown-once") });
+
+    /// <summary>The presign fixture (ABI 1.8, ADR 0899): the content URL the facade issues, null when it issues none.</summary>
+    [HttpGet("documents/{documentId:guid}/content-url")]
+    public async Task<IActionResult> ContentUrl(Guid documentId, [FromQuery] int ttlSeconds, [FromServices] IModuleArchiveFacade archive) =>
+        Ok(new { url = (await archive.GetDocumentContentUrlAsync(documentId, TimeSpan.FromSeconds(ttlSeconds)))?.ToString() });
+
+    [HttpHead("documents/{documentId:guid}/content-url")]
+    public IActionResult ContentUrlHead(Guid documentId) => Ok();
+
     [HttpGet("status")]
     public async Task<IActionResult> Status(
         [FromServices] IModuleCallerContext caller, CancellationToken cancellationToken)

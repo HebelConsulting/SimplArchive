@@ -79,15 +79,19 @@ public sealed partial class DocumentsClient
         return [];
     }
 
-    /// <summary>Commits a module action with the chosen value.</summary>
-    public async Task InvokeModuleActionAsync(
+    /// <summary>What a module action answered (ABI 1.8, core ADR 0899): a status sentence and, optionally, a value to
+    /// show exactly once. Both null for a module that answers nothing.</summary>
+    public sealed record ModuleActionOutcome(string? Message, string? RevealLabel, string? RevealValue);
+
+    /// <summary>Commits a module action with the chosen value, and reads its outcome.</summary>
+    public async Task<ModuleActionOutcome> InvokeModuleActionAsync(
         string commitHref, string valueField, string value, CancellationToken cancellationToken = default)
     {
         var payload = new Dictionary<string, string> { [valueField] = value };
         var response = await _core.Http.PostAsJsonAsync(commitHref, payload, cancellationToken);
         if (response.IsSuccessStatusCode)
         {
-            return;
+            return await OutcomeAsync(response, cancellationToken);
         }
 
         // A module's refusal arrives as the same RFC 7807 problem a core refusal does, with a detail its own
@@ -96,5 +100,47 @@ public sealed partial class DocumentsClient
         // what to do about it.
         var (_, _, detail) = await ApiCore.ProblemAsync(response, cancellationToken);
         throw new ApiActionException(detail ?? $"The action could not be completed ({(int)response.StatusCode}).");
+    }
+
+    /// <summary>The outcome in a <c>ModuleActionResult</c> body; a body of any other shape is a plain success.</summary>
+    public static ModuleActionOutcome ParseModuleActionOutcome(System.Text.Json.JsonElement body)
+    {
+        if (body.ValueKind != System.Text.Json.JsonValueKind.Object)
+        {
+            return new ModuleActionOutcome(null, null, null);
+        }
+
+        var message = body.TryGetProperty("message", out var m) && m.ValueKind == System.Text.Json.JsonValueKind.String ? m.GetString() : null;
+        if (body.TryGetProperty("revealOnce", out var reveal) && reveal.ValueKind == System.Text.Json.JsonValueKind.Object
+            && reveal.TryGetProperty("value", out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String
+            && v.GetString() is { Length: > 0 } value)
+        {
+            var label = reveal.TryGetProperty("label", out var l) && l.ValueKind == System.Text.Json.JsonValueKind.String ? l.GetString() : null;
+            return new ModuleActionOutcome(message, label, value);
+        }
+
+        return new ModuleActionOutcome(message, null, null);
+    }
+
+    /// <summary>
+    /// Reads a <c>ModuleActionResult</c> body when there is one; anything else (no body, another shape) is a plain
+    /// success, which is what every module answered before ABI 1.8. The revealed value is handed straight to the
+    /// caller and kept nowhere else.
+    /// </summary>
+    private static async Task<ModuleActionOutcome> OutcomeAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        if (response.Content.Headers.ContentType?.MediaType?.Contains("json", StringComparison.OrdinalIgnoreCase) != true)
+        {
+            return new ModuleActionOutcome(null, null, null);
+        }
+
+        try
+        {
+            return ParseModuleActionOutcome(await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>(cancellationToken));
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return new ModuleActionOutcome(null, null, null);
+        }
     }
 }

@@ -64,5 +64,10 @@ public static class ModuleAbiVersion
     /// protocol endpoint such as a NuGet feed and authenticates its clients' credentials (core ADR 0898). A default
     /// member and new types only, so a 1.6 module is unaffected.
     /// </para>
-    public const int Minor = 7;
+    /// <para>
+    /// 1.8 adds <see cref="IModuleArchiveFacade.GetDocumentContentUrlAsync"/> (a presigned content URL, so a module
+    /// redirects instead of proxying bytes) and <see cref="ModuleActionResult"/> (an action's outcome, optionally a
+    /// value revealed once), core ADR 0899. A default member and new types only, so a 1.7 module is unaffected.
+    /// </para>
+    public const int Minor = 8;
 }

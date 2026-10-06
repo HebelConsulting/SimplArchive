@@ -115,4 +115,21 @@ public class DesktopModuleActionTests
         Assert.True(picker.HasNoOptions);
         Assert.Null(picker.Selected);
     }
+
+    // ABI 1.8 (core ADR 0899): a commit's ModuleActionResult carries a status sentence and, optionally, a value to
+    // show once. Any other body is a plain success, which is what every module answered before.
+    [Fact]
+    public void A_commit_outcome_reads_the_message_and_the_value_revealed_once()
+    {
+        var revealed = DocumentsClient.ParseModuleActionOutcome(JsonSerializer.Deserialize<JsonElement>(
+            """{"message":"Issued.","revealOnce":{"label":"Pull credential for ACME","value":"sa_x_y"}}"""));
+        Assert.Equal(new DocumentsClient.ModuleActionOutcome("Issued.", "Pull credential for ACME", "sa_x_y"), revealed);
+
+        Assert.Equal(new DocumentsClient.ModuleActionOutcome("Done.", null, null),
+            DocumentsClient.ParseModuleActionOutcome(JsonSerializer.Deserialize<JsonElement>("""{"message":"Done.","revealOnce":null}""")));
+        Assert.Equal(new DocumentsClient.ModuleActionOutcome(null, null, null),
+            DocumentsClient.ParseModuleActionOutcome(JsonSerializer.Deserialize<JsonElement>("""{"holder":"anna@school.test"}""")));
+        Assert.Equal(new DocumentsClient.ModuleActionOutcome(null, null, null),
+            DocumentsClient.ParseModuleActionOutcome(JsonSerializer.Deserialize<JsonElement>("[]")));
+    }
 }

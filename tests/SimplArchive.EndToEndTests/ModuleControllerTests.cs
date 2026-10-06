@@ -648,4 +648,61 @@ public class ModuleControllerTests
             rig.Owner.Dispose();
         }
     }
+
+    // ABI 1.8 (ADR 0899): the facade presigns a document's content for a module that redirects rather than
+    // proxies (the bytes, a clamped lifetime, the consent gate), and an action may reveal a value once, which the
+    // host marks no-store.
+    [Fact]
+    public async Task A_module_presigns_content_it_may_see_and_reveals_a_value_once_uncached()
+    {
+        var rig = await RigAsync();
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", vendorKey.ExportSubjectPublicKeyInfoPem());
+        try
+        {
+            await ActivateAsync(rig, vendorKey);   // grants the module principal canSee on the repository
+            var bytes = Encoding.UTF8.GetBytes($"presign me {Guid.NewGuid():N}");
+            var granted = (await TestJson.Post(rig.Owner, $"/api/documents/{rig.RepoId}/children",
+                new { name = $"Package {Guid.NewGuid():N}" })).GetProperty("id").GetGuid();
+            var version = await TestJson.Post(rig.Owner, $"/api/documents/{granted}/versions", new { fileExtension = ".txt" });
+            using (var storage = new HttpClient())
+            {
+                (await storage.PutAsync(version.GetProperty("uploadUrl").GetString()!, new ByteArrayContent(bytes))).EnsureSuccessStatusCode();
+            }
+
+            await TestJson.Put(rig.Owner, $"/api/documents/{granted}/versions/{version.GetProperty("id").GetGuid()}", new { });
+
+            var issued = await TestJson.Get(rig.Admin, $"/api/test-module/documents/{granted}/content-url?ttlSeconds=3600");
+            var url = new Uri(issued.GetProperty("url").GetString()!);
+            using (var anonymous = new HttpClient())
+            {
+                Assert.Equal(bytes, await anonymous.GetByteArrayAsync(url));   // a plain client follows it to the bytes
+            }
+
+            var expires = System.Web.HttpUtility.ParseQueryString(url.Query)["X-Amz-Expires"];
+            Assert.InRange(int.Parse(expires!, System.Globalization.CultureInfo.InvariantCulture), 1, 300);   // an hour asked, five minutes given
+
+            // A document the module's principal was never granted: no URL, exactly as a content read sees nothing.
+            var elsewhere = (await TestJson.Post(rig.Owner, "/api/repositories", new { name = $"Ungranted {Guid.NewGuid():N}" })).GetProperty("id").GetGuid();
+            Assert.Equal(JsonValueKind.Null, (await TestJson.Get(rig.Admin, $"/api/test-module/documents/{elsewhere}/content-url?ttlSeconds=60")).GetProperty("url").ValueKind);
+
+            // Reveal once: the value arrives in the documented shape, and nothing along the way may keep it.
+            var revealed = await rig.Admin.PostAsync("/api/test-module/reveal", null);
+            Assert.Equal(HttpStatusCode.OK, revealed.StatusCode);
+            Assert.True(revealed.Headers.CacheControl?.NoStore);
+            var body = JsonSerializer.Deserialize<JsonElement>(await revealed.Content.ReadAsStringAsync());
+            Assert.Equal("Issued.", body.GetProperty("message").GetString());
+            Assert.Equal("s3cret-shown-once", body.GetProperty("revealOnce").GetProperty("value").GetString());
+            Assert.Equal("Test secret", body.GetProperty("revealOnce").GetProperty("label").GetString());
+
+            // An ordinary module response is not marked: no-store follows the revealed value, not the module.
+            Assert.NotEqual(true, (await rig.Admin.GetAsync("/api/test-module/status")).Headers.CacheControl?.NoStore);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", null);
+            rig.Admin.Dispose();
+            rig.Owner.Dispose();
+        }
+    }
 }

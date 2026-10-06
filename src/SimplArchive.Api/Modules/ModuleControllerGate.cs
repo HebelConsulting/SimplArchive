@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ApplicationModels;
 using Microsoft.AspNetCore.Mvc.Filters;
 using SimplArchive.Api.Errors.Exceptions.Modules;
@@ -25,6 +26,7 @@ public sealed class ModuleControllerGateConvention : IControllerModelConvention
         if (_moduleByAssembly.TryGetValue(controller.ControllerType.Assembly, out var moduleId))
         {
             controller.Filters.Add(new ModuleActivationGateFilter(moduleId));
+            controller.Filters.Add(new RevealOnceNoStoreFilter());
         }
     }
 }
@@ -62,6 +64,25 @@ internal sealed class ModuleActivationGateFilter : IAsyncResourceFilter
         // From here the scope runs AS the module (ADR 0736): its facade reads are gated by its own
         // principal's consented grants, not by any implicit whole-tenant view.
         services.GetRequiredService<ModuleIdentityAccessor>().ModuleId = _moduleId;
+
+        await next();
+    }
+}
+
+/// <summary>
+/// A module action's value revealed once (ABI 1.8, ADR 0899) is a secret on the wire: its response is marked
+/// <c>Cache-Control: no-store</c> so no cache along the way, and no browser history, keeps a copy. Applied by the
+/// host, because a module author forgetting it fails silently.
+/// </summary>
+internal sealed class RevealOnceNoStoreFilter : IAsyncResultFilter
+{
+    public async Task OnResultExecutionAsync(ResultExecutingContext context, ResultExecutionDelegate next)
+    {
+        if (context.Result is ObjectResult { Value: SimplArchive.ModuleAbi.ModuleActionResult { RevealOnce: not null } })
+        {
+            context.HttpContext.Response.Headers.CacheControl = "no-store";
+            context.HttpContext.Response.Headers.Pragma = "no-cache";
+        }
 
         await next();
     }
