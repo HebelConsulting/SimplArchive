@@ -12,7 +12,7 @@
 #
 # THE VERSION IS PINNED IN `images.env` (`CADDY_VERSION`) and passed in as a build argument, so the pin stays
 # where every other third-party image version lives rather than being buried in a Dockerfile nobody greps.
-ARG CADDY_VERSION=2.11.4
+ARG CADDY_VERSION=2.11.6
 
 FROM caddy:${CADDY_VERSION}-builder AS builder
 RUN xcaddy build --with github.com/mholt/caddy-l4

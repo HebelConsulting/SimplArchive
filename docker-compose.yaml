@@ -288,7 +288,7 @@ services:
   # persisted volume so create-bucket (which is the only time object lock can be enabled) runs only on a fresh
   # one; put-bucket-cors is applied every run.
   storage-init:
-    image: amazon/aws-cli:${AWSCLI_TAG:-2.36.50}
+    image: amazon/aws-cli:${AWSCLI_TAG:-2.37.9}
     depends_on:
       - seaweedfs
     environment:
@@ -401,7 +401,7 @@ services:
   # shows them in a web inbox on :8025 — so the demo's workflow/escalation emails are visible in a browser
   # (http://localhost:8025) without a real mail server. Dev-only; captures mail, never delivers it.
   mailpit:
-    image: axllent/mailpit:${MAILPIT_TAG:-v1.31.2}
+    image: axllent/mailpit:${MAILPIT_TAG:-v1.31.4}
     restart: unless-stopped
     ports:
       - "8025:8025"  # web inbox
@@ -688,7 +688,7 @@ services:
     build:
       context: ./docker/caddy-l4
       args:
-        CADDY_VERSION: ${CADDY_VERSION:-2.11.4}
+        CADDY_VERSION: ${CADDY_VERSION:-2.11.6}
     restart: unless-stopped
     depends_on:
       api:

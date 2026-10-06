@@ -29,6 +29,13 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # still carries literals, because it lags at rollout on purpose.
 files=("$repo_root/images.env")
 [[ -f "$repo_root/tools/kiosk/docker-compose.yml" ]] && files+=("$repo_root/tools/kiosk/docker-compose.yml")
+# The chart hooks and the AWS installers name images literally, outside images.env. They sat at older pins
+# (aws-cli 2.36.2, Postgres 16.14) while this report said the stack was current, because it never read them.
+# PinnedImageLockstepTests holds them to images.env; this report says when images.env itself is behind upstream.
+for extra in charts/simplarchive/templates/hooks/storage-init.yaml charts/simplarchive/templates/reset-cronjob.yaml \
+             tools/aws-install/install.sh tools/aws-install-single/install.sh; do
+  [[ -f "$repo_root/$extra" ]] && files+=("$repo_root/$extra")
+done
 
 # images.env maps NAME=tag; every other file names `image: repo:tag`. Turn the first into the second so one
 # loop reads both, using the repository each variable stands for.
@@ -73,6 +80,7 @@ for file in "${files[@]}"; do
       [[ -n "$line" ]] && pins+=("$line")
     done < <(
       grep -hE '^[[:space:]]+image:' "$file" \
+        | grep -v '{{' \
         | sed -E 's/^[[:space:]]*image:[[:space:]]*//' \
         | grep -v '@sha256:' \
         | grep -v '^ghcr\.io/hebelconsulting/' \

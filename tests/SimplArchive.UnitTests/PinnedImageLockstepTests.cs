@@ -107,13 +107,27 @@ public partial class PinnedImageLockstepTests
         // keeps working with no flags (compose auto-reads only `.env`, which is gitignored here as the local
         // override file); the chart is a literal because a Helm values.yaml cannot include another file; the
         // fixtures read images.env at startup. The copies are CHECKED rather than trusted.
-        var surfaces = new (string Label, string Path, bool Csharp)[]
+        var surfaces = new List<(string Label, string Path, bool Csharp)>
         {
             ("docker-compose.yaml", Path.Combine(root, "docker-compose.yaml"), false),
             ("charts/simplarchive/values.yaml", Path.Combine(root, "charts", "simplarchive", "values.yaml"), false),
+            // The chart's hooks that run aws-cli name it LITERALLY, outside values.yaml — and so did the AWS
+            // installers below. Neither was a surface here, so they sat at 2.36.2 while images.env moved to 2.36.50
+            // and then 2.37.9, with every check green.
+            ("charts/…/hooks/storage-init.yaml", Path.Combine(root, "charts", "simplarchive", "templates", "hooks", "storage-init.yaml"), false),
+            ("charts/…/reset-cronjob.yaml", Path.Combine(root, "charts", "simplarchive", "templates", "reset-cronjob.yaml"), false),
             ("E2EApiFactory.cs", Path.Combine(root, "tests", "SimplArchive.EndToEndTests", "E2EApiFactory.cs"), true),
             ("SelfHostedApp.cs", Path.Combine(root, "tests", "SimplArchive.SelfHosting", "SelfHostedApp.cs"), true),
         };
+
+        // The AWS installers live under tools/, which the public mirror WITHHOLDS (ADR 0484) — so they are surfaces
+        // in the private repository only. Gated on the origin, not on the files existing, for the reason the kiosk
+        // check below gives: "skip when missing" would also stand the guard down here the day they moved.
+        if (PrivateRepositoryGate.IsPrivateRepository(root))
+        {
+            surfaces.Add(("tools/aws-install/install.sh", Path.Combine(root, "tools", "aws-install", "install.sh"), false));
+            surfaces.Add(("tools/aws-install-single/install.sh", Path.Combine(root, "tools", "aws-install-single", "install.sh"), false));
+        }
 
         var env = EnvPin().Matches(File.ReadAllText(Path.Combine(root, "images.env")))
             .ToDictionary(m => m.Groups[1].Value, m => m.Groups[2].Value.Trim(), StringComparer.Ordinal);
@@ -126,7 +140,7 @@ public partial class PinnedImageLockstepTests
             .Select(s => (s.Label, Images: ImagesIn(s.Path, s.Csharp, env)))
             .ToList();
 
-        Assert.True(seen.Count == surfaces.Length,
+        Assert.True(seen.Count == surfaces.Count,
             "A surface that names images has moved or been renamed, so this guard stopped watching it:\n"
             + string.Join("\n", surfaces.Where(s => !File.Exists(s.Path)).Select(s => $"  {s.Label}")));
 
