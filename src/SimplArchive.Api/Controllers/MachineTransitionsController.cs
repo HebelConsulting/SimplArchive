@@ -49,12 +49,14 @@ public class MachineTransitionsController : ControllerBase
     private readonly IAuditRecorder _audit;
     private readonly ModuleContentHealthRecorder _health;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
+    private readonly SimplArchive.Api.Modules.TransitionInvocationRule _invocation;
 
     public MachineTransitionsController(
         SimplArchiveDbContext dbContext, DocumentAccessService access, StateMachineCatalog catalog,
         StateMachineEngine engine, IAuditRecorder audit,
         SimplArchive.Api.Modules.ModuleContentHealthRecorder health,
-        ICurrentTenantAccessor currentTenantAccessor)
+        ICurrentTenantAccessor currentTenantAccessor,
+        SimplArchive.Api.Modules.TransitionInvocationRule invocation)
     {
         _dbContext = dbContext;
         _access = access;
@@ -63,6 +65,7 @@ public class MachineTransitionsController : ControllerBase
         _audit = audit;
         _health = health;
         _currentTenantAccessor = currentTenantAccessor;
+        _invocation = invocation;
     }
 
     [HttpPost("{transitionName}")]
@@ -98,10 +101,11 @@ public class MachineTransitionsController : ControllerBase
         // principal does the writing under its own consent grants, so being allowed to SEE the subject is the
         // whole ask. (CanSee is already established: an invisible document returned NotFound above via the
         // rights walk in GetCallerRightsAsync — all-false rights read as not-found-shaped Forbid below.)
+        // A principal-invoked act (ABI 1.6, ADR 0897) belongs to the person its fields name, or an administrator.
+        // One rule with the link builder, so the button and the call never disagree.
         var autoRefresh = machine.Transitions[transitionName].AutoRefreshOnOpen;
         var rights = await _access.GetCallerRightsAsync(documentId, cancellationToken);
-        var required = autoRefresh ? rights.CanSee : rights.CanEditContent;
-        if (!required)
+        if (!await _invocation.MayInvokeAsync(machine.Transitions[transitionName], documentId, rights, cancellationToken))
         {
             return Forbid();
         }

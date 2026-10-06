@@ -52,5 +52,11 @@ public static class ModuleAbiVersion
     /// its package and the core files it, versioning it when the bytes change (core ADR 0891). Default null, so a
     /// 1.4 module is unaffected.
     /// </para>
-    public const int Minor = 5;
+    /// <para>
+    /// 1.6 adds a <see cref="IStateMachineBuilder.Transition(string, string, IReadOnlyList{StateCondition}, Func{TransitionContext, Task}, IReadOnlyList{string})"/>
+    /// overload naming the subject's principal fields: the named person (or a tenant administrator) may invoke the
+    /// act, instead of whoever may edit (core ADR 0897). A new default-implemented member, so a 1.5 module is
+    /// unaffected.
+    /// </para>
+    public const int Minor = 6;
 }

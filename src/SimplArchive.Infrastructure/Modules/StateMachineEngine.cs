@@ -34,7 +34,10 @@ public sealed class StateMachineCatalog : IStateMachineDefinitions
         // The least time between two upstream fetches (ABI 0.28, #1307) — the rate limit for a hook whose
         // collection holds DURABLE items, where the staged-content cooldown (ADR 0810) never engages. Null
         // means the module declared none: ephemeral content, ExpiresAt is the clock.
-        TimeSpan? MinimumRefreshInterval = null);
+        TimeSpan? MinimumRefreshInterval = null,
+        // Who may invoke it (ABI 1.6, ADR 0897): the subject's fields naming the person, in precedence order —
+        // the first holding a value wins. Null means the ordinary edit-rights gate.
+        IReadOnlyList<string>? InvokedByPrincipalFields = null);
 
     /// <summary>A declared proposal query (ABI 0.11, ADR 0769): label for the picker affordance, the field
     /// its answers fill, and the module's handler — run under the module principal, read-only.</summary>
@@ -75,6 +78,28 @@ public sealed class StateMachineCatalog : IStateMachineDefinitions
         return new Builder(definition);
     }
 
+    /// <summary>
+    /// Refuses a module whose principal-invoked transition (ABI 1.6) names a field its subject mask lacks. Only the
+    /// module's OWN masks qualify: the field is the module's claim about its own records.
+    /// </summary>
+    public void ValidatePrincipalFields(string moduleId, IReadOnlyList<ModuleMaskSeed> masks)
+    {
+        var fieldsOf = masks.ToDictionary(m => m.MaskId, m => m.Fields.Select(f => f.Name).ToHashSet(StringComparer.Ordinal));
+        foreach (var machine in _machines.Values.Where(m => m.ModuleId == moduleId))
+        {
+            foreach (var (transitionName, transition) in machine.Transitions)
+            {
+                foreach (var field in transition.InvokedByPrincipalFields ?? [])
+                {
+                    if (!fieldsOf.TryGetValue(machine.SubjectMaskId, out var declared) || !declared.Contains(field))
+                    {
+                        throw new UnknownPrincipalFieldException(machine.MachineId, transitionName, field);
+                    }
+                }
+            }
+        }
+    }
+
     private sealed class ModuleScope(StateMachineCatalog catalog, string moduleId) : IStateMachineDefinitions
     {
         public IStateMachineBuilder Machine(string machineId, Guid subjectMaskId) =>
@@ -92,6 +117,23 @@ public sealed class StateMachineCatalog : IStateMachineDefinitions
         public IStateMachineBuilder Transition(string name, string label, IReadOnlyList<StateCondition> guard, Func<TransitionContext, Task> handler)
         {
             definition.Transitions[name] = new TransitionDefinition(label, guard, handler);
+            return this;
+        }
+
+        public IStateMachineBuilder Transition(
+            string name, string label, IReadOnlyList<StateCondition> guard, Func<TransitionContext, Task> handler,
+            IReadOnlyList<string> invokedByPrincipalFields)
+        {
+            // An empty list would name nobody, so only an administrator could act: a declaration that reads as a
+            // rule and behaves as a lock. Refused at load rather than discovered by the first person who cannot sign.
+            if (invokedByPrincipalFields is not { Count: > 0 } || invokedByPrincipalFields.Any(string.IsNullOrWhiteSpace))
+            {
+                throw new ArgumentException(
+                    $"Transition '{definition.MachineId}/{name}' names no principal field.", nameof(invokedByPrincipalFields));
+            }
+
+            definition.Transitions[name] = new TransitionDefinition(
+                label, guard, handler, InvokedByPrincipalFields: [.. invokedByPrincipalFields]);
             return this;
         }
 

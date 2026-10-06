@@ -46,13 +46,17 @@ public sealed class DocumentResourceLinks
     // unreadable, one door along.
     private readonly SimplArchive.Application.Abstractions.IDavCollectionKindRegistry _kinds;
 
+    // Who may invoke a transition: the SAME rule the POST enforces (ADR 0897), so the link never promises more.
+    private readonly SimplArchive.Api.Modules.TransitionInvocationRule _invocation;
+
     public DocumentResourceLinks(
         SimplArchiveDbContext dbContext,
         DocumentAccessService access,
         ICurrentUserAccessor currentUserAccessor,
         IUserSystemRightsResolver userSystemRights,
         SimplArchive.Infrastructure.Modules.StateMachineCatalog machines,
-        SimplArchive.Application.Abstractions.IDavCollectionKindRegistry kinds)
+        SimplArchive.Application.Abstractions.IDavCollectionKindRegistry kinds,
+        SimplArchive.Api.Modules.TransitionInvocationRule invocation)
     {
         _dbContext = dbContext;
         _access = access;
@@ -60,6 +64,7 @@ public sealed class DocumentResourceLinks
         _userSystemRights = userSystemRights;
         _machines = machines;
         _kinds = kinds;
+        _invocation = invocation;
     }
 
     public async Task<(List<Link> Links, bool CanCreateChildren)> BuildAsync(
@@ -138,7 +143,7 @@ public sealed class DocumentResourceLinks
         // RED guards included, deliberately (owner-decided 2026-09-04): clicking a refused act answers
         // with the ADR 0742 diagnosis, which is the machine's explanation grammar as UI, where a hidden
         // button would read as a missing feature. Emitted only where the caller could execute
-        // (CanEditContent, the same right the POST enforces) and where the declaring module is ACTIVE —
+        // (TransitionInvocationRule, the same rule the POST enforces) and where the declaring module is ACTIVE —
         // for anyone else the machine does not exist (ADR 0543).
         if (maskFacts is not null)
         {
@@ -154,10 +159,9 @@ public sealed class DocumentResourceLinks
 
                 foreach (var (transitionName, transition) in machine.Transitions)
                 {
-                    // An ORDINARY transition mutates on the caller's behalf and stays edit-gated; the populate
-                    // hook is an AUTOMATED act the viewer merely triggers (ADR 0764) — CanSee is the whole ask,
-                    // and seeing this resource at all established it.
-                    if (!transition.AutoRefreshOnOpen && !rights.CanEditContent)
+                    // Edit-gated for an ordinary act, see-gated for the populate hook (ADR 0764), the named
+                    // person or an administrator for a principal-invoked one (ADR 0897) — one rule, the POST's.
+                    if (!await _invocation.MayInvokeAsync(transition, documentId, rights, cancellationToken))
                     {
                         continue;
                     }

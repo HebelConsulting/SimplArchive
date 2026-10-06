@@ -71,7 +71,11 @@ public static class ModuleStartup
             // engine evaluates against them per request. Through the module scope, so every machine carries
             // its declaring module's id, which is what the wire surface gates activation on (ADR 0737).
             if (!TryRun(loaded, "DefineStateMachines", logger,
-                    () => loaded.Module.DefineStateMachines(machineCatalog.ForModule(loaded.Module.ModuleId))))
+                    () =>
+                    {
+                        loaded.Module.DefineStateMachines(machineCatalog.ForModule(loaded.Module.ModuleId));
+                        machineCatalog.ValidatePrincipalFields(loaded.Module.ModuleId, loaded.Module.Masks);
+                    }))
             {
                 continue;
             }

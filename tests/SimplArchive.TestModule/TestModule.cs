@@ -158,6 +158,10 @@ public sealed class TestModule : IIndustryModule
             new ModuleFieldSeed("Reminder sent for", "Text", IsRequired: false),
             // The proposal fixture's target (ABI 0.11, ADR 0769): the field the "mentors" proposal fills.
             new ModuleFieldSeed("Mentor", "Text", IsRequired: false),
+            // The principal-invoked fixture's fields (ABI 1.6, ADR 0897): the instructor when one is named,
+            // otherwise the pilot, may countersign. The flight-school's sign rule in miniature.
+            new ModuleFieldSeed("Instructor", "Text", IsRequired: false),
+            new ModuleFieldSeed("Pilot", "Text", IsRequired: false),
         ]),
         new ModuleMaskSeed(CertificateMaskId, "Test Certificate", IsFolderMask: false, IsBookable: false,
         [
@@ -431,6 +435,11 @@ public sealed class TestModule : IIndustryModule
                     .Where(d => d.Id != context.SubjectDocumentId)
                     .Select(d => new ProposalItem(d.Name, d.Name, "a test mentor"))];
             })
+            // The principal-invoked act (ABI 1.6, ADR 0897): offered to, and allowed for, the person the dossier
+            // names (the first of Instructor, Pilot holding a value) or a tenant administrator, and NOBODY else,
+            // editors included. A no-op handler: what is under test is who reaches it.
+            .Transition("countersign", "Countersign", [], _ => Task.CompletedTask,
+                invokedByPrincipalFields: ["Instructor", "Pilot"])
             // The handler-thrown refusal fixture (ADR 0767's OTHER path): a ModuleApiException from inside
             // a handler reaches ApiExceptionHandler where the ambient culture has already unwound — the
             // catalog must still resolve for the REQUEST culture (the bug found live 2026-09-08).

@@ -485,4 +485,89 @@ public class ModuleControllerTests
             rig.Owner.Dispose();
         }
     }
+
+    // ABI 1.6 (ADR 0897): a principal-invoked act belongs to the person the subject names, the first of
+    // Instructor, Pilot holding a value, or a tenant administrator. A READER who is that person is offered it and
+    // may run it; an EDITOR who is not is neither offered it nor allowed it. The link and the POST answer alike.
+    [Fact]
+    public async Task A_principal_invoked_act_is_offered_to_and_allowed_for_the_named_person_only()
+    {
+        var rig = await RigAsync();
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", vendorKey.ExportSubjectPublicKeyInfoPem());
+        var clients = new List<HttpClient>();
+        try
+        {
+            await ActivateAsync(rig, vendorKey);
+
+            async Task<(HttpClient Client, string Email)> PersonAsync(string role, bool canEdit)
+            {
+                var email = $"{role}-{Guid.NewGuid():N}@e2e.local";
+                var id = await _factory.SeedUserAsync(rig.TenantId, email, "person-1234", role);
+                await TestJson.Put(rig.Owner, $"/api/documents/{rig.RepoId}/acl-entries/users/{id}",
+                    new { canSee = true, canReadContent = true, canEditContent = canEdit });
+                var client = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, "person-1234"));
+                clients.Add(client);
+                return (client, email);
+            }
+
+            var (pilot, pilotEmail) = await PersonAsync("pilot", canEdit: false);
+            var (instructor, instructorEmail) = await PersonAsync("instructor", canEdit: false);
+            var (editor, _) = await PersonAsync("editor", canEdit: true);
+
+            var fields = (await TestJson.Get(rig.Admin, $"/api/masks/{SimplArchive.TestModule.TestModule.DossierMaskId}"))
+                .GetProperty("fields").EnumerateArray()
+                .ToDictionary(f => f.GetProperty("name").GetString()!, f => f.GetProperty("id").GetGuid());
+
+            async Task<Guid> DossierAsync(string? instructorValue, string pilotValue)
+            {
+                var id = (await TestJson.Post(rig.Owner, $"/api/documents/{rig.RepoId}/children",
+                    new { name = $"Dossier {Guid.NewGuid():N}", maskId = SimplArchive.TestModule.TestModule.DossierMaskId }))
+                    .GetProperty("id").GetGuid();
+                var values = new List<object> { new { fieldDefinitionId = fields["Pilot"], values = new[] { pilotValue } } };
+                if (instructorValue is not null)
+                {
+                    values.Add(new { fieldDefinitionId = fields["Instructor"], values = new[] { instructorValue } });
+                }
+
+                await TestJson.Put(rig.Admin, $"/api/documents/{id}/index-data", new { fields = values });
+                return id;
+            }
+
+            static async Task<bool> OffersAsync(HttpClient client, Guid documentId) =>
+                (await TestJson.Get(client, $"/api/documents/{documentId}")).GetProperty("links").EnumerateArray()
+                    .Any(l => l.GetProperty("rel").GetString() == "machine:test-pilot:countersign");
+
+            static async Task<HttpStatusCode> InvokeAsync(HttpClient client, Guid documentId) =>
+                (await client.PostAsync($"/api/documents/{documentId}/machine/test-pilot/transitions/countersign", null)).StatusCode;
+
+            // SOLO: no instructor, so the pilot is the person, matched case-insensitively as an e-mail is.
+            var solo = await DossierAsync(instructorValue: null, pilotValue: pilotEmail.ToUpperInvariant());
+            Assert.True(await OffersAsync(pilot, solo));
+            Assert.Equal(HttpStatusCode.NoContent, await InvokeAsync(pilot, solo));
+            Assert.False(await OffersAsync(editor, solo));     // edit rights alone no longer suffice
+            Assert.Equal(HttpStatusCode.Forbidden, await InvokeAsync(editor, solo));
+            Assert.True(await OffersAsync(rig.Admin, solo));   // the tenant administrator always may
+
+            // DUAL: the instructor is named, so the instructor (not the pilot) is the person.
+            var dual = await DossierAsync(instructorEmail, pilotEmail);
+            Assert.False(await OffersAsync(pilot, dual));
+            Assert.Equal(HttpStatusCode.Forbidden, await InvokeAsync(pilot, dual));
+            Assert.True(await OffersAsync(instructor, dual));
+            Assert.Equal(HttpStatusCode.NoContent, await InvokeAsync(instructor, dual));
+
+            // An ORDINARY act on the same subject is untouched: still the editor's, never the reader's.
+            Assert.DoesNotContain((await TestJson.Get(pilot, $"/api/documents/{solo}")).GetProperty("links").EnumerateArray(),
+                l => l.GetProperty("rel").GetString() == "machine:test-pilot:log-entry");
+            Assert.Contains((await TestJson.Get(editor, $"/api/documents/{solo}")).GetProperty("links").EnumerateArray(),
+                l => l.GetProperty("rel").GetString() == "machine:test-pilot:log-entry");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", null);
+            clients.ForEach(c => c.Dispose());
+            rig.Admin.Dispose();
+            rig.Owner.Dispose();
+        }
+    }
 }

@@ -38,6 +38,27 @@ public interface IStateMachineBuilder
     IStateMachineBuilder Transition(string name, string label, IReadOnlyList<StateCondition> guard, Func<TransitionContext, Task> handler);
 
     /// <summary>
+    /// An act that a NAMED PERSON may invoke (ABI 1.6, core ADR 0897): the subject's own fields say who. The
+    /// first of <paramref name="invokedByPrincipalFields"/> holding a value names the principal (an e-mail
+    /// address, matched as <see cref="ModuleMaskSeed.RepresentsPrincipalField"/> is). That person, if they can
+    /// SEE the subject, or a tenant administrator may invoke it, and nobody else: the declaration replaces the
+    /// edit-rights gate rather than adding to it, so an editor who is not the named person is not offered the act.
+    /// <para>
+    /// Declarative, so the core asks ONE question for the link and the call, and the link never promises what
+    /// the module would refuse. The order is the module's precedence: <c>[Instructor, Pilot]</c> means the
+    /// instructor signs a dual flight and the pilot a solo one. A user only; a service account is never the
+    /// named person. Each field must be one of the subject mask's own, or the module is refused at load.
+    /// </para>
+    /// </summary>
+    /// <remarks>Default-implemented so a 1.5 test double still compiles; the host implements it. A double that a
+    /// module's tests drive through this overload must implement it too, and this default says so loudly.</remarks>
+    IStateMachineBuilder Transition(
+        string name, string label, IReadOnlyList<StateCondition> guard, Func<TransitionContext, Task> handler,
+        IReadOnlyList<string> invokedByPrincipalFields) =>
+        throw new NotSupportedException(
+            $"{GetType().Name} does not implement the ABI 1.6 principal-invoked Transition overload.");
+
+    /// <summary>
     /// An escalation off a derived status (ABI 0.5): a core background sweep evaluates <paramref name="statusName"/>
     /// per subject and, WHILE it holds, invokes <paramref name="handler"/> to turn "this subject is in that
     /// state" into who to tell and what to say. The handler receives the same context a transition does — the
@@ -52,7 +73,7 @@ public interface IStateMachineBuilder
 
     /// <summary>
     /// A transition the clients invoke AUTOMATICALLY when a subject is opened (ABI 0.6) — the populate-on-open
-    /// hook. Same shape, handler and engine-owned transaction as <see cref="Transition"/> (it IS a transition,
+    /// hook. Same shape, handler and engine-owned transaction as <see cref="Transition(string, string, IReadOnlyList{StateCondition}, Func{TransitionContext, Task})"/> (it IS a transition,
     /// reachable by its label like any other), but flagged so the subject resource advertises it as
     /// auto-invoke and both clients run it the moment the folder is opened rather than waiting for a button.
     /// This is how "opening the folder shows today's DABS" works without inventing a second reactive hook: the

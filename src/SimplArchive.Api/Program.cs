@@ -287,6 +287,7 @@ builder.Services.AddScoped<SimplArchive.Api.Documents.StrictEnvelopeDelivery>();
 builder.Services.AddScoped<SimplArchive.Api.Concurrency.GroupVerbs>();
 builder.Services.AddScoped<SimplArchive.Api.Concurrency.TagDefinitionVerbs>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentResourceLinks>();
+builder.Services.AddScoped<SimplArchive.Api.Modules.TransitionInvocationRule>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.MachineStatusEvaluator>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.ModuleActionEvaluator>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.MailboxAddressClaims>();
