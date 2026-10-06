@@ -18,7 +18,22 @@
              certificates while having neither; certificates arrived with #1353 and service accounts have not,
              so they come out until they do. A package description is a promise made to strangers. -->
         <Description>saconsole — administrative CLI for a SimplArchive installation: sign in, provision tenants, and register the certificate your content is enveloped to, over the HTTP API.</Description>
+        <!-- Where a reader of the package page goes next. The PUBLIC repository, because that is the one a stranger
+             can open — and the one this package is packed from (saconsole-publish.yml runs only there), so the
+             commit SourceLink records is a public commit too. Without these the page linked nowhere, and without
+             the licence expression it said "license not specified" for an Apache-2.0 project. -->
+        <PackageProjectUrl>https://github.com/HebelConsulting/SimplArchive</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/HebelConsulting/SimplArchive.git</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+        <!-- The package page's README: what SimplArchive IS, before what this tool does. The one-line description
+             above assumed the reader already knew. -->
+        <PackageReadmeFile>README.md</PackageReadmeFile>
     </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="README.md" Pack="true" PackagePath="/" />
+    </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="Spectre.Console.Cli" Version="0.55.0" />
