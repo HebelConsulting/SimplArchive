@@ -75,14 +75,17 @@ fi
 
 # Developer ID signing, inside-out (ADR 0896). `codesign --deep` is NOT used: it signs nested code with the
 # outer call's options, which gives every dylib the app's entitlements, and Apple's notary rejects --deep
-# signatures outright. So every Mach-O file is signed on its own first, then the bundle seals the rest.
+# signatures outright. So every file is signed on its own first, then the bundle seals the rest.
+#
+# EVERY file in Contents/MacOS, not only the Mach-O ones. codesign treats everything there as nested code, so the
+# self-contained publish's managed assemblies (System.IO.dll and some 240 others) must carry a signature too —
+# codesign stores a non-Mach-O file's in its extended attributes. The first dry-run signed Mach-O only and the
+# main executable was refused: "code object is not signed at all — In subcomponent: …/System.IO.dll".
 sign_app() {
   local app_dir="$1" exe="$2"
   local file
   while IFS= read -r -d '' file; do
-    # A string match, not `file … | grep -q`: under pipefail that pipe can report a MATCH as a failure, which
-    # here would silently skip signing a library and get the .dmg refused by the notary — only sometimes.
-    if [[ "$file" != "$app_dir/Contents/MacOS/$exe" && "$(file -b "$file")" == *Mach-O* ]]; then
+    if [[ "$file" != "$app_dir/Contents/MacOS/$exe" ]]; then
       codesign --force --timestamp --options runtime --sign "$SIGN_IDENTITY" "$file"
     fi
   done < <(find "$app_dir/Contents/MacOS" -type f -print0)
