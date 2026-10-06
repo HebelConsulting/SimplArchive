@@ -29,7 +29,10 @@ public class CurrentPrincipalMiddleware
         CurrentUserAccessor currentUserAccessor,
         CurrentImpersonationAccessor currentImpersonationAccessor)
     {
-        if (context.User.Identity?.IsAuthenticated == true)
+        // A module-credential principal (ABI 1.7, ADR 0898) has already set the accessors itself: tenant, the
+        // module's own principal. It carries none of the OpenIddict claims read below, so it is left alone.
+        if (context.User.Identity?.IsAuthenticated == true
+            && context.User.Identity.AuthenticationType != SimplArchive.Api.Modules.ModuleCredentialMiddleware.AuthenticationType)
         {
             var subject = context.User.FindFirst(OpenIddictConstants.Claims.Subject)?.Value;
             var isPlatformAdministrator = context.User.FindFirst(PlatformAdministratorClaimTypes.IsPlatformAdministrator)?.Value == "true";

@@ -17,6 +17,10 @@ public static class ModuleApiServices
     {
         services.AddScoped<IModuleCallerContext, ModuleCallerContext>();
         services.AddScoped<IModuleDocumentRights, ModuleDocumentRights>();
+        // The identity a protocol request authenticated as (ABI 1.7, ADR 0898): the middleware sets it, a module
+        // controller reads it through the ABI interface.
+        services.AddScoped<ModuleCredentialContext>();
+        services.AddScoped<IModuleCredentialContext>(sp => sp.GetRequiredService<ModuleCredentialContext>());
 
         // Not an ABI seam — the host's own, invoked by the protocol surfaces rather than by a module
         // (ADR 0810). Registered here because it lives and dies with the module machinery beside it.

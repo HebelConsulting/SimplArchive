@@ -407,6 +407,10 @@ var machineCatalog = new SimplArchive.Infrastructure.Modules.StateMachineCatalog
 // minutes down, and it is what any customer would meet on upgrading the core with an older module build.
 // Each module's two startup seams, with only the survivors published: a module that threw must not reach the
 // activation surface, the ApplicationParts, or the read-model wiring (ModuleStartup.RunAll says why).
+// Route claims first (ABI 1.7, ADR 0898): a module claiming a root prefix off the allowlist, or routing outside
+// api/ and its claims, is dropped before anything of it is registered.
+modules = SimplArchive.Api.Modules.ModuleRoutes.Admit(
+    modules, LoggerFactory.Create(logging => logging.AddSerilog()).CreateLogger("ModuleRoutes"));
 modules = SimplArchive.Infrastructure.Modules.ModuleStartup.RunAll(
     modules,
     builder.Services,
@@ -856,6 +860,9 @@ app.Use(async (context, next) =>
 app.UseRateLimiter();
 
 app.UseAuthentication();
+// A module's claimed root routes authenticate protocol credentials, exclusively (ABI 1.7, ADR 0898): after the core's
+// login has run, so its result can be discarded there, and before authorization, so [Authorize] sees the outcome.
+app.UseMiddleware<SimplArchive.Api.Modules.ModuleCredentialMiddleware>();
 app.UseAuthorization();
 app.UseMiddleware<CurrentPrincipalMiddleware>();
 // Once the caller is resolved, stamp tenant/principal onto every downstream log line (ADR "Enterprise-grade

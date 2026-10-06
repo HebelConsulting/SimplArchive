@@ -58,5 +58,11 @@ public static class ModuleAbiVersion
     /// act, instead of whoever may edit (core ADR 0897). A new default-implemented member, so a 1.5 module is
     /// unaffected.
     /// </para>
-    public const int Minor = 6;
+    /// <para>
+    /// 1.7 adds <see cref="IIndustryModule.RootRoutePrefixes"/> (an allowlisted root route prefix) and
+    /// <see cref="IModuleCredentialAuthenticator"/> with <see cref="ModuleCredentialFormat"/>: a module serves a
+    /// protocol endpoint such as a NuGet feed and authenticates its clients' credentials (core ADR 0898). A default
+    /// member and new types only, so a 1.6 module is unaffected.
+    /// </para>
+    public const int Minor = 7;
 }

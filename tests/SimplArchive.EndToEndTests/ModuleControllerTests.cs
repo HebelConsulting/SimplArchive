@@ -570,4 +570,82 @@ public class ModuleControllerTests
             rig.Owner.Dispose();
         }
     }
+
+    // ABI 1.7 (ADR 0898): a module's claimed ROOT route answers protocol credentials, never the core's login. The
+    // credential names its tenant; the core sets it, runs the gate, acts as the module's principal, and only then
+    // asks the module, whose facade already answers. A refusal is a 401 with the module's challenge.
+    [Fact]
+    public async Task A_claimed_root_route_authenticates_the_modules_own_credentials_exclusively()
+    {
+        var rig = await RigAsync();
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", vendorKey.ExportSubjectPublicKeyInfoPem());
+        using var wire = _factory.CreateClient();
+        var credential = ModuleCredentialFormat.Compose(rig.TenantId, SimplArchive.TestModule.TestCredentialAuthenticator.Secret);
+        try
+        {
+            async Task<HttpResponseMessage> FeedAsync(string? scheme = null, string? value = null, string? header = null, string path = "/nuget/test-feed")
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, path);
+                if (scheme is not null)
+                {
+                    request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(scheme, value);
+                }
+
+                if (header is not null)
+                {
+                    request.Headers.Add(header, value);
+                }
+
+                return await wire.SendAsync(request);
+            }
+
+            // Before activation the module does not exist for this tenant, credential or not.
+            var inactive = await FeedAsync("Bearer", credential);
+            Assert.Equal(HttpStatusCode.NotFound, inactive.StatusCode);
+            Assert.Contains("MODULE_NOT_ACTIVE", await inactive.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+            await ActivateAsync(rig, vendorKey);
+            await TestJson.Put(rig.Admin, "/api/modules/test-module/settings",
+                new { values = new Dictionary<string, string?> { ["endpoint"] = "https://feed.example" } });
+
+            // The protocol's first attempt is anonymous; the challenge is what makes the client send credentials.
+            var anonymous = await FeedAsync();
+            Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+            Assert.Equal("Basic realm=\"SimplArchive test feed\"", anonymous.Headers.WwwAuthenticate.ToString());
+
+            // Basic (the user name is ignored), Bearer and the module's API-key header all carry the same credential.
+            var basic = Convert.ToBase64String(Encoding.UTF8.GetBytes($"whoever:{credential}"));
+            foreach (var response in new[] { await FeedAsync("Basic", basic), await FeedAsync("Bearer", credential), await FeedAsync(header: "X-Test-ApiKey", value: credential) })
+            {
+                Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                var body = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
+                // The setting in the subject was read through the FACADE inside AuthenticateAsync: proof that the
+                // tenant and the module's principal were in place before the module was asked.
+                Assert.Equal("customer-1@https://feed.example", body.GetProperty("subject").GetString());
+                Assert.Equal(rig.TenantId, body.GetProperty("tenantId").GetGuid());
+                Assert.Equal(JsonValueKind.Null, body.GetProperty("userId").ValueKind);
+                Assert.NotEqual(JsonValueKind.Null, body.GetProperty("serviceAccountId").ValueKind);
+            }
+
+            // Refusals: a wrong secret, a credential not in the core's format, another tenant's id.
+            Assert.Equal(HttpStatusCode.Unauthorized, (await FeedAsync("Bearer", ModuleCredentialFormat.Compose(rig.TenantId, "wrong"))).StatusCode);
+            Assert.Equal(HttpStatusCode.Unauthorized, (await FeedAsync("Bearer", "open-sesame")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await FeedAsync("Bearer", ModuleCredentialFormat.Compose(Guid.NewGuid(), "open-sesame"))).StatusCode);
+
+            // EXCLUSIVE: the core's own login means nothing here, even an administrator's.
+            Assert.Equal(HttpStatusCode.Unauthorized, (await rig.Admin.GetAsync("/nuget/test-feed")).StatusCode);
+
+            // An unknown path under a claimed prefix is the module's 404, never the web client's fallback page.
+            var unknown = await FeedAsync("Bearer", credential, path: "/nuget/no-such-thing");
+            Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
+            Assert.DoesNotContain("<html", await unknown.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", null);
+            rig.Admin.Dispose();
+            rig.Owner.Dispose();
+        }
+    }
 }

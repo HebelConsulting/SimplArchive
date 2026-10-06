@@ -354,9 +354,13 @@ public sealed class TestModule : IIndustryModule
             return answer;
         };
 
+    /// <summary>The protocol-route fixture's claim (ABI 1.7, ADR 0898): <c>nuget</c>, the allowlist's one entry.</summary>
+    public IReadOnlyList<string> RootRoutePrefixes => ["nuget"];
+
     public void ConfigureServices(IServiceCollection services)
     {
         services.AddSingleton<TestModuleMarker>();
+        services.AddScoped<IModuleCredentialAuthenticator, TestCredentialAuthenticator>();
         // SCOPED, both: they read the module's read-model context, which lives per request (ADR 0738).
         services.AddScoped<IModuleFactProvider, TestFactProvider>();
         services.AddScoped<IModuleProjectionRebuilder, TestLandingRebuilder>();

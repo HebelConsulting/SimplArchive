@@ -157,6 +157,18 @@ public interface IIndustryModule
     ModuleManual? Manual => null;
 
     /// <summary>
+    /// Root-level route prefixes this module claims for its PROTOCOL endpoints (ABI 1.7, core ADR 0898): a NuGet
+    /// feed at <c>/nuget/v3/index.json</c> rather than under <c>/api</c>, because its address is pasted into every
+    /// client's configuration. Only a prefix on the core's ALLOWLIST may be claimed (today: <c>nuget</c>); a module
+    /// claiming any other, or one another module already claimed, is refused at load. A controller of this module
+    /// may route under a claimed prefix; every other module route stays under <c>api/</c>.
+    /// </summary>
+    /// <remarks>Default none. A claimed route is authenticated by the module's
+    /// <see cref="IModuleCredentialAuthenticator"/>, never by the core's own login, and runs behind the same
+    /// activation gate as every module route.</remarks>
+    IReadOnlyList<string> RootRoutePrefixes => [];
+
+    /// <summary>
     /// The external hosts this module's <see cref="IModuleHttpClient"/> may reach (ABI 0.6) — the allowlist
     /// the core's SSRF policy (ADR 0717) enforces on every request the module makes. A host not named here
     /// is refused before any request leaves the process, so a module's network egress is declared up front
