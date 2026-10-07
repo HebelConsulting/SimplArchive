@@ -25,6 +25,8 @@ public sealed class ModuleStatusEscalationService
     private readonly StateMachineCatalog _catalog;
     private readonly INotificationService _notifications;
     private readonly ModuleNoticeDelivery _delivery;
+    private readonly IServiceProvider _services;
+    private readonly ModuleReadModelCatalog _readModels;
     private readonly ILogger<ModuleStatusEscalationService> _logger;
 
     public ModuleStatusEscalationService(
@@ -34,8 +36,12 @@ public sealed class ModuleStatusEscalationService
         StateMachineCatalog catalog,
         INotificationService notifications,
         ILogger<ModuleStatusEscalationService> logger,
-        ModuleNoticeDelivery delivery)
+        ModuleNoticeDelivery delivery,
+        IServiceProvider services,
+        ModuleReadModelCatalog? readModels = null)
     {
+        _services = services;
+        _readModels = readModels ?? ModuleReadModelCatalog.Empty;
         _dbContext = dbContext;
         _tenantAccessor = tenantAccessor;
         _engine = engine;
@@ -95,36 +101,70 @@ public sealed class ModuleStatusEscalationService
         return sent;
     }
 
+    /// <summary>
+    /// One subject's escalation, CLAIMED and ATOMIC (#1638, ADR 0836): in ONE transaction, a Postgres advisory lock on
+    /// (machine, status, subject) is taken first, then the module's handler runs (writing its once-only marker) and its
+    /// notices are delivered (the notification, or the external outbox row). The other instance waits on the lock, then
+    /// reads the committed marker and sends nothing; a crash leaves either everything or nothing, never a marker with no
+    /// notice. The engine's transaction is the same machinery, joined (ADR 0902).
+    /// </summary>
     private async Task<int> EscalateOneAsync(string machineId, string statusName, Guid subjectId, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        IReadOnlyList<EscalationNotice> notices;
-        try
-        {
-            // Acts as the module, evaluates the status, and runs the handler in the engine's transaction only
-            // when the status holds — a subject the module cannot see reads empty and never escalates.
-            notices = await _engine.ExecuteEscalationAsync(machineId, statusName, subjectId, now, cancellationToken);
-        }
-        catch (Exception e)
-        {
-            // One subject's failing handler must not sink the sweep — the whole exchange is at Trace (ADR 0626).
-            _logger.LogWarning(e, "Escalation {Machine}/{Status} on subject {Subject} threw; skipping it.", machineId, statusName, subjectId);
-            return 0;
-        }
-
-        // One delivery rule with an action's notices (ABI 1.10, ADR 0902): a user gets the in-app path; any other address
-        // only when this STATUS was declared to reach external recipients, else a Warning naming who was skipped.
         var machine = _catalog.Machines[machineId];
         var external = machine.ExternalEscalations.Contains(statusName);
-        var sent = 0;
-        foreach (var notice in notices)
+        try
         {
-            if (await _delivery.DeliverAsync(machine.ModuleId ?? machineId, notice.RecipientEmail, notice.Title, notice.Message,
-                    notice.ReplyTo, notice.AttachmentDocumentId, subjectId, external, cancellationToken))
+            return await ModuleTransaction.RunAsync(_dbContext, _readModels, _services, async () =>
             {
-                sent++;
-            }
+                await ClaimAsync(machineId, statusName, subjectId, cancellationToken);
+
+                // Acts as the module, evaluates the status, and runs the handler only when the status holds: a subject
+                // the module cannot see reads empty and never escalates.
+                var notices = await _engine.ExecuteEscalationAsync(machineId, statusName, subjectId, now, cancellationToken);
+
+                // One delivery rule with an action's notices (ABI 1.10, ADR 0902): a user gets the in-app path; any other
+                // address only when this STATUS was declared to reach external recipients, else a Warning naming who.
+                var sent = 0;
+                foreach (var notice in notices)
+                {
+                    if (await _delivery.DeliverAsync(machine.ModuleId ?? machineId, notice.RecipientEmail, notice.Title, notice.Message,
+                            notice.ReplyTo, notice.AttachmentDocumentId, subjectId, external, cancellationToken))
+                    {
+                        sent++;
+                    }
+                }
+
+                return sent;
+            }, cancellationToken);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            // One subject's failing handler must not sink the sweep; nothing of it was committed. Trace carries the
+            // exchange (ADR 0626).
+            _logger.LogWarning(e, "Escalation {Machine}/{Status} on subject {Subject} threw; nothing was sent or recorded.", machineId, statusName, subjectId);
+            return 0;
+        }
+    }
+
+    /// <summary>
+    /// The claim (#1638): a transaction-scoped advisory lock on a stable 64-bit key of (machine, status, subject), released
+    /// at commit or rollback. Postgres only; under SQLite (the tests' provider) there is one connection and nothing to
+    /// contend with.
+    /// </summary>
+    private async Task ClaimAsync(string machineId, string statusName, Guid subjectId, CancellationToken cancellationToken)
+    {
+        if (!_dbContext.Database.IsNpgsql())
+        {
+            return;
         }
 
-        return sent;
+        var key = LockKey(machineId, statusName, subjectId);
+        await _dbContext.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({key})", cancellationToken);
     }
+
+    /// <summary>A stable lock key: the first 8 bytes of SHA-256 over the triple. Stable across instances and restarts,
+    /// unlike string.GetHashCode, which is randomised per process.</summary>
+    public static long LockKey(string machineId, string statusName, Guid subjectId) =>
+        BitConverter.ToInt64(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes($"module-escalation|{machineId}|{statusName}|{subjectId:D}")), 0);
 }

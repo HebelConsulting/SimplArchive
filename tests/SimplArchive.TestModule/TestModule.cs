@@ -43,7 +43,17 @@ public sealed class TestModule : IIndustryModule
 
     /// <summary>Settable by the escalation test: who the "Expiring" escalation names as its recipient (the
     /// module resolves the audience; the core resolves the e-mail to a tenant user).</summary>
-    public static string EscalationRecipientEmail { get; set; } = string.Empty;
+    /// <remarks>An E2E test cannot set this: the host loads the module into its OWN load context (ADR 0741), whose
+    /// copy of this static is not the test's. So, as for the verify key, an environment variable is the fallback.</remarks>
+    public static string EscalationRecipientEmail
+    {
+        get => _escalationRecipientEmail.Length > 0
+            ? _escalationRecipientEmail
+            : Environment.GetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_ESCALATION_RECIPIENT") ?? string.Empty;
+        set => _escalationRecipientEmail = value;
+    }
+
+    private static string _escalationRecipientEmail = string.Empty;
 
     /// <summary>
     /// The static works only when the test constructs the module in ITS OWN load context; a module the

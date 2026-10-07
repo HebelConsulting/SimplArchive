@@ -26,8 +26,10 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
     private readonly IObjectStorageClient? _objectStorage;
     private readonly ITransitEncryptor? _transit;
     private readonly IDocumentVersionFinalizer? _finalizer;
-    private Guid? _principalId;
-    private bool _principalResolved;
+    // The module principal, per (tenant, module): ONE scope can act for several of each (the escalation sweep walks
+    // every tenant and every module's machines), and a single cached id once answered every tenant after the first with
+    // the first tenant's principal, so their reminders silently never fired (#1638).
+    private readonly Dictionary<(Guid? Tenant, string Module), Guid?> _principals = [];
     private readonly ILogger<ModuleArchiveFacade>? _logger;
     private readonly IAuditRecorder? _audit;
     private readonly ModuleReadModelCatalog _readModels;
@@ -82,13 +84,14 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
             return null; // core-internal: ungated
         }
 
-        if (!_principalResolved)
+        var key = (_dbContext.CurrentTenantId, moduleId);
+        if (!_principals.TryGetValue(key, out var resolved))
         {
-            _principalId = (await ModulePrincipal.FindAsync(_dbContext, moduleId, cancellationToken))?.Id;
-            _principalResolved = true;
+            resolved = (await ModulePrincipal.FindAsync(_dbContext, moduleId, cancellationToken))?.Id;
+            _principals[key] = resolved;
         }
 
-        if (_principalId is not { } principalId)
+        if (resolved is not { } principalId)
         {
             // No principal means never activated here — nothing was consented, nothing is visible.
             return new Dictionary<Guid, EffectiveRights>();

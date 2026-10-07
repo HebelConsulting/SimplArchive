@@ -42,6 +42,9 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
 
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
 
+    /// <summary>The tenant the query filter currently scopes to: what a per-tenant cache must key on (#1638).</summary>
+    public Guid? CurrentTenantId => _currentTenantAccessor.TenantId;
+
     // Optional so the design-time factory + tests that construct the context directly (with no DI) still work;
     // DI injects the registered notifier (NullRealtimeNotifier, or the Api's SignalR broadcaster). Real-time
     // push (ADR "Real-time notifications (SignalR)") fires from the single SaveChangesAsync choke point below.

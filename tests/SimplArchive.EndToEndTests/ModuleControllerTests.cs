@@ -840,4 +840,53 @@ public class ModuleControllerTests
             rig.Owner.Dispose();
         }
     }
+
+    // #1638 (ADR 0836): the escalation sweep runs in BOTH instances. Two sweeps at the same moment over the same expiring
+    // subject must send the reminder exactly once: the advisory lock makes the second wait, then it reads the marker the
+    // first committed together with its notice.
+    [Fact]
+    public async Task Two_concurrent_escalation_sweeps_send_one_reminder()
+    {
+        var rig = await RigAsync();
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", vendorKey.ExportSubjectPublicKeyInfoPem());
+        try
+        {
+            await ActivateAsync(rig, vendorKey);
+            var watcherEmail = $"reminded-{Guid.NewGuid():N}@e2e.local";
+            await _factory.SeedUserAsync(rig.TenantId, watcherEmail, "reminded-1234", "Reminded");
+            using var watcher = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(watcherEmail, "reminded-1234"));
+            // The host's copy of the module reads the environment (its own load context, ADR 0741).
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_ESCALATION_RECIPIENT", watcherEmail);
+
+            var dossierId = (await TestJson.Post(rig.Owner, $"/api/documents/{rig.RepoId}/children",
+                new { name = $"Dossier {Guid.NewGuid():N}", maskId = SimplArchive.TestModule.TestModule.DossierMaskId })).GetProperty("id").GetGuid();
+            var certificateId = (await TestJson.Post(rig.Owner, $"/api/documents/{dossierId}/children", new { name = "Medical" })).GetProperty("id").GetGuid();
+            await TestJson.Put(rig.Admin, $"/api/documents/{certificateId}/mask", new { maskId = SimplArchive.TestModule.TestModule.CertificateMaskId });
+            var validTo = (await TestJson.Get(rig.Admin, $"/api/masks/{SimplArchive.TestModule.TestModule.CertificateMaskId}"))
+                .GetProperty("fields").EnumerateArray().Single(f => f.GetProperty("name").GetString() == "Valid to").GetProperty("id").GetGuid();
+            await TestJson.Put(rig.Admin, $"/api/documents/{certificateId}/index-data",
+                new { fields = new[] { new { fieldDefinitionId = validTo, values = new[] { DateOnly.FromDateTime(DateTime.UtcNow.AddDays(10)).ToString("yyyy-MM-dd") } } } });
+
+            async Task<int> SweepAsync()
+            {
+                using var scope = _factory.Services.CreateScope();
+                return await scope.ServiceProvider.GetRequiredService<SimplArchive.Infrastructure.Modules.ModuleStatusEscalationService>()
+                    .SweepAsync(DateTimeOffset.UtcNow);
+            }
+
+            var counts = await Task.WhenAll(SweepAsync(), SweepAsync());
+
+            var reminders = (await TestJson.Get(watcher, "/api/notifications")).GetProperty("notifications").EnumerateArray()
+                .Count(n => n.GetProperty("title").GetString() == "Certificate expiring");
+            Assert.True(reminders == 1, $"reminders={reminders}, sweeps sent {string.Join("+", counts)}");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_ESCALATION_RECIPIENT", null);
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", null);
+            rig.Admin.Dispose();
+            rig.Owner.Dispose();
+        }
+    }
 }
