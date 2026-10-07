@@ -72,6 +72,51 @@ public partial class ModulePinLockstepTests
             + "exists to end. Add the digest (the base64 NuGet records in <id>.<version>.nupkg.sha512).");
     }
 
+    [GeneratedRegex(@"SA_MODULE_FEED:-([^}""]+)\}")]
+    private static partial Regex FeedDefault();
+
+    [GeneratedRegex(@"^modules:\s*\n(?:[ \t]+.*\n|[ \t]*\n)*?[ \t]+feed:\s*(\S+)", RegexOptions.Multiline)]
+    private static partial Regex ChartFeed();
+
+    // WHERE modules come from is one value in five places (core #1555). The day the vendor feed becomes the source,
+    // every default moves at once — and the rollout order is strict: the feed must hold every pinned version
+    // BEFORE any installer points at it, because an empty feed stops every instance from starting (ADR 0799). A
+    // file left behind on the old feed is a deployment quietly installing from somewhere else, and one moved early
+    // is a deployment that cannot start. So they are compared, not trusted.
+    //
+    // The two tools/ stacks are private-repository-only: tools/ is withheld from the public mirror (ADR 0484).
+    [Fact]
+    public void Every_installer_defaults_to_the_same_module_feed()
+    {
+        if (PrivateRepositoryGate.RepoRoot() is not { } root)
+        {
+            return;
+        }
+
+        var files = new List<string> { "scripts/modules-init.sh", "docker-compose.yaml" };
+        if (PrivateRepositoryGate.IsPrivateRepository(root))
+        {
+            files.AddRange(["tools/kiosk/docker-compose.yml", "tools/vendor/docker-compose.yml"]);
+        }
+
+        var defaults = files.ToDictionary(f => f, f => FeedDefault().Matches(File.ReadAllText(Path.Combine(root, f)))
+            .Select(m => m.Groups[1].Value).Distinct(StringComparer.Ordinal).ToList());
+
+        var chart = ChartFeed().Match(File.ReadAllText(Path.Combine(root, "charts", "simplarchive", "values.yaml")));
+        Assert.True(chart.Success, "charts/simplarchive/values.yaml has no modules.feed — this guard cannot read it.");
+        defaults["charts/simplarchive/values.yaml (modules.feed)"] = [chart.Groups[1].Value];
+
+        var silent = defaults.Where(kv => kv.Value.Count == 0).Select(kv => kv.Key).ToList();
+        Assert.True(silent.Count == 0,
+            $"No SA_MODULE_FEED default found in: {string.Join(", ", silent)}. The shape changed and this guard stopped seeing it.");
+
+        var distinct = defaults.Values.SelectMany(v => v).Distinct(StringComparer.Ordinal).ToList();
+        Assert.True(distinct.Count == 1,
+            "The installers default to different module feeds:\n"
+            + string.Join("\n", defaults.Select(kv => $"  {kv.Key}: {string.Join(" | ", kv.Value)}"))
+            + "\n\nMove them in ONE change, and only once the new feed holds every pinned version (core #1555).");
+    }
+
     [Fact]
     public void The_charts_copy_of_the_installer_is_byte_identical()
     {
