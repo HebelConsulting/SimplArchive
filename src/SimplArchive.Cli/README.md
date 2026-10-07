@@ -31,6 +31,8 @@ configured from a terminal or a script:
 | `login`, `whoami` | Sign in (interactively, or as a service account) and show who you are acting as |
 | `tenant create`, `tenant standard-repository` | Provision a tenant with its first administrator; choose where SimplArchive files what it brings |
 | `module list`, `module activate`, `module settings`, `module rebuild` | Activate industry modules with a vendor-signed licence, configure them, rebuild their read models |
+| `module action` | Invoke a module's action on a document; a value it reveals once (a credential) is written to a mode-600 file |
+| `repository create` | Create a repository, or find the one of that name; prints its id |
 | `certificates list`, `enrol`, `revoke`, `import` | Manage the reader certificates encrypted content is addressed to, including bulk import from a CA |
 | `acl set`, `grant`, `revoke` | Decide who may do what to a document |
 | `me certificate`, `intray previous` | A user's own certificate, and recovering intray content |

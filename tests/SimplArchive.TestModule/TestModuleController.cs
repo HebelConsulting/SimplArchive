@@ -226,6 +226,10 @@ public sealed class TestModuleController : ControllerBase
     public IActionResult Reveal() =>
         Ok(new ModuleActionResult("Issued.") { RevealOnce = new RevealedValue("Test secret", "s3cret-shown-once") });
 
+    /// <summary>The reveal action's one option, so a script committing it needs no --value.</summary>
+    [HttpGet("reveal/options")]
+    public IActionResult RevealOptions() => Ok(new { options = new[] { new { value = "confirm", label = "Issue it" } } });
+
     /// <summary>The presign fixture (ABI 1.8, ADR 0899): the content URL the facade issues, null when it issues none.</summary>
     [HttpGet("documents/{documentId:guid}/content-url")]
     public async Task<IActionResult> ContentUrl(Guid documentId, [FromQuery] int ttlSeconds, [FromServices] IModuleArchiveFacade archive) =>

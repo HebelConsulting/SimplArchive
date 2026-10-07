@@ -5,6 +5,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using SimplArchive.Cli.Commands;
+using SimplArchive.Cli.Infrastructure;
 using SimplArchive.Infrastructure.Persistence;
 using SimplArchive.ModuleAbi;
 
@@ -490,6 +492,69 @@ public class BookingAdmissionTests
         finally
         {
             Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_ACTION_DOCUMENT", null);
+        }
+    }
+
+    /// <summary>
+    /// <c>saconsole module action</c> commits a module's action and keeps the value it reveals once in a FILE —
+    /// mode 600, never written over — and a re-run that finds the action withdrawn is a no-op with
+    /// <c>--if-offered</c>. Driven through the command's own code against the real API, the way
+    /// <see cref="LicenceFilingRerunTests"/> drives <c>module activate</c>.
+    /// </summary>
+    [Fact]
+    public async Task Saconsole_module_action_keeps_a_revealed_value_in_a_file_and_never_overwrites_one()
+    {
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", vendorKey.ExportSubjectPublicKeyInfoPem());
+        var folder = Directory.CreateTempSubdirectory("saconsole-reveal-");
+        try
+        {
+            var rig = await RigAsync(vendorKey);
+            var booking = await TestJson.Post(rig.Owner, $"/api/documents/{rig.RoomId}/bookings", Slot(11, 12));
+            var documentId = Guid.Parse(booking.GetProperty("links").EnumerateArray()
+                .First(l => l.GetProperty("rel").GetString() == "document").GetProperty("href").GetString()!.Split('/')[^1]);
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_REVEAL_DOCUMENT", documentId.ToString());
+
+            var api = new SimplArchiveApi(rig.Admin);
+            var human = Spectre.Console.AnsiConsole.Create(new Spectre.Console.AnsiConsoleSettings
+            {
+                Out = new Spectre.Console.AnsiConsoleOutput(TextWriter.Null),
+            });
+            var file = Path.Combine(folder.FullName, "issued.secret");
+
+            // No --value: the action offers exactly one option, which is taken.
+            var outcome = await ModuleActionCommand.InvokeAsync(
+                api, documentId, "test-module:issue", null, file, false, human, CancellationToken.None);
+
+            Assert.Equal(ModuleActionCommand.Outcome.Revealed, outcome);
+            Assert.Equal("s3cret-shown-once", await File.ReadAllTextAsync(file));
+            if (!OperatingSystem.IsWindows())
+            {
+                Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(file));
+            }
+
+            // The same target again is refused BEFORE the action commits, so the kept value is never replaced.
+            var refused = await Assert.ThrowsAsync<CliException>(() => ModuleActionCommand.InvokeAsync(
+                api, documentId, "test-module:issue", null, file, false, human, CancellationToken.None));
+            Assert.Contains("already exists", refused.Message, StringComparison.Ordinal);
+            Assert.Equal("s3cret-shown-once", await File.ReadAllTextAsync(file));
+
+            // Withdrawn (a re-run after it was done): an error by default, a no-op with --if-offered.
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_REVEAL_DOCUMENT", null);
+            await Assert.ThrowsAsync<CliException>(() => ModuleActionCommand.InvokeAsync(
+                api, documentId, "test-module:issue", null, Path.Combine(folder.FullName, "again"), false, human, CancellationToken.None));
+            Assert.Equal(ModuleActionCommand.Outcome.NotOffered, await ModuleActionCommand.InvokeAsync(
+                api, documentId, "test-module:issue", null, Path.Combine(folder.FullName, "again"), true, human, CancellationToken.None));
+            Assert.False(File.Exists(Path.Combine(folder.FullName, "again")));
+
+            rig.Admin.Dispose();
+            rig.Owner.Dispose();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_REVEAL_DOCUMENT", null);
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", null);
+            folder.Delete(recursive: true);
         }
     }
 }

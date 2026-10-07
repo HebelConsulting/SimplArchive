@@ -153,6 +153,15 @@ public static class SaConsoleApp
                     .WithDescription("Re-derive a module's read model from documents. One projection, or all.");
                 module.AddCommand<ModuleActivateCommand>("activate")
                     .WithDescription("File a vendor-signed licence and activate every module it names.");
+                module.AddCommand<ModuleActionCommand>("action")
+                    .WithDescription("Invoke a module's action on a document. A value it reveals once is written to a file.");
+            });
+
+            config.AddBranch("repository", repository =>
+            {
+                repository.SetDescription("Repositories: the root documents everything is filed under (ADR 0200).");
+                repository.AddCommand<RepositoryCreateCommand>("create")
+                    .WithDescription("Create a repository, or find the one of that name. Prints its id on stdout.");
             });
 
             // ACL: `set` states the complete set of rights (a replace, because the endpoint is a PUT), while

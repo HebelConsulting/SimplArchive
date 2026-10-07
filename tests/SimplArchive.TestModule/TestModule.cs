@@ -106,6 +106,24 @@ public sealed class TestModule : IIndustryModule
     public Func<ModuleDocumentActionContext, Task<IReadOnlyList<ModuleDocumentAction>>>? DocumentActions =>
         context =>
         {
+            // A second, separately switched action whose outcome REVEALS a value once (ABI 1.8) — what
+            // `saconsole module action` must keep in a file. Its own variable, so the hand-over test still
+            // sees exactly one action.
+            if (Guid.TryParse(Environment.GetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_REVEAL_DOCUMENT"), out var revealOn)
+                && revealOn == context.DocumentId)
+            {
+                return Task.FromResult<IReadOnlyList<ModuleDocumentAction>>(
+                [
+                    new ModuleDocumentAction(
+                        "test-module:issue",
+                        "Issue a secret",
+                        "/api/test-module/reveal/options",
+                        "/api/test-module/reveal",
+                        "confirm",
+                        "Issue it?"),
+                ]);
+            }
+
             var wanted = Environment.GetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_ACTION_DOCUMENT");
             if (!Guid.TryParse(wanted, out var id) || id != context.DocumentId)
             {
