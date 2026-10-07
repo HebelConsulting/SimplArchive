@@ -346,6 +346,38 @@ public class InstanceParityTests
             $"The /hubs handler still names round_robin, which is what breaks the handshake. It reads:\n{block}");
     }
 
+    /// <summary>
+    /// On the kiosk host's shared edge network (ADR 0903), an api reaches its own object store by the stack's unique
+    /// ALIAS, never by the service name <c>seaweedfs</c>.
+    /// </summary>
+    /// <remarks>
+    /// Compose registers every service name on every network a container joins, and both stacks run a
+    /// <c>seaweedfs</c> on the edge network, so the name answers with EITHER store. It did, for ten minutes on
+    /// 2026-10-08: the demo's server-side reads hit the vendor store ("access key not found") and the vendor's first
+    /// upload answered 500. The proxy was already routed by alias; the apps' own storage address was not.
+    /// </remarks>
+    [Theory]
+    [InlineData("tools/kiosk/docker-compose.yml")]
+    [InlineData("tools/vendor/docker-compose.yml")]
+    public void An_api_on_the_edge_network_reaches_its_store_by_alias(string file)
+    {
+        if (Withheld(file))
+        {
+            return; // the public mirror has no tools/, by design
+        }
+
+        var text = Read(file);
+        var url = System.Text.RegularExpressions.Regex.Match(text, @"ObjectStorage__ServiceUrl:\s*""http://([a-z0-9-]+):");
+        Assert.True(url.Success, $"{file} sets no ObjectStorage__ServiceUrl this guard can read.");
+
+        var host = url.Groups[1].Value;
+        Assert.NotEqual("seaweedfs", host);
+        Assert.True(System.Text.RegularExpressions.Regex.IsMatch(text, $@"aliases:\s*\[{host}\]"),
+            $"{file}: ObjectStorage__ServiceUrl names '{host}', which is not an alias this stack declares on the edge "
+            + "network. Use the stack's own storage alias (demo-s3, vendor-s3): a name both stacks share answers with "
+            + "either store.");
+    }
+
     /// <summary>The <c>KEY: value</c> pairs under a service block's <c>environment:</c>, values unquoted.</summary>
     private static Dictionary<string, string> EnvironmentKeys(string block)
     {
