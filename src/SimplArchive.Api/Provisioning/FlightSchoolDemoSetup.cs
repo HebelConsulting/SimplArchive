@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using SimplArchive.Domain.Acl;
-using SimplArchive.Domain.Documents;
 using SimplArchive.Domain.Masks;
 using SimplArchive.Infrastructure.Persistence;
 
@@ -42,68 +41,38 @@ public static class FlightSchoolDemoSetup
         IServiceProvider services, SimplArchiveDbContext dbContext, IConfiguration configuration,
         Guid tenantId, Guid adminId, DateTimeOffset now)
     {
-        if (string.IsNullOrWhiteSpace(configuration["FlightSchoolDemo:ServiceAccount:ClientId"])
-            || string.IsNullOrWhiteSpace(configuration["FlightSchoolDemo:ServiceAccount:ClientSecret"]))
+        // The repository and the account, as every module demo has them (ModuleDemoSetup, ADR 0901).
+        var seeded = await ModuleDemoSetup.AddIfConfiguredAsync(services, dbContext, configuration, "FlightSchoolDemo",
+            tenantId, adminId, now, [new ModuleDemoSetup.Repository(RepositorySlug, "Flight School")],
+            account =>
+            {
+                account.CanManageModules = true;
+                account.CanManageUsers = true;
+            });
+        if (seeded is null)
         {
             return;
         }
 
-        var school = new Document
-        {
-            Id = DemoId.For(tenantId, RepositorySlug),
-            TenantId = tenantId,
-            ParentId = null,
-            Name = "Flight School",
-            // A repository wears the Repository mask, in lockstep with ParentId == null (ADR 0627).
-            MaskVersionId = await Documents.FolderMask.CurrentVersionIdAsync(
-                dbContext, tenantId, WellKnownMaskIds.Repository, CancellationToken.None) ?? Guid.Empty,
-            CreatedByUserId = adminId,
-            CreatedAt = now,
-        };
-        dbContext.Documents.Add(school);
-        await dbContext.SaveChangesAsync();
-
+        // Flight School's own addition: the Administration folder holding the licence.
         var folderMaskVersion = await dbContext.MaskVersions
             .SingleAsync(v => v.MaskId == WellKnownMaskIds.Folder && v.IsCurrent);
-        var administration = await DemoDataSeeder.AddFolderAsync(dbContext, tenantId, school.Id, "Administration",
+        var administration = await DemoDataSeeder.AddFolderAsync(dbContext, tenantId, seeded.Repositories[RepositorySlug], "Administration",
             adminId, now, folderMaskVersion.Id, AdministrationSlug);
         // Broken with no entry copied down: a break snapshots what is in force at that moment, and the pilots'
         // read grants, added later by the module's demo seeder, are exactly what must not reach the licence.
         administration.BreaksInheritance = true;
 
-        await SeededServiceAccount.AddIfConfiguredAsync(services, dbContext, configuration, "FlightSchoolDemo",
-            tenantId, grantOn: school.Id,
-            rights: account =>
-            {
-                account.CanManageModules = true;
-                account.CanManageUsers = true;
-            },
-            grant: Everything);
-
-        // Still UNSAVED here — the helper adds and leaves the commit to its caller — so it is found in Local.
-        var clientId = configuration["FlightSchoolDemo:ServiceAccount:ClientId"];
-        var account = dbContext.ServiceAccounts.Local.Single(a => a.OpenIddictApplicationClientId == clientId);
         var onAdministration = new AclEntry
         {
             Id = DemoId.For(tenantId, "acl/flight-school-setup/administration"),
             TenantId = tenantId,
             DocumentId = administration.Id,
-            ServiceAccountId = account.Id,
+            ServiceAccountId = seeded.Account.Id,
             CreatedAt = now,
         };
-        Everything(onAdministration);
+        ModuleDemoSetup.Everything(onAdministration);
         dbContext.AclEntries.Add(onAdministration);
         await dbContext.SaveChangesAsync();
-    }
-
-    private static void Everything(AclEntry entry)
-    {
-        entry.CanSee = true;
-        entry.CanReadContent = true;
-        entry.CanEditContent = true;
-        entry.CanEditIndexData = true;
-        entry.CanDelete = true;
-        entry.CanCreateSubItems = true;
-        entry.CanManagePermissions = true;
     }
 }

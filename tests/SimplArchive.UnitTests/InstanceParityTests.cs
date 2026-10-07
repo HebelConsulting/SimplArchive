@@ -375,7 +375,8 @@ public class InstanceParityTests
         key.StartsWith("CryptoDemo__", StringComparison.Ordinal)
         || key.StartsWith("Demo__", StringComparison.Ordinal)
         || key.StartsWith("Interop__", StringComparison.Ordinal)
-        || key.StartsWith("FlightSchoolDemo__", StringComparison.Ordinal);
+        || key.StartsWith("FlightSchoolDemo__", StringComparison.Ordinal)
+        || key.StartsWith("LicensingDemo__", StringComparison.Ordinal);
 
     private static string ServiceBlock(string text, string name)
     {

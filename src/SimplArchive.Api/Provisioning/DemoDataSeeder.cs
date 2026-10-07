@@ -120,6 +120,11 @@ public static class DemoDataSeeder
         // FlightSchoolDemo:ServiceAccount:* is configured, which only the kiosk and the module's local demo do.
         await FlightSchoolDemoSetup.AddIfConfiguredAsync(services, dbContext, configuration, provisioned.TenantId,
             provisioned.AdministratorId, clock.GetUtcNow());
+
+        // The Licensing Module demo's repositories and setup principal (ADR 0901). No-op unless
+        // LicensingDemo:ServiceAccount:* is configured, which only that module's local demo does.
+        await LicensingDemoSetup.AddIfConfiguredAsync(services, dbContext, configuration, provisioned.TenantId,
+            provisioned.AdministratorId, clock.GetUtcNow());
     }
 
     private static async Task SeedAsync(
