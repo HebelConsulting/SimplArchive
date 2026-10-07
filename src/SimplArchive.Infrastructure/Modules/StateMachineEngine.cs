@@ -57,7 +57,11 @@ public sealed class StateMachineCatalog : IStateMachineDefinitions
         // status holds to learn who to remind and what to say.
         Dictionary<string, Func<TransitionContext, Task<IReadOnlyList<EscalationNotice>>>> Escalations,
         // name → the declared proposal query (ABI 0.11, ADR 0769).
-        Dictionary<string, ProposalDefinition> Proposals);
+        Dictionary<string, ProposalDefinition> Proposals)
+    {
+        /// <summary>The statuses whose escalation notices may reach an address that is not a user (ABI 1.10, ADR 0902).</summary>
+        public HashSet<string> ExternalEscalations { get; } = new(StringComparer.Ordinal);
+    }
 
     public IReadOnlyDictionary<string, MachineDefinition> Machines => _machines;
 
@@ -140,6 +144,22 @@ public sealed class StateMachineCatalog : IStateMachineDefinitions
         public IStateMachineBuilder Escalates(string statusName, Func<TransitionContext, Task<IReadOnlyList<EscalationNotice>>> handler)
         {
             definition.Escalations[statusName] = handler;
+            return this;
+        }
+
+        public IStateMachineBuilder Escalates(
+            string statusName, Func<TransitionContext, Task<IReadOnlyList<EscalationNotice>>> handler, bool externalRecipients)
+        {
+            definition.Escalations[statusName] = handler;
+            if (externalRecipients)
+            {
+                definition.ExternalEscalations.Add(statusName);
+            }
+            else
+            {
+                definition.ExternalEscalations.Remove(statusName);
+            }
+
             return this;
         }
 
@@ -302,49 +322,9 @@ public sealed class StateMachineEngine
             () => handler(new TransitionContext(subjectDocumentId, _archive, _services)), cancellationToken);
     }
 
-    /// <summary>
-    /// Runs <paramref name="body"/> inside the engine-owned transaction (ADRs 0737/0738): every wired module
-    /// read-model context shares the core connection, so enlisting them here is what makes a handler's document
-    /// writes and its projection writes ONE commit — and one rollback when it throws. On a throw the change
-    /// TRACKERS are also cleared: the database rolls back on dispose but the contexts would still hold the
-    /// handler's writes as clean entities, so a later FindAsync would serve a phantom row and a later save could
-    /// resurrect rolled-back state (found by the rollback test reading Count = 1 from a table that held nothing).
-    /// </summary>
-    private async Task<T> InEngineTransactionAsync<T>(Func<Task<T>> body, CancellationToken cancellationToken)
-    {
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-        var enlisted = new List<Microsoft.EntityFrameworkCore.DbContext>();
-        foreach (var contextType in _readModels.ContextTypes)
-        {
-            var readModelContext = (Microsoft.EntityFrameworkCore.DbContext)_services.GetRequiredService(contextType);
-            await readModelContext.Database.UseTransactionAsync(transaction.GetDbTransaction(), cancellationToken);
-            enlisted.Add(readModelContext);
-        }
-
-        try
-        {
-            var result = await body();
-            await transaction.CommitAsync(cancellationToken);
-            return result;
-        }
-        catch
-        {
-            _dbContext.ChangeTracker.Clear();
-            foreach (var readModelContext in enlisted)
-            {
-                readModelContext.ChangeTracker.Clear();
-            }
-
-            throw;
-        }
-        finally
-        {
-            foreach (var readModelContext in enlisted)
-            {
-                await readModelContext.Database.UseTransactionAsync(null, CancellationToken.None);
-            }
-        }
-    }
+    /// <summary>Runs <paramref name="body"/> inside the engine-owned transaction, or joins one in flight (ADR 0902).</summary>
+    private Task<T> InEngineTransactionAsync<T>(Func<Task<T>> body, CancellationToken cancellationToken) =>
+        ModuleTransaction.RunAsync(_dbContext, _readModels, _services, body, cancellationToken);
 
     private StateMachineCatalog.MachineDefinition Require(string machineId) =>
         _catalog.Machines.TryGetValue(machineId, out var machine)

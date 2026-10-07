@@ -30,6 +30,8 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
     private bool _principalResolved;
     private readonly ILogger<ModuleArchiveFacade>? _logger;
     private readonly IAuditRecorder? _audit;
+    private readonly ModuleReadModelCatalog _readModels;
+    private readonly IServiceProvider? _services;
 
     /// <summary>The longest a presigned content URL handed to a module may live (ABI 1.8, ADR 0899): long enough
     /// for a client to follow a redirect, short enough that a leaked URL is worth little.</summary>
@@ -45,8 +47,12 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         ITransitEncryptor? transit = null,
         IDocumentVersionFinalizer? finalizer = null,
         ILogger<ModuleArchiveFacade>? logger = null,
-        IAuditRecorder? audit = null)
+        IAuditRecorder? audit = null,
+        ModuleReadModelCatalog? readModels = null,
+        IServiceProvider? services = null)
     {
+        _readModels = readModels ?? ModuleReadModelCatalog.Empty;
+        _services = services;
         _logger = logger;
         _audit = audit;
         _dbContext = dbContext;
@@ -171,6 +177,27 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         return rows
             .GroupBy(r => r.ResourceDocumentId)
             .ToDictionary(g => g.Key, g => g.First().UserId);
+    }
+
+    /// <summary>
+    /// One transaction around a module's own act (ABI 1.10, ADR 0902), on the engine's own machinery: read models
+    /// enlisted, trackers cleared on rollback, and joining a transaction already in flight (a transition).
+    /// </summary>
+    public Task InTransactionAsync(Func<Task> body, CancellationToken cancellationToken = default) =>
+        ModuleTransaction.RunAsync(_dbContext, _readModels, _services ?? EmptyServices.Instance,
+            async () =>
+            {
+                await body();
+                return true;
+            },
+            cancellationToken);
+
+    /// <summary>A provider with nothing in it, for a facade built without one (tests that wire no read models).</summary>
+    private sealed class EmptyServices : IServiceProvider
+    {
+        public static readonly EmptyServices Instance = new();
+
+        public object? GetService(Type serviceType) => null;
     }
 
     /// <summary>

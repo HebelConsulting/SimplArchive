@@ -233,6 +233,9 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
     // silent, where a forgotten index enqueue is noticed by searching. See EmailOutboxEnqueuer.
     public DbSet<Notifications.EmailOutbox> EmailOutbox => Set<Notifications.EmailOutbox>();
 
+    // Notices mailed to a module's EXTERNAL recipient (ABI 1.10, ADR 0902): written with the act that queued them.
+    public DbSet<Notifications.ExternalEmailOutbox> ExternalEmailOutbox => Set<Notifications.ExternalEmailOutbox>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

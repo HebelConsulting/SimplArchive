@@ -190,6 +190,27 @@ public sealed class TestModuleController : ControllerBase
     [HttpHead("settings-seen")]
     public IActionResult HeadSettingsSeen() => NoContent();
 
+    /// <summary>
+    /// The transaction fixture (ABI 1.10, ADR 0902): a field write and a queued notice inside ONE
+    /// <c>InTransactionAsync</c>; with <c>fail</c> the act throws after both, and neither may survive.
+    /// </summary>
+    [HttpPost("documents/{documentId:guid}/atomic")]
+    public async Task<IActionResult> Atomic(
+        Guid documentId, [FromQuery] bool fail, [FromBody] Dictionary<string, string> body,
+        [FromServices] IModuleArchiveFacade archive, [FromServices] IModuleNotices notices)
+    {
+        await archive.InTransactionAsync(async () =>
+        {
+            await archive.SetFieldsAsync(documentId, new Dictionary<string, string> { ["Mentor"] = body["mentor"] });
+            await notices.QueueAsync(new ModuleNotice(body["notify"], "Mentor changed", $"The mentor is now {body["mentor"]}."));
+            if (fail)
+            {
+                throw new ModuleApiException("TEST_ATOMIC_REFUSED", 409, "Refused after writing.");
+            }
+        });
+        return NoContent();
+    }
+
     /// <summary>The audit fixture (ABI 1.9, ADR 0900): one facade write (the floor records it) and one named event.</summary>
     [HttpPost("documents/{documentId:guid}/mentor")]
     public async Task<IActionResult> SetMentor(

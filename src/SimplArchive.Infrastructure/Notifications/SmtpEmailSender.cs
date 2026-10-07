@@ -59,6 +59,54 @@ public sealed class SmtpEmailSender : IEmailSender
             TryEnvelopeBody(message, envelopeCertificatePems, _logger);
         }
 
+        await SubmitAsync(message, account, toAddress, cancellationToken);
+    }
+
+    /// <summary>
+    /// A message with a reply-to and an attachment (ABI 1.10, ADR 0902): a module's notice to an external recipient.
+    /// The body stays plain text; an attachment makes it multipart/mixed. Submitted through the same account and the
+    /// same permanent-failure translation as every other message.
+    /// </summary>
+    public async Task SendAsync(EmailMessage email, CancellationToken cancellationToken = default)
+    {
+        var account = await _accounts.ResolveAsync(cancellationToken)
+            ?? throw new InvalidOperationException(
+                "No SMTP account is configured, neither for this tenant nor for the installation, so this message cannot "
+                + "be submitted. It stays queued and the retry path will carry it.");
+
+        _logger.LogDebug("Sending mail to {Recipient} through {Account}, attachment {Attachment}.", email.ToAddress, account.Source, email.AttachmentFileName);
+        var message = new MimeMessage();
+        message.From.Add(new MailboxAddress(account.FromName, account.FromAddress));
+        message.To.Add(new MailboxAddress(email.ToName, email.ToAddress));
+        if (!string.IsNullOrWhiteSpace(email.ReplyTo))
+        {
+            message.ReplyTo.Add(MailboxAddress.Parse(email.ReplyTo));
+        }
+
+        message.Subject = email.Subject;
+        var text = new TextPart("plain") { Text = email.Body };
+        if (email.AttachmentContent is { } content && !string.IsNullOrEmpty(email.AttachmentFileName))
+        {
+            var attachment = new MimePart(ContentType.Parse(email.AttachmentContentType))
+            {
+                Content = new MimeContent(new MemoryStream(content)),
+                ContentDisposition = new ContentDisposition(ContentDisposition.Attachment),
+                ContentTransferEncoding = ContentEncoding.Base64,
+                FileName = email.AttachmentFileName,
+            };
+            message.Body = new Multipart("mixed") { text, attachment };
+        }
+        else
+        {
+            message.Body = text;
+        }
+
+        await SubmitAsync(message, account, email.ToAddress, cancellationToken);
+    }
+
+    /// <summary>Connects with the resolved account and submits, translating a 5xx into a permanent failure.</summary>
+    private async Task SubmitAsync(MimeMessage message, EffectiveSmtpSettings account, string toAddress, CancellationToken cancellationToken)
+    {
         using var client = new SmtpClient();
         var secureOption = account.UseStartTls ? SecureSocketOptions.StartTls : SecureSocketOptions.Auto;
         await client.ConnectAsync(account.Host, account.Port, secureOption, cancellationToken);

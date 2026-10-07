@@ -72,6 +72,17 @@ public interface IStateMachineBuilder
     IStateMachineBuilder Escalates(string statusName, Func<TransitionContext, Task<IReadOnlyList<EscalationNotice>>> handler);
 
     /// <summary>
+    /// An escalation whose notices may reach an address that is NOT a user of the tenant (ABI 1.10, core ADR 0902): a
+    /// customer contact. A user address still takes the in-app path; any other is mailed, with the tenant's name in the
+    /// subject, through the core's outbox after the handler commits. Declared per STATUS, so a module never widens a
+    /// reminder it did not mean to; an undeclared status still drops a non-user address with a Warning.
+    /// </summary>
+    /// <remarks>Default-implemented so a module's 1.9 test double still compiles; the host implements it.</remarks>
+    IStateMachineBuilder Escalates(
+        string statusName, Func<TransitionContext, Task<IReadOnlyList<EscalationNotice>>> handler, bool externalRecipients) =>
+        throw new NotSupportedException($"{GetType().Name} does not implement the ABI 1.10 Escalates overload.");
+
+    /// <summary>
     /// A transition the clients invoke AUTOMATICALLY when a subject is opened (ABI 0.6) — the populate-on-open
     /// hook. Same shape, handler and engine-owned transaction as <see cref="Transition(string, string, IReadOnlyList{StateCondition}, Func{TransitionContext, Task})"/> (it IS a transition,
     /// reachable by its label like any other), but flagged so the subject resource advertises it as
@@ -142,7 +153,15 @@ public sealed record ProposalItem(string Value, string Label, string? Detail = n
 /// <summary>One reminder the sweep should deliver (ABI 0.5): a recipient e-mail the core resolves to a tenant
 /// user, and the already-localized title and body the module composed. The module returns these from its
 /// escalation handler; the core owns only delivery and the e-mail→user resolution.</summary>
-public sealed record EscalationNotice(string RecipientEmail, string Title, string Message);
+public sealed record EscalationNotice(string RecipientEmail, string Title, string Message)
+{
+    /// <summary>Where a reply should go, e.g. the sales owner (ABI 1.10). Only used for mail to an external recipient.</summary>
+    public string? ReplyTo { get; init; }
+
+    /// <summary>A document whose CURRENT content is attached (ABI 1.10). Frozen when the notice is queued (the
+    /// document's version at that moment); only for an external recipient, which receives it as mail.</summary>
+    public Guid? AttachmentDocumentId { get; init; }
+}
 
 /// <summary>What a transition's handler receives: the subject, the archive, and the request's services.</summary>
 /// <param name="SubjectDocumentId">The document the machine was asked about.</param>

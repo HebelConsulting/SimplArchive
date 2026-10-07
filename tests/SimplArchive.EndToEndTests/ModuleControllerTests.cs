@@ -795,4 +795,49 @@ public class ModuleControllerTests
             rig.Owner.Dispose();
         }
     }
+
+    // ABI 1.10 (ADR 0902): InTransactionAsync makes a module's own act atomic. A field write and a queued notice inside
+    // it both vanish when the act throws, and both stand when it succeeds.
+    [Fact]
+    public async Task A_modules_act_in_a_transaction_leaves_nothing_behind_when_it_throws()
+    {
+        var rig = await RigAsync();
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", vendorKey.ExportSubjectPublicKeyInfoPem());
+        try
+        {
+            await ActivateAsync(rig, vendorKey);
+            var watcherEmail = $"watcher-{Guid.NewGuid():N}@e2e.local";
+            await _factory.SeedUserAsync(rig.TenantId, watcherEmail, "watcher-1234", "Watcher");
+            using var watcher = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(watcherEmail, "watcher-1234"));
+            var dossierId = (await TestJson.Post(rig.Owner, $"/api/documents/{rig.RepoId}/children",
+                new { name = $"Dossier {Guid.NewGuid():N}", maskId = SimplArchive.TestModule.TestModule.DossierMaskId })).GetProperty("id").GetGuid();
+
+            async Task<string?> MentorAsync() =>
+                (await TestJson.Get(rig.Admin, $"/api/documents/{dossierId}/index-data")).GetProperty("fields").EnumerateArray()
+                    .Where(f => f.GetProperty("fieldName").GetString() == "Mentor")
+                    .Select(f => f.GetProperty("values").EnumerateArray().Select(v => v.GetString()).FirstOrDefault())
+                    .FirstOrDefault();
+            async Task<int> NoticesAsync() =>
+                (await TestJson.Get(watcher, "/api/notifications")).GetProperty("notifications").EnumerateArray()
+                    .Count(n => n.GetProperty("title").GetString() == "Mentor changed");
+
+            var refused = await rig.Admin.PostAsJsonAsync($"/api/test-module/documents/{dossierId}/atomic?fail=true",
+                new { mentor = "rolled-back@e2e.local", notify = watcherEmail });
+            Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+            Assert.Null(await MentorAsync());
+            Assert.Equal(0, await NoticesAsync());
+
+            Assert.Equal(HttpStatusCode.NoContent, (await rig.Admin.PostAsJsonAsync($"/api/test-module/documents/{dossierId}/atomic?fail=false",
+                new { mentor = "kept@e2e.local", notify = watcherEmail })).StatusCode);
+            Assert.Equal("kept@e2e.local", await MentorAsync());
+            Assert.Equal(1, await NoticesAsync());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", null);
+            rig.Admin.Dispose();
+            rig.Owner.Dispose();
+        }
+    }
 }

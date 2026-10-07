@@ -34,6 +34,17 @@ public interface IModuleArchiveFacade
     Task<byte[]?> GetDocumentContentAsync(Guid documentId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Runs <paramref name="body"/> as ONE transaction (ABI 1.10, core ADR 0902): every facade write inside it, the
+    /// module's read-model writes, the core's audit floor and any notice queued with <see cref="IModuleNotices"/> commit
+    /// together, or none of them do. A throw rolls everything back and propagates. Inside a transition it simply joins
+    /// the engine's transaction. Use it wherever one act writes more than once (a renewal: a new licence, then the old
+    /// one superseded).
+    /// </summary>
+    /// <remarks>Default-implemented so a module's 1.9 test double still compiles; the host implements it.</remarks>
+    Task InTransactionAsync(Func<Task> body, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException($"{GetType().Name} does not implement the ABI 1.10 InTransactionAsync.");
+
+    /// <summary>
     /// A short-lived presigned URL for the current version's CONTENT (ABI 1.8, core ADR 0899), for a module that
     /// hands the bytes to a client rather than reading them: a feed answers <c>302</c> to it, so the Api never
     /// proxies a stored object. Null when the document has no confirmed version, the module's principal may not

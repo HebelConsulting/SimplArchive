@@ -80,8 +80,14 @@ public class ModuleStatusEscalationTests
         var facade = new ModuleArchiveFacade(db, new UserAccessor { UserId = actingUserId }, new ServiceAccountAccessor());
         var engine = new StateMachineEngine(db, catalog, facade, new ServiceCollection().BuildServiceProvider());
         var notifications = new NotificationService(db, tenantAccessor, new UserAccessor { UserId = actingUserId }, NullLogger<NotificationService>.Instance);
+        var delivery = new ModuleNoticeDelivery(db, notifications,
+            new SimplArchive.Infrastructure.Notifications.TenantSmtpSettingsResolver(db, tenantAccessor,
+                new SimplArchive.Infrastructure.Secrets.NullTransitEncryptor(),
+                Microsoft.Extensions.Options.Options.Create(new SimplArchive.Infrastructure.Notifications.SmtpOptions()),
+                NullLogger<SimplArchive.Infrastructure.Notifications.TenantSmtpSettingsResolver>.Instance),
+            tenantAccessor, NullLogger<ModuleNoticeDelivery>.Instance);
         var sweep = new ModuleStatusEscalationService(db, tenantAccessor, engine, catalog, notifications,
-            NullLogger<ModuleStatusEscalationService>.Instance);
+            NullLogger<ModuleStatusEscalationService>.Instance, delivery);
 
         // A dossier with a certificate whose expiry the test controls (Expiring = within 30 days).
         var dossierId = await facade.CreateDocumentAsync(rootId, TestModule.TestModule.DossierMaskId, "Dossier");

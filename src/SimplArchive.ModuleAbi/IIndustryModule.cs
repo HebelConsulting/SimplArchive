@@ -169,6 +169,13 @@ public interface IIndustryModule
     IReadOnlyList<string> RootRoutePrefixes => [];
 
     /// <summary>
+    /// Whether this module sends notices to addresses that are NOT users of the tenant through <see cref="IModuleNotices"/>
+    /// (ABI 1.10, core ADR 0902): a renewal confirmation to a customer. Default false: the module cannot become a mail
+    /// relay by accident, and an external address is refused with a Warning.
+    /// </summary>
+    bool SendsExternalNotices => false;
+
+    /// <summary>
     /// The external hosts this module's <see cref="IModuleHttpClient"/> may reach (ABI 0.6) — the allowlist
     /// the core's SSRF policy (ADR 0717) enforces on every request the module makes. A host not named here
     /// is refused before any request leaves the process, so a module's network egress is declared up front

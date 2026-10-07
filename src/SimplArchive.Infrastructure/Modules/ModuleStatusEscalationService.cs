@@ -24,6 +24,7 @@ public sealed class ModuleStatusEscalationService
     private readonly StateMachineEngine _engine;
     private readonly StateMachineCatalog _catalog;
     private readonly INotificationService _notifications;
+    private readonly ModuleNoticeDelivery _delivery;
     private readonly ILogger<ModuleStatusEscalationService> _logger;
 
     public ModuleStatusEscalationService(
@@ -32,13 +33,15 @@ public sealed class ModuleStatusEscalationService
         StateMachineEngine engine,
         StateMachineCatalog catalog,
         INotificationService notifications,
-        ILogger<ModuleStatusEscalationService> logger)
+        ILogger<ModuleStatusEscalationService> logger,
+        ModuleNoticeDelivery delivery)
     {
         _dbContext = dbContext;
         _tenantAccessor = tenantAccessor;
         _engine = engine;
         _catalog = catalog;
         _notifications = notifications;
+        _delivery = delivery;
         _logger = logger;
     }
 
@@ -108,25 +111,18 @@ public sealed class ModuleStatusEscalationService
             return 0;
         }
 
+        // One delivery rule with an action's notices (ABI 1.10, ADR 0902): a user gets the in-app path; any other address
+        // only when this STATUS was declared to reach external recipients, else a Warning naming who was skipped.
+        var machine = _catalog.Machines[machineId];
+        var external = machine.ExternalEscalations.Contains(statusName);
         var sent = 0;
         foreach (var notice in notices)
         {
-            var normalized = notice.RecipientEmail.Trim().ToUpperInvariant();
-            var recipientId = await _dbContext.Users
-                .Where(u => u.NormalizedEmail == normalized)
-                .Select(u => (Guid?)u.Id)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (recipientId is not { } userId)
+            if (await _delivery.DeliverAsync(machine.ModuleId ?? machineId, notice.RecipientEmail, notice.Title, notice.Message,
+                    notice.ReplyTo, notice.AttachmentDocumentId, subjectId, external, cancellationToken))
             {
-                // An external instructor with no account here cannot receive an in-app notice; naming who was
-                // skipped (not the message) is the Warning ADR 0626 asks for when we silently do less.
-                _logger.LogWarning("Module escalation recipient {Email} is not a user in tenant {Tenant}; the reminder was not delivered.", notice.RecipientEmail, _tenantAccessor.TenantId);
-                continue;
+                sent++;
             }
-
-            await _notifications.NotifyAsync(userId, NotificationType.ModuleStatusEscalation, notice.Title, notice.Message, subjectId, cancellationToken);
-            sent++;
         }
 
         return sent;

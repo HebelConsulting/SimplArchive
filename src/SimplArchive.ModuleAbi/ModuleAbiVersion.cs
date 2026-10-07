@@ -73,5 +73,10 @@ public static class ModuleAbiVersion
     /// 1.9 adds <see cref="IModuleAudit"/> (a module's named audit events); the host now also audits every write a
     /// module makes through the facade (core ADR 0900). A new interface only, so a 1.8 module is unaffected.
     /// </para>
-    public const int Minor = 9;
+    /// <para>
+    /// 1.10 adds <see cref="IModuleArchiveFacade.InTransactionAsync"/>, <see cref="IModuleNotices"/> with
+    /// <see cref="IIndustryModule.SendsExternalNotices"/>, an external-recipient <c>Escalates</c> overload, and a reply-to
+    /// and an attachment on notices (core ADR 0902). Default members and new types only, so a 1.9 module is unaffected.
+    /// </para>
+    public const int Minor = 10;
 }

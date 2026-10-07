@@ -32,4 +32,25 @@ public interface IEmailSender
     Task SendAsync(string toAddress, string toName, string subject, string body,
         IReadOnlyList<string> envelopeCertificatePems, CancellationToken cancellationToken = default) =>
         SendAsync(toAddress, toName, subject, body, cancellationToken);
+
+    // A message with a reply-to and an attachment (ABI 1.10, ADR 0902): a module's notice to an external recipient, a
+    // renewal confirmation carrying the signed licence. Default THROWS rather than dropping the attachment: a renewal
+    // mailed without its licence is worse than one not mailed, and a fake reaching this default is not one an
+    // attachment test should run against.
+    Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException($"{GetType().Name} does not send messages with a reply-to or an attachment.");
+}
+
+/// <summary>A plain-text message with an optional reply-to and one optional attachment (ADR 0902).</summary>
+public sealed record EmailMessage(string ToAddress, string Subject, string Body)
+{
+    public string ToName { get; init; } = string.Empty;
+
+    public string? ReplyTo { get; init; }
+
+    public string? AttachmentFileName { get; init; }
+
+    public byte[]? AttachmentContent { get; init; }
+
+    public string AttachmentContentType { get; init; } = "application/octet-stream";
 }
