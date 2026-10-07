@@ -44,6 +44,12 @@ jobs:
     runs-on: macos-latest
     permissions:
       contents: write # create the GitHub Release + upload assets
+    # NOTARIZATION POSTPONED (ADR 0905): while Apple has not provisioned the notary for our fresh enrolment, the
+    # repository variable MACOS_NOTARIZATION_POSTPONED=true builds the .dmgs AD-HOC signed, as every release before
+    # ADR 0896 did. Not "signed but un-notarized": Gatekeeper refuses that too, and it LOOKS finished (the script
+    # says why). Deleting the variable restores signing + notarization with no code change; the next release must.
+    env:
+      NOTARIZATION_POSTPONED: ${{ vars.MACOS_NOTARIZATION_POSTPONED == 'true' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -56,8 +62,13 @@ jobs:
 
       # The Developer ID certificate goes into a THROWAWAY keychain that dies with the runner: never the login
       # keychain, and never a file left on disk. A missing secret fails here, before anything is built (ADR 0896).
+      - name: Say that notarization is postponed
+        if: ${{ env.NOTARIZATION_POSTPONED == 'true' }}
+        run: echo "::warning::MACOS_NOTARIZATION_POSTPONED is set — the .dmgs are AD-HOC signed and not notarized (ADR 0905). Delete the variable before the next release."
+
       - name: Import the Developer ID certificate
         id: identity
+        if: ${{ env.NOTARIZATION_POSTPONED != 'true' }}
         env:
           MACOS_CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
@@ -83,7 +94,14 @@ jobs:
           echo "identity=$identity" >> "$GITHUB_OUTPUT"
           echo "Signing as: $identity"
 
+      - name: Package macOS .dmg (arm64 + x64), AD-HOC signed (notarization postponed, ADR 0905)
+        if: ${{ env.NOTARIZATION_POSTPONED == 'true' }}
+        env:
+          VERSION: ${{ github.event_name == 'push' && github.ref_name || inputs.version }}
+        run: scripts/package-macos-dmg.sh "${VERSION#v}"
+
       - name: Package macOS .dmg (arm64 + x64), signed and notarized
+        if: ${{ env.NOTARIZATION_POSTPONED != 'true' }}
         env:
           REQUIRE_SIGNING: "1"
           MACOS_SIGN_IDENTITY: ${{ steps.identity.outputs.identity }}
