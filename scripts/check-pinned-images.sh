@@ -28,7 +28,11 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # so reading the compose file would now yield "${POSTGRES_TAG:-16.15-alpine}" rather than a version. The kiosk
 # still carries literals, because it lags at rollout on purpose.
 files=("$repo_root/images.env")
-[[ -f "$repo_root/tools/kiosk/docker-compose.yml" ]] && files+=("$repo_root/tools/kiosk/docker-compose.yml")
+# The kiosk host's three bundles (ADR 0903): the edge proxy carries the Caddy pin the kiosk used to, and the
+# vendor stack pins its own copies of the shared services.
+for host_file in tools/kiosk/docker-compose.yml tools/edge/docker-compose.yml tools/vendor/docker-compose.yml; do
+  [[ -f "$repo_root/$host_file" ]] && files+=("$repo_root/$host_file")
+done
 # The chart hooks and the AWS installers name images literally, outside images.env. They sat at older pins
 # (aws-cli 2.36.2, Postgres 16.14) while this report said the stack was current, because it never read them.
 # PinnedImageLockstepTests holds them to images.env; this report says when images.env itself is behind upstream.

@@ -65,6 +65,7 @@ public class DbInitCopyLockstepTests
             {
                 Path.Combine("charts", "simplarchive", "files", "db-init.sql"),
                 Path.Combine("tools", "kiosk", "config", "db-init.sql"),
+                Path.Combine("tools", "vendor", "config", "db-init.sql"),
             }
             : [Path.Combine("charts", "simplarchive", "files", "db-init.sql")];
 

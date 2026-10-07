@@ -194,6 +194,9 @@ public partial class PinnedImageLockstepTests
     // spare on every update, and because that container is only ever a `psql` CLIENT the cost was an image
     // rather than a failure. Nothing was going to notice.
     //
+    // ONE HOST, THREE BUNDLES since ADR 0903: the kiosk, the edge proxy and the vendor stack all run on the kiosk
+    // host, so the claim covers all three — a vendor stack pinning another Postgres is the same spare image.
+    //
     // PRIVATE-REPOSITORY-ONLY, because its whole subject is withheld: `tools/` is not published to the public
     // mirror (ADR 0484), so in that checkout the bundle is absent BY DESIGN and asserting it exists turned the
     // mirror's fast tier red for a day (from the #1366 sync onward) on a repository where nothing was wrong.
@@ -201,21 +204,25 @@ public partial class PinnedImageLockstepTests
     // stand the guard down in the private repo the day somebody moved the bundle, which is the silent-pass this
     // file's own derived-list comment exists to prevent.
     [Fact]
-    public void The_kiosk_bundle_does_not_pin_one_image_at_two_versions()
+    public void The_kiosk_host_bundles_do_not_pin_one_image_at_two_versions()
     {
         if (PrivateRepositoryGate.RepoRoot() is not { } root || !PrivateRepositoryGate.IsPrivateRepository(root))
         {
             return;
         }
 
-        var kiosk = Path.Combine(root, "tools", "kiosk");
-        Assert.True(Directory.Exists(kiosk),
-            $"The kiosk bundle is missing at {kiosk}. This is the PRIVATE repository, where it is required.");
+        var tools = Path.Combine(root, "tools");
+        var bundles = new[] { "kiosk", "edge", "vendor" }.Select(b => Path.Combine(tools, b)).ToList();
+        foreach (var bundle in bundles)
+        {
+            Assert.True(Directory.Exists(bundle),
+                $"The bundle {bundle} is missing. This is the PRIVATE repository, where it is required.");
+        }
 
         // repo -> tag -> the files asking for it.
         var seen = new Dictionary<string, Dictionary<string, List<string>>>(StringComparer.Ordinal);
 
-        var files = Directory.EnumerateFiles(kiosk, "*.*", SearchOption.AllDirectories)
+        var files = bundles.SelectMany(b => Directory.EnumerateFiles(b, "*.*", SearchOption.AllDirectories))
             .Where(f => Path.GetExtension(f) is ".yml" or ".yaml" or ".sh")
             .OrderBy(f => f, StringComparer.Ordinal)
             .ToList();
@@ -234,7 +241,7 @@ public partial class PinnedImageLockstepTests
                     : match.Groups[3].Success ? match.Groups[3].Value
                     : match.Groups[4].Value;
 
-                var name = Path.GetRelativePath(kiosk, file).Replace(Path.DirectorySeparatorChar, '/');
+                var name = Path.GetRelativePath(tools, file).Replace(Path.DirectorySeparatorChar, '/');
                 var tags = seen.TryGetValue(repo, out var t) ? t : seen[repo] = new(StringComparer.Ordinal);
                 (tags.TryGetValue(tag, out var where) ? where : tags[tag] = []).Add(name);
             }
@@ -252,7 +259,7 @@ public partial class PinnedImageLockstepTests
             .ToList();
 
         Assert.True(split.Count == 0,
-            "The kiosk bundle pins the same image at two different versions. One deployment then carries both, "
+            "The kiosk host's bundles pin the same image at two different versions. The host then carries both, "
             + "pulling the spare on every update — and where the extra container is only a client (the psql "
             + "one-shot), it works, so nothing reports it:\n"
             + string.Join("\n", split));

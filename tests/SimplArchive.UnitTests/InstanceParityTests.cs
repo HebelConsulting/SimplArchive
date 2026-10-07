@@ -307,7 +307,8 @@ public class InstanceParityTests
     [Fact]
     public void The_signalr_hub_is_routed_with_session_affinity()
     {
-        var file = Path.Combine("tools", "kiosk", "Caddyfile");
+        // The kiosk's proxy is the host's edge proxy since ADR 0903; the /hubs rule moved with it.
+        var file = Path.Combine("tools", "edge", "Caddyfile");
         if (Withheld(file))
         {
             return; // the public mirror has no tools/, by design
@@ -317,7 +318,7 @@ public class InstanceParityTests
 
         var hub = text.IndexOf("handle /hubs/", StringComparison.Ordinal);
         Assert.True(hub >= 0,
-            "The kiosk Caddyfile no longer routes /hubs/* separately. The SignalR handshake needs session "
+            "The edge Caddyfile no longer routes the kiosk's /hubs/* separately. The SignalR handshake needs session "
             + "affinity across the two app instances (ADR 0839): without its own handler the hub falls back to "
             + "the round-robin block, and a negotiate on one instance followed by an upgrade on the other answers "
             + "404 — a hub that connects about half the time and reads as flaky networking.");

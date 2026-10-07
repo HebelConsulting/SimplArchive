@@ -52,7 +52,12 @@ public partial class KioskConfigKeysAgainstReleasedImageTests
             + "against it. Add `with: { fetch-tags: true }` to the checkout (or fetch that tag explicitly) rather "
             + "than trusting this guard's verdict.");
 
-        var keys = Directory.EnumerateFiles(kiosk, "*.yml")
+        // The vendor stack (ADR 0903) runs a released image too, from the same synced config, so its keys are
+        // held to the same rule.
+        var vendor = Path.Combine(root, "tools", "vendor");
+        Assert.True(Directory.Exists(vendor), $"{vendor} is missing — this guard has nothing to read there.");
+
+        var keys = Directory.EnumerateFiles(kiosk, "*.yml").Concat(Directory.EnumerateFiles(vendor, "*.yml"))
             .SelectMany(f => ComposeEnvironmentKey().Matches(File.ReadAllText(f))
                 .Select(m => m.Groups[1].Value))
             .Distinct(StringComparer.Ordinal)
