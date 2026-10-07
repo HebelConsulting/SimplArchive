@@ -645,13 +645,30 @@ public class DocumentChildrenController : ControllerBase
             ? await TypedFolderRuleOfAsync(parentMaskVersionId, cancellationToken)
             : null;
 
-        var admittedFolder = parentRule is not null && folderMaskRequested
-            && parentRule.Admits.Any(a => a.MaskId == folderMaskId);
+        // …and a MODULE's exclusive folder is one too (a Customer admits only an Issued license and a Pull credential,
+        // SimplArchiveLicensing ADR 0003). The core table above knows only the core's own families, while SaveChanges
+        // enforces the tenant's whole containment model, module masks included; asking the same rules here is what
+        // keeps an unnamed child an item-to-be instead of a Folder that SaveChanges then refuses.
+        var parentMaskId = parent.MaskVersionId is { } versionId
+            ? await _dbContext.MaskVersions.Where(v => v.Id == versionId).Select(v => (Guid?)v.MaskId).SingleOrDefaultAsync(cancellationToken)
+            : null;
+        var parentExclusive = parentRule is not null || (parentMaskId is { } exclusiveId && rules.IsExclusiveFolder(exclusiveId));
+
+        var admittedFolder = folderMaskRequested
+            && (parentRule?.Admits.Any(a => a.MaskId == folderMaskId) == true
+                || (parentMaskId is { } admittingId && rules.AdmittedBy(admittingId).Contains(folderMaskId)));
 
         if (parentRule is { } rule && folderMaskRequested && !admittedFolder)
         {
             throw new Errors.Exceptions.Documents.TypedFolderContainmentException(
                 $"A {rule.FolderName} holds only {rule.AdmittedNames} — '{request.FolderMask}' cannot live there.");
+        }
+
+        // A named folder a module's exclusive folder does not admit is refused too, never quietly made an item.
+        if (parentExclusive && folderMaskRequested && !admittedFolder)
+        {
+            throw new Errors.Exceptions.Documents.TypedFolderContainmentException(
+                $"'{request.Name}' cannot be created here: this folder holds only the kinds it declares.");
         }
 
         var rights = await _access.GetCallerRightsAsync(documentId, cancellationToken);
@@ -674,7 +691,7 @@ public class DocumentChildrenController : ControllerBase
             // caller with no ambient tenant can't produce a maskless folder (ADR 0590's defect).
             // Inside a typed folder, null UNLESS the caller named a mask that folder admits (a Section in a
             // Notebook): an unnamed one is an item-to-be, and the finalizer decides what it is (see above).
-            MaskVersionId = parentRule is not null && !admittedFolder
+            MaskVersionId = parentExclusive && !admittedFolder
                 ? Guid.Empty
                 : await Documents.FolderMask.CurrentVersionIdAsync(_dbContext, parent.TenantId, folderMaskId, cancellationToken)
                     ?? await Documents.FolderMask.CurrentVersionIdAsync(_dbContext, cancellationToken)

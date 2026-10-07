@@ -24,6 +24,10 @@ public sealed class TestModule : IIndustryModule
 
     /// <summary>A reader's X.509 certificate this module enrols — what <see cref="ReaderCertificates"/> answers from.</summary>
     public static readonly Guid ReaderCertificateMaskId = Guid.Parse("7E57AB1E-0000-0000-0000-000000000005");
+
+    /// <summary>An EXCLUSIVE module folder (it admits only Test Certificates): the shape a module's register takes, and
+    /// the case the children endpoint once got wrong by stamping a Folder that containment then refused.</summary>
+    public static readonly Guid BinderMaskId = Guid.Parse("7E57AB1E-0000-0000-0000-000000000006");
     public const string ReaderCertificateHolderField = "Holder user";
     public const string ReaderCertificateWithdrawnField = "Withdrawn";
 
@@ -163,6 +167,8 @@ public sealed class TestModule : IIndustryModule
             new ModuleFieldSeed("Instructor", "Text", IsRequired: false),
             new ModuleFieldSeed("Pilot", "Text", IsRequired: false),
         ]),
+        new ModuleMaskSeed(BinderMaskId, "Test Binder", IsFolderMask: true, IsBookable: false, [],
+            AdmitsOnlyDeclaredChildren: true, AdmittedChildren: [CertificateMaskId]),
         new ModuleMaskSeed(CertificateMaskId, "Test Certificate", IsFolderMask: false, IsBookable: false,
         [
             new ModuleFieldSeed("Valid to", "Date", IsRequired: false),

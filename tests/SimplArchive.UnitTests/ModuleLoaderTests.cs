@@ -38,10 +38,10 @@ public class ModuleLoaderTests
             // context (a private copy would make this cast throw).
             // SIX masks: dossier, certificate and entry (ADR 0738's shadowing lesson), the pair the module-declared
             // CalDAV collection needs — Test Log and Test Log Entry (#1242) — and the Test Reader Certificate the
-            // reader-certificate capability answers from (ADR 0890). The certificate is the one whose typed fields
+            // reader-certificate capability answers from (ADR 0890), and the exclusive Test Binder. The certificate is the one whose typed fields
             // prove the boundary; the count is here to prove the boundary carries ALL of them, so it moves whenever
             // the fixture grows and that is the point.
-            Assert.Equal(6, module.Masks.Count);
+            Assert.Equal(7, module.Masks.Count);
             var mask = module.Masks.Single(m => m.Name == "Test Certificate");
             Assert.False(mask.IsBookable);
 

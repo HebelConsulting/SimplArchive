@@ -183,6 +183,10 @@ public sealed class MaskContainmentRules
     /// </remarks>
     public bool Allows(Guid? ownMaskId, Guid? parentMaskId) => Check(ownMaskId, parentMaskId) == Refusal.None;
 
+    /// <summary>Whether a folder of this mask admits ONLY what it declares (core or module-declared): the same
+    /// question <see cref="Verify"/> asks, so a caller deciding what to create agrees with what SaveChanges enforces.</summary>
+    public bool IsExclusiveFolder(Guid folderMaskId) => _exclusiveFolders.Contains(folderMaskId);
+
     /// <summary>The masks this folder DECLARES it admits, in name order. Empty for an ordinary folder.</summary>
     /// <remarks>
     /// What a "New …" menu is built from, and deliberately narrower than "everything <see cref="Allows"/>

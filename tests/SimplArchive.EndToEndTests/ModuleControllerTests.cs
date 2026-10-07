@@ -1,3 +1,5 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
@@ -746,6 +748,45 @@ public class ModuleControllerTests
             // The ephemeral staging left no "created by module" line behind.
             Assert.DoesNotContain(events, e => e.GetProperty("action").GetString() == "Document.Created"
                 && Details(e)?.StartsWith("by module test-module", StringComparison.Ordinal) == true);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", null);
+            rig.Admin.Dispose();
+            rig.Owner.Dispose();
+        }
+    }
+
+    // A MODULE's exclusive folder admits only what it declares, and the children endpoint must agree with what
+    // SaveChanges enforces: an unnamed child is an item-to-be (no mask yet), which may then become an admitted item;
+    // a named folder it does not admit is refused. It once stamped a plain Folder, which containment then refused,
+    // so nothing could ever be filed into such a folder through the API (found by the Licensing demo, 2026-10-07).
+    [Fact]
+    public async Task A_modules_exclusive_folder_receives_an_untyped_child_that_becomes_an_admitted_item()
+    {
+        var rig = await RigAsync();
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", vendorKey.ExportSubjectPublicKeyInfoPem());
+        try
+        {
+            await ActivateAsync(rig, vendorKey);
+            var binder = (await TestJson.Post(rig.Owner, $"/api/documents/{rig.RepoId}/children",
+                new { name = $"Binder {Guid.NewGuid():N}", maskId = SimplArchive.TestModule.TestModule.BinderMaskId })).GetProperty("id").GetGuid();
+
+            var child = (await TestJson.Post(rig.Owner, $"/api/documents/{binder}/children", new { name = "Medical" })).GetProperty("id").GetGuid();
+            await TestJson.Put(rig.Owner, $"/api/documents/{child}/mask", new { maskId = SimplArchive.TestModule.TestModule.CertificateMaskId });
+            using (var scope = _factory.Services.CreateScope())
+            {
+                scope.ServiceProvider.GetRequiredService<SimplArchive.Infrastructure.Persistence.CurrentTenantAccessor>().TenantId = rig.TenantId;
+                var db = scope.ServiceProvider.GetRequiredService<SimplArchive.Infrastructure.Persistence.SimplArchiveDbContext>();
+                var maskId = await db.Documents.Where(d => d.Id == child)
+                    .Join(db.MaskVersions, d => d.MaskVersionId, v => (Guid?)v.Id, (d, v) => v.MaskId).SingleAsync();
+                Assert.Equal(SimplArchive.TestModule.TestModule.CertificateMaskId, maskId);
+            }
+
+            var refused = await rig.Owner.PostAsJsonAsync($"/api/documents/{binder}/children",
+                new { name = "Sub", maskId = SimplArchive.ModuleAbi.CoreMaskIds.Folder });
+            Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
         }
         finally
         {
