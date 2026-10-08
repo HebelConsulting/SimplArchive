@@ -27,9 +27,10 @@ namespace SimplArchive.UnitTests;
 /// </para>
 /// <para>
 /// <b>Calibrated before it shipped.</b> Run across <c>src/</c> it finds <b>one</b> site, and that site is the
-/// deliberate one. The measurement also corrected the issue's own expectation of two carve-outs: the login
-/// line needs none, because inspecting arguments rather than the call already excludes it — which is the
-/// design working as specified rather than a gap being tolerated.
+/// deliberate one. The login line needs no carve-out: it prints a <c>token</c>, deliberately not a secret word.
+/// <b>But the CALL pattern had a hole</b> (#1644): it matched <c>Console.Error.WriteLine</c> and not
+/// <c>Console.Out.WriteLine</c>, so <c>Console.Out.WriteLine(secret)</c>, a one-time credential in a draft of
+/// <c>saconsole module action</c>, passed unseen. Both streams are matched now, and the planted case below holds it.
 /// </para>
 /// </remarks>
 public class NoSecretReachesALogTests
@@ -45,7 +46,7 @@ public class NoSecretReachesALogTests
     private static readonly Regex Call = new(
         @"\b(?:Log(?:Trace|Debug|Information|Warning|Error|Critical)"
         + @"|(?:Ansi)?[Cc]onsole\s*\.\s*(?:MarkupLine(?:Interpolated)?|WriteLine|Write)"
-        + @"|Console\s*\.\s*Error\s*\.\s*WriteLine)\s*\(",
+        + @"|Console\s*\.\s*(?:Error|Out)\s*\.\s*Write(?:Line)?)\s*\(",
         RegexOptions.Compiled);
 
     /// <summary>
@@ -106,10 +107,16 @@ public class NoSecretReachesALogTests
     /// The one place a secret is deliberately written out, with the reason.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// <c>saconsole tenant create</c> prints the initial administrator password. The Api generates it once and
     /// stores nothing retrievable, so a caller who loses it must reset rather than look it up — printing it
-    /// IS the hand-off, and the code says so beside the line. A second entry here is a conversation, not an
-    /// edit.
+    /// IS the hand-off, and the code says so beside the line.
+    /// </para>
+    /// <para>
+    /// A second entry here is a conversation, not an edit. (<c>saconsole login</c>'s session export needs none: it
+    /// prints a <c>token</c>, which this guard deliberately does not treat as a secret word — see
+    /// <see cref="SecretWords"/>.)
+    /// </para>
     /// </remarks>
     private static readonly IReadOnlyDictionary<string, string> Allowed = new Dictionary<string, string>
     {
@@ -158,15 +165,19 @@ public class NoSecretReachesALogTests
         var planted = """
             _logger.LogInformation("Signed in {User}", user.Email, password);
             AnsiConsole.WriteLine($"pin is {cardPin}");
+            Console.Out.WriteLine(secret);
             _logger.LogWarning("Failed login for user {UserId}: incorrect password", user.Id);
             var login = session.Login(pin);
             """;
 
         var hits = Matches(planted).ToList();
 
-        Assert.Equal(2, hits.Count);
+        Assert.Equal(3, hits.Count);
         Assert.Contains(hits, h => h.Contains("password", StringComparison.Ordinal));
         Assert.Contains(hits, h => h.Contains("cardPin", StringComparison.Ordinal));
+
+        // Console.OUT as well as Console.Error (#1644): the stream a draft once wrote a credential to unseen.
+        Assert.Contains(hits, h => h.Trim() == "secret");
 
         // The template may say "password" — what matters is that the only ARGUMENT is an id.
         Assert.DoesNotContain(hits, h => h.Contains("user.Id", StringComparison.Ordinal));
