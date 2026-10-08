@@ -70,19 +70,13 @@ public class SensitivityLabelsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken cancellationToken)
     {
-        var labels = await _dbContext.SensitivityLabelDefinitions
+        // Through ToResource, so every row carries its self/retire/unretire links. The listing used to project its own
+        // rows WITHOUT them, while the web dialog edits and retires from exactly those rows (#1635).
+        var labels = (await _dbContext.SensitivityLabelDefinitions
             .OrderBy(l => l.Rank).ThenBy(l => l.Name)
-            .Select(l => new SensitivityLabelResource
-            {
-                Id = l.Id,
-                Name = l.Name,
-                Rank = l.Rank,
-                Color = l.Color,
-                Watermark = l.Watermark,
-                Retired = l.RetiredAt != null,
-            })
-            .ToListAsync(cancellationToken);
-
+            .ToListAsync(cancellationToken))
+            .Select(ToResource)
+            .ToList();
         return Ok(new SensitivityLabelsResource
         {
             Labels = labels,

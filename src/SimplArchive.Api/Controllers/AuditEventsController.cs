@@ -195,6 +195,8 @@ public class AuditEventsController : ControllerBase
             new("purge", Url.Action(nameof(Purge))!, "POST"),
             new("verify", Url.Action(nameof(Verify))!, "GET"),
             new("worm-verify", Url.Action(nameof(WormVerify))!, "GET"),
+            // The sealed segments themselves, which nothing advertised until the reachability crawl (#1635).
+            new("worm-segments", Url.Action(nameof(WormSegments))!, "GET"),
         };
         if (hasMore)
         {

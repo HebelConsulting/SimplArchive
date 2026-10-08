@@ -126,7 +126,12 @@ public class PlatformAdministratorsController : ControllerBase
             ClientId = clientId,
             ClientSecret = clientSecret,
             IsActive = platformAdministrator.IsActive,
-            Links = [new Link("self", $"/api/platform-administrators/{platformAdministrator.Id}", "GET")],
+            Links =
+            [
+                new Link("self", $"/api/platform-administrators/{platformAdministrator.Id}", "GET"),
+                // Reachable by no rel until the reachability crawl (#1635).
+                new Link("rotate-secret", $"/api/platform-administrators/{platformAdministrator.Id}/rotate-secret", "POST"),
+            ],
         };
 
         return CreatedAtAction(nameof(Get), new { platformAdministratorId = platformAdministrator.Id }, resource);
@@ -246,7 +251,12 @@ public class PlatformAdministratorsController : ControllerBase
         {
             ClientId = platformAdministrator.OpenIddictApplicationClientId,
             ClientSecret = newSecret,
-            Links = [new Link("self", $"/api/platform-administrators/{platformAdministratorId}", "GET")],
+            Links =
+            [
+                new Link("self", $"/api/platform-administrators/{platformAdministratorId}", "GET"),
+                // Reachable by no rel until the reachability crawl (#1635).
+                new Link("rotate-secret", $"/api/platform-administrators/{platformAdministratorId}/rotate-secret", "POST"),
+            ],
         });
     }
 
@@ -298,7 +308,12 @@ public class PlatformAdministratorsController : ControllerBase
             Name = platformAdministrator.Name,
             ClientId = platformAdministrator.OpenIddictApplicationClientId,
             IsActive = platformAdministrator.IsActive,
-            Links = [new Link("self", $"/api/platform-administrators/{platformAdministrator.Id}", "GET")],
+            Links =
+            [
+                new Link("self", $"/api/platform-administrators/{platformAdministrator.Id}", "GET"),
+                // Reachable by no rel until the reachability crawl (#1635).
+                new Link("rotate-secret", $"/api/platform-administrators/{platformAdministrator.Id}/rotate-secret", "POST"),
+            ],
         };
     }
 }

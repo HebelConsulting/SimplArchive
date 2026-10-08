@@ -79,6 +79,9 @@ public class EncryptionKeysController : ControllerBase
     /// <summary>One generation, and the identity of the key behind it.</summary>
     public class KekKeyResource
     {
+        /// <summary><c>delete</c> on every generation but the current one, the key that still wraps new objects (#1635).</summary>
+        public List<Link> Links { get; set; } = [];
+
         public string Generation { get; set; } = string.Empty;
 
         /// <summary>SHA-256 over the key's SubjectPublicKeyInfo. Not a secret — it is a fingerprint of
@@ -144,6 +147,7 @@ public class EncryptionKeysController : ControllerBase
             Generations = [.. generations],
             Keys = [.. held.Select(k => new KekKeyResource
             {
+                Links = k.Key == current ? [] : [new Link("delete", $"/api/encryption/keys/{Uri.EscapeDataString(k.Key)}", "DELETE")],
                 Generation = k.Key,
                 Thumbprint = k.Value,
                 Sampled = sampled.GetValueOrDefault(k.Key, KekRotationSweep.KeySample.Unstamped) switch
@@ -159,6 +163,13 @@ public class EncryptionKeysController : ControllerBase
             // which is cheap per object and not free in aggregate.
             Remaining = status.Running ? status.Remaining : await _sweep.CountRemainingAsync(cancellationToken),
             Failed = status.Failed,
+            // What can be done to the keys, advertised rather than composed (#1635: linked from nowhere before).
+            Links =
+            [
+                new Link("self", "/api/encryption/keys", "GET"),
+                new Link("rotate", "/api/encryption/keys/rotate", "POST"),
+                new Link("sweep", "/api/encryption/keys/sweep", "POST"),
+            ],
         });
     }
 

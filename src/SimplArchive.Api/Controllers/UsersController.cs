@@ -826,7 +826,11 @@ public class UsersController : ControllerBase
                 // which is why they are unconditional here rather than recomputed per row.
                 new Link("reset-password", $"/api/users/{user.Id}/reset-password", "POST"),
                 new Link("reset-mfa", $"/api/users/{user.Id}/mfa/reset", "POST"),
-                new Link("deactivate", $"/api/users/{user.Id}", "DELETE"),
+                // Deactivate and reactivate are a STATE PAIR (ADR 0719): an active user offers the one, an inactive
+                // user the other. Reactivate was reachable by no rel at all until the reachability crawl found it (#1635).
+                user.IsActive
+                    ? new Link("deactivate", $"/api/users/{user.Id}", "DELETE")
+                    : new Link("reactivate", $"/api/users/{user.Id}/reactivate", "POST"),
 
                 // Impersonating THIS user, advertised only where the token endpoint would actually accept it
                 // (#875, ADR 0722). Both clients used to decide this themselves from the row's DIRECT rights,
