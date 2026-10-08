@@ -27,7 +27,10 @@ public static class SerilogConfiguration
             .Enrich.WithProperty("Application", "SimplArchive.Api")
             .Enrich.WithProperty("Environment", environment.EnvironmentName)
             // The audit chain's designed contention, which EF reports at Error (issue #759).
-            .Filter.ByExcluding(e => AuditChainContentionFilter.IsDesignedContention(e.Exception));
+            .Filter.ByExcluding(e => AuditChainContentionFilter.IsDesignedContention(e.Exception))
+            // LAST, so it also sees what the enrichers above added: a credential carried in a path is replaced in
+            // every property of its request's events, including the host's raw-path lines (ADR 0909).
+            .Enrich.With(services.GetRequiredService<PathCredentialRedactor>());
 
         if (environment.IsDevelopment())
         {

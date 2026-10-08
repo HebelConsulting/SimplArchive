@@ -22,8 +22,10 @@ public static class ModuleRoutes
     /// <remarks>
     /// <c>nuget</c>: the Licensing Module's package feed (core #1550). Its address is pasted into every customer's
     /// NuGet configuration, so it must not carry <c>/api/modules/…</c>.
+    /// <c>fdroid</c>: the Licensing Module's Android app repository (core #1649). Its address is pasted into an app
+    /// store client, which sends no authentication, so the credential rides in the path (ADR 0909).
     /// </remarks>
-    public static readonly IReadOnlyList<string> AllowedRootPrefixes = ["nuget"];
+    public static readonly IReadOnlyList<string> AllowedRootPrefixes = ["nuget", "fdroid"];
 
     /// <summary>The modules whose route claims and controller routes are admissible, in load order. A refused module
     /// is dropped before anything of it is registered; the first claimant of a prefix keeps it.</summary>

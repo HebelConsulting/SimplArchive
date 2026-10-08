@@ -68,7 +68,10 @@ public sealed class ModuleCredentialMiddleware(
         }
 
         var moduleId = owner.Module.ModuleId;
-        var (scheme, credential) = Presented(context.Request, authenticator.ApiKeyHeaders);
+        // A credential the path carried (ADR 0909) was cut out by PathCredentialMiddleware; otherwise the headers.
+        var (scheme, credential) = context.Features.Get<PathCredentialFeature>() is { } carried
+            ? ("Path", carried.Credential)
+            : Presented(context.Request, authenticator.ApiKeyHeaders);
         logger.LogTrace("Module {ModuleId} credential exchange on {Path}: presented {Scheme}", moduleId, path, scheme ?? "nothing");
         if (credential is null)
         {

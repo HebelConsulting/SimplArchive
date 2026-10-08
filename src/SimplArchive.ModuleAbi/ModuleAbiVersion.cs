@@ -78,5 +78,9 @@ public static class ModuleAbiVersion
     /// <see cref="IIndustryModule.SendsExternalNotices"/>, an external-recipient <c>Escalates</c> overload, and a reply-to
     /// and an attachment on notices (core ADR 0902). Default members and new types only, so a 1.9 module is unaffected.
     /// </para>
-    public const int Minor = 10;
+    /// <para>
+    /// 1.11 adds <see cref="IModuleCredentialAuthenticator.PathCredentialPrefixes"/> and the <c>fdroid</c> root prefix
+    /// (core ADR 0909). A default member only, so a 1.10 module is unaffected.
+    /// </para>
+    public const int Minor = 11;
 }

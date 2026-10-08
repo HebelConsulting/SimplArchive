@@ -28,6 +28,20 @@ public sealed class TestFeedController(IModuleCredentialContext credential, IMod
 }
 
 /// <summary>
+/// The path-credential fixture (ABI 1.11, core ADR 0909): an app-repository client sends no authentication, so the
+/// credential is the path segment after <c>fdroid</c>. The core cut it out before routing, so this route is the plain
+/// path, and the response echoes the path it saw, so a test can prove the secret never reached the module's routing.
+/// </summary>
+[ApiController]
+[Authorize]
+[Route("fdroid/test-repo")]
+public sealed class TestRepoController(IModuleCredentialContext credential) : ControllerBase
+{
+    [HttpGet("{**rest}")]
+    public IActionResult Get(string? rest) => Ok(new { subject = credential.Identity?.Subject, path = Request.Path.Value, rest });
+}
+
+/// <summary>
 /// Accepts one secret, and reads a module setting through the FACADE while doing so: the facade answers settings
 /// only when the request acts as the module, so the subject it returns proves the core set tenant and principal
 /// BEFORE calling here.
@@ -36,7 +50,10 @@ public sealed class TestCredentialAuthenticator(IModuleArchiveFacade archive) : 
 {
     public const string Secret = "open-sesame";
 
-    public IReadOnlyList<string> RoutePrefixes => ["nuget/test-feed"];
+    public IReadOnlyList<string> RoutePrefixes => ["nuget/test-feed", "fdroid/test-repo"];
+
+    /// <summary>The app-repository fixture: on <c>fdroid</c> the credential is the first segment (ABI 1.11, ADR 0909).</summary>
+    public IReadOnlyList<string> PathCredentialPrefixes => ["fdroid"];
 
     public IReadOnlyList<string> ApiKeyHeaders => ["X-Test-ApiKey"];
 

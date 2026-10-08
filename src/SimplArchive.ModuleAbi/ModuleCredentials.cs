@@ -28,6 +28,19 @@ public interface IModuleCredentialAuthenticator
     /// Default none: the core reads Basic (the password) and Bearer itself.</summary>
     IReadOnlyList<string> ApiKeyHeaders => [];
 
+    /// <summary>
+    /// Root prefixes whose credential travels IN THE PATH (ABI 1.11, core ADR 0909): on these, the segment right after
+    /// the prefix is the credential, <c>/fdroid/&lt;credential&gt;/repo/index-v2.json</c>. For a protocol client that
+    /// cannot send a header at all. Default none.
+    /// </summary>
+    /// <remarks>
+    /// The core cuts that segment out of the path at the very start of the pipeline, before routing and before any of
+    /// its logging, and authenticates it exactly like a header credential. So this module's routes are the plain path
+    /// (<c>fdroid/repo/…</c>), the secret never appears in its route values, and every log line shows it as
+    /// <c>***</c>. Each entry must be one of the module's <see cref="IIndustryModule.RootRoutePrefixes"/>.
+    /// </remarks>
+    IReadOnlyList<string> PathCredentialPrefixes => [];
+
     /// <summary>What a refusal answers in <c>WWW-Authenticate</c>, so the client knows to retry with credentials.</summary>
     ModuleChallenge Challenge { get; }
 

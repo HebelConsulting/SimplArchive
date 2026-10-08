@@ -419,6 +419,11 @@ modules = SimplArchive.Infrastructure.Modules.ModuleStartup.RunAll(
 
 builder.Services.AddSingleton(machineCatalog);
 builder.Services.AddSingleton<IReadOnlyList<SimplArchive.Infrastructure.Modules.ModuleLoader.LoadedModule>>(modules);
+// A credential in a module's path (ABI 1.11, ADR 0909): the prefixes are read from the authenticators once the app
+// is built; the redactor masks the credential in every log line of its request, including the host's own.
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<SimplArchive.Api.Modules.PathCredentialPrefixes>();
+builder.Services.AddSingleton<SimplArchive.Api.Logging.PathCredentialRedactor>();
 
 // HERE rather than with the other encryption-configuration rules at the top of this file, and the placement
 // is the point: whether this installation can run an enveloping mode depends on a module
@@ -474,6 +479,8 @@ if (modules.Count > 0)
 }
 
 var app = builder.Build();
+app.Services.GetRequiredService<SimplArchive.Api.Modules.PathCredentialPrefixes>().Load(
+    app.Services, modules, app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("ModuleRoutes"));
 
 // A zone this host cannot resolve moves every entry naming it to a different instant, so it must SAY so
 // (#1138). Checked once at startup as well: an image without tzdata resolves nothing at all, and finding
@@ -715,6 +722,10 @@ using (var scope = app.Services.CreateScope())
 
 // Configure the HTTP request pipeline.
 
+// FIRST of all: a credential carried in a module's path (ADR 0909) is cut out before routing and before any of our
+// logging, so nothing downstream sees it; the host's own raw-path lines are masked by PathCredentialRedactor.
+app.UseMiddleware<SimplArchive.Api.Modules.PathCredentialMiddleware>();
+
 // Behind a TLS-terminating reverse proxy (the caddy service for LAN testing — ADR "Reverse proxy for LAN
 // testing"), honor X-Forwarded-Proto/-Host/-For so OpenIddict + link generation emit the external https URLs
 // the browser actually used, not the internal http ones. Gated on App:TrustProxyHeaders (default off, so
@@ -745,6 +756,15 @@ app.UseMiddleware<CorrelationIdMiddleware>();
 // (unhandled exception) is logged at Error by Serilog's request logging.
 app.UseSerilogRequestLogging(options =>
 {
+    // The summary's path says where a path credential was (ADR 0909): /fdroid/***/repo/…, not the shortened path.
+    options.GetMessageTemplateProperties = (httpContext, _, elapsed, statusCode) =>
+    [
+        new Serilog.Events.LogEventProperty("RequestMethod", new Serilog.Events.ScalarValue(httpContext.Request.Method)),
+        new Serilog.Events.LogEventProperty("RequestPath",
+            new Serilog.Events.ScalarValue(SimplArchive.Api.Modules.PathCredentialMiddleware.DisplayPath(httpContext))),
+        new Serilog.Events.LogEventProperty("StatusCode", new Serilog.Events.ScalarValue(statusCode)),
+        new Serilog.Events.LogEventProperty("Elapsed", new Serilog.Events.ScalarValue(elapsed)),
+    ];
     options.EnrichDiagnosticContext = (diagnostic, httpContext) =>
     {
         var services = httpContext.RequestServices;

@@ -602,6 +602,50 @@ public class ModuleControllerTests
         }
     }
 
+    // ABI 1.11 (ADR 0909): an app-repository client sends no authentication, so the credential is the path segment
+    // after the prefix. The core cuts it out before routing and authenticates it like a header credential: the module
+    // routes the plain path and never sees the secret there.
+    [Fact]
+    public async Task A_credential_in_the_path_authenticates_and_never_reaches_the_modules_routing()
+    {
+        var rig = await RigAsync();
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", vendorKey.ExportSubjectPublicKeyInfoPem());
+        using var wire = _factory.CreateClient();
+        var credential = ModuleCredentialFormat.Compose(rig.TenantId, SimplArchive.TestModule.TestCredentialAuthenticator.Secret);
+        try
+        {
+            await ActivateAsync(rig, vendorKey);
+            await TestJson.Put(rig.Admin, "/api/modules/test-module/settings",
+                new { values = new Dictionary<string, string?> { ["endpoint"] = "https://repo.example" } });
+
+            var response = await wire.GetAsync($"/fdroid/{credential}/test-repo/repo/index-v2.json");
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var body = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
+            Assert.Equal("customer-1@https://repo.example", body.GetProperty("subject").GetString());
+            Assert.Equal("/fdroid/test-repo/repo/index-v2.json", body.GetProperty("path").GetString());
+            Assert.Equal("repo/index-v2.json", body.GetProperty("rest").GetString());
+
+            // Refusals: a wrong secret is the module's 401; a credential naming no tenant of this installation, 404.
+            var wrong = ModuleCredentialFormat.Compose(rig.TenantId, "wrong");
+            Assert.Equal(HttpStatusCode.Unauthorized, (await wire.GetAsync($"/fdroid/{wrong}/test-repo/repo/index-v2.json")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound,
+                (await wire.GetAsync($"/fdroid/{ModuleCredentialFormat.Compose(Guid.NewGuid(), "open-sesame")}/test-repo/x")).StatusCode);
+
+            // The header credential does not apply here: on a path-credential prefix the first segment IS the credential.
+            using var headed = new HttpRequestMessage(HttpMethod.Get, "/fdroid/test-repo/repo/index-v2.json");
+            headed.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", credential);
+            Assert.NotEqual(HttpStatusCode.OK, (await wire.SendAsync(headed)).StatusCode);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", null);
+            rig.Admin.Dispose();
+            rig.Owner.Dispose();
+        }
+    }
+
     // ABI 1.8 (ADR 0899): the facade presigns a document's content for a module that redirects rather than
     // proxies (the bytes, a clamped lifetime, the consent gate), and an action may reveal a value once, which the
     // host marks no-store.

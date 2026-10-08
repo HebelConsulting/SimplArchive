@@ -1,6 +1,4 @@
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Text;
 using System.Text.Json;
 using Microsoft.Playwright;
 using static Microsoft.Playwright.Assertions;
@@ -48,27 +46,8 @@ public class WebModuleActionTests(ModuleAppFixture app)
     // The test module activated in the demo tenant, and a Test Dossier to act on, through the API as the demo admin.
     private async Task<Guid> ActivatedModuleWithADossierAsync(string dossierName)
     {
-        using var http = new HttpClient { BaseAddress = new Uri(app.BaseUrl) };
-        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await Ui.GetUserTokenAsync(app.BaseUrl));
-
-        var tenantId = (await http.GetFromJsonAsync<JsonElement>("/api/diagnostics/whoami")).GetProperty("tenantId").GetGuid();
-        var repoId = (await (await http.PostAsJsonAsync("/api/repositories", new { name = $"Modules {Guid.NewGuid():N}" }))
-            .EnsureSuccessStatusCode().Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
-
-        // File the licence and activate (ADR 0740). Activating twice in one run is harmless.
-        var licenceDoc = (await (await http.PostAsJsonAsync($"/api/documents/{repoId}/children", new { name = "Test module licence" }))
-            .EnsureSuccessStatusCode().Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
-        var version = await (await http.PostAsJsonAsync($"/api/documents/{licenceDoc}/versions", new { fileExtension = ".json" }))
-            .EnsureSuccessStatusCode().Content.ReadFromJsonAsync<JsonElement>();
-        using (var storage = new HttpClient())
-        {
-            (await storage.PutAsync(version.GetProperty("uploadUrl").GetString()!,
-                new ByteArrayContent(Encoding.UTF8.GetBytes(app.SignTestModuleLicence(tenantId))))).EnsureSuccessStatusCode();
-        }
-
-        (await http.PutAsJsonAsync($"/api/documents/{licenceDoc}/versions/{version.GetProperty("id").GetGuid()}", new { })).EnsureSuccessStatusCode();
-        (await http.PutAsJsonAsync("/api/modules/test-module/license", new { licenseDocumentId = licenceDoc })).EnsureSuccessStatusCode();
-
+        var (http, _, repoId) = await app.ActivateTestModuleAsync();
+        using var client = http;
         return (await (await http.PostAsJsonAsync($"/api/documents/{repoId}/children", new { name = dossierName, maskId = DossierMaskId }))
             .EnsureSuccessStatusCode().Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
     }
