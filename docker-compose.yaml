@@ -462,7 +462,7 @@ services:
     ports:
       - "8200:8200"
     volumes:
-      - openbao-data:/openbao
+      - openbao-data:/openbao-state   # never /openbao: the image's VOLUME /openbao/file would shadow it (#1642)
       - ./scripts/openbao.hcl:/etc/openbao/openbao.hcl:ro
       - ./scripts/openbao-entrypoint.sh:/usr/local/bin/openbao-entrypoint.sh:ro
     entrypoint: ["/bin/sh", "/usr/local/bin/openbao-entrypoint.sh"]
@@ -483,7 +483,7 @@ services:
     # Read the persistent OpenBao's data volume (ro) to pick up the generated root token (ADR "Persist the dev
     # OpenBao") — the fixed dev root token is gone now that OpenBao is initialized with a real seal.
     volumes:
-      - openbao-data:/openbao:ro
+      - openbao-data:/openbao-state:ro
     environment:
       BAO_ADDR: "http://openbao:8200"
     entrypoint:
@@ -491,10 +491,10 @@ services:
       - -c
       - |
         set -e
-        # Wait until OpenBao is initialized + unsealed (its entrypoint writes /openbao/init.json), then auth with
+        # Wait until OpenBao is initialized + unsealed (its entrypoint writes /openbao-state/init.json), then auth with
         # the generated root token from that file.
-        until [ -f /openbao/init.json ] && bao status >/dev/null 2>&1; do echo 'waiting for openbao (unsealed)...'; sleep 1; done
-        export BAO_TOKEN=$$(sed -n 's/.*"root_token": *"\([^"]*\)".*/\1/p' /openbao/init.json)
+        until [ -f /openbao-state/init.json ] && bao status >/dev/null 2>&1; do echo 'waiting for openbao (unsealed)...'; sleep 1; done
+        export BAO_TOKEN=$$(sed -n 's/.*"root_token": *"\([^"]*\)".*/\1/p' /openbao-state/init.json)
         # Enable the KV v2 engine at secret/ — dev mode auto-mounted this, but the persistent file backend
         # (ADR "Persist the dev OpenBao") does not, so provision it explicitly (idempotent on a re-run).
         bao secrets enable -path=secret -version=2 kv 2>/dev/null || true

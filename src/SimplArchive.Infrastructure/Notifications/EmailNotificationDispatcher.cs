@@ -48,15 +48,22 @@ public sealed class EmailNotificationDispatcher : IEmailNotificationDispatcher
 
     private readonly Microsoft.Extensions.DependencyInjection.IServiceScopeFactory _scopeFactory;
 
+    // The AMBIENT tenant of this scope, which the real sender's TenantSmtpSettingsResolver reads to pick the
+    // account (#1337). Set per message around the send (#1639): the sweep runs in one scope for every tenant,
+    // and without it every tenant's mail went through the INSTALLATION's account, whatever the tenant had set.
+    private readonly CurrentTenantAccessor? _ambientTenant;
+
     public EmailNotificationDispatcher(SimplArchiveDbContext dbContext, IEmailSender emailSender,
         ILogger<EmailNotificationDispatcher> logger, IAuditRecorder audit,
-        Microsoft.Extensions.DependencyInjection.IServiceScopeFactory scopeFactory)
+        Microsoft.Extensions.DependencyInjection.IServiceScopeFactory scopeFactory,
+        CurrentTenantAccessor? ambientTenant = null)
     {
         _dbContext = dbContext;
         _emailSender = emailSender;
         _logger = logger;
         _audit = audit;
         _scopeFactory = scopeFactory;
+        _ambientTenant = ambientTenant;
     }
 
     public async Task<int> DispatchPendingAsync(CancellationToken cancellationToken = default)
@@ -129,7 +136,8 @@ public sealed class EmailNotificationDispatcher : IEmailNotificationDispatcher
                 var (subject, body) = certificates.Count == 0
                     ? (item.Title, item.Body)
                     : ("SimplArchive — new notification", $"{item.Title}\n\n{item.Body}");
-                await _emailSender.SendAsync(item.Email, item.DisplayName, subject, body, certificates, cancellationToken);
+                await SendAsTenantAsync(item.TenantId,
+                    () => _emailSender.SendAsync(item.Email, item.DisplayName, subject, body, certificates, cancellationToken));
 
                 await CompleteAsync(item, emailedAt: DateTimeOffset.UtcNow, failedAt: null, cancellationToken);
                 sent++;
@@ -145,6 +153,30 @@ public sealed class EmailNotificationDispatcher : IEmailNotificationDispatcher
         }
 
         return sent;
+    }
+
+    /// <summary>
+    /// Runs the send with the message's tenant as the ambient one, so the sender submits through THAT tenant's
+    /// account (#1639), and restores whatever was there before, so nothing after the send runs as that tenant.
+    /// </summary>
+    private async Task SendAsTenantAsync(Guid tenantId, Func<Task> send)
+    {
+        if (_ambientTenant is null)
+        {
+            await send();
+            return;
+        }
+
+        var previous = _ambientTenant.TenantId;
+        _ambientTenant.TenantId = tenantId;
+        try
+        {
+            await send();
+        }
+        finally
+        {
+            _ambientTenant.TenantId = previous;
+        }
     }
 
     /// <summary>

@@ -9,7 +9,7 @@
 # token.
 set -e
 export BAO_ADDR="http://127.0.0.1:8200"
-KEYS="/openbao/init.json"
+KEYS="/openbao-state/init.json"   # beside the storage, NOT under /openbao (#1642, see openbao.hcl)
 
 # Start the server in the background; the script stays as PID 1's child so it can init/unseal, then waits on it.
 bao server -config=/etc/openbao/openbao.hcl &
