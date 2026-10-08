@@ -150,6 +150,7 @@ public static class DependencyInjection
         // WHICH module's code runs in this scope (ADR 0736) — set at the module boundaries, read by the
         // facade's consent gate.
         services.AddScoped<Modules.ModuleIdentityAccessor>();
+        services.AddScoped<Modules.ModuleUploads>();   // presigned uploads for modules (ABI 1.12, ADR 0910)
         // The booking-admission seam (ADR 0781): asked on every booking write, answering instantly when no
         // module vets bookings — which is every tenant without one, and every test.
         services.AddScoped<Application.Abstractions.IBookingAdmissionReviewer, Modules.ModuleBookingAdmissionReviewer>();
@@ -180,6 +181,8 @@ public static class DependencyInjection
         // can resolve it and drive one pass directly.
         services.AddSingleton<Modules.EphemeralContentSweepWorker>();
         services.AddHostedService(sp => sp.GetRequiredService<Modules.EphemeralContentSweepWorker>());
+        services.AddSingleton<Modules.ModuleUploadSweepWorker>();
+        services.AddHostedService(sp => sp.GetRequiredService<Modules.ModuleUploadSweepWorker>());
 
         // The intray ingest pipeline (ADR 0576). REGISTRATION ORDER IS THE PIPELINE ORDER: straightening must
         // run before patch-code detection (#492), because a patch code is horizontal bars read by a projection

@@ -56,6 +56,38 @@ public interface IModuleArchiveFacade
         throw new NotSupportedException($"{GetType().Name} does not implement the ABI 1.8 GetDocumentContentUrlAsync.");
 
     /// <summary>
+    /// Hands out a presigned upload (ABI 1.12, core ADR 0910): a client PUTs up to <paramref name="maxBytes"/> straight
+    /// to object storage, so large content (an APK) never passes through the API. Nothing exists in the archive until
+    /// <see cref="FileUploadAsync"/>; an upload never filed is swept after a day.
+    /// </summary>
+    /// <param name="maxBytes">The largest upload that will be opened or filed.</param>
+    /// <param name="lifetime">How long the URL accepts the PUT; default 30 minutes, at most an hour.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task<ModuleUpload> BeginUploadAsync(long maxBytes, TimeSpan? lifetime = null, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException($"{GetType().Name} does not implement the ABI 1.12 BeginUploadAsync.");
+
+    /// <summary>
+    /// The uploaded bytes as a SEEKABLE read-only stream, for the module to inspect before deciding to file them. The
+    /// host spools them to a temporary file deleted when the stream is disposed, never into memory. Throws
+    /// <see cref="ModuleUploadMissingException"/> or <see cref="ModuleUploadTooLargeException"/>.
+    /// </summary>
+    Task<Stream> OpenUploadAsync(string uploadId, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException($"{GetType().Name} does not implement the ABI 1.12 OpenUploadAsync.");
+
+    /// <summary>
+    /// Files the upload as a PERMANENT document's content, like <see cref="CreateContentDocumentAsync"/>, moved
+    /// server-side rather than re-sent; encrypted on the way where the tenant wraps at rest. The upload is consumed.
+    /// </summary>
+    Task<Guid> FileUploadAsync(
+        string uploadId, Guid parentFolderId, Guid maskId, string name, string extension,
+        IReadOnlyDictionary<string, string>? fields = null, Guid? replaceDocumentId = null, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException($"{GetType().Name} does not implement the ABI 1.12 FileUploadAsync.");
+
+    /// <summary>Discards an upload the module refused, at once rather than at the sweep. Missing is not an error.</summary>
+    Task DiscardUploadAsync(string uploadId, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException($"{GetType().Name} does not implement the ABI 1.12 DiscardUploadAsync.");
+
+    /// <summary>
     /// The value an administrator configured for one of this module's declared <see cref="ModuleSetting"/>s
     /// (ABI 0.12, core ADR 0772), for the CURRENT tenant. Null when nothing is configured — which is a normal
     /// state, not an error: the module degrades to whatever it does without that integration, and should say

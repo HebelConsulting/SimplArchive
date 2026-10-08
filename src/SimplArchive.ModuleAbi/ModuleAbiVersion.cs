@@ -82,5 +82,10 @@ public static class ModuleAbiVersion
     /// 1.11 adds <see cref="IModuleCredentialAuthenticator.PathCredentialPrefixes"/> and the <c>fdroid</c> root prefix
     /// (core ADR 0909). A default member only, so a 1.10 module is unaffected.
     /// </para>
-    public const int Minor = 11;
+    /// <para>
+    /// 1.12 adds presigned uploads to the facade (<see cref="IModuleArchiveFacade.BeginUploadAsync"/>, OpenUploadAsync,
+    /// FileUploadAsync, DiscardUploadAsync) and the <c>apps</c> root prefix (core ADR 0910). Default members and new
+    /// types only, so a 1.11 module is unaffected.
+    /// </para>
+    public const int Minor = 12;
 }

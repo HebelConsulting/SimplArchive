@@ -408,7 +408,7 @@ public sealed class TestModule : IIndustryModule
         };
 
     /// <summary>The protocol-route fixture's claim (ABI 1.7, ADR 0898): <c>nuget</c>, the allowlist's one entry.</summary>
-    public IReadOnlyList<string> RootRoutePrefixes => ["nuget", "fdroid"];
+    public IReadOnlyList<string> RootRoutePrefixes => ["nuget", "fdroid", "apps"];
 
     public void ConfigureServices(IServiceCollection services)
     {

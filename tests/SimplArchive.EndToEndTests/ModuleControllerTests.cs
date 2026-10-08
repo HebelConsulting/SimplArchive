@@ -646,6 +646,89 @@ public class ModuleControllerTests
         }
     }
 
+    // ABI 1.12 (ADR 0910): a module hands out a presigned upload, the client PUTs straight to storage, and the module
+    // reads it back (seekable, never through the API) and files it, or discards it; what is never filed is swept.
+    [Fact]
+    public async Task A_module_receives_a_presigned_upload_reads_it_and_files_it_without_proxying_the_bytes()
+    {
+        var rig = await RigAsync();
+        using var vendorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", vendorKey.ExportSubjectPublicKeyInfoPem());
+        using var wire = _factory.CreateClient();
+        wire.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+            ModuleCredentialFormat.Compose(rig.TenantId, SimplArchive.TestModule.TestCredentialAuthenticator.Secret));
+        using var storage = new HttpClient();
+        try
+        {
+            await ActivateAsync(rig, vendorKey);
+            var bytes = Encoding.UTF8.GetBytes($"an upload {Guid.NewGuid():N}");
+
+            async Task<JsonElement> BeginAsync(long maxBytes) =>
+                JsonSerializer.Deserialize<JsonElement>(await (await wire.PostAsync($"/apps/test-upload?maxBytes={maxBytes}", null))
+                    .EnsureSuccessStatusCode().Content.ReadAsStringAsync());
+
+            // Begin, PUT straight to storage, then the module opens and files it.
+            var upload = await BeginAsync(1024);
+            var uploadId = upload.GetProperty("uploadId").GetString()!;
+            (await storage.PutAsync(upload.GetProperty("url").GetString()!, new ByteArrayContent(bytes))).EnsureSuccessStatusCode();
+            var name = $"Upload {Guid.NewGuid():N}";
+            var filed = await wire.PostAsync($"/apps/test-upload/{uploadId}?folder={rig.RepoId}&name={name}", null);
+            Assert.Equal(HttpStatusCode.OK, filed.StatusCode);
+            var body = JsonSerializer.Deserialize<JsonElement>(await filed.Content.ReadAsStringAsync());
+            Assert.True(body.GetProperty("seekable").GetBoolean());
+            Assert.Equal(Encoding.UTF8.GetString(bytes), body.GetProperty("text").GetString());
+
+            // The document holds exactly those bytes, hashed and sized as any content is; the upload itself is gone.
+            var documentId = body.GetProperty("id").GetGuid();
+            using (var scope = _factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<SimplArchive.Infrastructure.Persistence.SimplArchiveDbContext>();
+                var version = await db.DocumentVersions.IgnoreQueryFilters().SingleAsync(v => v.DocumentId == documentId);
+                Assert.Equal(bytes.Length, version.SizeBytes);
+                Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(bytes)), version.Sha256Hash);
+                var objects = scope.ServiceProvider.GetRequiredService<SimplArchive.Application.Abstractions.IObjectStorageClient>();
+                await using var stored = await objects.GetObjectAsync(version.ObjectKey);
+                using var copy = new MemoryStream();
+                await stored.CopyToAsync(copy);
+                Assert.Equal(bytes, copy.ToArray());
+                Assert.Empty(await objects.ListObjectsAsync(SimplArchive.Application.Abstractions.ObjectKeyPrefixes.ModuleUploads(rig.TenantId)));
+            }
+
+            // Filing it again: it was consumed. Nothing uploaded at all: the same refusal.
+            Assert.Equal(HttpStatusCode.Conflict, (await wire.PostAsync($"/apps/test-upload/{uploadId}?folder={rig.RepoId}&name=again", null)).StatusCode);
+            var never = (await BeginAsync(1024)).GetProperty("uploadId").GetString()!;
+            Assert.Equal(HttpStatusCode.Conflict, (await wire.PostAsync($"/apps/test-upload/{never}?folder={rig.RepoId}&name=never", null)).StatusCode);
+
+            // Larger than the module allowed: refused, and discarded rather than left behind.
+            var small = await BeginAsync(4);
+            (await storage.PutAsync(small.GetProperty("url").GetString()!, new ByteArrayContent(bytes))).EnsureSuccessStatusCode();
+            Assert.Equal(HttpStatusCode.RequestEntityTooLarge,
+                (await wire.PostAsync($"/apps/test-upload/{small.GetProperty("uploadId").GetString()}?folder={rig.RepoId}&name=big", null)).StatusCode);
+
+            // Discarded explicitly, and swept when forgotten.
+            var discarded = await BeginAsync(1024);
+            (await storage.PutAsync(discarded.GetProperty("url").GetString()!, new ByteArrayContent(bytes))).EnsureSuccessStatusCode();
+            Assert.Equal(HttpStatusCode.NoContent, (await wire.DeleteAsync($"/apps/test-upload/{discarded.GetProperty("uploadId").GetString()}")).StatusCode);
+            var forgotten = await BeginAsync(1024);
+            (await storage.PutAsync(forgotten.GetProperty("url").GetString()!, new ByteArrayContent(bytes))).EnsureSuccessStatusCode();
+
+            var sweep = _factory.Services.GetRequiredService<SimplArchive.Infrastructure.Modules.ModuleUploadSweepWorker>();
+            Assert.Equal(0, await sweep.SweepAsync(DateTimeOffset.UtcNow, CancellationToken.None));   // too young to sweep
+            Assert.True(await sweep.SweepAsync(DateTimeOffset.UtcNow.AddDays(2), CancellationToken.None) >= 1);
+            using (var scope = _factory.Services.CreateScope())
+            {
+                var objects = scope.ServiceProvider.GetRequiredService<SimplArchive.Application.Abstractions.IObjectStorageClient>();
+                Assert.Empty(await objects.ListObjectsAsync(SimplArchive.Application.Abstractions.ObjectKeyPrefixes.ModuleUploads(rig.TenantId)));
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_VERIFY_KEY", null);
+            rig.Admin.Dispose();
+            rig.Owner.Dispose();
+        }
+    }
+
     // ABI 1.8 (ADR 0899): the facade presigns a document's content for a module that redirects rather than
     // proxies (the bytes, a clamped lifetime, the consent gate), and an action may reveal a value once, which the
     // host marks no-store.

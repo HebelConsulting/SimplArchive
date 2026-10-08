@@ -547,9 +547,50 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         DateOnly? documentDate = null, TimeOnly? documentTime = null, CancellationToken cancellationToken = default) =>
         // Ephemeral: keyed under the tenant's fs/special/ store, and the document carries the expiry the sweep honours.
         WriteContentAsync(
-            parentFolderId, maskId, name, content, extension,
+            parentFolderId, maskId, name,
             keyFor: (tenantId, storageFolderId, versionId) => ObjectKeyBuilder.ModuleStagedContentKey(tenantId, storageFolderId, versionId, extension),
+            store: (key, ct) => PutBytesAsync(key, content, extension, ct),
             expiresAt, fields, replaceDocumentId, documentDate, documentTime, cancellationToken);
+
+    /// <summary>The bytes a module passed in, stored at <paramref name="key"/>: the store step of the byte-content writes.</summary>
+    private async Task<(string Sha256, long Size)> PutBytesAsync(string key, byte[] content, string extension, CancellationToken cancellationToken)
+    {
+        using var stream = new MemoryStream(content, writable: false);
+        await _objectStorage!.PutObjectAsync(key, stream, ContentTypeFor(extension), cancellationToken);
+        return (Convert.ToHexStringLower(SHA256.HashData(content)), content.Length);
+    }
+
+    // ---- presigned uploads (ABI 1.12, ADR 0910): ModuleUploads does the work; filing is the content write below -----
+
+    private ModuleUploads Uploads => (_services?.GetService(typeof(ModuleUploads)) as ModuleUploads)
+        ?? throw new NotSupportedException("This host has no module uploads wired.");
+
+    public Task<ModuleUpload> BeginUploadAsync(long maxBytes, TimeSpan? lifetime = null, CancellationToken cancellationToken = default) =>
+        Uploads.BeginAsync(maxBytes, lifetime, cancellationToken);
+
+    public Task<Stream> OpenUploadAsync(string uploadId, CancellationToken cancellationToken = default) =>
+        Uploads.OpenAsync(uploadId, cancellationToken);
+
+    public Task DiscardUploadAsync(string uploadId, CancellationToken cancellationToken = default) =>
+        Uploads.DiscardAsync(uploadId, cancellationToken);
+
+    public async Task<Guid> FileUploadAsync(
+        string uploadId, Guid parentFolderId, Guid maskId, string name, string extension,
+        IReadOnlyDictionary<string, string>? fields = null, Guid? replaceDocumentId = null, CancellationToken cancellationToken = default)
+    {
+        var uploads = Uploads;
+        var id = await WriteContentAsync(
+            parentFolderId, maskId, name,
+            keyFor: (tenantId, storageFolderId, versionId) => ObjectKeyBuilder.Build(tenantId, DateTimeOffset.UtcNow, storageFolderId, versionId, extension),
+            store: (key, ct) => uploads.MoveAsync(uploadId, key, ct),
+            expiresAt: null, fields, replaceDocumentId, documentDate: null, documentTime: null, cancellationToken);
+
+        // Audited as CreateContentDocumentAsync is: it is permanent archive content (ADR 0900).
+        var tenantId = await _dbContext.Documents.Where(d => d.Id == id).Select(d => d.TenantId).SingleAsync(cancellationToken);
+        await AuditWriteAsync(
+            replaceDocumentId is null ? ModuleWriteAudit.Created : ModuleWriteAudit.VersionAdded, tenantId, id, name, null, cancellationToken);
+        return id;
+    }
 
     public async Task<Guid> CreateContentDocumentAsync(
         Guid parentFolderId, Guid maskId, string name, byte[] content, string extension,
@@ -558,8 +599,9 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
     {
         // Permanent: the ordinary archive keyspace, no expiry — reference data the module files and reads back.
         var id = await WriteContentAsync(
-            parentFolderId, maskId, name, content, extension,
+            parentFolderId, maskId, name,
             keyFor: (tenantId, storageFolderId, versionId) => ObjectKeyBuilder.Build(tenantId, DateTimeOffset.UtcNow, storageFolderId, versionId, extension),
+            store: (key, ct) => PutBytesAsync(key, content, extension, ct),
             expiresAt: null, fields, replaceDocumentId, documentDate, documentTime, cancellationToken);
 
         // Audited, unlike the ephemeral staging above: permanent content is part of the archive (ADR 0900).
@@ -649,10 +691,7 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         var versionId = Guid.NewGuid();
         var objectKey = ObjectKeyBuilder.Build(document.TenantId, now, document.StorageFolderId, versionId, extension);
 
-        using (var stream = new MemoryStream(content, writable: false))
-        {
-            await _objectStorage.PutObjectAsync(objectKey, stream, ContentTypeFor(extension), cancellationToken);
-        }
+        _ = await PutBytesAsync(objectKey, content, extension, cancellationToken);   // the finalizer hashes and sizes it
 
         // PENDING, and finalized rather than hand-confirmed: a confirmed version written directly dies on the
         // CHECK constraint that pairs status with the version number, and — the point of this method — would
@@ -696,9 +735,8 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
         Guid parentFolderId,
         Guid maskId,
         string name,
-        byte[] content,
-        string extension,
         Func<Guid, Guid, Guid, string> keyFor,
+        Func<string, CancellationToken, Task<(string Sha256, long Size)>> store,
         DateTimeOffset? expiresAt,
         IReadOnlyDictionary<string, string>? fields,
         Guid? replaceDocumentId,
@@ -753,10 +791,7 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
 
         var versionId = Guid.NewGuid();
         var objectKey = keyFor(document.TenantId, document.StorageFolderId, versionId);
-        using (var stream = new MemoryStream(content, writable: false))
-        {
-            await _objectStorage.PutObjectAsync(objectKey, stream, ContentTypeFor(extension), cancellationToken);
-        }
+        var (sha256, size) = await store(objectKey, cancellationToken);
 
         var nextVersionNumber = 1 + (await _dbContext.DocumentVersions
             .Where(v => v.DocumentId == document.Id && v.VersionNumber != null)
@@ -771,8 +806,8 @@ public sealed class ModuleArchiveFacade : IModuleArchiveFacade
             ObjectKey = objectKey,
             Status = DocumentVersionStatus.Confirmed,
             VersionNumber = nextVersionNumber,
-            Sha256Hash = Convert.ToHexStringLower(SHA256.HashData(content)),
-            SizeBytes = content.Length,
+            Sha256Hash = sha256,
+            SizeBytes = size,
             CreatedByUserId = userId,
             CreatedByServiceAccountId = serviceAccountId,
             CreatedAt = now,

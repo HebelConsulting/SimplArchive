@@ -85,6 +85,12 @@ public static class ObjectKeyPrefixes
     /// </summary>
     public static string ModuleStagedContent(Guid tenantId) => $"{Tenant(tenantId)}{ModuleStagedSegment}/";
 
+    /// <summary>Where a module's presigned uploads wait to be filed (ADR 0910): one area per tenant, swept after a day.</summary>
+    public static string ModuleUploads(Guid tenantId) => $"{Tenant(tenantId)}module-uploads/";
+
+    /// <summary>One module's uploads, so a module can open and file only what it began.</summary>
+    public static string ModuleUploads(Guid tenantId, string moduleId) => $"{ModuleUploads(tenantId)}{moduleId}/";
+
     /// <summary>The staged-content segment, exposed so <c>ObjectKeyBuilder.IsModuleStagedContentKey</c> can
     /// recognise a key without rebuilding the tenant-qualified prefix.</summary>
     public const string ModuleStagedSegment = "fs/special";
