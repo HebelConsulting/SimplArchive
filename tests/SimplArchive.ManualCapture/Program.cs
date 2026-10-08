@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+using SimplArchive.ConsoleLogging;
 using SimplArchive.ManualCapture;
 
 // The user-manual screenshot-capture harness (ADR 0502). Emits a deterministic set of PNGs the Typst manual
@@ -11,6 +13,12 @@ using SimplArchive.ManualCapture;
 //   --web            capture the Blazor web screens (heavy — Testcontainers + Chrome; main only)
 //   (neither)   capture both
 //   --out <dir> output directory (default: manual/screenshots)
+//
+// Its progress goes through the shared plain logger to stderr (ADRs 0906/0911); it has no data output — the
+// result is the PNGs. The factory is disposed before exit so the console logger's background writer flushes.
+
+using var logging = PlainConsoleLogging.CreateFactory();
+var log = logging.CreateLogger("manual-capture");
 
 var desktopLive = args.Contains("--desktop-live");
 // `--desktop` is a prefix of `--desktop-live`, so ask for the exact flag: Contains on the array is an exact
@@ -28,23 +36,23 @@ var outDir = outIndex >= 0 && outIndex + 1 < args.Length
     ? Path.GetFullPath(args[outIndex + 1])
     : Path.Combine(Paths.RepoRoot(), "manual", "screenshots");
 Directory.CreateDirectory(outDir);
-Console.WriteLine($"[manual-capture] output → {outDir}");
+log.LogInformation("[manual-capture] output → {OutDir}", outDir);
 
 if (desktop)
 {
-    await DesktopCapture.RunAsync(outDir);
+    await DesktopCapture.RunAsync(outDir, log);
 }
 
 // AFTER the fixture pass, deliberately: where both run, the live figure is the one that must survive, and the
 // published manual's screens are the live ones.
 if (desktopLive)
 {
-    await LiveDesktopCapture.RunAsync(outDir);
+    await LiveDesktopCapture.RunAsync(outDir, log);
 }
 
 if (web)
 {
-    await WebCapture.RunAsync(outDir);
+    await WebCapture.RunAsync(outDir, log);
 }
 
-Console.WriteLine("[manual-capture] done.");
+log.LogInformation("[manual-capture] done.");

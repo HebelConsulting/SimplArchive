@@ -1,5 +1,6 @@
 using SimplArchive.Cli.Commands;
 using SimplArchive.Cli.Infrastructure;
+using SimplArchive.ConsoleLogging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Spectre.Console.Cli;
@@ -27,9 +28,9 @@ public static class SaConsoleApp
     /// </summary>
     public static int Run(string[] args)
     {
-        var verbose = args.Contains(CliLogging.VerboseFlag, StringComparer.Ordinal);
-        using var logging = CliLogging.CreateFactory(verbose);
-        return Build(logging).Run([.. args.Where(a => a != CliLogging.VerboseFlag)]);
+        var verbose = args.Contains(PlainConsoleLogging.VerboseFlag, StringComparer.Ordinal);
+        using var logging = PlainConsoleLogging.CreateFactory(verbose);
+        return Build(logging).Run([.. args.Where(a => a != PlainConsoleLogging.VerboseFlag)]);
     }
 
     public static CommandApp Build(ILoggerFactory logging)

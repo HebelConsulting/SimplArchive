@@ -7,8 +7,9 @@
         <RootNamespace>SimplArchive.Cli</RootNamespace>
         <!-- Administering an installation from a terminal (ADR 0822). Shipped as a .NET tool like caconsole,
              so an administrator installs it rather than building this repository. It talks to the Api over
-             HTTP and references no project here on purpose: it is a CLIENT of the deployed application, not
-             a part of it, and a project reference would quietly make it one. -->
+             HTTP and references no APPLICATION project on purpose: it is a CLIENT of the deployed application,
+             not a part of it, and such a reference would quietly make it one. (Its one reference is the shared
+             console logger, a leaf that carries none of the application; see below.) -->
         <IsPackable>true</IsPackable>
         <PackAsTool>true</PackAsTool>
         <ToolCommandName>saconsole</ToolCommandName>
@@ -39,7 +40,13 @@
         <PackageReference Include="Spectre.Console.Cli" Version="0.55.0" />
         <!-- Output through a logger to stderr (ADR 0906, #1661); commands get their logger by constructor. -->
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.9" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- The one plain stderr logger every console program shares (ADRs 0906/0911). The single project this tool
+             references, and the exception is deliberate: it is a leaf with one package and no project references,
+             so it carries no part of the application into a client of it. PackAsTool bundles its assembly. -->
+        <ProjectReference Include="../SimplArchive.ConsoleLogging/SimplArchive.ConsoleLogging.csproj" />
     </ItemGroup>
 
     <ItemGroup>

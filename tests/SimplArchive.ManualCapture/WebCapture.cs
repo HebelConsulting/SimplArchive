@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Playwright;
 using SimplArchive.SelfHosting;
 
@@ -28,8 +30,13 @@ public static partial class WebCapture
     /// </remarks>
     private static readonly List<string> Skipped = [];
 
-    public static async Task RunAsync(string outDir)
+    // The harness's logger (ADR 0906), set by RunAsync for the one run this process makes; the capture steps below
+    // are static and many, so they read it here rather than each taking it as a parameter.
+    private static ILogger Log = NullLogger.Instance;
+
+    public static async Task RunAsync(string outDir, ILogger log)
     {
+        Log = log;
         Skipped.Clear();
         // Freeze the app's demo clock so the audit / tasks / my-work screens are byte-stable run-to-run (ADR 0510).
         // Matches the desktop capture's fixed clock (MainWindowViewModel.ScreenshotClock) so both halves of the
@@ -37,10 +44,10 @@ public static partial class WebCapture
         // WithOcrSidecar: the external-link landing figure is supposed to show the document thumbnail (#476),
         // and nothing else in the deployment can rasterise a PDF. Only this harness asks for it — the UI suites
         // would pay the image build for a picture they never take.
-        await using var app = new SelfHostedApp { DemoClock = "2026-06-01T09:00:00Z", WithOcrSidecar = true };
-        Console.WriteLine("[web] booting the self-hosted app (Postgres + SeaweedFS + OpenSearch + Tika + Gotenberg + API)…");
+        await using var app = new SelfHostedApp { DemoClock = "2026-06-01T09:00:00Z", WithOcrSidecar = true, Logger = log };
+        Log.LogInformation("[web] booting the self-hosted app (Postgres + SeaweedFS + OpenSearch + Tika + Gotenberg + API)…");
         await app.StartAsync();
-        Console.WriteLine($"[web] app ready at {app.BaseUrl}");
+        Log.LogInformation("[web] app ready at {BaseUrl}", app.BaseUrl);
 
         using var playwright = await Playwright.CreateAsync();
         // Software rasterization (#832): GPU compositing rounds an overlay's alpha blend ±1/255 differently
@@ -98,7 +105,7 @@ public static partial class WebCapture
         {
             if (screen.Tab is { } tab)
             {
-                Console.WriteLine($"[web] opening tab '{tab}'");
+                Log.LogInformation("[web] opening tab '{Tab}'", tab);
                 // Tabs are icon-only (#298) — the label is in aria-label, not visible text.
                 await page.Locator($".wb-tab[aria-label='{tab}']").First.ClickAsync();
                 // Let the tab's panel render + any first-load fetch settle before the shot.
@@ -121,8 +128,8 @@ public static partial class WebCapture
         // figure is a STALE figure — the previous PNG is still on disk and still ships.
         if (Skipped.Count > 0)
         {
-            Console.WriteLine($"[web] {Skipped.Count} FIGURE(S) NOT REGENERATED — the manual will ship the "
-                + $"PREVIOUS picture for each: {string.Join(", ", Skipped)}");
+            Log.LogWarning("[web] {Count} FIGURE(S) NOT REGENERATED — the manual will ship the "
+                + "PREVIOUS picture for each: {Figures}", Skipped.Count, string.Join(", ", Skipped));
         }
     }
 
@@ -160,7 +167,7 @@ public static partial class WebCapture
         // layout under a mobile filename.
         if (!await page.EvaluateAsync<bool>("() => matchMedia('(pointer: coarse)').matches"))
         {
-            Console.WriteLine("[web] mobile tiers SKIPPED — touch emulation did not produce a coarse pointer");
+            Log.LogWarning("[web] mobile tiers SKIPPED — touch emulation did not produce a coarse pointer");
             return;
         }
 
@@ -277,7 +284,7 @@ public static partial class WebCapture
         {
             // A missing figure is better than a failed regeneration: the script also refreshes 30 other shots.
             Skipped.Add("personal-launchers");
-            Console.WriteLine($"[web] personal-launchers skipped: {e.Message}");
+            Log.LogWarning("[web] personal-launchers skipped: {Reason}", e.Message);
         }
     }
 
@@ -317,7 +324,7 @@ public static partial class WebCapture
         {
             // A missing figure is better than a failed regeneration: the script also refreshes 30 other shots.
             Skipped.Add("webdav");
-            Console.WriteLine($"[web] webdav skipped: {e.Message.Split('\n')[0]}");
+            Log.LogWarning("[web] webdav skipped: {Reason}", e.Message.Split('\n')[0]);
         }
     }
 
@@ -362,12 +369,12 @@ public static partial class WebCapture
         catch (Exception ex)
         {
             Skipped.Add("versions");
-            Console.WriteLine($"[web] versions skipped: {ex.Message.Split('\n')[0]}");
+            Log.LogWarning("[web] versions skipped: {Reason}", ex.Message.Split('\n')[0]);
         }
         finally
         {
             try { await DismissAnyDialogAsync(page); }
-            catch (Exception ex) { Console.WriteLine($"[web] warning — could not close the versions dialog: {ex.Message.Split('\n')[0]}"); }
+            catch (Exception ex) { Log.LogWarning("[web] could not close the versions dialog: {Reason}", ex.Message.Split('\n')[0]); }
         }
     }
 
@@ -387,12 +394,12 @@ public static partial class WebCapture
             await chat.Locator(".wb-chat-thread").First.WaitForAsync(new() { Timeout = 15000 });
             await page.WaitForTimeoutAsync(800);
             await chat.ScreenshotAsync(new LocatorScreenshotOptions { Path = Path.Combine(outDir, "web-chat.png") });
-            Console.WriteLine("[web] chat → web-chat.png");
+            Log.LogInformation("[web] chat → web-chat.png");
         }
         catch (Exception ex)
         {
             Skipped.Add("chat");
-            Console.WriteLine($"[web] chat skipped: {ex.Message.Split('\n')[0]}");
+            Log.LogWarning("[web] chat skipped: {Reason}", ex.Message.Split('\n')[0]);
         }
     }
 
@@ -419,7 +426,7 @@ public static partial class WebCapture
         catch (Exception ex)
         {
             Skipped.Add("version-compare");
-            Console.WriteLine($"[web] version-compare skipped: {ex.Message}");
+            Log.LogWarning("[web] version-compare skipped: {Reason}", ex.Message);
         }
         finally
         {
@@ -438,7 +445,7 @@ public static partial class WebCapture
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[web] warning — could not close the version-compare dialog: {ex.Message}");
+                Log.LogWarning("[web] could not close the version-compare dialog: {Reason}", ex.Message);
             }
         }
     }
@@ -663,12 +670,12 @@ public static partial class WebCapture
         catch (Exception ex)
         {
             // First line only: Playwright appends a long call log that buries the step name.
-            Console.WriteLine($"[web] external-links FAILED at step '{step}': {ex.Message.Split('\n')[0]}");
+            Log.LogWarning("[web] external-links FAILED at step '{Step}': {Reason}", step, ex.Message.Split('\n')[0]);
             try
             {
                 var dump = Path.Combine(Path.GetTempPath(), "manual-capture-external-links-failure.png");
                 await page.ScreenshotAsync(new PageScreenshotOptions { Path = dump });
-                Console.WriteLine($"[web] state at failure → {dump}");
+                Log.LogWarning("[web] state at failure → {Dump}", dump);
             }
             catch { /* diagnostics are best-effort */ }
         }
@@ -726,7 +733,7 @@ public static partial class WebCapture
         catch (Exception ex)
         {
             Skipped.Add($"enrich:{name}");
-            Console.WriteLine($"[web] enrich '{name}' skipped: {ex.Message}");
+            Log.LogWarning("[web] enrich '{Name}' skipped: {Reason}", name, ex.Message);
         }
     }
 
@@ -823,7 +830,7 @@ public static partial class WebCapture
         }
         catch (TimeoutException)
         {
-            Console.WriteLine("[web] the unread-count fetch never arrived — figures may show the pre-badge state");
+            Log.LogWarning("[web] the unread-count fetch never arrived — figures may show the pre-badge state");
         }
 
         // …and one render tick, so the badge has actually painted once the count is in.
@@ -850,7 +857,7 @@ public static partial class WebCapture
         await page.EvaluateAsync("() => { document.querySelectorAll('.mud-snackbar, .mud-snackbar-container').forEach(e => e.remove()); }");
         var path = Path.Combine(outDir, $"web-{name}.png");
         await page.ScreenshotAsync(new PageScreenshotOptions { Path = path });
-        Console.WriteLine($"[web] {name} → {Path.GetFileName(path)}");
+        Log.LogInformation("[web] {Name} → {File}", name, Path.GetFileName(path));
     }
 
     [GeneratedRegex("^log ?in$", RegexOptions.IgnoreCase)]

@@ -33,6 +33,9 @@
          Bumping Testcontainers does NOT help: even 4.13.0 asks only for [2025.1.0, ). Re-check on the next
          Testcontainers bump; remove once its own floor moves past 2026.0.0. -->
     <PackageReference Include="SSH.NET" Version="2026.0.0" />
+    <!-- The engine's progress lines go through an ILogger the caller supplies (ADR 0906); the abstractions only,
+         since which console (if any) shows them is the caller's choice. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.9" />
   </ItemGroup>
 
   <ItemGroup>

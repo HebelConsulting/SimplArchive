@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using SimplArchive.SelfHosting;
 
@@ -14,12 +15,12 @@ namespace SimplArchive.ManualCapture;
 // Docker-free render smoke; this is what the published manual uses.
 public static class LiveDesktopCapture
 {
-    public static async Task RunAsync(string outDir)
+    public static async Task RunAsync(string outDir, ILogger log)
     {
         var live = Screens.Desktop.Where(s => s.Capture == Capture.Live).ToList();
         if (live.Count == 0)
         {
-            Console.WriteLine("[desktop-live] no screens are classified Capture.Live — nothing to do.");
+            log.LogInformation("[desktop-live] no screens are classified Capture.Live — nothing to do.");
             return;
         }
 
@@ -28,16 +29,16 @@ public static class LiveDesktopCapture
 
         // The same frozen clock the web capture uses (ADR 0510). Byte-determinism is the property that makes a
         // regenerated manual's diff readable, and two capture paths against two clocks could not share a manual.
-        await using var app = new SelfHostedApp { DemoClock = "2026-06-01T09:00:00Z", WithOcrSidecar = true };
+        await using var app = new SelfHostedApp { DemoClock = "2026-06-01T09:00:00Z", WithOcrSidecar = true, Logger = log };
         await app.StartAsync();
-        Console.WriteLine($"[desktop-live] app ready at {app.BaseUrl}");
+        log.LogInformation("[desktop-live] app ready at {BaseUrl}", app.BaseUrl);
 
         var token = await SelfHostedLogin.GetUserTokenAsync(app.BaseUrl);
 
         foreach (var screen in live)
         {
             var outPath = Path.Combine(outDir, $"desktop-{screen.Name}.png");
-            Console.WriteLine($"[desktop-live] {screen.Name} → {Path.GetFileName(outPath)}");
+            log.LogInformation("[desktop-live] {Screen} → {File}", screen.Name, Path.GetFileName(outPath));
 
             // TWICE, and the second one into a scratch file: a live capture has ordering and timing surfaces a
             // fixture does not, and a figure that differs run to run makes every regenerated-manual commit

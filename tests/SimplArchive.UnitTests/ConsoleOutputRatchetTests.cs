@@ -35,11 +35,6 @@ public class ConsoleOutputRatchetTests
         ["src/SimplArchive.Cli/Commands/TenantCreateCommand.cs"] = 1,   // data output only (ADR 0906)
         // The one direct write left in the desktop client: DesktopLog's own fallback when logging cannot start.
         ["src/SimplArchive.DesktopClient/Services/DesktopLog.cs"] = 1,
-        ["tests/SimplArchive.ManualCapture/DesktopCapture.cs"] = 1,
-        ["tests/SimplArchive.ManualCapture/LiveDesktopCapture.cs"] = 3,
-        ["tests/SimplArchive.ManualCapture/Program.cs"] = 2,
-        ["tests/SimplArchive.ManualCapture/WebCapture.cs"] = 18,
-        ["tests/SimplArchive.SelfHosting/SelfHostedApp.cs"] = 1,
     };
 
     /// <summary>

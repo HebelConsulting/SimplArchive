@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- TargetFramework is set explicitly (not just inherited from Directory.Build.props), as every project here does. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- The ONE plain console logger for every command-line program (ADRs 0906/0911, #1661): saconsole, the vendor
+       and interop tools under tools/, and the published test tools. A leaf with a single package and no project
+       references, so a CLIENT of the installation (saconsole) can reference it without becoming part of the
+       application. The Api does not reference it, so the image's restore layer does not copy it. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.9" />
+  </ItemGroup>
+
+</Project>

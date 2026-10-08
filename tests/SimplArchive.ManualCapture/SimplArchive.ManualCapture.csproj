@@ -15,6 +15,8 @@
   <ItemGroup>
     <!-- The shared self-host boot engine (ADR 0502) — used for web capture (adds our own Chrome on top). -->
     <ProjectReference Include="..\SimplArchive.SelfHosting\SimplArchive.SelfHosting.csproj" />
+    <!-- Progress through the shared plain stderr logger (ADRs 0906/0911); the harness has no data output. -->
+    <ProjectReference Include="..\..\src\SimplArchive.ConsoleLogging\SimplArchive.ConsoleLogging.csproj" />
     <!-- Built (not linked) so each capture subprocess (dotnet run, no-build) works: the API for the web mode, the
          desktop client's headless screenshot hooks for the desktop mode. -->
     <ProjectReference Include="..\..\src\SimplArchive.Api\SimplArchive.Api.csproj">

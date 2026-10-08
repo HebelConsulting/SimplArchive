@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace SimplArchive.ManualCapture;
 
@@ -8,7 +9,7 @@ namespace SimplArchive.ManualCapture;
 // gate (ADR 0502).
 public static class DesktopCapture
 {
-    public static async Task RunAsync(string outDir)
+    public static async Task RunAsync(string outDir, ILogger log)
     {
         var repoRoot = Paths.RepoRoot();
         var desktopCsproj = Path.Combine(repoRoot, "src", "SimplArchive.DesktopClient", "SimplArchive.DesktopClient.csproj");
@@ -32,7 +33,7 @@ public static class DesktopCapture
                 _ => ["--screenshot", outPath, "--demo", .. screen.Flags, .. pdfArg],
             };
 
-            Console.WriteLine($"[desktop] {screen.Name} → {Path.GetFileName(outPath)}");
+            log.LogInformation("[desktop] {Screen} → {File}", screen.Name, Path.GetFileName(outPath));
             await RunDesktopAsync(repoRoot, desktopCsproj, appArgs);
 
             if (!File.Exists(outPath))

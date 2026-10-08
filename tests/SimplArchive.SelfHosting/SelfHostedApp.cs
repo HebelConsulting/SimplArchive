@@ -7,6 +7,8 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Testcontainers.PostgreSql;
 
@@ -54,6 +56,13 @@ public sealed class SelfHostedApp : IAsyncDisposable
 
     /// <summary>Extra environment for the Api process — a TestModule fixture switch, say. Applied last.</summary>
     public IReadOnlyDictionary<string, string> ExtraEnvironment { get; init; } = new Dictionary<string, string>();
+
+    /// <summary>
+    /// Where the engine's own progress lines go (ADR 0906: through a logger, never the console). Silent unless the
+    /// caller hands one in — the manual-capture harness does, a test fixture need not. The Api subprocess's output is
+    /// NOT routed here: it stays in the <see cref="ApiLog"/> buffer, which a boot failure quotes in full.
+    /// </summary>
+    public ILogger Logger { get; init; } = NullLogger.Instance;
 
     /// <summary>The stub encryption service, once started — null unless <see cref="StrictTenantName"/> is set.</summary>
     public EncryptionServiceStub? EncryptionService { get; private set; }
@@ -515,7 +524,7 @@ public sealed class SelfHostedApp : IAsyncDisposable
                     pending = (long)(await count.ExecuteScalarAsync() ?? 0L);
                     if (pending == 0)
                     {
-                        Console.WriteLine($"[SelfHostedApp] search index ready after {(DateTime.UtcNow - started).TotalSeconds:F1}s.");
+                        Logger.LogInformation("[SelfHostedApp] search index ready after {Seconds:F1}s.", (DateTime.UtcNow - started).TotalSeconds);
                         return;
                     }
                 }
