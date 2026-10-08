@@ -589,7 +589,7 @@ services:
     environment:
       SA_MODULES: "${SA_MODULES:-}"
       SA_MODULE_TOKEN: "${SA_MODULE_TOKEN:-}"
-      SA_MODULE_FEED: "${SA_MODULE_FEED:-https://nuget.pkg.github.com/HebelConsulting}"
+      SA_MODULE_FEED: "${SA_MODULE_FEED:-https://packages.simplarchive.dev/nuget}"
     volumes:
       - ./modules.env:/modules.env:ro
       - ./scripts/modules-init.sh:/modules-init.sh:ro

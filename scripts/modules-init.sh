@@ -17,7 +17,7 @@ set -eu
 
 MODULES_ENV="${MODULES_ENV:-/modules.env}"
 TARGET="${TARGET:-/modules}"
-FEED="${SA_MODULE_FEED:-https://nuget.pkg.github.com/HebelConsulting}"
+FEED="${SA_MODULE_FEED:-https://packages.simplarchive.dev/nuget}"
 SA_MODULES="${SA_MODULES:-}"
 
 # …UNIONED with every SA_MODULES_<KEY> (ADR 0870's rollout). Each add-on overlay names ITS module in a key of
@@ -44,8 +44,8 @@ if [ -z "$SA_MODULES" ]; then
 fi
 
 [ -f "$MODULES_ENV" ] || die "$MODULES_ENV not found, but SA_MODULES asks for: $SA_MODULES"
-[ -n "${SA_MODULE_TOKEN:-}" ] || die "SA_MODULE_TOKEN is unset. GitHub Packages requires a read:packages token
-  even for a public package, and every module repository here is private, so there is no unauthenticated path."
+[ -n "${SA_MODULE_TOKEN:-}" ] || die "SA_MODULE_TOKEN is unset. The module feed serves nothing anonymously: set it to
+  this installation's pull credential from the vendor (or, against GitHub Packages, a read:packages token)."
 
 # Read one pinned value. Deliberately parsed rather than sourced: modules.env is plain KEY=VALUE and sourcing it
 # would execute whatever it contains.

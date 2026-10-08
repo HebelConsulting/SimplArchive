@@ -96,7 +96,9 @@ public partial class ModulePinLockstepTests
         var files = new List<string> { "scripts/modules-init.sh", "docker-compose.yaml" };
         if (PrivateRepositoryGate.IsPrivateRepository(root))
         {
-            files.AddRange(["tools/kiosk/docker-compose.yml", "tools/vendor/docker-compose.yml"]);
+            // Not tools/vendor: that stack IS the vendor feed and installs from GitHub Packages, because its modules-init
+            // runs before its own api is up (#1656). The kiosk is a customer like any other.
+            files.Add("tools/kiosk/docker-compose.yml");
         }
 
         var defaults = files.ToDictionary(f => f, f => FeedDefault().Matches(File.ReadAllText(Path.Combine(root, f)))

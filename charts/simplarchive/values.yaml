@@ -419,10 +419,12 @@ modules:
   #   install: ["FLIGHT_SCHOOL"]
   #   existingSecret: simplarchive-module-feed
 
-  feed: https://nuget.pkg.github.com/HebelConsulting
+  # The vendor feed (core #1555): a customer's pull credential reads the module packages its licence names, and
+  # stops at the licence's end for anything published after it.
+  feed: https://packages.simplarchive.dev/nuget
 
-  # A Secret holding the read:packages token. REQUIRED when `install` is non-empty — GitHub Packages demands a
-  # token even for a public package, and every module repository here is private, so there is no anonymous path.
+  # A Secret holding the installation's PULL CREDENTIAL from the vendor (the Licensing Module's feed). REQUIRED when
+  # `install` is non-empty: the feed serves nothing anonymously.
   existingSecret: ""
   tokenSecretKey: token
 
