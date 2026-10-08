@@ -46,6 +46,15 @@ public sealed class SelfHostedApp : IAsyncDisposable
     /// </summary>
     public string? TestModuleVerifyKeyPem { get; init; }
 
+    /// <summary>
+    /// Stage the TestModule even without a Strict tenant (#1628): the web suite drives a module's document actions
+    /// through the browser. A Strict tenant stages it anyway, because it cannot start without it.
+    /// </summary>
+    public bool StageTestModule { get; init; }
+
+    /// <summary>Extra environment for the Api process — a TestModule fixture switch, say. Applied last.</summary>
+    public IReadOnlyDictionary<string, string> ExtraEnvironment { get; init; } = new Dictionary<string, string>();
+
     /// <summary>The stub encryption service, once started — null unless <see cref="StrictTenantName"/> is set.</summary>
     public EncryptionServiceStub? EncryptionService { get; private set; }
 
@@ -366,7 +375,10 @@ public sealed class SelfHostedApp : IAsyncDisposable
             EncryptionService = stub;
             env["Encryption__ServiceUrl"] = stub.Url;
             env[$"Encryption__Modes__{StrictTenantName}"] = "Strict";
+        }
 
+        if (!string.IsNullOrWhiteSpace(StrictTenantName) || StageTestModule)
+        {
             // A Strict tenant needs a loaded module answering the reader-certificate capability, or the Api
             // refuses to start (ADR 0890). The TestModule answers it per reader from its own documents: a Strict-
             // tenant test activates it with a licence signed against TestModuleVerifyKeyPem and enrols the reader
@@ -399,6 +411,11 @@ public sealed class SelfHostedApp : IAsyncDisposable
             File.Copy(testModuleDll, Path.Combine(modulesRoot, "test-module", Path.GetFileName(testModuleDll)));
             env["Modules__Directory"] = modulesRoot;
         }
+        foreach (var (k, v) in ExtraEnvironment)
+        {
+            env[k] = v;
+        }
+
         foreach (var (k, v) in env)
         {
             psi.Environment[k] = v;

@@ -450,6 +450,19 @@
                     }
                 </div>
             }
+            @* A module's pick-then-act actions (ADR 0786, #1628): the desktop's buttons, on the web. The click
+               opens the picker; the label is the module's own. *@
+            @if (Detail.ModuleActions is { Count: > 0 })
+            {
+                <div style="display:flex; flex-wrap:wrap; gap:6px;" class="mt-2">
+                    @foreach (var moduleAction in Detail.ModuleActions)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Disabled="@Detail.Busy"
+                                   data-module-action="@moduleAction.Rel"
+                                   OnClick="@(() => ModuleAction.InvokeAsync(moduleAction))">@moduleAction.Label</MudButton>
+                    }
+                </div>
+            }
         }
 
         @* Nothing lives down here any more. Save/Cancel went to the header row with the pencil that starts
@@ -588,6 +601,9 @@
     /// <summary>A generic action's button was clicked (ADR 0743) — the shell executes it (ADR 0730's rule:
     /// what the shell supplies is a parameter, and the pane only renders).</summary>
     [Parameter, EditorRequired] public EventCallback<Hypermedia.LinkResponse> GenericAction { get; set; }
+
+    /// <summary>Invoked with the module action the user pressed (#1628) — the shell opens its picker.</summary>
+    [Parameter, EditorRequired] public EventCallback<Models.ModuleActionDto> ModuleAction { get; set; }
 
     /// <summary>The Bookings… button was clicked (ADR 0735) — the shell opens the dialog.</summary>
     [Parameter, EditorRequired] public EventCallback OpenBookings { get; set; }

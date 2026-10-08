@@ -49,6 +49,10 @@ public sealed class DetailState
     /// load, inherited statuses would be claims about the wrong document.</summary>
     public IReadOnlyList<Models.MachineStatusDto> MachineStatuses { get; set; } = [];
 
+    /// <summary>The modules' pick-then-act actions (#1628, ADR 0786). Cleared on subject change like the rest
+    /// (ADR 0559): an action carries its own commit address, so a stale one would act on the wrong document.</summary>
+    public IReadOnlyList<Models.ModuleActionDto> ModuleActions { get; set; } = [];
+
     /// <summary>True while a load or save is in flight, which disables the pane's commit controls.</summary>
     public bool Busy { get; set; }
 

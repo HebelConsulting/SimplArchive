@@ -73,6 +73,11 @@ public partial class NoServerDetailInClientsTests
         // the same reason — and listed separately rather than as a count of two on one entry, because the
         // two files can drift and each should have to justify itself.
         ["src/SimplArchive.Client/Dialogs/SelfEnrolmentDialog.razor"] = 1,
+        // The web half of the module-action picker (#1628; ADR 0511, desktop canonical): an option's Detail (ADR
+        // 0786, the module's sentence about one candidate) twice, and the module's own refusal (ADR 0767) once —
+        // the same two licences DocumentsClient.ModuleActions.cs and ModuleActionPickerViewModel.cs hold, listed
+        // separately so the two halves each justify themselves.
+        ["src/SimplArchive.Client/Dialogs/ModuleActionDialog.razor"] = 3,
     };
 
     [Fact]

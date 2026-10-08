@@ -175,6 +175,26 @@ public record DocumentDetailResponse
     /// per-condition diagnoses — what the detail pane's Status section renders. Empty for maskless
     /// documents and masks with no machine.</summary>
     public List<MachineStatusDto> MachineStatuses { get; set; } = [];
+
+    /// <summary>The modules' pick-then-act actions on this document (ADR 0786; ABI 1.8 for reveal-once) — what
+    /// the detail pane renders as buttons, matching the desktop (#1628).</summary>
+    public List<ModuleActionDto> ModuleActions { get; set; } = [];
+}
+
+/// <summary>One module action as the document resource advertises it: options to pick from, and where to commit.</summary>
+public record ModuleActionDto
+{
+    public string Rel { get; set; } = string.Empty;
+
+    public string Label { get; set; } = string.Empty;
+
+    public string OptionsHref { get; set; } = string.Empty;
+
+    public string CommitHref { get; set; } = string.Empty;
+
+    public string ValueField { get; set; } = string.Empty;
+
+    public string? Prompt { get; set; }
 }
 
 public record MachineStatusDto

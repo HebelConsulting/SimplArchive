@@ -103,7 +103,8 @@ public sealed class TestModule : IIndustryModule
     /// </summary>
     /// <summary>The action surface under test (ABI 0.20): declared on a mask this module does NOT own, so
     /// the per-document decision below is what stops it speaking for every document wearing it.</summary>
-    public IReadOnlyList<Guid> ActionSubjectMasks { get; } = [CoreMaskIds.Booking];
+    // Dossiers too, for the web suite's reveal fixture (#1628) — offered only when its switch is on, see below.
+    public IReadOnlyList<Guid> ActionSubjectMasks { get; } = [CoreMaskIds.Booking, DossierMaskId];
 
     /// <summary>
     /// Offers an action only when the environment names THIS document — the cheapest way for a test to prove
@@ -115,8 +116,13 @@ public sealed class TestModule : IIndustryModule
             // A second, separately switched action whose outcome REVEALS a value once (ABI 1.8) — what
             // `saconsole module action` must keep in a file. Its own variable, so the hand-over test still
             // sees exactly one action.
-            if (Guid.TryParse(Environment.GetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_REVEAL_DOCUMENT"), out var revealOn)
-                && revealOn == context.DocumentId)
+            // The web UI suite cannot know a document id when it starts the server, so it switches the reveal action
+            // on for every Test Dossier instead (#1628). Nothing else creates dossiers there.
+            var onEveryDossier = Environment.GetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_REVEAL_ON_DOSSIERS") == "1"
+                && context.MaskId == DossierMaskId;
+            if (onEveryDossier
+                || (Guid.TryParse(Environment.GetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_REVEAL_DOCUMENT"), out var revealOn)
+                    && revealOn == context.DocumentId))
             {
                 return Task.FromResult<IReadOnlyList<ModuleDocumentAction>>(
                 [

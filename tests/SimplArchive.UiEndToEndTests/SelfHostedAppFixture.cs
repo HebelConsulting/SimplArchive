@@ -8,9 +8,16 @@ namespace SimplArchive.UiEndToEndTests;
 // + OpenSearch + Tika + Gotenberg via Testcontainers, then the real API launched as a subprocess so a real browser
 // can reach it, seeded by Demo:*, ADR 0214) lives in SimplArchive.SelfHosting and is shared with the desktop
 // fixture + the manual-capture harness — one source of truth, no more hand-synced copies.
-public sealed class SelfHostedAppFixture : IAsyncLifetime
+public class SelfHostedAppFixture : IAsyncLifetime
 {
-    private readonly SelfHostedApp _app = new();
+    private readonly SelfHostedApp _app;
+
+    public SelfHostedAppFixture() : this(new SelfHostedApp())
+    {
+    }
+
+    /// <summary>For a fixture that needs the app started differently (<see cref="ModuleAppFixture"/>).</summary>
+    protected SelfHostedAppFixture(SelfHostedApp app) => _app = app;
     private IPlaywright? _playwright;
 
     public const string AdminEmail = SelfHostedApp.AdminEmail;
@@ -32,7 +39,7 @@ public sealed class SelfHostedAppFixture : IAsyncLifetime
         Browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Channel = "chrome", Headless = true });
     }
 
-    public async Task DisposeAsync()
+    public virtual async Task DisposeAsync()
     {
         if (Browser is not null)
         {
@@ -49,3 +56,37 @@ public sealed class UiCollection : ICollectionFixture<SelfHostedAppFixture>
 {
     public const string Name = "ui-e2e";
 }
+
+/// <summary>
+/// The app with the TestModule staged, for driving a module's document actions through the browser (#1628). Its own
+/// collection, so the shared app keeps running with NO module installed: tests such as the tenant settings' empty
+/// modules state depend on that.
+/// </summary>
+public sealed class ModuleAppFixture : SelfHostedAppFixture
+{
+    private static readonly System.Security.Cryptography.ECDsa VendorKey =
+        System.Security.Cryptography.ECDsa.Create(System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
+
+    public ModuleAppFixture() : base(new SelfHostedApp
+    {
+        StageTestModule = true,
+        TestModuleVerifyKeyPem = VendorKey.ExportSubjectPublicKeyInfoPem(),
+        // The module offers its reveal-once action on every Test Dossier (the server cannot know a document id yet).
+        ExtraEnvironment = new Dictionary<string, string> { ["SIMPLARCHIVE_TESTMODULE_REVEAL_ON_DOSSIERS"] = "1" },
+    })
+    {
+    }
+
+    /// <summary>A licence for the TestModule in <paramref name="tenantId"/>, signed with the key the staged module trusts.</summary>
+    public string SignTestModuleLicence(Guid tenantId) => System.Text.Json.JsonSerializer.Serialize(
+        new SimplArchive.ModuleAbi.TenantLicense(["test-module"], tenantId, DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)),
+            SimplArchive.ModuleAbi.ModuleAbiVersion.Major, string.Empty).Sign(VendorKey),
+        new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+}
+
+[CollectionDefinition(Name)]
+public sealed class ModuleUiCollection : ICollectionFixture<ModuleAppFixture>
+{
+    public const string Name = "UI with the TestModule";
+}
+

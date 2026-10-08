@@ -37,6 +37,9 @@
       <Private>false</Private>
     </ProjectReference>
     <!-- The shared self-host boot engine (ADR 0502) — one source of truth for standing up the real app. -->
+    <!-- The module contract, to SIGN the TestModule's licence for the module-action tests (#1628). A dependency-free
+         contract assembly, so nothing else comes along. -->
+    <ProjectReference Include="..\..\src\SimplArchive.ModuleAbi\SimplArchive.ModuleAbi.csproj" />
     <ProjectReference Include="..\SimplArchive.SelfHosting\SimplArchive.SelfHosting.csproj" />
   </ItemGroup>
 

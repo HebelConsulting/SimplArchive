@@ -1,0 +1,185 @@
+@using System.Net.Http.Json
+@using System.Text.Json
+@inject HttpClient Http
+
+@* A module's pick-then-act action (ADR 0786, #1628), matching the desktop's picker: the module's options from
+   the action's optionsHref, one chosen, committed to its commitHref with its own valueField. Nothing here knows
+   a module. The dialog closes with the outcome; the shell shows the message and any value revealed once. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 360px;">
+            @if (Action.Prompt is { Length: > 0 } prompt)
+            {
+                <MudText Typo="Typo.body2" Class="mb-2">@prompt</MudText>
+            }
+            @if (_loading)
+            {
+                <MudProgressLinear Indeterminate="true" />
+            }
+            else if (_options.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("ModuleActionNoOptions")</MudText>
+            }
+            else
+            {
+                <MudRadioGroup T="string" @bind-Value="_chosen">
+                    @foreach (var option in _options)
+                    {
+                        <MudRadio T="string" Value="@option.Value" data-module-option="@option.Value">
+                            @option.Label
+                            @if (option.Detail is { Length: > 0 } detail)
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="display:block;">@detail</MudText>
+                            }
+                        </MudRadio>
+                    }
+                </MudRadioGroup>
+            }
+            @if (_error is { } error)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2">@error</MudAlert>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => Dialog.Cancel())">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(_chosen is null || _busy)"
+                   data-module-commit="@Action.Rel" OnClick="CommitAsync">@Action.Label</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    /// <summary>What the commit answered: the module's sentence, and a value it reveals once (ABI 1.8).</summary>
+    public sealed record Outcome(string? Message, string? RevealLabel, string? RevealValue);
+
+    private sealed record Option(string Value, string Label, string? Detail);
+
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    [Parameter, EditorRequired] public Models.ModuleActionDto Action { get; set; } = null!;
+
+    private List<Option> _options = [];
+    private string? _chosen;
+    private string? _error;
+    private bool _loading = true;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _options = Options(await Http.GetFromJsonAsync<JsonElement>(Action.OptionsHref.TrimStart('/')));
+            // One option is the confirm shape (a credential issued, a key rotated): pre-chosen, one click commits.
+            _chosen = _options.Count == 1 ? _options[0].Value : null;
+        }
+        catch (HttpRequestException e)
+        {
+            _error = e.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task CommitAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            var response = await Http.PostAsJsonAsync(Action.CommitHref.TrimStart('/'),
+                new Dictionary<string, string> { [Action.ValueField] = _chosen! });
+            if (!response.IsSuccessStatusCode)
+            {
+                _error = await RefusalAsync(response);
+                return;
+            }
+
+            Dialog.Close(DialogResult.Ok(await OutcomeAsync(response)));
+        }
+        catch (HttpRequestException e)
+        {
+            _error = e.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    // The first array of objects in the options response — the module names the property, so no name is assumed
+    // (the desktop reads it the same way).
+    private static List<Option> Options(JsonElement response)
+    {
+        static string? Field(JsonElement e, params string[] names) =>
+            names.Select(n => e.TryGetProperty(n, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null)
+                .FirstOrDefault(v => v is not null);
+
+        if (response.ValueKind != JsonValueKind.Object)
+        {
+            return [];
+        }
+
+        foreach (var property in response.EnumerateObject().Where(p => p.Value.ValueKind == JsonValueKind.Array))
+        {
+            var options = property.Value.EnumerateArray()
+                .Where(i => i.ValueKind == JsonValueKind.Object)
+                .Select(i => new Option(Field(i, "value", "email", "id") ?? string.Empty, Field(i, "label", "name") ?? string.Empty, Field(i, "detail")))
+                .Where(o => o.Value.Length > 0)
+                .ToList();
+            if (options.Count > 0)
+            {
+                return options;
+            }
+        }
+
+        return [];
+    }
+
+    private static async Task<Outcome> OutcomeAsync(HttpResponseMessage response)
+    {
+        if (response.Content.Headers.ContentType?.MediaType?.Contains("json", StringComparison.OrdinalIgnoreCase) != true)
+        {
+            return new Outcome(null, null, null);
+        }
+
+        try
+        {
+            var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+            var message = body.TryGetProperty("message", out var m) && m.ValueKind == JsonValueKind.String ? m.GetString() : null;
+            if (body.TryGetProperty("revealOnce", out var reveal) && reveal.ValueKind == JsonValueKind.Object
+                && reveal.TryGetProperty("value", out var v) && v.GetString() is { Length: > 0 } value)
+            {
+                var label = reveal.TryGetProperty("label", out var l) ? l.GetString() : null;
+                return new Outcome(message, label, value);
+            }
+
+            return new Outcome(message, null, null);
+        }
+        catch (JsonException)
+        {
+            return new Outcome(null, null, null);
+        }
+    }
+
+    // A module's refusal is the same RFC 7807 problem a core one is; its detail is composed by the module's own
+    // catalog for the request culture (ADR 0767), the one server text this client renders.
+    private static async Task<string> RefusalAsync(HttpResponseMessage response)
+    {
+        string? code = null, module = null, detail = null;
+        try
+        {
+            var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+            code = problem.TryGetProperty("errorCode", out var c) ? c.GetString() : null;
+            module = problem.TryGetProperty("module", out var m) ? m.GetString() : null;
+            detail = problem.TryGetProperty("detail", out var d) ? d.GetString() : null;
+        }
+        catch (JsonException)
+        {
+        }
+
+        return SimplArchive.Localization.ApiErrorText.For(code, module, detail);
+    }
+}
