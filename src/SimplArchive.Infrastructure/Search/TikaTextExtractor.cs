@@ -69,5 +69,7 @@ public sealed class TikaTextExtractor : ITextExtractor
 // No-op extractor — registered when Tika isn't configured, so indexing degrades to metadata-only.
 public sealed class NullTextExtractor : ITextExtractor
 {
+    public bool IsConfigured => false;
+
     public Task<string> ExtractAsync(Stream content, string contentType, CancellationToken cancellationToken = default) => Task.FromResult("");
 }

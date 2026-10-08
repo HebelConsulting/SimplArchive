@@ -14,4 +14,15 @@ public interface IDocumentVersionComparer
     Task<VersionComparison> CompareAsync(string fromObjectKey, string toObjectKey, string? toExtensionHint = null, CancellationToken cancellationToken = default);
 }
 
-public sealed record VersionComparison(bool Available, string FromText, string ToText);
+/// <summary>The two texts, or why there are none (the clients say WHY, not just "unavailable").</summary>
+public sealed record VersionComparison(bool Available, string FromText, string ToText,
+    ComparisonUnavailable Reason = ComparisonUnavailable.None);
+
+/// <summary>Why a comparison has no texts. Distinct because the remedies are: a format with no text has none, while a
+/// format that needs text extraction compares fine on an installation that runs it (it was one message, #bug).</summary>
+public enum ComparisonUnavailable
+{
+    None,
+    NoText,
+    NoTextExtraction,
+}

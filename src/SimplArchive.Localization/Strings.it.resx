@@ -531,6 +531,12 @@
   <data name="CompareNoVersions" xml:space="preserve">
     <value>Non è stato possibile elencare le versioni di questo documento, quindi non c'è nulla da confrontare.</value>
   </data>
+  <data name="CompareNeedsTextExtraction" xml:space="preserve">
+    <value>Il confronto di questo formato richiede un servizio di estrazione del testo, che questa installazione non esegue. I documenti di testo e le e-mail possono comunque essere confrontati.</value>
+  </data>
+  <data name="CompareNoWorkingCopy" xml:space="preserve">
+    <value>Non c'è ancora una copia di lavoro salvata da confrontare. Salva prima le modifiche al file in check-out.</value>
+  </data>
   <data name="CompareNotAvailable" xml:space="preserve">
     <value>Il confronto non è disponibile per questo formato (solo i documenti con testo estraibile possono essere confrontati).</value>
   </data>
@@ -3215,9 +3221,6 @@
   </data>
   <data name="StWorkflowStatus" xml:space="preserve">
     <value>Flusso di lavoro: {0}.</value>
-  </data>
-  <data name="StCompareUnavailable" xml:space="preserve">
-    <value>Il confronto non è disponibile per questo formato (solo i documenti da cui è estraibile il testo possono essere confrontati).</value>
   </data>
   <data name="StMfaDisabled" xml:space="preserve">
     <value>Autenticazione a due fattori disattivata.</value>

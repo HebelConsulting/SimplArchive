@@ -141,6 +141,9 @@ public class CheckoutsController : ControllerBase
     {
         // False when there's no stash (nothing changed) or a side has no extractable text (binary/image format).
         public bool Available { get; set; }
+
+        /// <summary>Why: <c>no-working-copy</c>, <c>no-text</c> or <c>no-text-extraction</c>. Null when available.</summary>
+        public string? UnavailableReason { get; set; }
         public string FromText { get; set; } = string.Empty;
         public string ToText { get; set; } = string.Empty;
     }
@@ -194,7 +197,7 @@ public class CheckoutsController : ControllerBase
         var version = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, documentId, document.CurrentVersionId, cancellationToken);
         if (version is null || !await _objectStorage.ExistsAsync(stashKey, cancellationToken))
         {
-            return Ok(new CheckoutComparisonResource { Available = false, Links = [selfLink] });
+            return Ok(new CheckoutComparisonResource { Available = false, UnavailableReason = ComparisonReason.NoWorkingCopy, Links = [selfLink] });
         }
 
         // Refused where the tenant's doors refuse plaintext (#1485, ADR 0861). The same disclosure as the
@@ -212,6 +215,7 @@ public class CheckoutsController : ControllerBase
         return Ok(new CheckoutComparisonResource
         {
             Available = comparison.Available,
+            UnavailableReason = ComparisonReason.Of(comparison.Reason),
             FromText = comparison.FromText,
             ToText = comparison.ToText,
             Links = [selfLink],

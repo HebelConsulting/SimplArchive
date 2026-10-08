@@ -123,12 +123,13 @@ public sealed record UserOptionInfo(Guid Id, string DisplayName, string? RemoveH
 // The two sides of a comparison as extracted texts (ADR 0712) — the client computes the side-by-side rows
 // from them via the shared SimplArchive.Presentation.TextDiff. Serves both the version compare and the
 // check-out working-copy compare (ADR 0517). Available=false when a side has no extractable text (or, for
-// check-out, no working-copy stash exists).
-public sealed record VersionComparison(bool Available, string FromText, string ToText)
+// check-out, no working-copy stash exists); UnavailableReason then names which (the server's unavailableReason).
+public sealed record VersionComparison(bool Available, string FromText, string ToText, string? UnavailableReason = null)
 {
     // The one wire parse both consumers (VersionsClient, CheckoutClient) share — the payloads are the same shape.
     public static VersionComparison Parse(System.Text.Json.JsonElement json) => new(
         json.TryGetProperty("available", out var a) && a.ValueKind == System.Text.Json.JsonValueKind.True,
         json.TryGetProperty("fromText", out var f) && f.ValueKind == System.Text.Json.JsonValueKind.String ? f.GetString()! : string.Empty,
-        json.TryGetProperty("toText", out var t) && t.ValueKind == System.Text.Json.JsonValueKind.String ? t.GetString()! : string.Empty);
+        json.TryGetProperty("toText", out var t) && t.ValueKind == System.Text.Json.JsonValueKind.String ? t.GetString()! : string.Empty,
+        json.TryGetProperty("unavailableReason", out var r) && r.ValueKind == System.Text.Json.JsonValueKind.String ? r.GetString() : null);
 }

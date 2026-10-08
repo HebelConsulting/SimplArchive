@@ -32,17 +32,25 @@ public sealed class DocumentVersionComparer : IDocumentVersionComparer
 
     public async Task<VersionComparison> CompareAsync(string fromObjectKey, string toObjectKey, string? toExtensionHint = null, CancellationToken cancellationToken = default)
     {
-        var fromText = await ExtractTextAsync(fromObjectKey, null, cancellationToken);
-        var toText = await ExtractTextAsync(toObjectKey, toExtensionHint, cancellationToken);
+        var (fromText, fromNeedsExtraction) = await ExtractTextAsync(fromObjectKey, null, cancellationToken);
+        var (toText, toNeedsExtraction) = await ExtractTextAsync(toObjectKey, toExtensionHint, cancellationToken);
+        if (fromText is not null && toText is not null)
+        {
+            return new VersionComparison(true, fromText, toText);
+        }
 
-        return fromText is null || toText is null
-            ? new VersionComparison(false, string.Empty, string.Empty)
-            : new VersionComparison(true, fromText, toText);
+        // WHY there is nothing, because the remedies differ: an office document or a PDF compares fine where text
+        // extraction runs, and the minimal vendor installation runs none, so "this format can't be compared" was
+        // wrong there.
+        var needsExtraction = (fromText is null && fromNeedsExtraction) || (toText is null && toNeedsExtraction);
+        return new VersionComparison(false, string.Empty, string.Empty,
+            needsExtraction && !_textExtractor.IsConfigured ? ComparisonUnavailable.NoTextExtraction : ComparisonUnavailable.NoText);
     }
 
     // The version's text, or null when it can't be extracted (binary/image, or Tika unavailable → "").
     // extensionHint supplies the format when objectKey has no extension of its own (the check-out stash, ADR 0517).
-    private async Task<string?> ExtractTextAsync(string objectKey, string? extensionHint, CancellationToken cancellationToken)
+    // NeedsExtraction says the text had to come from the extractor (not a text format decoded directly, not an e-mail).
+    private async Task<(string? Text, bool NeedsExtraction)> ExtractTextAsync(string objectKey, string? extensionHint, CancellationToken cancellationToken)
     {
         await using var stream = await _objectStorage.GetObjectAsync(objectKey, cancellationToken);
 
@@ -52,7 +60,7 @@ public sealed class DocumentVersionComparer : IDocumentVersionComparer
         if (TextExtensions.Contains(extension))
         {
             using var reader = new StreamReader(stream, Encoding.UTF8);
-            return await reader.ReadToEndAsync(cancellationToken);
+            return (await reader.ReadToEndAsync(cancellationToken), false);
         }
 
         // An email: the bodies are what a user means by "the text", not the MIME envelope — and a note edited
@@ -66,11 +74,11 @@ public sealed class DocumentVersionComparer : IDocumentVersionComparer
                 body = HtmlText.Strip(html);
             }
 
-            return string.IsNullOrWhiteSpace(body) ? null : body;
+            return (string.IsNullOrWhiteSpace(body) ? null : body, false);
         }
 
         // Otherwise route through the text extractor (Tika) — "" means unsupported / not configured.
         var text = await _textExtractor.ExtractAsync(stream, "application/octet-stream", cancellationToken);
-        return string.IsNullOrWhiteSpace(text) ? null : text;
+        return (string.IsNullOrWhiteSpace(text) ? null : text, true);
     }
 }

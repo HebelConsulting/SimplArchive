@@ -39,7 +39,7 @@ public static class CheckoutDiffLauncher
         {
             // No working copy staged means there is no right-hand side to compare against — the row should not
             // have offered this, so say so rather than opening the tool on one file.
-            return Strings.Get("StCompareUnavailable");
+            return Strings.Get("CompareNoWorkingCopy");
         }
 
         try

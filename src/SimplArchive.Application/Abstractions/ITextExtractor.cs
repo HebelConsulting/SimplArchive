@@ -6,4 +6,10 @@ namespace SimplArchive.Application.Abstractions;
 public interface ITextExtractor
 {
     Task<string> ExtractAsync(Stream content, string contentType, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// False when this installation runs no text extraction (the null extractor), so a caller can tell "this format
+    /// has no text" from "nothing here can read it", which have different remedies.
+    /// </summary>
+    bool IsConfigured => true;
 }

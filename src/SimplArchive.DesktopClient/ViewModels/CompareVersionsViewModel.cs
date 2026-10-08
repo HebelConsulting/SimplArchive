@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SimplArchive.DesktopClient.Services;
 using SimplArchive.Localization;
+using SimplArchive.Presentation;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -125,7 +126,7 @@ public sealed partial class CompareVersionsViewModel : ObservableObject
             if (!cmp.Available)
             {
                 NotAvailable = true;
-                Status = Strings.Get("StCompareUnavailable");
+                Status = Strings.Get(ComparisonUnavailableMessage.KeyOf(cmp.UnavailableReason));
                 return;
             }
 

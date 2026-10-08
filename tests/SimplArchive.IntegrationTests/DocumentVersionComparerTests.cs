@@ -2,6 +2,7 @@ using System.Text;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Tenants;
 using SimplArchive.Infrastructure.Comparison;
+using SimplArchive.Infrastructure.Search;
 
 namespace SimplArchive.IntegrationTests;
 
@@ -11,8 +12,8 @@ namespace SimplArchive.IntegrationTests;
 // to Tika. These tests prove the toExtensionHint lets an extensionless text side decode directly — no Tika needed.
 public class DocumentVersionComparerTests
 {
-    // A text extractor that always yields nothing — stands in for "Tika not configured / can't extract".
-    private sealed class NullTextExtractor : ITextExtractor
+    // A CONFIGURED text extractor that yields nothing — "Tika runs but cannot extract this".
+    private sealed class EmptyTextExtractor : ITextExtractor
     {
         public Task<string> ExtractAsync(Stream content, string contentType, CancellationToken cancellationToken = default) => Task.FromResult("");
     }
@@ -33,7 +34,7 @@ public class DocumentVersionComparerTests
         const string stashKey = "tenants/t/users/u/checkout/doc"; // no extension
         var comparer = new DocumentVersionComparer(
             StorageWith(versionKey, "line one\nline two\nline three\n", stashKey, "line one\nline two CHANGED\nline three\n"),
-            new NullTextExtractor());
+            new EmptyTextExtractor());
 
         var result = await comparer.CompareAsync(versionKey, stashKey, toExtensionHint: ".txt");
 
@@ -53,7 +54,7 @@ public class DocumentVersionComparerTests
         var storage = new InMemoryObjectStorage();
         storage.Objects[fromKey] = Encoding.UTF8.GetBytes(emlA);
         storage.Objects[toKey] = Encoding.UTF8.GetBytes(emlB);
-        var comparer = new DocumentVersionComparer(storage, new NullTextExtractor());
+        var comparer = new DocumentVersionComparer(storage, new EmptyTextExtractor());
 
         var result = await comparer.CompareAsync(fromKey, toKey);
 
@@ -72,11 +73,54 @@ public class DocumentVersionComparerTests
         const string stashKey = "tenants/t/users/u/checkout/doc";
         var comparer = new DocumentVersionComparer(
             StorageWith(versionKey, "original\n", stashKey, "edited\n"),
-            new NullTextExtractor());
+            new EmptyTextExtractor());
 
         // No hint → the extensionless side routes to the (null) extractor → no text → not available.
         var result = await comparer.CompareAsync(versionKey, stashKey);
 
         Assert.False(result.Available);
+    }
+
+    [Fact]
+    public async Task Without_a_text_extraction_service_a_pdf_says_the_installation_lacks_one()
+    {
+        // The minimal vendor installation runs no text-extraction service: the comparison must blame the
+        // installation, not the format — a PDF compares fine where extraction runs.
+        const string fromKey = "tenants/t/2026/a.pdf";
+        const string toKey = "tenants/t/2026/b.pdf";
+        var comparer = new DocumentVersionComparer(StorageWith(fromKey, "%PDF-1.7", toKey, "%PDF-1.7"), new NullTextExtractor());
+
+        var result = await comparer.CompareAsync(fromKey, toKey);
+
+        Assert.False(result.Available);
+        Assert.Equal(ComparisonUnavailable.NoTextExtraction, result.Reason);
+    }
+
+    [Fact]
+    public async Task With_a_running_extractor_that_finds_nothing_the_format_is_the_reason()
+    {
+        // The anti-vacuous half: a rule that always blamed the missing service would pass the test above.
+        const string fromKey = "tenants/t/2026/a.png";
+        const string toKey = "tenants/t/2026/b.png";
+        var comparer = new DocumentVersionComparer(StorageWith(fromKey, "x", toKey, "y"), new EmptyTextExtractor());
+
+        var result = await comparer.CompareAsync(fromKey, toKey);
+
+        Assert.False(result.Available);
+        Assert.Equal(ComparisonUnavailable.NoText, result.Reason);
+    }
+
+    [Fact]
+    public async Task An_empty_e_mail_is_NoText_even_without_an_extraction_service()
+    {
+        // An e-mail never needed the service, so its absence is not the reason.
+        const string fromKey = "tenants/t/2026/a.eml";
+        const string toKey = "tenants/t/2026/b.eml";
+        const string empty = "From: a@x\r\nContent-Type: text/plain\r\n\r\n\r\n";
+        var comparer = new DocumentVersionComparer(StorageWith(fromKey, empty, toKey, empty), new NullTextExtractor());
+
+        var result = await comparer.CompareAsync(fromKey, toKey);
+
+        Assert.Equal(ComparisonUnavailable.NoText, result.Reason);
     }
 }

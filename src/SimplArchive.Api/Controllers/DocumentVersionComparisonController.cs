@@ -92,6 +92,7 @@ public class DocumentVersionComparisonController : ControllerBase
             ToVersionId = toVersion.Id,
             ToVersionNumber = toVersion.VersionNumber,
             Available = comparison.Available,
+            UnavailableReason = ComparisonReason.Of(comparison.Reason),
             FromText = comparison.FromText,
             ToText = comparison.ToText,
             Links = [new Link("self", $"/api/documents/{documentId}/versions/compare?from={fromVersionId}&to={toVersionId}", "GET")],
@@ -134,7 +135,26 @@ public class DocumentVersionComparisonController : ControllerBase
         public Guid ToVersionId { get; set; }
         public int? ToVersionNumber { get; set; }
         public bool Available { get; set; }
+
+        /// <summary>Why <see cref="Available"/> is false: <c>no-text</c> or <c>no-text-extraction</c>. Null when available.</summary>
+        public string? UnavailableReason { get; set; }
+
         public string FromText { get; set; } = string.Empty;
         public string ToText { get; set; } = string.Empty;
     }
+}
+
+/// <summary>The wire spelling of why a comparison is unavailable: one place, shared by both compare endpoints.</summary>
+public static class ComparisonReason
+{
+    public const string NoText = "no-text";
+    public const string NoTextExtraction = "no-text-extraction";
+    public const string NoWorkingCopy = "no-working-copy";
+
+    public static string? Of(Application.Abstractions.ComparisonUnavailable reason) => reason switch
+    {
+        Application.Abstractions.ComparisonUnavailable.NoText => NoText,
+        Application.Abstractions.ComparisonUnavailable.NoTextExtraction => NoTextExtraction,
+        _ => null,
+    };
 }

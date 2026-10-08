@@ -43,7 +43,7 @@
             }
             else if (_result is { Available: false })
             {
-                <MudAlert Severity="Severity.Info" Dense="true">@Strings.Get("CompareNotAvailable")</MudAlert>
+                <MudAlert Severity="Severity.Info" Dense="true">@Strings.Get(SimplArchive.Presentation.ComparisonUnavailableMessage.KeyOf(_result.UnavailableReason))</MudAlert>
             }
             else if (_result is { } r)
             {
@@ -172,5 +172,5 @@
     private record LinkDto { public string Rel { get; set; } = string.Empty; public string Href { get; set; } = string.Empty; }
     private record VersionListResponse { public List<VersionResponse> Versions { get; set; } = []; public List<LinkDto> Links { get; set; } = []; }
     private record VersionResponse { public Guid Id { get; set; } public int? VersionNumber { get; set; } public string Status { get; set; } = string.Empty; }
-    private record CompareResult { public bool Available { get; set; } public string FromText { get; set; } = string.Empty; public string ToText { get; set; } = string.Empty; }
+    private record CompareResult { public bool Available { get; set; } public string FromText { get; set; } = string.Empty; public string ToText { get; set; } = string.Empty; public string? UnavailableReason { get; set; } }
 }
