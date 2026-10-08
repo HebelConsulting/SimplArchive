@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Text;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Cli.Infrastructure;
-using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace SimplArchive.Cli.Commands;
@@ -31,7 +31,7 @@ public sealed class CertificateRegisterSettings : TenantSessionSettings
 /// you want to hand over" is before it leaves the machine.
 /// </para>
 /// </remarks>
-public sealed class CertificateRegisterCommand(IAnsiConsole console) : AsyncCommand<CertificateRegisterSettings>
+public sealed class CertificateRegisterCommand(ILogger<CertificateRegisterCommand> logger) : AsyncCommand<CertificateRegisterSettings>
 {
     protected override async Task<int> ExecuteAsync(
         CommandContext context, CertificateRegisterSettings settings, CancellationToken cancellationToken)
@@ -50,10 +50,9 @@ public sealed class CertificateRegisterCommand(IAnsiConsole console) : AsyncComm
         var status = await api.PutBytesAsync(address, bytes, ContentTypeFor(settings.File), cancellationToken);
 
         var subject = status.TryGetProperty("subject", out var value) ? value.GetString() : null;
-        console.MarkupLine($"[green]Registered[/] {Markup.Escape(subject ?? "the certificate")}.");
-        console.MarkupLine(
-            "Content addressed to this user is now enveloped to it. "
-            + "Replace it by deleting it first: [blue]saconsole me certificate delete[/].");
+        logger.LogInformation(
+            "Registered {Subject}. Content addressed to this user is now enveloped to it. "
+            + "Replace it by deleting it first: saconsole me certificate delete.", subject ?? "the certificate");
 
         return 0;
     }

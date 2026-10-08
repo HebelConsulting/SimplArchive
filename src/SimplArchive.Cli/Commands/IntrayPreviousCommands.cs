@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Cli.Infrastructure;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -31,7 +32,7 @@ internal static class IntrayPreviousSurface
 /// <summary>
 /// Lists what an intray overwrite set aside and how long is left to recover it (#799).
 /// </summary>
-public sealed class IntrayPreviousListCommand(IAnsiConsole console) : AsyncCommand<TenantSessionSettings>
+public sealed class IntrayPreviousListCommand(ILogger<IntrayPreviousListCommand> logger) : AsyncCommand<TenantSessionSettings>
 {
     protected override async Task<int> ExecuteAsync(
         CommandContext context, TenantSessionSettings settings, CancellationToken cancellationToken)
@@ -47,7 +48,7 @@ public sealed class IntrayPreviousListCommand(IAnsiConsole console) : AsyncComma
             // Not an error, and worth saying plainly: an empty list is the healthy state, and somebody running
             // this after losing a file needs to know the difference between "nothing was kept" and "the
             // command did not work".
-            console.MarkupLine("[grey]Nothing has been set aside for this user — no intray item has been overwritten.[/]");
+            logger.LogInformation("Nothing has been set aside for this user: no intray item has been overwritten.");
             return 0;
         }
 
@@ -66,8 +67,8 @@ public sealed class IntrayPreviousListCommand(IAnsiConsole console) : AsyncComma
                 Text(row, "expiresAt"));
         }
 
-        console.Write(table);
-        console.MarkupLine($"[grey]Restore one with:[/] saconsole intray previous restore <name>");
+        logger.LogInformation("{Table}", CliLogging.Render(table));
+        logger.LogInformation("Restore one with: saconsole intray previous restore <name>");
         return 0;
     }
 
@@ -78,7 +79,7 @@ public sealed class IntrayPreviousListCommand(IAnsiConsole console) : AsyncComma
 }
 
 /// <summary>Puts a set-aside copy back into the intray (#799).</summary>
-public sealed class IntrayPreviousRestoreCommand(IAnsiConsole console) : AsyncCommand<IntrayPreviousRestoreCommand.Settings>
+public sealed class IntrayPreviousRestoreCommand(ILogger<IntrayPreviousRestoreCommand> logger) : AsyncCommand<IntrayPreviousRestoreCommand.Settings>
 {
     public sealed class Settings : TenantSessionSettings
     {
@@ -118,8 +119,8 @@ public sealed class IntrayPreviousRestoreCommand(IAnsiConsole console) : AsyncCo
         var restore = Hypermedia.Href(Hypermedia.LinksOf(row), "restore", $"The preserved item '{settings.Name}'");
         await api.PostAsync(restore, new { }, cancellationToken);
 
-        console.MarkupLine($"[green]Restored[/] {Markup.Escape(settings.Name)} [grey]into the intray.[/]");
-        console.MarkupLine("[grey]Whatever was there has itself been set aside, so this is reversible.[/]");
+        logger.LogInformation(
+            "Restored {Name} into the intray. Whatever was there has itself been set aside, so this is reversible.", settings.Name);
         return 0;
     }
 }

@@ -1,6 +1,7 @@
 using SimplArchive.Cli.Commands;
 using SimplArchive.Cli.Infrastructure;
-using Spectre.Console;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Spectre.Console.Cli;
 
 // saconsole — administrative CLI for a SimplArchive installation (ADR 0822). An API client and nothing else:
@@ -19,9 +20,24 @@ namespace SimplArchive.Cli;
 /// </remarks>
 public static class SaConsoleApp
 {
-    public static CommandApp Build()
+    /// <summary>
+    /// Runs saconsole: the logger lives exactly as long as the command, and is disposed before the process exits so its
+    /// background writer flushes (ADR 0906, #1661). <c>--verbose</c> is taken out of the arguments before parsing: it is
+    /// a property of the output, not of any command.
+    /// </summary>
+    public static int Run(string[] args)
     {
-        var app = new CommandApp();
+        var verbose = args.Contains(CliLogging.VerboseFlag, StringComparer.Ordinal);
+        using var logging = CliLogging.CreateFactory(verbose);
+        return Build(logging).Run([.. args.Where(a => a != CliLogging.VerboseFlag)]);
+    }
+
+    public static CommandApp Build(ILoggerFactory logging)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(logging);
+        services.AddSingleton(typeof(ILogger<>), typeof(Logger<>));
+        var app = new CommandApp(new TypeRegistrar(services));
         app.Configure(config =>
         {
             config.SetApplicationName("saconsole");
@@ -30,7 +46,7 @@ public static class SaConsoleApp
             // exports to stdout so it can be used as `eval "$(saconsole login --url …)"` — so an error written to
             // stdout is an error the shell EXECUTES. Measured before this was fixed: an unreachable installation put
             // `Unexpected SocketException: Connection refused` on stdout, where eval would have run it.
-            var errors = AnsiConsole.Create(new AnsiConsoleSettings { Out = new AnsiConsoleOutput(Console.Error) });
+            var errors = logging.CreateLogger("saconsole");
 
             // Four kinds of failure, told apart because calling them all the same thing is how a tool starts lying
             // about what went wrong.
@@ -51,23 +67,21 @@ public static class SaConsoleApp
                 switch (exception.GetBaseException())
                 {
                     case CliException expected:
-                        errors.MarkupLine($"[red]{Markup.Escape(expected.Message)}[/]");
+                        errors.LogError("{Message}", expected.Message);
                         return 1;
 
                     case CommandRuntimeException usage:
-                        errors.MarkupLine($"[red]{Markup.Escape(usage.Message)}[/]");
-                        errors.MarkupLine("Run with [blue]--help[/] to see the options.");
+                        errors.LogError("{Message} Run with --help to see the options.", usage.Message);
                         return 1;
 
                     // The base exception of a refused connection is SocketException, so catching HttpRequestException
                     // alone would miss it — which is exactly how it reached the "real bug" branch.
                     case HttpRequestException or System.Net.Sockets.SocketException:
-                        errors.MarkupLine("[red]Could not reach the installation.[/]");
-                        errors.MarkupLine("Check the URL, that the installation is running, and that this host can reach it.");
+                        errors.LogError("Could not reach the installation. Check the URL, that it is running, and that this host can reach it.");
                         return 1;
 
                     case var bug:
-                        errors.MarkupLine($"[red]Unexpected {bug.GetType().Name}:[/] {Markup.Escape(bug.Message)}");
+                        errors.LogError("Unexpected {ExceptionType}: {Message}", bug.GetType().Name, bug.Message);
                         return 2;
                 }
             });

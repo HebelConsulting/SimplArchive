@@ -29,24 +29,10 @@ public class ConsoleOutputRatchetTests
 
     private static readonly Dictionary<string, int> Remaining = new()
     {
-        ["src/SimplArchive.Cli/Commands/AclSurface.cs"] = 5,
-        ["src/SimplArchive.Cli/Commands/CertificateDeleteCommand.cs"] = 2,
-        ["src/SimplArchive.Cli/Commands/CertificateEnrolCommand.cs"] = 3,
-        ["src/SimplArchive.Cli/Commands/CertificateImportCommand.cs"] = 10,
-        ["src/SimplArchive.Cli/Commands/CertificateListCommand.cs"] = 1,
-        ["src/SimplArchive.Cli/Commands/CertificateRegisterCommand.cs"] = 2,
-        ["src/SimplArchive.Cli/Commands/CertificateRevokeCommand.cs"] = 3,
-        ["src/SimplArchive.Cli/Commands/CertificateShowCommand.cs"] = 2,
-        ["src/SimplArchive.Cli/Commands/IntrayPreviousCommands.cs"] = 4,
-        ["src/SimplArchive.Cli/Commands/LoginCommand.cs"] = 9,
-        ["src/SimplArchive.Cli/Commands/ModuleActionCommand.cs"] = 3,
-        ["src/SimplArchive.Cli/Commands/ModuleActivateCommand.cs"] = 4,
-        ["src/SimplArchive.Cli/Commands/ModuleListCommand.cs"] = 1,
-        ["src/SimplArchive.Cli/Commands/ModuleRebuildCommand.cs"] = 2,
-        ["src/SimplArchive.Cli/Commands/ModuleSettingsCommands.cs"] = 2,
-        ["src/SimplArchive.Cli/Commands/RepositoryCreateCommand.cs"] = 2,
-        ["src/SimplArchive.Cli/Commands/TenantCreateCommand.cs"] = 6,
-        ["src/SimplArchive.Cli/SaConsoleApp.cs"] = 6,
+        ["src/SimplArchive.Cli/Commands/LoginCommand.cs"] = 2,   // data output only (ADR 0906)
+        ["src/SimplArchive.Cli/Commands/RepositoryCreateCommand.cs"] = 1,   // data output only (ADR 0906)
+        ["src/SimplArchive.Cli/Commands/StandardRepositoryCommands.cs"] = 1,   // data output: the id (#1661; was an uncounted console.WriteLine)
+        ["src/SimplArchive.Cli/Commands/TenantCreateCommand.cs"] = 1,   // data output only (ADR 0906)
         ["src/SimplArchive.Client/Pages/Home.Interop.razor.cs"] = 3,
         ["src/SimplArchive.DesktopClient/Program.cs"] = 47,
         ["src/SimplArchive.DesktopClient/Services/ApiClientChecks.cs"] = 52,

@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Cli.Infrastructure;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -69,7 +70,7 @@ public sealed class CertificateRevokeSettings : TenantSessionSettings
 /// the bulk import so the two cannot write it differently.
 /// </para>
 /// </remarks>
-public sealed class CertificateRevokeCommand(IAnsiConsole console) : AsyncCommand<CertificateRevokeSettings>
+public sealed class CertificateRevokeCommand(ILogger<CertificateRevokeCommand> logger) : AsyncCommand<CertificateRevokeSettings>
 {
     protected override async Task<int> ExecuteAsync(
         CommandContext context, CertificateRevokeSettings settings, CancellationToken cancellationToken)
@@ -92,7 +93,7 @@ public sealed class CertificateRevokeCommand(IAnsiConsole console) : AsyncComman
         {
             // The state asked for already obtains. Not an error, and not silently "done" either — an operator
             // running this deliberately is entitled to know they changed nothing.
-            console.MarkupLine($"[blue]Unchanged[/] — {Markup.Escape(found.Label)} was already revoked.");
+            logger.LogInformation("Unchanged: {Certificate} was already revoked.", found.Label);
             return 0;
         }
 
@@ -102,10 +103,9 @@ public sealed class CertificateRevokeCommand(IAnsiConsole console) : AsyncComman
 
         await CertificateRevocation.SetRevokedOnAsync(api, hypermedia, found.DocumentId, on, cancellationToken);
 
-        console.MarkupLine($"[green]Revoked[/] {Markup.Escape(found.Label)} on {on.ToUniversalTime():yyyy-MM-dd HH:mm:ss} UTC.");
-        console.MarkupLine(
-            "Content is no longer enveloped to it. A reader whose only certificate this was can no longer "
-            + "open sealed documents until another is enrolled.");
+        logger.LogInformation(
+            "Revoked {Certificate} on {RevokedAt:yyyy-MM-dd HH:mm:ss} UTC. Content is no longer enveloped to it. A reader whose "
+            + "only certificate this was can no longer open sealed documents until another is enrolled.", found.Label, on.ToUniversalTime());
 
         return 0;
     }

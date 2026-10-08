@@ -53,3 +53,10 @@ For unattended use, sign in as a tenant **service account** with `saconsole logi
 in `SACONSOLE_CLIENT_SECRET` (from the environment, never as an argument).
 
 Requires the .NET 10 runtime. Source, documentation and issues: <https://github.com/HebelConsulting/SimplArchive>
+
+## Output
+
+What is meant for a person goes to **stderr**, as plain lines (`warning:` and `error:` mark those levels); add
+`--verbose` for diagnostic detail. **stdout carries only a command's result**: the exports of `login`, the id of
+`repository create` and `tenant standard-repository show`, the one-time password of `tenant create`. So
+`id=$(saconsole repository create --name Customers)` captures exactly the id, and `2>/dev/null` silences the rest.

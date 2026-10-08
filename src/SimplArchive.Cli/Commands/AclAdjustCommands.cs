@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using SimplArchive.Cli.Infrastructure;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -22,7 +23,7 @@ namespace SimplArchive.Cli.Commands;
 /// that, so nothing is added on top of it.
 /// </para>
 /// </remarks>
-public abstract class AclAdjustCommand(IAnsiConsole console) : AsyncCommand<AclSettings>
+public abstract class AclAdjustCommand(ILogger logger) : AsyncCommand<AclSettings>
 {
     /// <summary>Whether the named rights are added or taken away.</summary>
     protected abstract bool Granting { get; }
@@ -52,18 +53,18 @@ public abstract class AclAdjustCommand(IAnsiConsole console) : AsyncCommand<AclS
 
         if (intended == current)
         {
-            AclSurface.Report(console, target, current, intended);
+            AclSurface.Report(logger, target, current, intended);
             return 0;
         }
 
         await api.PutWithETagAsync(target.Address, AclSurface.Body(intended), etag, cancellationToken);
-        AclSurface.Report(console, target, current, intended);
+        AclSurface.Report(logger, target, current, intended);
         return 0;
     }
 }
 
 /// <summary>Adds rights to what a principal already holds, leaving the rest alone.</summary>
-public sealed class AclGrantCommand(IAnsiConsole console) : AclAdjustCommand(console)
+public sealed class AclGrantCommand(ILogger<AclGrantCommand> logger) : AclAdjustCommand(logger)
 {
     protected override bool Granting => true;
 }
@@ -78,7 +79,7 @@ public sealed class AclGrantCommand(IAnsiConsole console) : AclAdjustCommand(con
 /// <c>DELETE</c> on the same address and is deliberately not this command — "take away the right to delete"
 /// and "take away their entry" are different acts, and one verb for both is how the wrong one gets run.
 /// </remarks>
-public sealed class AclRevokeCommand(IAnsiConsole console) : AclAdjustCommand(console)
+public sealed class AclRevokeCommand(ILogger<AclRevokeCommand> logger) : AclAdjustCommand(logger)
 {
     protected override bool Granting => false;
 }

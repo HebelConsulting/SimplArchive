@@ -1,5 +1,5 @@
+using Microsoft.Extensions.Logging;
 using SimplArchive.Cli.Infrastructure;
-using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace SimplArchive.Cli.Commands;
@@ -13,7 +13,7 @@ namespace SimplArchive.Cli.Commands;
 /// register the first one from here and would have to finish the job in a different client. A verb that can
 /// only be performed once is not a verb.
 /// </remarks>
-public sealed class CertificateDeleteCommand(IAnsiConsole console) : AsyncCommand<TenantSessionSettings>
+public sealed class CertificateDeleteCommand(ILogger<CertificateDeleteCommand> logger) : AsyncCommand<TenantSessionSettings>
 {
     protected override async Task<int> ExecuteAsync(
         CommandContext context, TenantSessionSettings settings, CancellationToken cancellationToken)
@@ -22,10 +22,9 @@ public sealed class CertificateDeleteCommand(IAnsiConsole console) : AsyncComman
         var api = new SimplArchiveApi(http);
         await api.DeleteAsync(await CertificateEndpoint.AddressAsync(api, cancellationToken), cancellationToken);
 
-        console.MarkupLine("[green]Removed.[/] Content addressed to this user is no longer enveloped.");
-        console.MarkupLine(
-            "On an installation that serves content only as an envelope, this user can no longer open "
-            + "documents until another certificate is registered.");
+        logger.LogInformation(
+            "Removed. Content addressed to this user is no longer enveloped. On an installation that serves content "
+            + "only as an envelope, this user can no longer open documents until another certificate is registered.");
 
         return 0;
     }

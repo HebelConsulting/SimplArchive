@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Cli.Infrastructure;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -9,7 +10,7 @@ namespace SimplArchive.Cli.Commands;
 /// Provisions a tenant with its first administrator and repository — a platform-administrator act, because a
 /// tenant does not exist yet to administer it (ADR 0206).
 /// </summary>
-public sealed class TenantCreateCommand : AsyncCommand<TenantCreateCommand.Settings>
+public sealed class TenantCreateCommand(ILogger<TenantCreateCommand> logger) : AsyncCommand<TenantCreateCommand.Settings>
 {
     public sealed class Settings : PlatformAdminSettings
     {
@@ -63,16 +64,18 @@ public sealed class TenantCreateCommand : AsyncCommand<TenantCreateCommand.Setti
         var administrator = created.GetProperty("tenantAdministrator");
         var password = administrator.GetProperty("password").GetString();
 
-        AnsiConsole.MarkupLine($"[green]Tenant created[/]: [blue]{Markup.Escape(settings.Name)}[/] " +
-            $"({created.GetProperty("id").GetString()})");
-        AnsiConsole.MarkupLine($"  administrator : [blue]{Markup.Escape(administrator.GetProperty("email").GetString() ?? "")}[/]");
-        AnsiConsole.MarkupLine($"  repository    : [blue]{Markup.Escape(settings.RepositoryName)}[/]");
-        AnsiConsole.WriteLine();
+        logger.LogInformation(
+            "Tenant created: {Tenant} ({TenantId}), administrator {Administrator}, repository {Repository}.",
+            settings.Name, created.GetProperty("id").GetString(), administrator.GetProperty("email").GetString() ?? string.Empty,
+            settings.RepositoryName);
 
         // The Api generates this and returns it ONCE — it is not stored anywhere retrievable, so a caller
         // who loses it has to reset rather than look it up. Saying so is part of printing it.
-        AnsiConsole.MarkupLine("[yellow]Initial administrator password — shown once, not recoverable:[/]");
-        AnsiConsole.WriteLine(password ?? "(the installation returned none)");
+        logger.LogWarning("The initial administrator password follows on stdout. It is shown once and not recoverable.");
+
+        // Data output (ADR 0906): the password alone on stdout, for `password=$(saconsole tenant create …)`; never logged
+        // (ADR 0886's named carve-out is this write, not a log line).
+        Console.Out.WriteLine(password ?? "(the installation returned none)");
 
         return 0;
     }

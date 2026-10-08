@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Cli.Infrastructure;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -55,7 +56,7 @@ public sealed class ModuleActivateSettings : TenantSessionSettings
 /// absence as though the licence were wrong. <c>--module</c> narrows it when that is genuinely wanted.
 /// </para>
 /// </remarks>
-public sealed class ModuleActivateCommand(IAnsiConsole console) : AsyncCommand<ModuleActivateSettings>
+public sealed class ModuleActivateCommand(ILogger<ModuleActivateCommand> logger) : AsyncCommand<ModuleActivateSettings>
 {
     protected override async Task<int> ExecuteAsync(
         CommandContext context, ModuleActivateSettings settings, CancellationToken cancellationToken)
@@ -91,17 +92,17 @@ public sealed class ModuleActivateCommand(IAnsiConsole console) : AsyncCommand<M
 
         var (documentId, outcome) = await LicenceFiling.FileAsync(
             api, hypermedia, parentId, settings.Name ?? Describe.DefaultName(claims), bytes, cancellationToken);
-        console.MarkupLine(outcome switch
+        logger.LogInformation(outcome switch
         {
-            LicenceFiling.Outcome.Filed => $"Filed the licence as document [blue]{documentId:D}[/].",
-            LicenceFiling.Outcome.NewVersion => $"Filed the licence as a new version of document [blue]{documentId:D}[/].",
-            _ => $"[blue]Unchanged[/] — document {documentId:D} already holds this licence.",
-        });
+            LicenceFiling.Outcome.Filed => "Filed the licence as document {DocumentId}.",
+            LicenceFiling.Outcome.NewVersion => "Filed the licence as a new version of document {DocumentId}.",
+            _ => "Unchanged: document {DocumentId} already holds this licence.",
+        }, documentId);
 
         foreach (var (moduleId, licenceHref) in targets.Activatable)
         {
             await api.PutAsync(licenceHref, new { licenseDocumentId = documentId }, cancellationToken);
-            console.MarkupLine($"[green]Activated[/] {Markup.Escape(moduleId)}.");
+            logger.LogInformation("Activated {Module}.", moduleId);
         }
 
         // Named, not counted: a module the licence entitles and this installation does not carry is the
@@ -109,12 +110,12 @@ public sealed class ModuleActivateCommand(IAnsiConsole console) : AsyncCommand<M
         // is a missing deployment or a licence bought ahead of one.
         foreach (var moduleId in targets.NotInstalled)
         {
-            console.MarkupLine(
-                $"[yellow]Not activated[/] {Markup.Escape(moduleId)} — the licence entitles it, but this "
-                + "installation does not carry that module. Deploy it and run this again.");
+            logger.LogWarning(
+                "Not activated {Module}: the licence entitles it, but this installation does not carry that module. "
+                + "Deploy it and run this again.", moduleId);
         }
 
-        console.MarkupLine($"Support runs through [blue]{Markup.Escape(claims.SupportContractEnd)}[/] (inclusive).");
+        logger.LogInformation("Support runs through {SupportEnd} (inclusive).", claims.SupportContractEnd);
 
         return 0;
     }

@@ -38,7 +38,7 @@ public class SaConsoleStreamTests
             Environment.SetEnvironmentVariable("SACONSOLE_URL", null);
             Environment.SetEnvironmentVariable("SACONSOLE_TOKEN", null);
 
-            var exit = SaConsoleApp.Build().Run(args);
+            var exit = SaConsoleApp.Run(args);   // Run, not Build: it disposes the logger, so its background writer flushes
             Assert.True(exit != 0, "these arguments are all supposed to fail");
         }
         finally

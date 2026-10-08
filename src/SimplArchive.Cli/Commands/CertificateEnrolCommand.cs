@@ -2,8 +2,8 @@ using System.ComponentModel;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Cli.Infrastructure;
-using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace SimplArchive.Cli.Commands;
@@ -37,7 +37,7 @@ public sealed class CertificateEnrolSettings : TenantSessionSettings
 /// <c>saconsole me certificate register</c> writes. Two stores; this is the one content delivery uses.
 /// </para>
 /// </remarks>
-public sealed class CertificateEnrolCommand(IAnsiConsole console) : AsyncCommand<CertificateEnrolSettings>
+public sealed class CertificateEnrolCommand(ILogger<CertificateEnrolCommand> logger) : AsyncCommand<CertificateEnrolSettings>
 {
     protected override async Task<int> ExecuteAsync(
         CommandContext context, CertificateEnrolSettings settings, CancellationToken cancellationToken)
@@ -63,9 +63,9 @@ public sealed class CertificateEnrolCommand(IAnsiConsole console) : AsyncCommand
             var label = enrolled.TryGetProperty("label", out var l) ? l.GetString() : null;
             var serial = enrolled.TryGetProperty("serial", out var s) ? s.GetString() : null;
 
-            console.MarkupLine($"[green]Enrolled[/] {Markup.Escape(label ?? "the certificate")}"
-                + (serial is { Length: > 0 } ? $" — serial {Markup.Escape(serial)}" : string.Empty));
-            console.MarkupLine("Content addressed to this reader is now enveloped to it as well.");
+            logger.LogInformation(
+                "Enrolled {Certificate} (serial {Serial}). Content addressed to this reader is now enveloped to it as well.",
+                label ?? "the certificate", serial is { Length: > 0 } ? serial : "none");
 
             return 0;
         }
@@ -75,7 +75,7 @@ public sealed class CertificateEnrolCommand(IAnsiConsole console) : AsyncCommand
             // NOT a failure worth a non-zero exit on its own terms — the state the caller asked for already
             // obtains. Reported as unchanged, with the server's own sentence, which says WHO holds it when
             // that is somebody else (#1494).
-            console.MarkupLine($"[blue]Unchanged[/] — {Markup.Escape(exception.Message)}");
+            logger.LogInformation("Unchanged: {Reason}", exception.Message);
             return 0;
         }
     }

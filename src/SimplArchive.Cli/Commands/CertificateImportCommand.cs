@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Cli.Infrastructure;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -40,7 +41,7 @@ public sealed class CertificateImportSettings : TenantSessionSettings
 /// is the module's only revocation interface (its ADR 0005).
 /// </para>
 /// </remarks>
-public sealed class CertificateImportCommand(IAnsiConsole console) : AsyncCommand<CertificateImportSettings>
+public sealed class CertificateImportCommand(ILogger<CertificateImportCommand> logger) : AsyncCommand<CertificateImportSettings>
 {
     protected override async Task<int> ExecuteAsync(
         CommandContext context, CertificateImportSettings settings, CancellationToken cancellationToken)
@@ -69,18 +70,15 @@ public sealed class CertificateImportCommand(IAnsiConsole console) : AsyncComman
 
         if (settings.DryRun)
         {
-            console.MarkupLine("[yellow]Dry run[/] — nothing will be sent.");
+            logger.LogInformation("Dry run: nothing will be sent.");
         }
 
         var enrolled = await EnrolAsync(api, certificates, manifest, settings.DryRun, cancellationToken);
         var revoked = await RevokeAsync(api, hypermedia, certificates, manifest, settings.DryRun, cancellationToken);
 
-        console.WriteLine();
-        console.MarkupLine(
-            $"enrolled [green]{enrolled.Enrolled}[/], unchanged [blue]{enrolled.Unchanged}[/], "
-            + $"refused [red]{enrolled.Refused}[/]  ·  "
-            + $"revoked [green]{revoked.Revoked}[/], already revoked [blue]{revoked.Unchanged}[/], "
-            + $"not found [red]{revoked.NotFound}[/]");
+        logger.LogInformation(
+            "enrolled {Enrolled}, unchanged {Unchanged}, refused {Refused} · revoked {Revoked}, already revoked {AlreadyRevoked}, not found {NotFound}",
+            enrolled.Enrolled, enrolled.Unchanged, enrolled.Refused, revoked.Revoked, revoked.Unchanged, revoked.NotFound);
 
         // A NON-ZERO EXIT when anything was refused, because this runs in scripts: an import that enrolled
         // nine of ten and exited 0 is an import whose failure nobody sees. "Unchanged" is not a failure.
@@ -100,8 +98,7 @@ public sealed class CertificateImportCommand(IAnsiConsole console) : AsyncComman
         {
             if (dryRun)
             {
-                console.MarkupLine($"  would enrol [blue]{Markup.Escape(issued.Holder)}[/] — "
-                    + Markup.Escape(issued.Label.Length > 0 ? issued.Label : "(no label)"));
+                logger.LogInformation("  would enrol {Holder}: {Label}", issued.Holder, issued.Label.Length > 0 ? issued.Label : "(no label)");
                 enrolled++;
                 continue;
             }
@@ -113,14 +110,14 @@ public sealed class CertificateImportCommand(IAnsiConsole console) : AsyncComman
                     new { certificatePem = issued.CertificatePem, label = issued.Label, holder = issued.Holder },
                     cancellationToken);
 
-                console.MarkupLine($"  [green]enrolled[/] {Markup.Escape(issued.Holder)}");
+                logger.LogInformation("  enrolled {Holder}", issued.Holder);
                 enrolled++;
             }
             catch (CliException exception) when (IsAlreadyEnrolled(exception))
             {
                 // UNCHANGED, not refused. #1494 gave this its own code precisely so a re-run could tell the
                 // difference between "you already have this" and "this cannot be enrolled".
-                console.MarkupLine($"  [blue]unchanged[/] {Markup.Escape(issued.Holder)} — already enrolled");
+                logger.LogInformation("  unchanged {Holder}: already enrolled", issued.Holder);
                 unchanged++;
             }
             catch (CliException exception)
@@ -128,7 +125,7 @@ public sealed class CertificateImportCommand(IAnsiConsole console) : AsyncComman
                 // NAMED, and the import continues. A refusal is usually about ONE certificate — a key too
                 // weak, a curve the tenant does not accept, a holder who is not a user here — and stopping
                 // the batch would make one bad row hold up every good one.
-                console.MarkupLine($"  [red]refused[/] {Markup.Escape(issued.Holder)}: {Markup.Escape(exception.Message)}");
+                logger.LogWarning("  refused {Holder}: {Reason}", issued.Holder, exception.Message);
                 refused++;
             }
         }
@@ -163,28 +160,28 @@ public sealed class CertificateImportCommand(IAnsiConsole console) : AsyncComman
             {
                 // NOT an error about the CA: a certificate it revoked may simply never have been enrolled
                 // here, or belong to another tenant. Reported so the operator can tell which.
-                console.MarkupLine($"  [red]not found[/] serial {Markup.Escape(entry.Serial)} — nothing enrolled here carries it");
+                logger.LogWarning("  not found: serial {Serial}, nothing enrolled here carries it", entry.Serial);
                 notFound++;
                 continue;
             }
 
             if (enrolment.AlreadyRevoked)
             {
-                console.MarkupLine($"  [blue]unchanged[/] serial {Markup.Escape(entry.Serial)} — already revoked");
+                logger.LogInformation("  unchanged: serial {Serial} already revoked", entry.Serial);
                 unchanged++;
                 continue;
             }
 
             if (dryRun)
             {
-                console.MarkupLine($"  would revoke serial [blue]{Markup.Escape(entry.Serial)}[/] on {entry.At.ToUniversalTime():yyyy-MM-dd HH:mm:ss} UTC");
+                logger.LogInformation("  would revoke serial {Serial} on {RevokedAt:yyyy-MM-dd HH:mm:ss} UTC", entry.Serial, entry.At.ToUniversalTime());
                 revoked++;
                 continue;
             }
 
             await CertificateRevocation.SetRevokedOnAsync(
                 api, hypermedia, enrolment.DocumentId, entry.At, cancellationToken);
-            console.MarkupLine($"  [green]revoked[/] serial {Markup.Escape(entry.Serial)} on {entry.At.ToUniversalTime():yyyy-MM-dd HH:mm:ss} UTC");
+            logger.LogInformation("  revoked serial {Serial} on {RevokedAt:yyyy-MM-dd HH:mm:ss} UTC", entry.Serial, entry.At.ToUniversalTime());
             revoked++;
         }
 

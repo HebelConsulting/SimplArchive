@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Cli.Infrastructure;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -33,7 +34,7 @@ public sealed class ModuleRebuildSettings : TenantSessionSettings
 /// has, and this rebuilds one or all of them.
 /// </para>
 /// </remarks>
-public sealed class ModuleRebuildCommand(IAnsiConsole console) : AsyncCommand<ModuleRebuildSettings>
+public sealed class ModuleRebuildCommand(ILogger<ModuleRebuildCommand> logger) : AsyncCommand<ModuleRebuildSettings>
 {
     protected override async Task<int> ExecuteAsync(
         CommandContext context, ModuleRebuildSettings settings, CancellationToken cancellationToken)
@@ -57,7 +58,7 @@ public sealed class ModuleRebuildCommand(IAnsiConsole console) : AsyncCommand<Mo
         var available = Projections(await api.GetAsync(projections, cancellationToken)).ToList();
         if (available.Count == 0)
         {
-            console.MarkupLine($"'{Markup.Escape(settings.Module)}' declares no projections to rebuild.");
+            logger.LogInformation("'{Module}' declares no projections to rebuild.", settings.Module);
             return 0;
         }
 
@@ -75,7 +76,7 @@ public sealed class ModuleRebuildCommand(IAnsiConsole console) : AsyncCommand<Mo
         foreach (var projection in chosen)
         {
             await api.PostAsync(projection.RebuildHref, new { }, cancellationToken);
-            console.MarkupLine($"[green]Rebuilt[/] {Markup.Escape(settings.Module)} / {Markup.Escape(projection.Name)}");
+            logger.LogInformation("Rebuilt {Module} / {Projection}", settings.Module, projection.Name);
         }
 
         return 0;

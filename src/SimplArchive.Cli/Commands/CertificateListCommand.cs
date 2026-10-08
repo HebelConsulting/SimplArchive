@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Cli.Infrastructure;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -29,7 +30,7 @@ public sealed class CertificateListSettings : TenantSessionSettings
 /// flagged rather than enforced backwards, so a row can be enrolled and failing at the same time.
 /// </para>
 /// </remarks>
-public sealed class CertificateListCommand(IAnsiConsole console) : AsyncCommand<CertificateListSettings>
+public sealed class CertificateListCommand(ILogger<CertificateListCommand> logger) : AsyncCommand<CertificateListSettings>
 {
     protected override async Task<int> ExecuteAsync(
         CommandContext context, CertificateListSettings settings, CancellationToken cancellationToken)
@@ -48,9 +49,15 @@ public sealed class CertificateListCommand(IAnsiConsole console) : AsyncCommand<
         var rows = Rows(await api.GetAsync(address, cancellationToken)).ToList();
         if (rows.Count == 0)
         {
-            console.MarkupLine(settings.Holder is { Length: > 0 }
-                ? $"Nothing is enrolled for {Markup.Escape(settings.Holder)}."
-                : "Nothing is enrolled in this tenant.");
+            if (settings.Holder is { Length: > 0 })
+            {
+                logger.LogInformation("Nothing is enrolled for {Holder}.", settings.Holder);
+            }
+            else
+            {
+                logger.LogInformation("Nothing is enrolled in this tenant.");
+            }
+
             return 0;
         }
 
@@ -69,7 +76,7 @@ public sealed class CertificateListCommand(IAnsiConsole console) : AsyncCommand<
                 State(row));
         }
 
-        console.Write(table);
+        logger.LogInformation("{Table}", CliLogging.Render(table));
         return 0;
     }
 

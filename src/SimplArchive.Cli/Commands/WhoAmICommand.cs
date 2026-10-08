@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Cli.Infrastructure;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -14,7 +15,7 @@ namespace SimplArchive.Cli.Commands;
 /// only defence is that the answer to "which one am I pointed at?" is cheap, obvious and always available.
 /// So it ships WITH the environment fallback rather than after it.
 /// </remarks>
-public sealed class WhoAmICommand(IAnsiConsole console) : AsyncCommand<TenantSessionSettings>
+public sealed class WhoAmICommand(ILogger<WhoAmICommand> logger) : AsyncCommand<TenantSessionSettings>
 {
     protected override async Task<int> ExecuteAsync(
         CommandContext context, TenantSessionSettings settings, CancellationToken cancellationToken)
@@ -43,7 +44,7 @@ public sealed class WhoAmICommand(IAnsiConsole console) : AsyncCommand<TenantSes
         table.AddRow("Tenant admin", Flag("isTenantAdmin") ? "yes" : "no");
         table.AddRow("Can manage users", Flag("canManageUsers") ? "yes" : "no");
 
-        console.Write(table);
+        logger.LogInformation("{Table}", CliLogging.Render(table));
         return 0;
     }
 }

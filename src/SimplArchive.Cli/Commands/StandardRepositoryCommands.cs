@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Cli.Infrastructure;
-using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace SimplArchive.Cli.Commands;
@@ -10,7 +10,7 @@ namespace SimplArchive.Cli.Commands;
 /// Shows the tenant's standard repository (ADR 0892) — where SimplArchive files what it brings, its manuals first.
 /// </summary>
 /// <remarks>Followed from the root's <c>tenantSettings</c> rel, which a tenant administrator holds.</remarks>
-public sealed class StandardRepositoryShowCommand(IAnsiConsole console) : AsyncCommand<TenantSessionSettings>
+public sealed class StandardRepositoryShowCommand(ILogger<StandardRepositoryShowCommand> logger) : AsyncCommand<TenantSessionSettings>
 {
     protected override async Task<int> ExecuteAsync(
         CommandContext context, TenantSessionSettings settings, CancellationToken cancellationToken)
@@ -19,9 +19,16 @@ public sealed class StandardRepositoryShowCommand(IAnsiConsole console) : AsyncC
         var api = new SimplArchiveApi(http);
         var (resource, _) = await StandardRepositorySurface.ReadAsync(api, cancellationToken);
 
-        console.WriteLine(StandardRepositorySurface.Current(resource) is { } id
-            ? id.ToString()
-            : "No standard repository is set — nothing is filed until one is chosen.");
+        if (StandardRepositorySurface.Current(resource) is { } id)
+        {
+            // Data output (ADR 0906): the id alone on stdout, for `id=$(saconsole tenant standard-repository show)`.
+            Console.Out.WriteLine(id);
+        }
+        else
+        {
+            logger.LogInformation("No standard repository is set; nothing is filed until one is chosen.");
+        }
+
         return 0;
     }
 }
@@ -40,7 +47,7 @@ public sealed class StandardRepositorySetSettings : TenantSessionSettings
 /// Reads the settings resource first for its ETag and its <c>settings-standard-repository</c> rel, then writes with
 /// that ETag as <c>If-Match</c> — a colleague's change in between is refused rather than overwritten.
 /// </remarks>
-public sealed class StandardRepositorySetCommand(IAnsiConsole console) : AsyncCommand<StandardRepositorySetSettings>
+public sealed class StandardRepositorySetCommand(ILogger<StandardRepositorySetCommand> logger) : AsyncCommand<StandardRepositorySetSettings>
 {
     protected override async Task<int> ExecuteAsync(
         CommandContext context, StandardRepositorySetSettings settings, CancellationToken cancellationToken)
@@ -52,7 +59,7 @@ public sealed class StandardRepositorySetCommand(IAnsiConsole console) : AsyncCo
         var target = Hypermedia.Href(Hypermedia.LinksOf(resource), StandardRepositorySurface.Rel, "The tenant settings");
         var written = await api.PutWithETagAsync(target, new { standardRepositoryId = settings.Repository }, etag, cancellationToken);
 
-        console.WriteLine($"Standard repository is now {StandardRepositorySurface.Current(written)}.");
+        logger.LogInformation("Standard repository is now {Repository}.", StandardRepositorySurface.Current(written));
         return 0;
     }
 }

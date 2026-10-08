@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Cli.Infrastructure;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -53,7 +54,7 @@ public sealed class ModuleActionSettings : TenantSessionSettings
 /// which is right for a person who expected the action; with it, a script's second run is a no-op.
 /// </para>
 /// </remarks>
-public sealed class ModuleActionCommand : AsyncCommand<ModuleActionSettings>
+public sealed class ModuleActionCommand(ILogger<ModuleActionCommand> logger) : AsyncCommand<ModuleActionSettings>
 {
     protected override async Task<int> ExecuteAsync(
         CommandContext context, ModuleActionSettings settings, CancellationToken cancellationToken)
@@ -63,13 +64,11 @@ public sealed class ModuleActionCommand : AsyncCommand<ModuleActionSettings>
             throw new CliException($"--document must be a document id (a GUID); got '{settings.Document}'.");
         }
 
-        var human = AnsiConsole.Create(new AnsiConsoleSettings { Out = new AnsiConsoleOutput(Console.Error) });
-
         using var http = new HttpClient { BaseAddress = new Uri(settings.ResolvedUrl.TrimEnd('/') + "/") };
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", settings.ResolvedToken);
 
         await InvokeAsync(
-            new SimplArchiveApi(http), documentId, settings.Rel, settings.Value, settings.RevealTo, settings.IfOffered, human, cancellationToken);
+            new SimplArchiveApi(http), documentId, settings.Rel, settings.Value, settings.RevealTo, settings.IfOffered, logger, cancellationToken);
         return 0;
     }
 
@@ -93,7 +92,7 @@ public sealed class ModuleActionCommand : AsyncCommand<ModuleActionSettings>
         string? value,
         string? revealTo,
         bool ifOffered,
-        IAnsiConsole human,
+        ILogger logger,
         CancellationToken cancellationToken)
     {
         var template = await new Hypermedia(api).RootHrefAsync("document", cancellationToken);
@@ -103,7 +102,7 @@ public sealed class ModuleActionCommand : AsyncCommand<ModuleActionSettings>
         {
             if (ifOffered)
             {
-                human.MarkupLine($"Document {documentId:D} does not offer [blue]{Markup.Escape(rel)}[/]; nothing to do.");
+                logger.LogInformation("Document {DocumentId} does not offer {Rel}; nothing to do.", documentId, rel);
                 return Outcome.NotOffered;
             }
 
@@ -134,7 +133,7 @@ public sealed class ModuleActionCommand : AsyncCommand<ModuleActionSettings>
 
         if (result.TryGetProperty("message", out var message) && message.GetString() is { Length: > 0 } text)
         {
-            human.MarkupLine(Markup.Escape(text));
+            logger.LogInformation("{Message}", text);
         }
 
         if (result.TryGetProperty("revealOnce", out var reveal) && reveal.ValueKind == JsonValueKind.Object
@@ -142,7 +141,7 @@ public sealed class ModuleActionCommand : AsyncCommand<ModuleActionSettings>
         {
             var label = reveal.TryGetProperty("label", out var l) ? l.GetString() : null;
             Keep(target, secret);
-            human.MarkupLine($"{Markup.Escape(label ?? "The revealed value")} written to [blue]{Markup.Escape(target)}[/] (mode 600). It is not shown again.");
+            logger.LogInformation("{Label} written to {Target} (mode 600). It is not shown again.", label ?? "The revealed value", target);
             return Outcome.Revealed;
         }
 

@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Cli.Infrastructure;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -33,20 +34,25 @@ public sealed class RepositoryCreateSettings : TenantSessionSettings
 /// (ADR 0719). The listing is paged, and every page is read before deciding a name is free.
 /// </para>
 /// </remarks>
-public sealed class RepositoryCreateCommand : AsyncCommand<RepositoryCreateSettings>
+public sealed class RepositoryCreateCommand(ILogger<RepositoryCreateCommand> logger) : AsyncCommand<RepositoryCreateSettings>
 {
     protected override async Task<int> ExecuteAsync(
         CommandContext context, RepositoryCreateSettings settings, CancellationToken cancellationToken)
     {
-        var human = AnsiConsole.Create(new AnsiConsoleSettings { Out = new AnsiConsoleOutput(Console.Error) });
-
         using var http = new HttpClient { BaseAddress = new Uri(settings.ResolvedUrl.TrimEnd('/') + "/") };
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", settings.ResolvedToken);
         var api = new SimplArchiveApi(http);
         var (id, created) = await FindOrCreateAsync(api, settings.Name, cancellationToken);
-        human.MarkupLine(created
-            ? $"[green]Created[/] repository [blue]{Markup.Escape(settings.Name)}[/]."
-            : $"Repository [blue]{Markup.Escape(settings.Name)}[/] already exists.");
+        if (created)
+        {
+            logger.LogInformation("Created repository {Name}.", settings.Name);
+        }
+        else
+        {
+            logger.LogInformation("Repository {Name} already exists.", settings.Name);
+        }
+
+        // Data output (ADR 0906): the id alone on stdout, for `id=$(saconsole repository create …)`.
         Console.Out.WriteLine(id.ToString("D"));
         return 0;
     }

@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Net.Http.Headers;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Cli.Infrastructure;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -29,7 +30,7 @@ namespace SimplArchive.Cli.Commands;
 /// and, over SSH, in somebody's session log.
 /// </para>
 /// </remarks>
-public sealed class LoginCommand : AsyncCommand<LoginCommand.Settings>
+public sealed class LoginCommand(ILogger<LoginCommand> logger) : AsyncCommand<LoginCommand.Settings>
 {
     /// <summary>Environment variable carrying a service account's secret — never an option.</summary>
     public const string ClientSecretVariable = "SACONSOLE_CLIENT_SECRET";
@@ -61,15 +62,14 @@ public sealed class LoginCommand : AsyncCommand<LoginCommand.Settings>
 
     protected override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
-        // Everything readable goes to stderr; see the remarks. The exports go to the raw stdout, below.
-        var human = AnsiConsole.Create(new AnsiConsoleSettings { Out = new AnsiConsoleOutput(Console.Error) });
+        // Everything readable goes through the logger to stderr (ADR 0906); the exports go to the raw stdout, below.
 
         using var http = new HttpClient { BaseAddress = new Uri(settings.ResolvedUrl.TrimEnd('/') + "/") };
 
         var token = settings.ClientId is { Length: > 0 } clientId
             ? await new SimplArchiveApi(http).RequestServiceAccountTokenAsync(
                 clientId, Environment.GetEnvironmentVariable(ClientSecretVariable)!, cancellationToken)
-            : await ApproveDeviceCodeAsync(http, human, cancellationToken);
+            : await ApproveDeviceCodeAsync(http, logger, cancellationToken);
 
         // Prove the token works AND name who it belongs to, before announcing success. A login that reports
         // success and then fails on the first real command has told the administrator the wrong thing about
@@ -88,22 +88,20 @@ public sealed class LoginCommand : AsyncCommand<LoginCommand.Settings>
                 : null;
         var tenant = me.TryGetProperty("tenantName", out var t) ? t.GetString() : null;
 
-        human.MarkupLine($"  [green]Signed in[/] as {Markup.Escape(who ?? "(unknown)")}"
-            + (tenant is null ? string.Empty : $" in {Markup.Escape(tenant)}"));
+        logger.LogInformation("Signed in as {Who} in {Tenant}.", who ?? "(unknown)", tenant ?? "(no tenant)");
 
         if (settings.NoExport)
         {
-            human.MarkupLine("  [dim]No exports printed (--no-export). This session is not usable by other commands.[/]");
+            logger.LogInformation("No exports printed (--no-export). This session is not usable by other commands.");
             return 0;
         }
 
-        human.MarkupLine("  [dim]Run this, or wrap the command in: eval \"$(saconsole login --url …)\"[/]");
-        human.WriteLine();
+        logger.LogInformation("Run the exports below, or wrap the command in: eval \"$(saconsole login --url …)\"");
 
         // STDOUT, and only this. Single-quoted so a URL with shell metacharacters cannot be re-interpreted;
         // neither value can contain a single quote (one is a bearer token, the other a URL we just used).
         //
-        // Straight to the process's stdout, NOT through the injected IAnsiConsole: Spectre WRAPS long lines at the
+        // Data output (ADR 0906). Straight to the process's stdout, NOT through Spectre: it WRAPS long lines at the
         // console width — 80 when stdout is not a terminal, which is exactly the eval/script case — so the token
         // line broke, `eval` ran a bare `export`, and bash dumped the whole environment, a client secret included,
         // into the caller's log (the kiosk's first v0.37.0 reset). A shell export line must arrive as one line.
@@ -112,28 +110,22 @@ public sealed class LoginCommand : AsyncCommand<LoginCommand.Settings>
         return 0;
     }
 
-    private static async Task<string> ApproveDeviceCodeAsync(HttpClient http, IAnsiConsole human, CancellationToken cancellationToken)
+    private static async Task<string> ApproveDeviceCodeAsync(HttpClient http, ILogger logger, CancellationToken cancellationToken)
     {
         var flow = new DeviceFlow(http);
 
         var authorization = await flow.RequestAsync(cancellationToken);
 
-        human.WriteLine();
-        human.MarkupLine($"  Code            [bold]{Markup.Escape(authorization.UserCode)}[/]");
-        human.MarkupLine($"  Approve it at   [blue]{Markup.Escape(authorization.VerificationUriComplete ?? authorization.VerificationUri)}[/]");
+        logger.LogInformation("Code            {UserCode}", authorization.UserCode);
+        logger.LogInformation("Approve it at   {VerificationUri}", authorization.VerificationUriComplete ?? authorization.VerificationUri);
         if (authorization.VerificationUriComplete is not null)
         {
             // Both are shown when they differ: the complete URI is the convenient one, and the bare one is
             // what to type on a phone that cannot follow a link from a terminal.
-            human.MarkupLine($"  or enter it at  [blue]{Markup.Escape(authorization.VerificationUri)}[/]");
+            logger.LogInformation("or enter it at  {VerificationUri}", authorization.VerificationUri);
         }
 
-        human.WriteLine();
-        human.MarkupLine("  [dim]Check the code on that page matches the one above before approving.[/]");
-        human.WriteLine();
-
-        return await human.Status()
-            .StartAsync("Waiting for approval…", async _ =>
-                await flow.PollAsync(authorization, _ => { }, cancellationToken));
+        logger.LogInformation("Check the code on that page matches the one above before approving. Waiting for approval…");
+        return await flow.PollAsync(authorization, _ => { }, cancellationToken);
     }
 }

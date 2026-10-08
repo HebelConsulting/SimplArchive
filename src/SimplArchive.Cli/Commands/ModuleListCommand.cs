@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using SimplArchive.Cli.Infrastructure;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -13,7 +14,7 @@ namespace SimplArchive.Cli.Commands;
 /// mistyped a module id was sent to a second error. Every other command here needs a module id too, and
 /// nothing told anybody what the ids are.
 /// </remarks>
-public sealed class ModuleListCommand(IAnsiConsole console) : AsyncCommand<TenantSessionSettings>
+public sealed class ModuleListCommand(ILogger<ModuleListCommand> logger) : AsyncCommand<TenantSessionSettings>
 {
     protected override async Task<int> ExecuteAsync(
         CommandContext context, TenantSessionSettings settings, CancellationToken cancellationToken)
@@ -26,7 +27,7 @@ public sealed class ModuleListCommand(IAnsiConsole console) : AsyncCommand<Tenan
 
         if (rows.Count == 0)
         {
-            console.MarkupLine("[grey]This installation has no modules installed.[/]");
+            logger.LogInformation("This installation has no modules installed.");
             return 0;
         }
 
@@ -55,7 +56,7 @@ public sealed class ModuleListCommand(IAnsiConsole console) : AsyncCommand<Tenan
                 configurable ? "yes" : "[grey]—[/]");
         }
 
-        console.Write(table);
+        logger.LogInformation("{Table}", CliLogging.Render(table));
         return 0;
     }
 }

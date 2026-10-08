@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Cli.Infrastructure;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -166,31 +167,22 @@ internal static class AclSurface
 
     /// <summary>Reports what changed, naming the rights rather than the booleans.</summary>
     internal static void Report(
-        IAnsiConsole console, Target target, AclRights before, AclRights after)
+        ILogger logger, Target target, AclRights before, AclRights after)
     {
         var added = AclRights.All.Where(r => after.Has(r) && !before.Has(r)).ToList();
         var removed = AclRights.All.Where(r => before.Has(r) && !after.Has(r)).ToList();
 
         if (added.Count == 0 && removed.Count == 0)
         {
-            console.MarkupLine(
-                $"[grey]{Markup.Escape(target.PrincipalName)} already holds exactly that; nothing changed.[/]");
+            logger.LogInformation("{Principal} already holds exactly that; nothing changed.", target.PrincipalName);
             return;
         }
 
-        console.MarkupLine($"{Markup.Escape(target.PrincipalName)} ({target.PrincipalKind}):");
-        if (added.Count > 0)
-        {
-            console.MarkupLine($"  [green]+ {Markup.Escape(string.Join(", ", added))}[/]");
-        }
-
-        if (removed.Count > 0)
-        {
-            console.MarkupLine($"  [red]- {Markup.Escape(string.Join(", ", removed))}[/]");
-        }
-
-        console.MarkupLine(after.Granted.Count == 0
-            ? "  [grey]now holds nothing on this document[/]"
-            : $"  [grey]now holds: {Markup.Escape(string.Join(", ", after.Granted))}[/]");
+        logger.LogInformation(
+            "{Principal} ({Kind}): added {Added}; removed {Removed}; now holds {Holds}.",
+            target.PrincipalName, target.PrincipalKind,
+            added.Count > 0 ? string.Join(", ", added) : "nothing",
+            removed.Count > 0 ? string.Join(", ", removed) : "nothing",
+            after.Granted.Count > 0 ? string.Join(", ", after.Granted) : "nothing on this document");
     }
 }

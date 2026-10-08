@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Cli.Infrastructure;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -20,7 +21,7 @@ public class ModuleSettingsSettings : TenantSessionSettings
 /// <b>A secret's value is never reported</b>, only whether one is set — which is what the resource itself
 /// carries, so this tool cannot leak something the API declined to hand over.
 /// </remarks>
-public sealed class ModuleSettingsShowCommand(IAnsiConsole console) : AsyncCommand<ModuleSettingsSettings>
+public sealed class ModuleSettingsShowCommand(ILogger<ModuleSettingsShowCommand> logger) : AsyncCommand<ModuleSettingsSettings>
 {
     protected override async Task<int> ExecuteAsync(
         CommandContext context, ModuleSettingsSettings settings, CancellationToken cancellationToken)
@@ -35,7 +36,7 @@ public sealed class ModuleSettingsShowCommand(IAnsiConsole console) : AsyncComma
         var items = resource.TryGetProperty("items", out var declared) ? declared.EnumerateArray().ToList() : [];
         if (items.Count == 0)
         {
-            console.MarkupLine($"'{Markup.Escape(settings.Module)}' declares nothing to configure.");
+            logger.LogInformation("'{Module}' declares nothing to configure.", settings.Module);
             return 0;
         }
 
@@ -74,7 +75,7 @@ public sealed class ModuleSettingsShowCommand(IAnsiConsole console) : AsyncComma
                 Markup.Escape(Text("label")));
         }
 
-        console.Write(table);
+        logger.LogInformation("{Table}", CliLogging.Render(table));
         return 0;
     }
 }
@@ -139,7 +140,7 @@ public sealed class ModuleSettingsSetSettings : ModuleSettingsSettings
 /// would do to every secret, since a client cannot read one back to resend it.
 /// </para>
 /// </remarks>
-public sealed class ModuleSettingsSetCommand(IAnsiConsole console) : AsyncCommand<ModuleSettingsSetSettings>
+public sealed class ModuleSettingsSetCommand(ILogger<ModuleSettingsSetCommand> logger) : AsyncCommand<ModuleSettingsSetSettings>
 {
     protected override async Task<int> ExecuteAsync(
         CommandContext context, ModuleSettingsSetSettings settings, CancellationToken cancellationToken)
@@ -177,10 +178,14 @@ public sealed class ModuleSettingsSetCommand(IAnsiConsole console) : AsyncComman
 
         // THE VALUE IS NOT ECHOED — the whole point of taking it out of argv would be lost if the
         // confirmation printed it back.
-        console.MarkupLine(settings.Clear
-            ? $"[green]Cleared[/] {Markup.Escape(settings.Module)} / {Markup.Escape(settings.Key)}"
-            : $"[green]Set[/] {Markup.Escape(settings.Module)} / {Markup.Escape(settings.Key)} "
-              + $"[grey]({value!.Length} characters)[/]");
+        if (settings.Clear)
+        {
+            logger.LogInformation("Cleared {Module} / {Key}", settings.Module, settings.Key);
+        }
+        else
+        {
+            logger.LogInformation("Set {Module} / {Key} ({Length} characters)", settings.Module, settings.Key, value!.Length);
+        }
 
         return 0;
     }

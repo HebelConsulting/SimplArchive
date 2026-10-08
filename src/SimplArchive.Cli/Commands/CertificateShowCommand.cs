@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Cli.Infrastructure;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -15,7 +16,7 @@ namespace SimplArchive.Cli.Commands;
 /// clients — it simply decides whether content arrives readable. So "what is set?" has to be cheap and
 /// unambiguous, in the same spirit as <c>whoami</c>.
 /// </remarks>
-public sealed class CertificateShowCommand(IAnsiConsole console) : AsyncCommand<TenantSessionSettings>
+public sealed class CertificateShowCommand(ILogger<CertificateShowCommand> logger) : AsyncCommand<TenantSessionSettings>
 {
     protected override async Task<int> ExecuteAsync(
         CommandContext context, TenantSessionSettings settings, CancellationToken cancellationToken)
@@ -32,26 +33,25 @@ public sealed class CertificateShowCommand(IAnsiConsole console) : AsyncCommand<
             // Stated FIRST and on its own, because on such an installation every other line would invite an
             // action that is going to be refused (ADR 0813): these certificates are provisioned from outside.
             table.AddRow("Certificate", "managed centrally");
-            console.Write(table);
-            console.MarkupLine(
-                "[yellow]This installation provisions certificates for its users.[/] "
-                + "Registering or deleting one here is refused; ask whoever administers it.");
+            logger.LogInformation("{Table}", CliLogging.Render(table));
+            logger.LogInformation(
+                "This installation provisions certificates for its users. Registering or deleting one here is refused; "
+                + "ask whoever administers it.");
             return 0;
         }
 
         if (!Flag(status, "enabled"))
         {
             table.AddRow("Certificate", "none registered");
-            console.Write(table);
-            console.MarkupLine(
-                "Register one with: [blue]saconsole me certificate register <file>[/]  "
-                + "(the public certificate — never a private key).");
+            logger.LogInformation("{Table}", CliLogging.Render(table));
+            logger.LogInformation(
+                "Register one with: saconsole me certificate register <file> (the public certificate, never a private key).");
             return 0;
         }
 
         table.AddRow("Subject", Markup.Escape(Text(status, "subject") ?? "(unnamed)"));
         table.AddRow("Expires", Markup.Escape(Text(status, "notAfter")?[..10] ?? "(unknown)"));
-        console.Write(table);
+        logger.LogInformation("{Table}", CliLogging.Render(table));
         return 0;
     }
 

@@ -516,10 +516,7 @@ public class BookingAdmissionTests
             Environment.SetEnvironmentVariable("SIMPLARCHIVE_TESTMODULE_REVEAL_DOCUMENT", documentId.ToString());
 
             var api = new SimplArchiveApi(rig.Admin);
-            var human = Spectre.Console.AnsiConsole.Create(new Spectre.Console.AnsiConsoleSettings
-            {
-                Out = new Spectre.Console.AnsiConsoleOutput(TextWriter.Null),
-            });
+            var human = SimplArchive.Cli.Infrastructure.CliLogging.Silent;
             var file = Path.Combine(folder.FullName, "issued.secret");
 
             // No --value: the action offers exactly one option, which is taken.

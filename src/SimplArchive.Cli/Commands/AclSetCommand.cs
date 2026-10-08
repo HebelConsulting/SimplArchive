@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Cli.Infrastructure;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -31,7 +32,7 @@ public sealed class AclSetSettings : AclSettings
 /// subtraction is surprising.
 /// </para>
 /// </remarks>
-public sealed class AclSetCommand(IAnsiConsole console) : AsyncCommand<AclSetSettings>
+public sealed class AclSetCommand(ILogger<AclSetCommand> logger) : AsyncCommand<AclSetSettings>
 {
     protected override async Task<int> ExecuteAsync(
         CommandContext context, AclSetSettings settings, CancellationToken cancellationToken)
@@ -55,7 +56,7 @@ public sealed class AclSetCommand(IAnsiConsole console) : AsyncCommand<AclSetSet
         }
 
         await api.PutWithETagAsync(target.Address, AclSurface.Body(intended), etag, cancellationToken);
-        AclSurface.Report(console, target, current, intended);
+        AclSurface.Report(logger, target, current, intended);
         return 0;
     }
 
