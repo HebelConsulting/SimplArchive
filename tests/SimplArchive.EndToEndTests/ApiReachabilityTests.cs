@@ -64,8 +64,6 @@ public class ApiReachabilityTests(E2EApiFactory factory)
     /// </remarks>
     private static readonly Dictionary<string, string> Unreached = new(StringComparer.Ordinal)
     {
-        ["DELETE api/documents/{documentId:guid}/origin"] = "#1665: importer-only, advertised by no rel; the Porter composes it",
-        ["GET api/documents/by-origin/{originTenantId:guid}/{originDocumentId:guid}"] = "#1665: importer-only, advertised by no rel; the Porter composes it",
         ["GET api/documents/{documentId:guid}/archive-entries"] = "needs a zip document; the seed files none",
         ["GET api/documents/{documentId:guid}/archive-entries/content"] = "needs a zip document; the seed files none",
         ["GET api/documents/{documentId:guid}/checkout/preview"] = "needs a checked-out document with a renderable working copy; the seed checks out plain text",
@@ -73,11 +71,9 @@ public class ApiReachabilityTests(E2EApiFactory factory)
         ["GET api/documents/{documentId:guid}/contact-card/photo"] = "needs a contact with a photo",
         ["GET api/documents/{documentId:guid}/external-links/{linkId:guid}/url"] = "advertised only when the tenant shows link URLs, which the seed leaves off",
         ["GET api/documents/{documentId:guid}/machine/{machineId}/proposals/{proposalName}"] = "needs an active module with a state machine; no module is active in this tenant",
-        ["GET api/documents/{documentId:guid}/origin"] = "#1665: importer-only, advertised by no rel; the Porter composes it",
         ["GET api/documents/{documentId:guid}/versions/{versionId:guid}/enveloped-content"] = "needs a Strict-tier tenant (ADR 0825)",
         ["GET api/intray/{name}/pages"] = "needs an ingested scan in the intray; the seed uploads plain text that is not ingested yet",
         ["GET api/modules/{moduleId}/projections"] = "needs an active module with a read model; no module is active in this tenant",
-        ["HEAD api/documents/by-origin/{originTenantId:guid}/{originDocumentId:guid}"] = "#1665: importer-only, advertised by no rel; the Porter composes it",
         ["HEAD api/documents/{documentId:guid}/archive-entries"] = "needs a zip document; the seed files none",
         ["HEAD api/documents/{documentId:guid}/archive-entries/content"] = "needs a zip document; the seed files none",
         ["HEAD api/documents/{documentId:guid}/checkout/preview"] = "needs a checked-out document with a renderable working copy; the seed checks out plain text",
@@ -85,7 +81,6 @@ public class ApiReachabilityTests(E2EApiFactory factory)
         ["HEAD api/documents/{documentId:guid}/contact-card/photo"] = "needs a contact with a photo",
         ["HEAD api/documents/{documentId:guid}/external-links/{linkId:guid}/url"] = "advertised only when the tenant shows link URLs, which the seed leaves off",
         ["HEAD api/documents/{documentId:guid}/machine/{machineId}/proposals/{proposalName}"] = "needs an active module with a state machine; no module is active in this tenant",
-        ["HEAD api/documents/{documentId:guid}/origin"] = "#1665: importer-only, advertised by no rel; the Porter composes it",
         ["HEAD api/documents/{documentId:guid}/versions/{versionId:guid}/enveloped-content"] = "needs a Strict-tier tenant (ADR 0825)",
         ["HEAD api/intray/{name}/pages"] = "needs an ingested scan in the intray; the seed uploads plain text that is not ingested yet",
         ["HEAD api/modules/{moduleId}/projections"] = "needs an active module with a read model; no module is active in this tenant",
@@ -102,7 +97,6 @@ public class ApiReachabilityTests(E2EApiFactory factory)
         ["POST api/sensitivity-labels/{id:guid}/unretire"] = "needs a retired label or tag",
         ["POST api/tags/{id:guid}/unretire"] = "needs a retired label or tag",
         ["PUT api/documents/{documentId:guid}/checkout/working-copy/pages/order"] = "needs a checked-out multi-page scan; the seed checks out plain text",
-        ["PUT api/documents/{documentId:guid}/origin"] = "#1665: importer-only, advertised by no rel; the Porter composes it",
         ["PUT api/documents/{documentId:guid}/versions/{versionId:guid}/searchable"] = "needs a scan that can be made searchable",
         ["PUT api/intray/{name}/pages/order"] = "needs an ingested scan in the intray; the seed uploads plain text that is not ingested yet",
     };

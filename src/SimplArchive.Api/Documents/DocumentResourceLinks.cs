@@ -309,6 +309,10 @@ public sealed class DocumentResourceLinks
             links.Add(new Link("import", url.Action(nameof(DocumentTransferController.Import), "DocumentTransfer", new { documentId })!, "POST"));
         }
 
+        // The origin key an import records (ADR 0349/0520, #1665): one address, GET/PUT/DELETE (ADR 0719). Static,
+        // like `import` above: gated on the CanImport system right, which the endpoint enforces.
+        links.Add(new Link("origin", $"/api/documents/{documentId}/origin", "GET"));
+
         // What a notebook holds (#564). CONDITIONAL, and on the mask rather than on a right: these
         // sub-resources do not EXIST on an ordinary folder, so their absence is the clients' whole test for
         // whether to offer "New section" / "New note". Without them each client would read a mask name off a

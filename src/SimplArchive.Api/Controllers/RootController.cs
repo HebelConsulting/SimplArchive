@@ -100,6 +100,10 @@ public class RootController : ControllerBase
                 // the server itself advertised is FOLLOWING, not composing: the server still owns the path
                 // shape, and renaming the route only requires updating this one line.
                 new Link("document", "/api/documents/{id}", "GET"),
+                // The importer's re-import lookup (ADR 0349/0520, #1665), templated for the same reason: an importer
+                // holds only the SOURCE system's ids. Advertised like `import`/`export`: the gate is the CanImport
+                // system right, already in the client's hands from whoami, and the endpoint enforces it.
+                new Link("documentByOrigin", "/api/documents/by-origin/{originTenantId}/{originDocumentId}", "GET"),
                 new Link("documentsBulk", "/api/documents/bulk", "GET"),
                 new Link("duplicates", "/api/duplicates", "GET"),
                 new Link("tasks", "/api/tasks", "GET"),
