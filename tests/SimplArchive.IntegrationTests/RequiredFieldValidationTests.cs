@@ -69,7 +69,7 @@ public class RequiredFieldValidationTests
             CreatedAt = DateTimeOffset.UtcNow,
         });
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
+        await Assert.ThrowsAsync<SimplArchive.Domain.Masks.MissingRequiredFieldException>(() => context.SaveChangesAsync());
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public class RequiredFieldValidationTests
             var document = await maskContext.Documents.SingleAsync(d => d.Id == documentId);
             document.MaskVersionId = fixture.MaskVersionId;
 
-            await Assert.ThrowsAsync<InvalidOperationException>(() => maskContext.SaveChangesAsync());
+            await Assert.ThrowsAsync<SimplArchive.Domain.Masks.MissingRequiredFieldException>(() => maskContext.SaveChangesAsync());
         }
     }
 

@@ -28,6 +28,12 @@ public sealed class TestModule : IIndustryModule
     /// <summary>An EXCLUSIVE module folder (it admits only Test Certificates): the shape a module's register takes, and
     /// the case the children endpoint once got wrong by stamping a Folder that containment then refused.</summary>
     public static readonly Guid BinderMaskId = Guid.Parse("7E57AB1E-0000-0000-0000-000000000006");
+
+    // A register that admits only cases, and a case folder with a REQUIRED field (#1634): the shape the Licensing
+    // Module's Package register had, which could not be created through the API at all until a create could
+    // carry its index data.
+    public static readonly Guid RegisterMaskId = Guid.Parse("7E57AB1E-0000-0000-0000-000000000007");
+    public static readonly Guid CaseMaskId = Guid.Parse("7E57AB1E-0000-0000-0000-000000000008");
     public const string ReaderCertificateHolderField = "Holder user";
     public const string ReaderCertificateWithdrawnField = "Withdrawn";
 
@@ -197,6 +203,13 @@ public sealed class TestModule : IIndustryModule
         ]),
         new ModuleMaskSeed(BinderMaskId, "Test Binder", IsFolderMask: true, IsBookable: false, [],
             AdmitsOnlyDeclaredChildren: true, AdmittedChildren: [CertificateMaskId]),
+        new ModuleMaskSeed(RegisterMaskId, "Test Register", IsFolderMask: true, IsBookable: false, [],
+            AdmitsOnlyDeclaredChildren: true, AdmittedChildren: [CaseMaskId]),
+        new ModuleMaskSeed(CaseMaskId, "Test Case", IsFolderMask: true, IsBookable: false,
+        [
+            new ModuleFieldSeed("Case number", "Text", IsRequired: true),
+            new ModuleFieldSeed("Note", "Text", IsRequired: false),
+        ]),
         new ModuleMaskSeed(CertificateMaskId, "Test Certificate", IsFolderMask: false, IsBookable: false,
         [
             new ModuleFieldSeed("Valid to", "Date", IsRequired: false),

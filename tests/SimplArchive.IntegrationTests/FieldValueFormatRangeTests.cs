@@ -66,7 +66,7 @@ public class FieldValueFormatRangeTests
         using var context = CreateContext(connection, tenantId);
         context.FieldValues.Add(new FieldValue { Id = Guid.NewGuid(), TenantId = tenantId, DocumentId = documentId, FieldDefinitionId = fieldId, Value = "not-an-invoice-number" });
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
+        await Assert.ThrowsAsync<SimplArchive.Domain.Masks.FieldValueRejectedException>(() => context.SaveChangesAsync());
     }
 
     [Fact]
@@ -97,7 +97,7 @@ public class FieldValueFormatRangeTests
         using var context = CreateContext(connection, tenantId);
         context.FieldValues.Add(new FieldValue { Id = Guid.NewGuid(), TenantId = tenantId, DocumentId = documentId, FieldDefinitionId = fieldId, Value = "TooLongValue" });
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
+        await Assert.ThrowsAsync<SimplArchive.Domain.Masks.FieldValueRejectedException>(() => context.SaveChangesAsync());
     }
 
     [Fact]
@@ -129,7 +129,7 @@ public class FieldValueFormatRangeTests
         using var context = CreateContext(connection, tenantId);
         context.FieldValues.Add(new FieldValue { Id = Guid.NewGuid(), TenantId = tenantId, DocumentId = documentId, FieldDefinitionId = fieldId, Value = "-5" });
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
+        await Assert.ThrowsAsync<SimplArchive.Domain.Masks.FieldValueRejectedException>(() => context.SaveChangesAsync());
     }
 
     [Fact]
@@ -160,7 +160,7 @@ public class FieldValueFormatRangeTests
         using var context = CreateContext(connection, tenantId);
         context.FieldValues.Add(new FieldValue { Id = Guid.NewGuid(), TenantId = tenantId, DocumentId = documentId, FieldDefinitionId = fieldId, Value = "2019-06-15T00:00:00Z" });
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
+        await Assert.ThrowsAsync<SimplArchive.Domain.Masks.FieldValueRejectedException>(() => context.SaveChangesAsync());
     }
 
     [Fact]
@@ -222,7 +222,7 @@ public class FieldValueFormatRangeTests
         using var context = CreateContext(connection, tenantId);
         context.FieldValues.Add(new FieldValue { Id = Guid.NewGuid(), TenantId = tenantId, DocumentId = documentId, FieldDefinitionId = fieldId, Value = value });
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
+        await Assert.ThrowsAsync<SimplArchive.Domain.Masks.FieldValueRejectedException>(() => context.SaveChangesAsync());
     }
 
     [Fact]

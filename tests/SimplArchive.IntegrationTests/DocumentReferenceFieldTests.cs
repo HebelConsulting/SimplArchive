@@ -103,7 +103,7 @@ public class DocumentReferenceFieldTests
         using var context = Ctx(connection, tenantId);
         context.FieldValues.Add(Value(tenantId, lessonId, fieldId, "the Tuesday flight"));
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
+        var error = await Assert.ThrowsAsync<SimplArchive.Domain.Masks.FieldValueRejectedException>(() => context.SaveChangesAsync());
         Assert.Contains("not a document id", error.Message);
     }
 
@@ -117,7 +117,7 @@ public class DocumentReferenceFieldTests
         using var context = Ctx(connection, tenantId);
         context.FieldValues.Add(Value(tenantId, lessonId, fieldId, Guid.NewGuid().ToString()));
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
+        var error = await Assert.ThrowsAsync<SimplArchive.Domain.Masks.FieldValueRejectedException>(() => context.SaveChangesAsync());
         Assert.Contains("does not name a document", error.Message);
     }
 
@@ -135,7 +135,7 @@ public class DocumentReferenceFieldTests
         using var context = Ctx(connection, tenantId);
         context.FieldValues.Add(Value(tenantId, lessonId, fieldId, otherTenantsFlightId.ToString()));
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
+        var error = await Assert.ThrowsAsync<SimplArchive.Domain.Masks.FieldValueRejectedException>(() => context.SaveChangesAsync());
         Assert.Contains("does not name a document", error.Message);
     }
 
@@ -158,7 +158,7 @@ public class DocumentReferenceFieldTests
         using var write = Ctx(connection, tenantId);
         write.FieldValues.Add(Value(tenantId, lessonId, fieldId, flightId.ToString()));
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => write.SaveChangesAsync());
+        var error = await Assert.ThrowsAsync<SimplArchive.Domain.Masks.FieldValueRejectedException>(() => write.SaveChangesAsync());
         Assert.Contains("does not name a document", error.Message);
     }
 

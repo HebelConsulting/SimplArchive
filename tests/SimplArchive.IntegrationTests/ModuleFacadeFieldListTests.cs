@@ -124,7 +124,7 @@ public class ModuleFacadeFieldListTests
         // A second entry cannot take the same name: the module's rename goes through SaveChanges and its
         // sibling-name invariant like anyone else's (ABI 0.2, #1014).
         var secondId = await rig.Facade.CreateDocumentAsync(rig.RootId, TestModule.TestModule.EntryMaskId, "Second");
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        await Assert.ThrowsAsync<SimplArchive.Domain.Documents.DocumentNameNotUniqueException>(
             () => rig.Facade.RenameDocumentAsync(secondId, "2026-09-04 LSPG 1030 LSPG 1125 P28A HBPHG"));
     }
 

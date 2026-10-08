@@ -22,70 +22,21 @@ public class ModuleControllerTests
 
     public ModuleControllerTests(E2EApiFactory factory) => _factory = factory;
 
-    private sealed record Rig(HttpClient Admin, HttpClient Owner, Guid TenantId, Guid RepoId);
-
-    private async Task<Rig> RigAsync()
-    {
-        var (clientId, secret, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
-        var owner = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
-        var repoId = (await TestJson.Post(owner, "/api/repositories", new { name = $"Mods {Guid.NewGuid():N}" }))
-            .GetProperty("id").GetGuid();
-
-        var email = $"modadmin-{Guid.NewGuid():N}@e2e.local";
-        const string password = "modadmin-1234";
-        // canManageServiceAccounts on top of tenant-admin: the consent act needs to FIND the module's
-        // principal in the service-accounts listing, whose gate is that specific system right.
-        var adminId = await _factory.SeedUserAsync(tenantId, email, password, "Module Admin", isTenantAdmin: true, canManageServiceAccounts: true);
-        await TestJson.Put(owner, $"/api/documents/{repoId}/acl-entries/users/{adminId}",
-            new { canSee = true, canReadContent = true, canCreateSubItems = true, canEditContent = true });
-        var admin = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, password));
-        return new Rig(admin, owner, tenantId, repoId);
-    }
+    // The rig is shared with the tests that need an ACTIVE test module outside this class (#1634): one copy,
+    // not one per class (ADR 0877).
+    private Task<TestModuleRig.Rig> RigAsync() => TestModuleRig.CreateAsync(_factory);
 
     private static async Task<bool> RootAdvertisesAsync(HttpClient client) =>
         (await TestJson.Get(client, "/api")).GetProperty("links").EnumerateArray()
             .Any(l => l.GetProperty("rel").GetString() == "test-module:status");
 
-    private static async Task<Guid> FileLicenseAsync(Rig rig, DateOnly supportEnd, ECDsa vendorKey)
-    {
-        var license = new TenantLicense(["test-module"], rig.TenantId, supportEnd, ModuleAbiVersion.Major, string.Empty)
-            .Sign(vendorKey);
-        var json = JsonSerializer.Serialize(license, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+    private static Task<Guid> FileLicenseAsync(TestModuleRig.Rig rig, DateOnly supportEnd, ECDsa vendorKey) =>
+        TestModuleRig.FileLicenseAsync(rig, supportEnd, vendorKey);
 
-        var docId = (await TestJson.Post(rig.Owner, $"/api/documents/{rig.RepoId}/children",
-            new { name = $"License {Guid.NewGuid():N}" })).GetProperty("id").GetGuid();
-        var created = await TestJson.Post(rig.Owner, $"/api/documents/{docId}/versions", new { fileExtension = ".json" });
-        using (var storage = new HttpClient())
-        {
-            (await storage.PutAsync(created.GetProperty("uploadUrl").GetString()!,
-                new ByteArrayContent(Encoding.UTF8.GetBytes(json)))).EnsureSuccessStatusCode();
-        }
+    private static Task ActivateAsync(TestModuleRig.Rig rig, ECDsa vendorKey, bool grantPrincipal = true) =>
+        TestModuleRig.ActivateAsync(rig, vendorKey, grantPrincipal);
 
-        await TestJson.Put(rig.Owner, $"/api/documents/{docId}/versions/{created.GetProperty("id").GetGuid()}", new { });
-        return docId;
-    }
-
-    private async Task ActivateAsync(Rig rig, ECDsa vendorKey, bool grantPrincipal = true)
-    {
-        var licenseDocId = await FileLicenseAsync(rig, DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)), vendorKey);
-        await TestJson.Put(rig.Admin, "/api/modules/test-module/license", new { licenseDocumentId = licenseDocId });
-        if (grantPrincipal)
-        {
-            await GrantPrincipalAsync(rig);
-        }
-    }
-
-    /// <summary>The consent act (ADR 0736): an ordinary ACL grant to the module's own login-less
-    /// principal — created by the activation, listed like any service account.</summary>
-    private static async Task GrantPrincipalAsync(Rig rig)
-    {
-        var principalId = (await TestJson.Get(rig.Admin, "/api/service-accounts"))
-            .GetProperty("serviceAccounts").EnumerateArray()
-            .Single(sa => sa.GetProperty("name").GetString() == "Module: Test Module")
-            .GetProperty("id").GetGuid();
-        await TestJson.Put(rig.Admin, $"/api/documents/{rig.RepoId}/acl-entries/service-accounts/{principalId}",
-            new { canSee = true });
-    }
+    private static Task GrantPrincipalAsync(TestModuleRig.Rig rig) => TestModuleRig.GrantPrincipalAsync(rig);
 
     [Fact]
     public async Task A_transition_is_a_labeled_action_with_a_diagnosis_when_red_and_a_commit_when_green()
@@ -398,7 +349,7 @@ public class ModuleControllerTests
         }
     }
 
-    private async Task FileValidCertificateAsync(Rig rig, Guid dossierId)
+    private async Task FileValidCertificateAsync(TestModuleRig.Rig rig, Guid dossierId)
     {
         var certificateId = (await TestJson.Post(rig.Owner, $"/api/documents/{dossierId}/children",
             new { name = "Medical" })).GetProperty("id").GetGuid();

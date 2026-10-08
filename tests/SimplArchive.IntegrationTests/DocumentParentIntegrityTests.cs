@@ -66,7 +66,7 @@ public class DocumentParentIntegrityTests
         var folder = await context.Documents.SingleAsync(d => d.Id == folderId);
         folder.ParentId = childId;
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
+        await Assert.ThrowsAsync<SimplArchive.Domain.Documents.DocumentParentCycleException>(() => context.SaveChangesAsync());
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public class DocumentParentIntegrityTests
         using var context = CreateContext(connection, fixture.TenantId);
         context.Documents.Add(NewDocument(fixture, Guid.NewGuid(), "Invoices"));
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
+        await Assert.ThrowsAsync<SimplArchive.Domain.Documents.DocumentNameNotUniqueException>(() => context.SaveChangesAsync());
     }
 
     [Fact]
@@ -147,7 +147,7 @@ public class DocumentParentIntegrityTests
         using var context = CreateContext(connection, fixture.TenantId);
         context.Documents.Add(NewDocument(fixture, Guid.NewGuid(), "Invoice.pdf", parentId: folderId));
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
+        await Assert.ThrowsAsync<SimplArchive.Domain.Documents.DocumentNameNotUniqueException>(() => context.SaveChangesAsync());
     }
 
     [Fact]

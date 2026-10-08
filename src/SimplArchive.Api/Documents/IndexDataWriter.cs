@@ -126,6 +126,12 @@ public class IndexDataWriter(SimplArchiveDbContext dbContext, MailboxAddressClai
         //
         // Here rather than at the caller because it is part of WRITING index data, not part of the envelope:
         // a caller that forgot it would silently reopen exactly the hole #1083 closed.
-        dbContext.Entry(document).Property(d => d.ConcurrencyToken).IsModified = true;
+        //
+        // Not for a document being CREATED with its index data (#1634): it has no stored token to compare yet, and
+        // its insert issues the first one.
+        if (dbContext.Entry(document).State != EntityState.Added)
+        {
+            dbContext.Entry(document).Property(d => d.ConcurrencyToken).IsModified = true;
+        }
     }
 }

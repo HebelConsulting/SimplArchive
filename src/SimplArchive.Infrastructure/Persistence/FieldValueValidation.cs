@@ -28,13 +28,13 @@ internal static class FieldValueValidation
             case FieldDataType.Text:
                 if (fieldDefinition.MaxTextLength is { } maxLength && fieldValue.Value.Length > maxLength)
                 {
-                    throw new InvalidOperationException(
+                    throw new Domain.Masks.FieldValueRejectedException(
                         $"Field value for '{fieldDefinition.Name}' exceeds the maximum length of {maxLength}.");
                 }
 
                 if (fieldDefinition.FormatPattern is { } pattern && !System.Text.RegularExpressions.Regex.IsMatch(fieldValue.Value, pattern))
                 {
-                    throw new InvalidOperationException(
+                    throw new Domain.Masks.FieldValueRejectedException(
                         $"Field value '{fieldValue.Value}' for '{fieldDefinition.Name}' does not match the required format.");
                 }
 
@@ -46,14 +46,14 @@ internal static class FieldValueValidation
                 if (fieldDefinition.MinValue is { } minNumberText
                     && numberValue < decimal.Parse(minNumberText, CultureInfo.InvariantCulture))
                 {
-                    throw new InvalidOperationException(
+                    throw new Domain.Masks.FieldValueRejectedException(
                         $"Field value {numberValue} for '{fieldDefinition.Name}' is below the minimum of {minNumberText}.");
                 }
 
                 if (fieldDefinition.MaxValue is { } maxNumberText
                     && numberValue > decimal.Parse(maxNumberText, CultureInfo.InvariantCulture))
                 {
-                    throw new InvalidOperationException(
+                    throw new Domain.Masks.FieldValueRejectedException(
                         $"Field value {numberValue} for '{fieldDefinition.Name}' is above the maximum of {maxNumberText}.");
                 }
 
@@ -68,14 +68,14 @@ internal static class FieldValueValidation
                 if (fieldDefinition.MinValue is { } minDateText
                     && dateValue < DateTimeOffset.Parse(minDateText, CultureInfo.InvariantCulture))
                 {
-                    throw new InvalidOperationException(
+                    throw new Domain.Masks.FieldValueRejectedException(
                         $"Field value {dateValue:O} for '{fieldDefinition.Name}' is before the minimum of {minDateText}.");
                 }
 
                 if (fieldDefinition.MaxValue is { } maxDateText
                     && dateValue > DateTimeOffset.Parse(maxDateText, CultureInfo.InvariantCulture))
                 {
-                    throw new InvalidOperationException(
+                    throw new Domain.Masks.FieldValueRejectedException(
                         $"Field value {dateValue:O} for '{fieldDefinition.Name}' is after the maximum of {maxDateText}.");
                 }
 
@@ -87,7 +87,7 @@ internal static class FieldValueValidation
             case FieldDataType.EmailAddress:
                 if (!EmailAddressValue.IsWellFormed(fieldValue.Value))
                 {
-                    throw new InvalidOperationException(
+                    throw new Domain.Masks.FieldValueRejectedException(
                         $"Field value '{fieldValue.Value}' for '{fieldDefinition.Name}' is not a valid e-mail address.");
                 }
 
@@ -99,7 +99,7 @@ internal static class FieldValueValidation
                 if (!Uri.TryCreate(fieldValue.Value, UriKind.Absolute, out var url)
                     || (url.Scheme != Uri.UriSchemeHttp && url.Scheme != Uri.UriSchemeHttps))
                 {
-                    throw new InvalidOperationException(
+                    throw new Domain.Masks.FieldValueRejectedException(
                         $"Field value '{fieldValue.Value}' for '{fieldDefinition.Name}' is not a valid http/https URL.");
                 }
 
@@ -112,7 +112,7 @@ internal static class FieldValueValidation
             case FieldDataType.DocumentReference:
                 if (!Guid.TryParse(fieldValue.Value, out _))
                 {
-                    throw new InvalidOperationException(
+                    throw new Domain.Masks.FieldValueRejectedException(
                         $"Field value '{fieldValue.Value}' for '{fieldDefinition.Name}' is not a document id.");
                 }
 

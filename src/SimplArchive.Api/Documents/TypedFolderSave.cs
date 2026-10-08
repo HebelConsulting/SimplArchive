@@ -75,6 +75,17 @@ public static class TypedFolderSave
         Domain.Documents.StandardRepositoryProtectedException x =>
             new Errors.Exceptions.Documents.StandardRepositoryProtectedException(x.Message),
 
+        // #1634: the field rules and the cycle rule had no type of their own, so every endpoint GUESSED between
+        // "fill in the required field" and "this value is invalid" by what the request changed, and the create
+        // endpoint reported both as a name clash. Typed now, they say what is wrong wherever they occur. The
+        // NAME rule is deliberately not here: each endpoint words its own conflict (same parent, or target).
+        Domain.Masks.MissingRequiredFieldException x =>
+            new Errors.Exceptions.Documents.RequiredFieldMissingException(x.Message),
+        Domain.Masks.FieldValueRejectedException x =>
+            new Errors.Exceptions.Documents.FieldValueInvalidException(x.Message),
+        Domain.Documents.DocumentParentCycleException =>
+            new Errors.Exceptions.Documents.InvalidMoveTargetException(),
+
         _ => null,
     };
 }

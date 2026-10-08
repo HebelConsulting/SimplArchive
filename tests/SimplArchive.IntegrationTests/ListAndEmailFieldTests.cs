@@ -134,7 +134,7 @@ public class ListAndEmailFieldTests
             context.FieldValues.Add(Value(tenantId, documentId, fieldId, "not-an-address"));
             context.FieldValues.Add(Value(tenantId, documentId, fieldId, "veranstaltungen@demo.dev"));
 
-            await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
+            await Assert.ThrowsAsync<SimplArchive.Domain.Masks.FieldValueRejectedException>(() => context.SaveChangesAsync());
         }
 
         // And nothing was written: the save is one transaction, so the good elements do not survive a
@@ -158,7 +158,7 @@ public class ListAndEmailFieldTests
         using var context = Ctx(connection, tenantId);
         context.FieldValues.Add(Value(tenantId, documentId, fieldId, "events"));
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
+        var error = await Assert.ThrowsAsync<SimplArchive.Domain.Masks.FieldValueRejectedException>(() => context.SaveChangesAsync());
         Assert.Contains("e-mail address", error.Message);
     }
 

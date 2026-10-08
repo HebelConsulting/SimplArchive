@@ -51,6 +51,10 @@ public class DocumentChildrenController : ControllerBase
     // Module-declared DAV kinds (#1242) — see the create affordance below.
     private readonly IDavCollectionKindRegistry _davKinds;
 
+    // Writes a new child's initial index data in the same save as the child (#1634), through the one writer every
+    // index-data path shares rather than a copy of it.
+    private readonly Documents.IndexDataWriter _indexData;
+
     public DocumentChildrenController(
         ICurrentUserAccessor currentUserAccessor,
         SimplArchiveDbContext dbContext,
@@ -62,8 +66,10 @@ public class DocumentChildrenController : ControllerBase
         IMaskContainmentProvider containment,
         IReadOnlyList<Infrastructure.Modules.ModuleLoader.LoadedModule> modules,
         IDavCollectionKindRegistry davKinds,
-        ILogger<DocumentChildrenController> logger)
+        ILogger<DocumentChildrenController> logger,
+        Documents.IndexDataWriter indexData)
     {
+        _indexData = indexData;
         _modules = modules;
         _logger = logger;
         _davKinds = davKinds;
@@ -555,6 +561,18 @@ public class DocumentChildrenController : ControllerBase
         /// </para>
         /// </remarks>
         public Guid? MaskId { get; set; }
+
+        /// <summary>
+        /// The new document's index data, written in the SAME save as the document (#1634), in the shape
+        /// <c>PUT …/index-data</c> takes. Omitted means none, as before.
+        /// </summary>
+        /// <remarks>
+        /// One user action, one request (ADR 0794). It is also the only way a mask with REQUIRED fields can be
+        /// created inside an exclusive module folder: such a child can only be created WITH its mask, and a create
+        /// that carried no values was refused for the very values it had no way to send. Required stays required;
+        /// it is checked against what this request carries.
+        /// </remarks>
+        public List<DocumentMetadataController.SetFieldValueGroup>? Fields { get; set; }
     }
 
     // The folder kinds a caller may name by SLUG. No longer the gate — whether a mask may be created is
@@ -703,11 +721,18 @@ public class DocumentChildrenController : ControllerBase
 
         _dbContext.Documents.Add(child);
 
+        if (request.Fields is { Count: > 0 } fields)
+        {
+            await _indexData.ApplyAsync(child, fields, confirmDuplicateClaims: false, cancellationToken);
+        }
+
+        // Only the sibling-name rule is a name conflict (#1634). The shared translation turns the field and
+        // containment rules into their own errors, and anything else surfaces as itself instead of as a false 409.
         try
         {
             await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
         }
-        catch (InvalidOperationException)
+        catch (Domain.Documents.DocumentNameNotUniqueException)
         {
             throw DocumentNameConflictException.OnSameParent();
         }

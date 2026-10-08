@@ -658,7 +658,7 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
         {
             if (!visited.Add(currentId.Value))
             {
-                throw new InvalidOperationException(
+                throw new Domain.Documents.DocumentParentCycleException(
                     $"Document '{document.Id}' cannot be its own ancestor — assigning parent '{document.ParentId}' would create a cycle.");
             }
 
@@ -715,7 +715,7 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
 
         if (conflictsWithinBatch)
         {
-            throw new InvalidOperationException(
+            throw new Domain.Documents.DocumentNameNotUniqueException(
                 $"Document '{document.Id}' cannot share the name '{document.Name}' with another document under the same parent.");
         }
 
@@ -733,7 +733,7 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
 
         if (conflictsWithPersisted)
         {
-            throw new InvalidOperationException(
+            throw new Domain.Documents.DocumentNameNotUniqueException(
                 $"Document '{document.Id}' cannot share the name '{document.Name}' with another document under the same parent.");
         }
     }
@@ -804,7 +804,7 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
         var missing = ids.Except(found).ToList();
         if (missing.Count > 0)
         {
-            throw new InvalidOperationException(
+            throw new Domain.Masks.FieldValueRejectedException(
                 $"Field value '{missing[0]}' for '{referenced[missing[0]]}' does not name a document in this tenant.");
         }
     }
@@ -857,7 +857,7 @@ public partial class SimplArchiveDbContext : DbContext, IDataProtectionKeyContex
 
             if (missingFieldDefinition is not null)
             {
-                throw new InvalidOperationException(
+                throw new Domain.Masks.MissingRequiredFieldException(
                     $"Document '{document.Id}' is missing a value for required field '{missingFieldDefinition.Name}'.");
             }
         }
