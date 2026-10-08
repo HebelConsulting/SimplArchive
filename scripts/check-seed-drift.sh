@@ -21,7 +21,7 @@ SEED="$(cd "$(dirname "$0")/.." && pwd)/docs/SeedCLAUDE.md"
 
 # The repositories initialised FROM the seed. A repo arrives here by a decision, not by discovery: adding it
 # is the moment somebody decides it is seeded, and discovery would quietly start measuring one that never was.
-SEEDED=(SimplArchiveEncryption SimplArchiveEncryptionService SimplArchiveFlightSchool)
+SEEDED=(SimplArchiveEncryption SimplArchiveEncryptionService SimplArchiveFlightSchool SimplArchiveLicensing SimplArchiveMobile)
 
 # Deliberately NOT measured, each for its own reason — recorded here because an unexplained exclusion is
 # indistinguishable from an oversight, and counting these would make the problem look twice its size.
