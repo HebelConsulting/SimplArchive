@@ -80,8 +80,9 @@ public sealed partial class DocumentsClient
     }
 
     /// <summary>What a module action answered (ABI 1.8, core ADR 0899): a status sentence and, optionally, a value to
-    /// show exactly once. Both null for a module that answers nothing.</summary>
-    public sealed record ModuleActionOutcome(string? Message, string? RevealLabel, string? RevealValue);
+    /// show exactly once, with the QR image of its scan address the core drew (ABI 1.13, ADR 0913). All null for a
+    /// module that answers nothing.</summary>
+    public sealed record ModuleActionOutcome(string? Message, string? RevealLabel, string? RevealValue, string? RevealScanImage = null);
 
     /// <summary>Commits a module action with the chosen value, and reads its outcome.</summary>
     public async Task<ModuleActionOutcome> InvokeModuleActionAsync(
@@ -116,7 +117,8 @@ public sealed partial class DocumentsClient
             && v.GetString() is { Length: > 0 } value)
         {
             var label = reveal.TryGetProperty("label", out var l) && l.ValueKind == System.Text.Json.JsonValueKind.String ? l.GetString() : null;
-            return new ModuleActionOutcome(message, label, value);
+            var scanImage = reveal.TryGetProperty("scanImage", out var q) && q.ValueKind == System.Text.Json.JsonValueKind.String ? q.GetString() : null;
+            return new ModuleActionOutcome(message, label, value, scanImage);
         }
 
         return new ModuleActionOutcome(message, null, null);

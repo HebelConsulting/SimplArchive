@@ -29,6 +29,7 @@ public partial class Home
             {
                 { d => d.Password, revealed },
                 { d => d.Intro, Strings.Get("RevealOnceHint") },
+                { d => d.ScanImage, outcome.RevealScanImage },
             };
             await (await DialogService.ShowAsync<GeneratedPasswordDialog>(outcome.RevealLabel ?? action.Label, reveal)).Result;
         }

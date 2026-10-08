@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using OtpNet;
-using QRCoder;
 using SimplArchive.Api.Security;
 
 namespace SimplArchive.Api.Authentication;
@@ -27,13 +26,8 @@ public sealed class MfaService(IThrottleCounterStore replayStore, ILogger<MfaSer
         return $"otpauth://totp/{label}?secret={secret}&issuer={Uri.EscapeDataString(Issuer)}&digits=6&period=30";
     }
 
-    // The enrollment QR as a PNG (data the client renders inline).
-    public byte[] GenerateQrPng(string otpauthUri)
-    {
-        using var generator = new QRCodeGenerator();
-        using var data = generator.CreateQrCode(otpauthUri, QRCodeGenerator.ECCLevel.M);
-        return new PngByteQRCode(data).GetGraphic(6);
-    }
+    // The enrollment QR as a PNG data URL (what the client renders inline).
+    public string GenerateQrDataUrl(string otpauthUri) => QrCodes.PngDataUrl(otpauthUri);
 
     /// <summary>
     /// Verifies a 6-digit TOTP against the secret and BURNS it, so the same code cannot be used twice

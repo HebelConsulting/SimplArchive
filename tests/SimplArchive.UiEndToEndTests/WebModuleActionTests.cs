@@ -39,6 +39,8 @@ public class WebModuleActionTests(ModuleAppFixture app)
         var reveal = page.Locator(".mud-dialog").Filter(new() { HasText = "Copy it now: it won't be shown again." });
         await Expect(reveal).ToBeVisibleAsync();
         await Expect(reveal.Locator("input")).ToHaveValueAsync("s3cret-shown-once");
+        // The fixture's scan address is drawn by the core and shown as a QR image beside the value (ADR 0913).
+        await Expect(reveal.Locator("img.reveal-scan")).ToHaveAttributeAsync("src", new System.Text.RegularExpressions.Regex("^data:image/png;base64,"));
         await reveal.GetByRole(AriaRole.Button, new() { Name = "Done" }).ClickAsync();
         await Expect(reveal).Not.ToBeVisibleAsync();
     }

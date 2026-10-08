@@ -23,7 +23,7 @@ public sealed class ModuleActionSettings : TenantSessionSettings
     public string? Value { get; init; }
 
     [CommandOption("--reveal-to <FILE>")]
-    [Description("Where a value the action reveals once is written (mode 600; never overwritten). Default: ./<rel>.revealed")]
+    [Description("Where a value the action reveals once is written (mode 600; never overwritten). Default: ./<rel>.revealed. A QR code of its scan address, when there is one, goes beside it as <FILE>.qr.png.")]
     public string? RevealTo { get; init; }
 
     [CommandOption("--if-offered")]
@@ -113,9 +113,10 @@ public sealed class ModuleActionCommand(ILogger<ModuleActionCommand> logger) : A
 
         // Checked before committing: once the module has revealed the value, there is no second chance to keep it.
         var target = Path.GetFullPath(revealTo ?? $"{SafeFileName(action.Rel)}.revealed");
-        if (File.Exists(target))
+        var scanTarget = $"{target}.qr.png";
+        if (File.Exists(target) || File.Exists(scanTarget))
         {
-            throw new CliException($"{target} already exists, and a revealed value is never written over another. Move it or pass --reveal-to.");
+            throw new CliException($"{target} (or its .qr.png) already exists, and a revealed value is never written over another. Move it or pass --reveal-to.");
         }
 
         if (Path.GetDirectoryName(target) is { } directory && !Directory.Exists(directory))
@@ -140,8 +141,15 @@ public sealed class ModuleActionCommand(ILogger<ModuleActionCommand> logger) : A
             && reveal.TryGetProperty("value", out var revealed) && revealed.GetString() is { Length: > 0 } secret)
         {
             var label = reveal.TryGetProperty("label", out var l) ? l.GetString() : null;
-            Keep(target, secret);
+            Keep(target, System.Text.Encoding.UTF8.GetBytes(secret));
             logger.LogInformation("{Label} written to {Target} (mode 600). It is not shown again.", label ?? "The revealed value", target);
+
+            // ABI 1.13 (ADR 0913): the scan address the core drew as a QR code. As secret as the value, so kept alike.
+            if (reveal.TryGetProperty("scanImage", out var scan) && scan.GetString() is { Length: > 0 } dataUrl && dataUrl.IndexOf(',') is var comma and >= 0)
+            {
+                Keep(scanTarget, Convert.FromBase64String(dataUrl[(comma + 1)..]));
+                logger.LogInformation("Its QR code written to {Target} (mode 600), for the phone that will use it.", scanTarget);
+            }
             return Outcome.Revealed;
         }
 
@@ -149,7 +157,7 @@ public sealed class ModuleActionCommand(ILogger<ModuleActionCommand> logger) : A
     }
 
     /// <summary>Creates the file NEW (never truncating one) with owner-only access, then writes the value.</summary>
-    private static void Keep(string path, string secret)
+    private static void Keep(string path, byte[] content)
     {
         var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write };
         if (!OperatingSystem.IsWindows())
@@ -158,8 +166,7 @@ public sealed class ModuleActionCommand(ILogger<ModuleActionCommand> logger) : A
         }
 
         using var stream = new FileStream(path, options);
-        using var writer = new StreamWriter(stream);
-        writer.Write(secret);
+        stream.Write(content);
     }
 
     private static string SafeFileName(string rel) =>

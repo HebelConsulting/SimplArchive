@@ -14,4 +14,11 @@ public sealed record ModuleActionResult(string? Message = null)
 }
 
 /// <summary>A value revealed once: what it is (already localized, e.g. "Pull credential for ACME AG") and the value.</summary>
-public sealed record RevealedValue(string Label, string Value);
+public sealed record RevealedValue(string Label, string Value)
+{
+    /// <summary>An address a phone scans to use the value, or null (ABI 1.13, core ADR 0913) — typically the value
+    /// embedded in a URL, such as an app repository's address carrying its pull credential. The core draws it as a QR
+    /// code beside the value, in the same uncached response, so a module needs no image library and both clients
+    /// show the same code. It is as secret as the value: the same no-store and no-log rules hold.</summary>
+    public string? ScanAddress { get; init; }
+}

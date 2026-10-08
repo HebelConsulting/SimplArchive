@@ -530,6 +530,14 @@ public class BookingAdmissionTests
                 Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(file));
             }
 
+            // ABI 1.13 (ADR 0913): the fixture's scan address, drawn by the core, is kept beside it as a PNG, alike.
+            var qr = $"{file}.qr.png";
+            Assert.Equal([0x89, (byte)'P', (byte)'N', (byte)'G'], (await File.ReadAllBytesAsync(qr))[..4]);
+            if (!OperatingSystem.IsWindows())
+            {
+                Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(qr));
+            }
+
             // The same target again is refused BEFORE the action commits, so the kept value is never replaced.
             var refused = await Assert.ThrowsAsync<CliException>(() => ModuleActionCommand.InvokeAsync(
                 api, documentId, "test-module:issue", null, file, false, human, CancellationToken.None));

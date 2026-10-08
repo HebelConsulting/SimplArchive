@@ -775,6 +775,12 @@ public class ModuleControllerTests
             Assert.Equal("s3cret-shown-once", body.GetProperty("revealOnce").GetProperty("value").GetString());
             Assert.Equal("Test secret", body.GetProperty("revealOnce").GetProperty("label").GetString());
 
+            // ABI 1.13 (ADR 0913): the scan address arrives as written, and the core has drawn it as a PNG QR code.
+            Assert.Equal("https://repo.example.test/fdroid/s3cret-shown-once/repo", body.GetProperty("revealOnce").GetProperty("scanAddress").GetString());
+            var scanImage = body.GetProperty("revealOnce").GetProperty("scanImage").GetString()!;
+            Assert.StartsWith("data:image/png;base64,", scanImage);
+            Assert.Equal([0x89, (byte)'P', (byte)'N', (byte)'G'], Convert.FromBase64String(scanImage["data:image/png;base64,".Length..])[..4]);
+
             // An ordinary module response is not marked: no-store follows the revealed value, not the module.
             Assert.NotEqual(true, (await rig.Admin.GetAsync("/api/test-module/status")).Headers.CacheControl?.NoStore);
         }

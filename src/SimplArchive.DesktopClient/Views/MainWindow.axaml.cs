@@ -84,7 +84,7 @@ public partial class MainWindow : Window
                 // view-model is built, and forgetting it disables a visible button — loud, not silent.
                 vm.ShowModuleActionPickerAsync = async pvm =>
                     await new ModuleActionPickerDialog { DataContext = pvm }.ShowDialog<bool>(this);
-                vm.ShowRevealOnceAsync = (label, value) => GeneratedPasswordDialog.ForRevealedValue(label, value).ShowDialog(this);
+                vm.ShowRevealOnceAsync = (label, value, scanImage) => GeneratedPasswordDialog.ForRevealedValue(label, value, scanImage).ShowDialog(this);
                 vm.ShowExternalLinksDialog = evm =>
                 {
                     var window = new ExternalLinksDialog(evm);

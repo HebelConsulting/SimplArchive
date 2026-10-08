@@ -125,6 +125,11 @@ public class DesktopModuleActionTests
             """{"message":"Issued.","revealOnce":{"label":"Pull credential for ACME","value":"sa_x_y"}}"""));
         Assert.Equal(new DocumentsClient.ModuleActionOutcome("Issued.", "Pull credential for ACME", "sa_x_y"), revealed);
 
+        // ABI 1.13 (core ADR 0913): the QR image the core drew for a scan address rides along.
+        Assert.Equal(new DocumentsClient.ModuleActionOutcome("Issued.", "Pull credential for ACME", "sa_x_y", "data:image/png;base64,AAAA"),
+            DocumentsClient.ParseModuleActionOutcome(JsonSerializer.Deserialize<JsonElement>(
+                """{"message":"Issued.","revealOnce":{"label":"Pull credential for ACME","value":"sa_x_y","scanAddress":"https://r/x","scanImage":"data:image/png;base64,AAAA"}}""")));
+
         Assert.Equal(new DocumentsClient.ModuleActionOutcome("Done.", null, null),
             DocumentsClient.ParseModuleActionOutcome(JsonSerializer.Deserialize<JsonElement>("""{"message":"Done.","revealOnce":null}""")));
         Assert.Equal(new DocumentsClient.ModuleActionOutcome(null, null, null),

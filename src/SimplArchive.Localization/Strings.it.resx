@@ -5034,6 +5034,12 @@
   <data name="RevealOnceHint" xml:space="preserve">
     <value>Copialo ora: non verrà mostrato di nuovo.</value>
   </data>
+  <data name="RevealOnceScanHint" xml:space="preserve">
+    <value>Oppure scansionalo con il telefono che lo userà.</value>
+  </data>
+  <data name="RevealOnceScanAlt" xml:space="preserve">
+    <value>Codice QR dell'indirizzo</value>
+  </data>
   <data name="AccountSmime" xml:space="preserve">
     <value>E-mail cifrata (S/MIME)…</value>
   </data>

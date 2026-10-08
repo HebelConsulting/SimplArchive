@@ -72,14 +72,17 @@ internal sealed class ModuleActivationGateFilter : IAsyncResourceFilter
 /// <summary>
 /// A module action's value revealed once (ABI 1.8, ADR 0899) is a secret on the wire: its response is marked
 /// <c>Cache-Control: no-store</c> so no cache along the way, and no browser history, keeps a copy. Applied by the
-/// host, because a module author forgetting it fails silently.
+/// host, because a module author forgetting it fails silently. The outcome is answered in the core's
+/// <see cref="ModuleActionResponse"/>, which draws a revealed scan address as a QR code (ABI 1.13, ADR 0913).
 /// </summary>
 internal sealed class RevealOnceNoStoreFilter : IAsyncResultFilter
 {
     public async Task OnResultExecutionAsync(ResultExecutingContext context, ResultExecutionDelegate next)
     {
-        if (context.Result is ObjectResult { Value: SimplArchive.ModuleAbi.ModuleActionResult { RevealOnce: not null } })
+        if (context.Result is ObjectResult { Value: SimplArchive.ModuleAbi.ModuleActionResult { RevealOnce: not null } result } answer)
         {
+            answer.Value = ModuleActionResponse.From(result);
+            answer.DeclaredType = typeof(ModuleActionResponse);
             context.HttpContext.Response.Headers.CacheControl = "no-store";
             context.HttpContext.Response.Headers.Pragma = "no-cache";
         }

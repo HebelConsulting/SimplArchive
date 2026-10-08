@@ -87,5 +87,9 @@ public static class ModuleAbiVersion
     /// FileUploadAsync, DiscardUploadAsync) and the <c>apps</c> root prefix (core ADR 0910). Default members and new
     /// types only, so a 1.11 module is unaffected.
     /// </para>
-    public const int Minor = 12;
+    /// <para>
+    /// 1.13 adds <see cref="RevealedValue.ScanAddress"/>, which the core draws as a QR code (core ADR 0913). An init
+    /// property only, so a 1.12 module is unaffected.
+    /// </para>
+    public const int Minor = 13;
 }

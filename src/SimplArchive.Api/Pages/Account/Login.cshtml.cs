@@ -544,7 +544,7 @@ public class LoginModel : PageModel
     private void RenderEnrollStep(string secret, string email)
     {
         EnrollSecret = secret;
-        EnrollQrDataUrl = $"data:image/png;base64,{Convert.ToBase64String(_mfa.GenerateQrPng(_mfa.BuildOtpauthUri(secret, email)))}";
+        EnrollQrDataUrl = _mfa.GenerateQrDataUrl(_mfa.BuildOtpauthUri(secret, email));
         ShowEnroll = true;
     }
 

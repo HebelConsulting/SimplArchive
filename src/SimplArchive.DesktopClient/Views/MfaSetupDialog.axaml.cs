@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
-using Avalonia.Media.Imaging;
 using SimplArchive.DesktopClient.Services;
 
 namespace SimplArchive.DesktopClient.Views;
@@ -37,9 +36,7 @@ public partial class MfaSetupDialog : Window
         {
             var enroll = await _api.Profile.EnrollMfaAsync();
             SecretRun.Text = enroll.Secret;
-            var base64 = enroll.QrDataUrl.Contains(',') ? enroll.QrDataUrl[(enroll.QrDataUrl.IndexOf(',') + 1)..] : enroll.QrDataUrl;
-            using var stream = new MemoryStream(Convert.FromBase64String(base64));
-            QrImage.Source = new Bitmap(stream);
+            QrImage.Source = DataUrlBitmap.TryDecode(enroll.QrDataUrl);
             CodeBox.Focus();
         }
         catch (Exception)

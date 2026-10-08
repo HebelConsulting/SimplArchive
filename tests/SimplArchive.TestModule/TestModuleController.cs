@@ -224,7 +224,10 @@ public sealed class TestModuleController : ControllerBase
     /// <summary>The reveal-once fixture (ABI 1.8, ADR 0899): an action outcome carrying a value shown once.</summary>
     [HttpPost("reveal")]
     public IActionResult Reveal() =>
-        Ok(new ModuleActionResult("Issued.") { RevealOnce = new RevealedValue("Test secret", "s3cret-shown-once") });
+        Ok(new ModuleActionResult("Issued.")
+        {
+            RevealOnce = new RevealedValue("Test secret", "s3cret-shown-once") { ScanAddress = "https://repo.example.test/fdroid/s3cret-shown-once/repo" },
+        });
 
     /// <summary>The reveal action's one option, so a script committing it needs no --value.</summary>
     [HttpGet("reveal/options")]

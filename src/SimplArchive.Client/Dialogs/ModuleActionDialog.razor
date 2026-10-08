@@ -49,8 +49,9 @@
 </MudDialog>
 
 @code {
-    /// <summary>What the commit answered: the module's sentence, and a value it reveals once (ABI 1.8).</summary>
-    public sealed record Outcome(string? Message, string? RevealLabel, string? RevealValue);
+    /// <summary>What the commit answered: the module's sentence, a value it reveals once (ABI 1.8), and that value's
+    /// scan address as the QR image the core drew (ABI 1.13, ADR 0913).</summary>
+    public sealed record Outcome(string? Message, string? RevealLabel, string? RevealValue, string? RevealScanImage = null);
 
     private sealed record Option(string Value, string Label, string? Detail);
 
@@ -153,7 +154,8 @@
                 && reveal.TryGetProperty("value", out var v) && v.GetString() is { Length: > 0 } value)
             {
                 var label = reveal.TryGetProperty("label", out var l) ? l.GetString() : null;
-                return new Outcome(message, label, value);
+                var scanImage = reveal.TryGetProperty("scanImage", out var q) && q.ValueKind == JsonValueKind.String ? q.GetString() : null;
+                return new Outcome(message, label, value, scanImage);
             }
 
             return new Outcome(message, null, null);

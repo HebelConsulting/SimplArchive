@@ -80,13 +80,12 @@ public class UserMfaController(
         await users.MutateAsync(Request, user, apply: () => Task.CompletedTask, cancellationToken: cancellationToken);
 
         var otpauth = mfa.BuildOtpauthUri(secret, user.Email);
-        var qr = Convert.ToBase64String(mfa.GenerateQrPng(otpauth));
 
         return Ok(new MfaEnrollResponse
         {
             Secret = secret,
             OtpauthUri = otpauth,
-            QrDataUrl = $"data:image/png;base64,{qr}",
+            QrDataUrl = mfa.GenerateQrDataUrl(otpauth),
         });
     }
 
