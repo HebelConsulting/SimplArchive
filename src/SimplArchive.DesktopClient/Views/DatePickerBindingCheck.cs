@@ -1,6 +1,7 @@
 using System;
 using Avalonia.Controls;
 using Avalonia.Data;
+using SimplArchive.DesktopClient.Services;
 using SimplArchive.DesktopClient.ViewModels;
 
 namespace SimplArchive.DesktopClient.Views;
@@ -49,8 +50,9 @@ internal static class DatePickerBindingCheck
         ip.SelectedDate = new DateTime(2026, 5, 17);
         var sameTypeToVm = intray.Intray.DocumentDate == new DateTime(2026, 5, 17);
 
-        Console.WriteLine($"SysDocumentDate      vm->control={toControl} control->vm={toViewModel} clear={cleared}");
-        Console.WriteLine($"Intray.DocumentDate  vm->control={sameTypeToControl} control->vm={sameTypeToVm}");
-        Console.WriteLine(toControl && toViewModel && cleared && sameTypeToControl && sameTypeToVm ? "OK" : "FAILED");
+        DesktopLog.Info("SysDocumentDate      vm->control={ToControl} control->vm={ToViewModel} clear={Cleared}",
+            toControl, toViewModel, cleared);
+        DesktopLog.Info("Intray.DocumentDate  vm->control={ToControl} control->vm={ToViewModel}", sameTypeToControl, sameTypeToVm);
+        DesktopLog.Verdict(toControl && toViewModel && cleared && sameTypeToControl && sameTypeToVm);
     }
 }

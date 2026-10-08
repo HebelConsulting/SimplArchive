@@ -6,8 +6,8 @@ namespace SimplArchive.DesktopClient.Services;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Each writes its findings to the console and ends with <c>OK</c> or <c>FAILED</c>, because the caller is a
-/// terminal rather than a test runner: these exercise flows that need a real token and a real server, which is
+/// Each logs its findings through <see cref="DesktopLog"/> (ADR 0906) and ends with <c>OK</c> or <c>FAILED</c>,
+/// because the caller is a terminal rather than a test runner: these exercise flows that need a real token and a real server, which is
 /// what puts them outside <c>SimplArchive.DesktopUiEndToEndTests</c>.
 /// </para>
 /// <para>
@@ -18,6 +18,22 @@ namespace SimplArchive.DesktopClient.Services;
 /// </remarks>
 internal static class ApiClientChecks
 {
+    /// <summary>
+    /// One finding: the pass line at Information with its values, the fail line at Warning. Both templates are
+    /// literals at the call site; the values belong to the pass line, a failure having nothing to report.
+    /// </summary>
+    private static void Outcome(bool passed, string passTemplate, string failMessage, params object?[] passValues)
+    {
+        if (passed)
+        {
+            DesktopLog.Info(passTemplate, passValues);
+        }
+        else
+        {
+            DesktopLog.Warn(failMessage);
+        }
+    }
+
     internal static async Task MultipageAsync(string token, string documentName)
     {
         var api = new SimplArchiveApiClient(token);
@@ -26,18 +42,18 @@ internal static class ApiClientChecks
             .FirstOrDefault(c => c.Name == documentName)
             ?? throw new InvalidOperationException($"No document named '{documentName}' in any visible repository's top level.");
         var preview = await api.Documents.GetPreviewAsync(document.Href("versions"));
-        Console.WriteLine($"preview-pages link present: {preview.PreviewPagesUrl is not null}");
+        DesktopLog.Info("preview-pages link present: {LinkPresent}", preview.PreviewPagesUrl is not null);
         if (preview.PreviewPagesUrl is not { } url)
         {
-            Console.WriteLine("FAILED: no preview-pages link.");
+            DesktopLog.Warn("FAILED: no preview-pages link.");
             return;
         }
 
         var pages = await api.Versions.GetPreviewPagesAsync(url);
-        Console.WriteLine($"page urls: {pages?.Count ?? 0}");
+        DesktopLog.Info("page urls: {PageUrls}", pages?.Count ?? 0);
         if (pages is null)
         {
-            Console.WriteLine("FAILED: preview-pages returned null.");
+            DesktopLog.Warn("FAILED: preview-pages returned null.");
             return;
         }
 
@@ -48,24 +64,23 @@ internal static class ApiClientChecks
             // PNG IHDR: width/height at bytes 16..24 (big-endian) — validates it's a real page image.
             var w = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
             var h = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
-            Console.WriteLine($"  page {++i}: {w}x{h} ({bytes.Length} bytes)");
+            DesktopLog.Info("  page {Page}: {Width}x{Height} ({Bytes} bytes)", ++i, w, h, bytes.Length);
         }
 
-        Console.WriteLine(i > 1 ? "OK: multiple pages fetched." : "FAILED: expected multiple pages.");
+        Outcome(i > 1, "OK: multiple pages fetched.", "FAILED: expected multiple pages.");
     }
 
     internal static async Task NewFolderAsync(string accessToken, string name)
     {
         var api = new SimplArchiveApiClient(accessToken);
         var root = (await api.Documents.GetRepositoriesAsync()).First();
-        Console.WriteLine($"creating folder '{name}' in '{root.Name}'…");
+        DesktopLog.Info("creating folder '{Name}' in '{Root}'…", name, root.Name);
 
         await api.Documents.CreateFolderAsync(root.Href("children"), name);
 
         var match = (await api.Documents.GetChildrenAsync(root.Href("children"))).FirstOrDefault(c => c.Name == name);
-        Console.WriteLine(match is null
-            ? "FAILED: folder not found."
-            : $"OK: '{match.Name}' present, isFolder={!match.HasVersions}");
+        Outcome(match is not null, "OK: '{Name}' present, isFolder={IsFolder}", "FAILED: folder not found.",
+            match?.Name, match is { HasVersions: false });
     }
 
     internal static async Task ModifyAsync(string accessToken)
@@ -75,32 +90,29 @@ internal static class ApiClientChecks
 
         var original = $"modify-test-{Guid.NewGuid():N}";
         var renamed = $"{original}-renamed";
-        Console.WriteLine($"creating folder '{original}' in '{root.Name}'…");
+        DesktopLog.Info("creating folder '{Name}' in '{Root}'…", original, root.Name);
         await api.Documents.CreateFolderAsync(root.Href("children"), original);
         var created = (await api.Documents.GetChildrenAsync(root.Href("children"))).First(c => c.Name == original);
 
-        Console.WriteLine($"renaming to '{renamed}'…");
+        DesktopLog.Info("renaming to '{Name}'…", renamed);
         await api.Documents.RenameAsync(created.Href("self"), renamed);
         var afterRename = await api.Documents.GetChildrenAsync(root.Href("children"));
-        Console.WriteLine(afterRename.Any(c => c.Name == renamed) && afterRename.All(c => c.Name != original)
-            ? "OK: rename reflected."
-            : "FAILED: rename not reflected.");
+        Outcome(afterRename.Any(c => c.Name == renamed) && afterRename.All(c => c.Name != original),
+            "OK: rename reflected.", "FAILED: rename not reflected.");
 
-        Console.WriteLine("deleting…");
+        DesktopLog.Info("deleting…");
         await api.Documents.DeleteAsync(created.Href("self"));
         var afterDelete = await api.Documents.GetChildrenAsync(root.Href("children"));
         var recycled = await api.RecycleBin.GetRecycleBinAsync(root);
-        Console.WriteLine(afterDelete.All(c => c.Id != created.Id) && recycled.Any(r => r.Id == created.Id)
-            ? "OK: gone from folder, present in recycle bin."
-            : "FAILED: delete/recycle-bin state wrong.");
+        Outcome(afterDelete.All(c => c.Id != created.Id) && recycled.Any(r => r.Id == created.Id),
+            "OK: gone from folder, present in recycle bin.", "FAILED: delete/recycle-bin state wrong.");
 
-        Console.WriteLine("restoring…");
+        DesktopLog.Info("restoring…");
         await api.RecycleBin.RestoreAsync(recycled.Single(r => r.Id == created.Id));
         var afterRestore = await api.Documents.GetChildrenAsync(root.Href("children"));
         var recycledAfter = await api.RecycleBin.GetRecycleBinAsync(root);
-        Console.WriteLine(afterRestore.Any(c => c.Id == created.Id) && recycledAfter.All(r => r.Id != created.Id)
-            ? "OK: restored to folder, cleared from recycle bin."
-            : "FAILED: restore state wrong.");
+        Outcome(afterRestore.Any(c => c.Id == created.Id) && recycledAfter.All(r => r.Id != created.Id),
+            "OK: restored to folder, cleared from recycle bin.", "FAILED: restore state wrong.");
 
         // Clean up so repeated runs don't accumulate folders.
         await api.Documents.DeleteAsync(created.Href("self"));
@@ -113,22 +125,23 @@ internal static class ApiClientChecks
 
         var name = $"saveas-test-{Guid.NewGuid():N}.txt";
         var content = System.Text.Encoding.UTF8.GetBytes("save-as round-trip test\n");
-        Console.WriteLine($"uploading '{name}' to '{root.Name}'…");
+        DesktopLog.Info("uploading '{Name}' to '{Root}'…", name, root.Name);
         await api.Documents.UploadFileAsync(root.Href("children"), name, content);
         var document = (await api.Documents.GetChildrenAsync(root.Href("children"))).First(c => c.Name == name);
 
         var preview = await api.Documents.GetPreviewAsync(document.Href("versions"));
         if (preview.DownloadUrl is null)
         {
-            Console.WriteLine("FAILED: no download URL.");
+            DesktopLog.Warn("FAILED: no download URL.");
             return;
         }
 
         var (bytes, _) = await SimplArchiveApiClient.DownloadAsync(preview.DownloadUrl);
         await File.WriteAllBytesAsync(outPath, bytes);
-        Console.WriteLine(bytes.SequenceEqual(content)
-            ? $"OK: saved {bytes.Length} bytes -> {outPath}; round-trip matches."
-            : "FAILED: saved bytes don't match the uploaded content.");
+        Outcome(bytes.SequenceEqual(content),
+            "OK: saved {Bytes} bytes -> {OutPath}; round-trip matches.",
+            "FAILED: saved bytes don't match the uploaded content.",
+            bytes.Length, outPath);
 
         await api.Documents.DeleteAsync(document.Href("self")); // cleanup
     }
@@ -146,23 +159,30 @@ internal static class ApiClientChecks
         await api.Documents.CreateFolderAsync(a.Href("children"), $"ref-C-{s}");
         var c = (await api.Documents.GetChildrenAsync(a.Href("children"))).First(n => n.Name == $"ref-C-{s}");
 
-        Console.WriteLine("moving C from A to B…");
+        DesktopLog.Info("moving C from A to B…");
         await api.Documents.MoveAsync(c.Href("self"), b.Id);
         var cInB = (await api.Documents.GetChildrenAsync(b.Href("children"))).Any(n => n.Id == c.Id);
         var cGoneFromA = !(await api.Documents.GetChildrenAsync(a.Href("children"))).Any(n => n.Id == c.Id);
-        Console.WriteLine(cInB && cGoneFromA ? "OK: moved." : "FAILED: move state wrong.");
+        Outcome(cInB && cGoneFromA, "OK: moved.", "FAILED: move state wrong.");
 
-        Console.WriteLine("referencing C into A…");
+        DesktopLog.Info("referencing C into A…");
         await api.References.CreateReferenceAsync(a.Href("references"), c.Id);
         var refs = await api.References.GetReferencesAsync(a.Href("references"));
         var reference = refs.FirstOrDefault(r => r.TargetId == c.Id);
-        Console.WriteLine(reference is not null && reference.RealParentId == b.Id
-            ? $"OK: reference present, realParentId points to B; go-to folder = '{(await api.GetDocumentByAddressAsync(reference.Links!.Href("go-to")!)).Name}'."
-            : "FAILED: reference/realParentId wrong.");
+        if (reference is not null && reference.RealParentId == b.Id)
+        {
+            DesktopLog.Info("OK: reference present, realParentId points to B; go-to folder = '{GoTo}'.",
+                (await api.GetDocumentByAddressAsync(reference.Links!.Href("go-to")!)).Name);
+        }
+        else
+        {
+            DesktopLog.Warn("FAILED: reference/realParentId wrong.");
+        }
 
-        Console.WriteLine("removing the reference…");
+        DesktopLog.Info("removing the reference…");
         await api.References.DeleteReferenceAsync(reference!.DeleteHref!);
-        Console.WriteLine((await api.References.GetReferencesAsync(a.Href("references"))).Count == 0 ? "OK: reference removed." : "FAILED: reference still present.");
+        Outcome((await api.References.GetReferencesAsync(a.Href("references"))).Count == 0,
+            "OK: reference removed.", "FAILED: reference still present.");
 
         await api.Documents.DeleteAsync(a.Href("self")); // cleanup (cascades C)
         await api.Documents.DeleteAsync(b.Href("self"));
@@ -171,12 +191,12 @@ internal static class ApiClientChecks
     internal static async Task SearchAsync(string accessToken, string query)
     {
         var api = new SimplArchiveApiClient(accessToken);
-        Console.WriteLine($"searching for '{query}'…");
+        DesktopLog.Info("searching for '{Query}'…", query);
         var results = await api.Search.SearchAsync(query);
-        Console.WriteLine($"{results.Count} result(s):");
+        DesktopLog.Info("{Count} result(s):", results.Count);
         foreach (var result in results)
         {
-            Console.WriteLine($"  {(result.IsFolder ? "[folder]" : "[doc]   ")} {result.Name}   —   {result.Path}");
+            DesktopLog.Info("  {Kind} {Name}   —   {Path}", result.IsFolder ? "[folder]" : "[doc]   ", result.Name, result.Path);
         }
     }
 
@@ -196,13 +216,12 @@ internal static class ApiClientChecks
         await api.References.CreateReferenceAsync(b.Href("references"), c.Id);
 
         var cRow = (await api.Documents.GetChildrenAsync(a.Href("children"))).First(n => n.Id == c.Id);
-        Console.WriteLine(cRow.HasReferences ? "OK: hasReferences=true on the referenced item." : "FAILED: hasReferences not set.");
+        Outcome(cRow.HasReferences, "OK: hasReferences=true on the referenced item.", "FAILED: hasReferences not set.");
 
         var folders = await api.References.GetReferencingFoldersAsync(c.Href("referencing-folders"));
         var match = folders.FirstOrDefault(f => f.Id == b.Id);
-        Console.WriteLine(match is not null
-            ? $"OK: referencing folder listed with path '{match.Path}'."
-            : "FAILED: referencing folder not listed.");
+        Outcome(match is not null, "OK: referencing folder listed with path '{Path}'.", "FAILED: referencing folder not listed.",
+            match?.Path);
 
         await api.Documents.DeleteAsync(a.Href("self"));
         await api.Documents.DeleteAsync(b.Href("self"));
@@ -213,14 +232,13 @@ internal static class ApiClientChecks
         var api = new SimplArchiveApiClient(accessToken);
         var root = (await api.Documents.GetRepositoriesAsync()).First();
         var name = Path.GetFileName(filePath);
-        Console.WriteLine($"uploading '{name}' into '{root.Name}'…");
+        DesktopLog.Info("uploading '{Name}' into '{Root}'…", name, root.Name);
 
         await api.Documents.UploadFileAsync(root.Href("children"), name, await File.ReadAllBytesAsync(filePath));
 
         var match = (await api.Documents.GetChildrenAsync(root.Href("children"))).FirstOrDefault(c => c.Name == name);
-        Console.WriteLine(match is null
-            ? "FAILED: uploaded document not found in the folder."
-            : $"OK: '{match.Name}' present, hasVersions={match.HasVersions}");
+        Outcome(match is not null, "OK: '{Name}' present, hasVersions={HasVersions}",
+            "FAILED: uploaded document not found in the folder.", match?.Name, match?.HasVersions);
     }
 
     internal static async Task WorkflowAsync(string accessToken)
@@ -228,33 +246,35 @@ internal static class ApiClientChecks
         var api = new SimplArchiveApiClient(accessToken);
         var me = await api.GetWhoAmIAsync();
         var repo = (await api.Documents.GetRepositoriesAsync()).First();
-        Console.WriteLine($"repo '{repo.Name}', me {me.UserId}");
+        DesktopLog.Info("repo '{Repository}', me {UserId}", repo.Name, me.UserId);
 
         await api.Documents.UploadFileAsync(repo.Href("children"), "wf-desktop-test.txt", System.Text.Encoding.UTF8.GetBytes("workflow desktop test"));
         var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).First(c => c.Name == "wf-desktop-test");
-        Console.WriteLine($"created doc {doc.Name} ({doc.Id})");
+        DesktopLog.Info("created doc {Name} ({DocumentId})", doc.Name, doc.Id);
 
         var wf = await api.Documents.GetWorkflowAsync(doc.Href("versions"));
-        Console.WriteLine($"initial: {wf?.StatusName} | links: {string.Join(",", wf?.Links.Keys ?? [])}");
+        DesktopLog.Info("initial: {Status} | links: {Links}", wf?.StatusName, string.Join(",", wf?.Links.Keys ?? []));
 
         await api.Workflow.PostWorkflowActionAsync(wf!.Links.Href("submit")!, new { reviewerId = me.UserId });
         wf = await api.Documents.GetWorkflowAsync(doc.Href("versions"));
-        Console.WriteLine($"after submit: {wf?.StatusName} | assignedTo: {wf?.AssignedToName} | links: {string.Join(",", wf?.Links.Keys ?? [])}");
+        DesktopLog.Info("after submit: {Status} | assignedTo: {AssignedTo} | links: {Links}",
+            wf?.StatusName, wf?.AssignedToName, string.Join(",", wf?.Links.Keys ?? []));
 
         var tasks = await api.Workflow.GetTasksAsync();
-        Console.WriteLine($"tasks: {tasks.Count} -> {string.Join(",", tasks.Select(t => $"{t.DocumentName}/v{t.VersionNumber}"))}");
+        DesktopLog.Info("tasks: {Count} -> {Tasks}", tasks.Count, string.Join(",", tasks.Select(t => $"{t.DocumentName}/v{t.VersionNumber}")));
 
         await api.Workflow.PostWorkflowActionAsync(wf!.Links.Href("approve")!, null);
         wf = await api.Documents.GetWorkflowAsync(doc.Href("versions"));
-        Console.WriteLine($"after approve: {wf?.StatusName} | links: {string.Join(",", wf?.Links.Keys ?? [])}");
+        DesktopLog.Info("after approve: {Status} | links: {Links}", wf?.StatusName, string.Join(",", wf?.Links.Keys ?? []));
 
         await api.Workflow.PostWorkflowActionAsync(wf!.Links.Href("release")!, null);
         wf = await api.Documents.GetWorkflowAsync(doc.Href("versions"));
-        Console.WriteLine($"after release: {wf?.StatusName}");
-        Console.WriteLine("history:");
+        DesktopLog.Info("after release: {Status}", wf?.StatusName);
+        DesktopLog.Info("history:");
         foreach (var h in wf!.History)
         {
-            Console.WriteLine($"  {h.ToStatusName} by {h.PerformedByName}{(h.AssignedToName is { } a ? $" -> {a}" : "")}{(h.RejectionReason is { } r ? $" · {r}" : "")}");
+            DesktopLog.Info("  {Status} by {PerformedBy}{AssignedTo}{Rejection}", h.ToStatusName, h.PerformedByName,
+                h.AssignedToName is { } a ? $" -> {a}" : string.Empty, h.RejectionReason is { } r ? $" · {r}" : string.Empty);
         }
     }
 
@@ -263,49 +283,52 @@ internal static class ApiClientChecks
         var api = new SimplArchiveApiClient(accessToken);
 
         var repositories = await api.Documents.GetRepositoriesAsync();
-        Console.WriteLine($"repositories: {repositories.Count}");
+        DesktopLog.Info("repositories: {Count}", repositories.Count);
         foreach (var repository in repositories)
         {
-            Console.WriteLine($"  📁 {repository.Name} (hasChildren={repository.HasChildren})");
+            DesktopLog.Info("  📁 {Name} (hasChildren={HasChildren})", repository.Name, repository.HasChildren);
         }
 
         var root = repositories.FirstOrDefault();
         if (root is null)
         {
-            Console.WriteLine("no repositories visible; stopping.");
+            DesktopLog.Warn("no repositories visible; stopping.");
             return;
         }
 
         var children = await api.Documents.GetChildrenAsync(root.Href("children"));
-        Console.WriteLine($"children of '{root.Name}': {children.Count}");
+        DesktopLog.Info("children of '{Root}': {Count}", root.Name, children.Count);
 
         var document = children.FirstOrDefault(c => c.HasVersions);
         if (document is null)
         {
-            Console.WriteLine("no document with a version in the first repository; stopping.");
+            DesktopLog.Warn("no document with a version in the first repository; stopping.");
             return;
         }
 
         var mask = await api.Documents.GetMaskAsync(document.Href("mask"));
-        Console.WriteLine($"mask: {mask.Name ?? "(none)"} v{mask.VersionNumber}");
+        DesktopLog.Info("mask: {Mask} v{MaskVersion}", mask.Name ?? "(none)", mask.VersionNumber);
 
         var indexData = await api.Documents.GetIndexDataAsync(document.Href("index-data"));
-        Console.WriteLine($"index-data fields: {indexData.Count}");
+        DesktopLog.Info("index-data fields: {Count}", indexData.Count);
         foreach (var field in indexData)
         {
-            Console.WriteLine($"  {field.FieldName} = {string.Join(", ", field.Values)}");
+            DesktopLog.Info("  {Field} = {Values}", field.FieldName, string.Join(", ", field.Values));
         }
 
         var comments = await api.Documents.GetCommentsAsync(document.Href("chat"));
-        Console.WriteLine($"comments: {comments.Count}");
+        DesktopLog.Info("comments: {Count}", comments.Count);
 
         var preview = await api.Documents.GetPreviewAsync(document.Href("versions"));
-        Console.WriteLine($"preview: {(preview.PreviewUrl is null ? "(none)" : "resolved")} converted={preview.PreviewConverted}; download: {(preview.DownloadUrl is null ? "(none)" : "resolved")}");
+        // Whether the presigned URLs resolved, never the URLs themselves: their query strings are credentials.
+        DesktopLog.Info("preview: {Preview} converted={Converted}; download: {Download}",
+            preview.PreviewUrl is null ? "(none)" : "resolved", preview.PreviewConverted,
+            preview.DownloadUrl is null ? "(none)" : "resolved");
 
         if (preview.PreviewUrl is not null)
         {
             var (bytes, contentType) = await SimplArchiveApiClient.DownloadAsync(preview.PreviewUrl);
-            Console.WriteLine($"preview content-type: {contentType} ({bytes.Length} bytes)");
+            DesktopLog.Info("preview content-type: {ContentType} ({Bytes} bytes)", contentType, bytes.Length);
         }
 
         if (preview.DownloadUrl is not null)
@@ -315,7 +338,8 @@ internal static class ApiClientChecks
                 ? document.Name
                 : document.Name + preview.FileExtension;
             var path = await NativeFileOpener.DownloadToTempAsync(preview.DownloadUrl, fileName);
-            Console.WriteLine($"downloaded '{document.Name}' (ext '{preview.FileExtension}') -> {path} ({new FileInfo(path).Length} bytes)");
+            DesktopLog.Info("downloaded '{Name}' (ext '{Extension}') -> {Path} ({Bytes} bytes)",
+                document.Name, preview.FileExtension, path, new FileInfo(path).Length);
         }
     }
 }

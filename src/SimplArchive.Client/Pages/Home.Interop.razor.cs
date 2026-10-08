@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 
 namespace SimplArchive.Client.Pages;
@@ -23,6 +24,10 @@ namespace SimplArchive.Client.Pages;
 // releases them along with everything else the page holds.
 public partial class Home
 {
+    // The browser console through a logger (ADR 0906): a degraded layout is a Warning, filterable like any other.
+    [Inject]
+    private ILogger<Home> Logger { get; set; } = null!;
+
     private ElementReference _dropRoot;
     private IJSObjectReference? _module;
     private DotNetObjectReference<Home>? _selfRef;
@@ -66,7 +71,7 @@ public partial class Home
             {
                 // A missing wbLayout.js must not crash the workbench — the panes just stay at their CSS defaults
                 // (issue #267). Leaving _layoutModule null makes the interop below no-op.
-                Console.Error.WriteLine($"wbLayout.js failed to load: {ex.Message}");
+                Logger.LogWarning("wbLayout.js failed to load: {Reason}", ex.Message);
             }
         }
 
@@ -92,7 +97,7 @@ public partial class Home
                 catch (JSException ex)
                 {
                     _panesWired = true; // give up rather than retry-spam a broken/stale module
-                    Console.Error.WriteLine($"wbLayout.js attach failed (stale cache?): {ex.Message}");
+                    Logger.LogWarning("wbLayout.js attach failed (stale cache?): {Reason}", ex.Message);
                 }
             }
             if (!_viewportWatched && _layoutModule is not null)
@@ -106,7 +111,7 @@ public partial class Home
                 }
                 catch (JSException ex)
                 {
-                    Console.Error.WriteLine($"wbLayout.js watchViewport failed (stale cache?): {ex.Message}");
+                    Logger.LogWarning("wbLayout.js watchViewport failed (stale cache?): {Reason}", ex.Message);
                 }
                 finally
                 {

@@ -87,6 +87,7 @@ public static class DesktopLog
         {
             // A client that cannot write its log still has to start. A read-only home directory, a full disk, a
             // locked file — none of those is a reason to deny somebody their archive.
+            // The one direct write (ADR 0906): logging itself is unavailable here.
             Console.Error.WriteLine($"SimplArchive: logging is unavailable ({e.Message}); continuing without a log file.");
             _logger = Serilog.Core.Logger.None;
         }
@@ -109,6 +110,22 @@ public static class DesktopLog
     public static void Error(Exception e, string template, params object?[] values) => _logger.Error(e, template, values);
 
     public static void Fatal(Exception e, string template, params object?[] values) => _logger.Fatal(e, template, values);
+
+    /// <summary>
+    /// A headless check's closing line (ADR 0906): <c>OK</c> at Information, <c>FAILED</c> at Warning. The words
+    /// are the contract: <c>DesktopHookFamilyTests</c> fails a hook whose output contains <c>FAILED</c>.
+    /// </summary>
+    public static void Verdict(bool passed)
+    {
+        if (passed)
+        {
+            Info("OK");
+        }
+        else
+        {
+            Warn("FAILED");
+        }
+    }
 
     /// <summary>The newest log file, for the About dialog and for a support request that asks "which file?".</summary>
     public static string? NewestFile()

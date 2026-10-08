@@ -54,7 +54,7 @@ public static class SortThumbnailsCheck
 
         if (failure is not null)
         {
-            Console.WriteLine($"SORT-THUMBS FAILED: {failure}");
+            DesktopLog.Warn("SORT-THUMBS FAILED: {Failure}", failure);
             return false;
         }
 
@@ -74,7 +74,9 @@ public static class SortThumbnailsCheck
                 && dialog.CurrentRotations.Count == 1 ? "ok" : $"WRONG:{string.Join(',', dialog.CurrentRotations)}";
         }
 
-        Console.WriteLine($"SORT-THUMBS loaded={thumbnails.Count} dialog={dialog.CurrentOrder.Count} rotations={rotations}");
+        // DesktopSortPagesThumbnailTests matches this line verbatim; {Message:lj} renders the string unquoted.
+        DesktopLog.Info("SORT-THUMBS loaded={Loaded} dialog={Dialog} rotations={Rotations}",
+            thumbnails.Count, dialog.CurrentOrder.Count, rotations);
         return thumbnails.Count > 0 && dialog.CurrentOrder.Count == thumbnails.Count && rotations == "ok";
     }
 }

@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using SimplArchive.DesktopClient.Services;
 
 namespace SimplArchive.DesktopClient.Views;
 
@@ -57,9 +58,11 @@ public static class SearchFieldCheck
         var passed = visibleWithText && clearedByButton && focusReturned
                      && hiddenWhenEmpty && clearedByEsc && escPassedThrough;
 
-        Console.WriteLine($"visibleWithText={visibleWithText} clearedByButton={clearedByButton} focusReturned={focusReturned}");
-        Console.WriteLine($"hiddenWhenEmpty={hiddenWhenEmpty} clearedByEsc={clearedByEsc} escPassedThrough={escPassedThrough}");
-        Console.WriteLine(passed ? "OK" : "FAILED");
+        DesktopLog.Info("visibleWithText={VisibleWithText} clearedByButton={ClearedByButton} focusReturned={FocusReturned}",
+            visibleWithText, clearedByButton, focusReturned);
+        DesktopLog.Info("hiddenWhenEmpty={HiddenWhenEmpty} clearedByEsc={ClearedByEsc} escPassedThrough={EscPassedThrough}",
+            hiddenWhenEmpty, clearedByEsc, escPassedThrough);
+        DesktopLog.Verdict(passed);
         return passed;
     }
 }

@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Headless;
+using SimplArchive.DesktopClient.Services;
 using SimplArchive.DesktopClient.ViewModels;
 
 namespace SimplArchive.DesktopClient.Views;
@@ -43,7 +44,7 @@ public static class OpenShortcutCheck
         {
             vm.SelectedTab = tab;
             try { vm.OpenSelectedCommand.ExecuteAsync(null).GetAwaiter().GetResult(); }
-            catch (Exception ex) { survivedEmpty = false; Console.WriteLine($"tab {tab} threw: {ex.Message}"); }
+            catch (Exception ex) { survivedEmpty = false; DesktopLog.Warn(ex, "tab {Tab} threw: {Reason}", tab, ex.Message); }
         }
 
         // Search: a selected result the chord must NOT act on. Revealing it would set SelectedTab to 0.
@@ -62,9 +63,10 @@ public static class OpenShortcutCheck
         var tipCarriesChord = MainWindowViewModel.OpenTip.Contains(chord) && MainWindowViewModel.RibbonOpenTip.Contains(chord);
         var passed = survivedEmpty && searchUntouched && tipCarriesChord;
 
-        Console.WriteLine($"chord: {chord} | ribbon tooltip: {MainWindowViewModel.RibbonOpenTip}");
-        Console.WriteLine($"survivedEmpty={survivedEmpty} searchUntouched={searchUntouched} tipCarriesChord={tipCarriesChord}");
-        Console.WriteLine(passed ? "OK" : "FAILED");
+        DesktopLog.Info("chord: {Chord} | ribbon tooltip: {RibbonTooltip}", chord, MainWindowViewModel.RibbonOpenTip);
+        DesktopLog.Info("survivedEmpty={SurvivedEmpty} searchUntouched={SearchUntouched} tipCarriesChord={TipCarriesChord}",
+            survivedEmpty, searchUntouched, tipCarriesChord);
+        DesktopLog.Verdict(passed);
         return passed;
     }
 }

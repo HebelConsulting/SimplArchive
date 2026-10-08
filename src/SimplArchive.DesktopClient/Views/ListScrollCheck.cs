@@ -5,6 +5,7 @@ using Avalonia.Headless;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using System.Linq;
+using SimplArchive.DesktopClient.Services;
 using SimplArchive.DesktopClient.ViewModels;
 
 namespace SimplArchive.DesktopClient.Views;
@@ -68,7 +69,8 @@ internal static class ListScrollCheck
             .First(b => b.Orientation == Avalonia.Layout.Orientation.Vertical
                 && ReferenceEquals(b.TemplatedParent, scroller)); // NOT the ListBox's disabled internal one
         var pt = vbar.TranslatePoint(new Avalonia.Point(0, 0), scroller);
-        Console.WriteLine($"DIAG vbar visible={vbar.IsVisible}/{vbar.IsEffectivelyVisible} bounds={vbar.Bounds} pt={pt} paneViewport={scroller.Viewport.Width:F0}");
+        DesktopLog.Debug("DIAG vbar visible={Visible}/{EffectivelyVisible} bounds={Bounds} pt={Point} paneViewport={PaneViewport:F0}",
+            vbar.IsVisible, vbar.IsEffectivelyVisible, vbar.Bounds, pt, scroller.Viewport.Width);
         var barVisible = vbar.IsEffectivelyVisible
             && pt is { } q
             && q.X < scroller.Viewport.Width + 20;
@@ -89,7 +91,7 @@ internal static class ListScrollCheck
         var hintShown = hint is { IsEffectivelyVisible: true } h
             && h.Bounds.Width > 0 && h.Bounds.Height > 0
             && !string.IsNullOrWhiteSpace(h.Text);
-        Console.WriteLine($"DIAG hint shown={hintShown} text='{hint?.Text}' bounds={hint?.Bounds}");
+        DesktopLog.Debug("DIAG hint shown={HintShown} text='{HintText}' bounds={HintBounds}", hintShown, hint?.Text, hint?.Bounds);
 
         vm.ContentsFilterName = string.Empty;
         Dispatcher.UIThread.RunJobs();
@@ -99,7 +101,9 @@ internal static class ListScrollCheck
         // ...and gone again once nothing is filtered, so it is not permanent furniture in the pane.
         var hintHidden = hint is null || !hint.IsEffectivelyVisible;
 
-        Console.WriteLine($"scrollable={scrollable} moved={moved} barVisible={barVisible} filtered={filtered} restored={restored} hintShown={hintShown} hintHidden={hintHidden} extent={scroller.Extent.Height:F0} viewport={scroller.Viewport.Height:F0}");
-        Console.WriteLine(scrollable && moved && barVisible && filtered && restored && hintShown && hintHidden ? "OK" : "FAILED");
+        DesktopLog.Info("scrollable={Scrollable} moved={Moved} barVisible={BarVisible} filtered={Filtered} restored={Restored} "
+            + "hintShown={HintShown} hintHidden={HintHidden} extent={Extent:F0} viewport={Viewport:F0}",
+            scrollable, moved, barVisible, filtered, restored, hintShown, hintHidden, scroller.Extent.Height, scroller.Viewport.Height);
+        DesktopLog.Verdict(scrollable && moved && barVisible && filtered && restored && hintShown && hintHidden);
     }
 }

@@ -107,7 +107,7 @@ internal static class ScreenshotRenderer
                 + "wrote nothing is how a stale PNG ships (the skipped-capture lesson).");
 
         frame.Save(path);
-        Console.WriteLine($"live capture → {path}");
+        DesktopLog.Info("live capture → {Path}", path);
     }
 
     /// <summary>Runs the dispatcher until <paramref name="task"/> completes, surfacing its failure.</summary>

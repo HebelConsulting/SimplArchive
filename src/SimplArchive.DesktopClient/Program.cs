@@ -45,6 +45,10 @@ internal static class Program
         // the flag a console to print into.
         Services.DesktopLog.Initialize(verbose: args.Contains("--verbose"));
 
+        // The headless hooks report through the log (ADR 0906) and leave by `return` or Environment.Exit; both
+        // raise ProcessExit, so this one handler flushes the sinks on every way out.
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => Services.DesktopLog.Shutdown();
+
         // A simplarchive:// launch (#761): the OS hands the link as an argument. Parked on the view-model and
         // consumed once the user is signed in and the workbench is loaded — a deep link cannot skip login.
         if (args.FirstOrDefault(a => a.StartsWith($"{Services.DeepLinks.Scheme}://", StringComparison.OrdinalIgnoreCase)) is { } schemeLink)
@@ -112,34 +116,35 @@ internal static class Program
             var module = Services.CardCertificates.FindModule();
             if (module is null)
             {
-                Console.WriteLine("no PKCS#11 module found; looked in:");
+                Services.DesktopLog.Warn("no PKCS#11 module found; looked in:");
                 foreach (var candidate in Services.CardCertificates.ModuleCandidates())
                 {
-                    Console.WriteLine($"  {candidate}");
+                    Services.DesktopLog.Warn("  {Candidate}", candidate);
                 }
 
                 Environment.Exit(1);
             }
 
-            Console.WriteLine($"module: {module}");
+            Services.DesktopLog.Info("module: {Module}", module);
             try
             {
                 var found = Services.CardCertificates.Read(module);
-                Console.WriteLine($"certificates found: {found.Count}");
+                Services.DesktopLog.Info("certificates found: {Count}", found.Count);
                 foreach (var one in found)
                 {
                     var concern = Services.CardCertificates.Concern(one.Certificate, DateTimeOffset.UtcNow);
-                    Console.WriteLine($"  token '{one.TokenLabel}' (serial {one.TokenSerial}) object '{one.ObjectLabel}'");
-                    Console.WriteLine($"    subject : {one.Certificate.Subject}");
-                    Console.WriteLine($"    expires : {one.Certificate.NotAfter:yyyy-MM-dd}");
-                    Console.WriteLine($"    concern : {concern}");
+                    Services.DesktopLog.Info("  token '{TokenLabel}' (serial {TokenSerial}) object '{ObjectLabel}'",
+                        one.TokenLabel, one.TokenSerial, one.ObjectLabel);
+                    Services.DesktopLog.Info("    subject : {Subject}", one.Certificate.Subject);
+                    Services.DesktopLog.Info("    expires : {Expires:yyyy-MM-dd}", one.Certificate.NotAfter);
+                    Services.DesktopLog.Info("    concern : {Concern}", concern);
                 }
 
                 Environment.Exit(found.Count > 0 ? 0 : 1);
             }
             catch (Exception e)
             {
-                Console.WriteLine($"reading the token FAILED: {e.GetType().Name}: {e.Message}");
+                Services.DesktopLog.Error(e, "reading the token FAILED: {ExceptionType}: {Reason}", e.GetType().Name, e.Message);
                 Environment.Exit(1);
             }
         }
@@ -164,8 +169,8 @@ internal static class Program
             Dispatcher.UIThread.RunJobs();
 
             var ok = window.Icon is not null;
-            Console.WriteLine($"LogonWindow.Icon set by the app-wide style: {ok}");
-            Console.WriteLine(ok ? "OK" : "FAILED");
+            Services.DesktopLog.Info("LogonWindow.Icon set by the app-wide style: {IconSet}", ok);
+            Services.DesktopLog.Verdict(ok);
             return;
         }
 
@@ -200,14 +205,14 @@ internal static class Program
 
             var result = closed.IsCompleted ? closed.Result : "(dialog still open)";
             var buttonOk = result == "sign-out";
-            Console.WriteLine($"Second button closes with: {result} (expected sign-out) -> {buttonOk}");
+            Services.DesktopLog.Info("Second button closes with: {Result} (expected sign-out) -> {ButtonOk}", result, buttonOk);
 
             // The label has to move WITH the behaviour: "Close" on a button that reopens a sign-in window is
             // the affordance-honesty defect this change exists to fix, so a silent revert of the text is a
             // regression even while the behaviour is right.
             var label = SimplArchive.Localization.Strings.Get("ClSignOut");
             var labelOk = !string.IsNullOrWhiteSpace(label) && label != "ClSignOut" && label != "Close";
-            Console.WriteLine($"Second button label: '{label}' -> {labelOk}");
+            Services.DesktopLog.Info("Second button label: '{Label}' -> {LabelOk}", label, labelOk);
 
             // And AppExceptions routes that result to the logon hook rather than to Shutdown().
             var returned = false;
@@ -218,10 +223,10 @@ internal static class Program
                 null,
                 () => returned = true);
             Services.AppExceptions.ReturnToLogon();
-            Console.WriteLine($"AppExceptions.ReturnToLogon invoked the logon hook: {returned}");
+            Services.DesktopLog.Info("AppExceptions.ReturnToLogon invoked the logon hook: {Returned}", returned);
 
             var ok = buttonOk && labelOk && returned;
-            Console.WriteLine(ok ? "OK" : "FAILED");
+            Services.DesktopLog.Verdict(ok);
             return;
         }
 
@@ -247,7 +252,8 @@ internal static class Program
             vm.ToggleIndexCommand.Execute(null);
             vm.ToggleChatCommand.Execute(null);
             vm.TogglePreviewPaneCommand.Execute(null);
-            Console.WriteLine($"collapsed: tree={vm.TreeCollapsed} list={vm.ListCollapsed} index={vm.IndexCollapsed} chat={vm.ChatCollapsed} preview={vm.PreviewCollapsed}");
+            Services.DesktopLog.Info("collapsed: tree={Tree} list={List} index={Index} chat={Chat} preview={Preview}",
+                vm.TreeCollapsed, vm.ListCollapsed, vm.IndexCollapsed, vm.ChatCollapsed, vm.PreviewCollapsed);
 
             vm.ResetLayoutCommand.Execute(null);
             var expanded = !vm.TreeCollapsed && !vm.ListCollapsed && !vm.IndexCollapsed && !vm.ChatCollapsed && !vm.PreviewCollapsed;
@@ -261,8 +267,9 @@ internal static class Program
                 && vm.IndexHeight.IsAuto
                 && vm.ChatWidth.Value == 2 && vm.ChatWidth.IsStar
                 && vm.PreviewWidth.Value == 3 && vm.PreviewWidth.IsStar;
-            Console.WriteLine($"after reset: expanded={expanded} defaults={defaults} (tree={vm.TreeWidth} list={vm.ListWidth} index={vm.IndexHeight} chat={vm.ChatWidth})");
-            Console.WriteLine(expanded && defaults ? "OK" : "FAILED");
+            Services.DesktopLog.Info("after reset: expanded={Expanded} defaults={Defaults} (tree={Tree} list={List} index={Index} chat={Chat})",
+                expanded, defaults, vm.TreeWidth, vm.ListWidth, vm.IndexHeight, vm.ChatWidth);
+            Services.DesktopLog.Verdict(expanded && defaults);
             return;
         }
 
@@ -316,8 +323,9 @@ internal static class Program
             reloaded.ResetLayoutCommand.Execute(null); // leave defaults behind
             var reset = reloaded.ColTypeWidth == 130 && reloaded.ColDateWidth == 96;
 
-            Console.WriteLine($"clamped={clamped} fills={fills} scrolls={scrolls} neighbour={neighbour} persisted={persisted} reset={reset}");
-            Console.WriteLine(clamped && fills && scrolls && neighbour && persisted && reset ? "OK" : "FAILED");
+            Services.DesktopLog.Info("clamped={Clamped} fills={Fills} scrolls={Scrolls} neighbour={Neighbour} persisted={Persisted} reset={Reset}",
+                clamped, fills, scrolls, neighbour, persisted, reset);
+            Services.DesktopLog.Verdict(clamped && fills && scrolls && neighbour && persisted && reset);
             return;
         }
 
@@ -342,7 +350,7 @@ internal static class Program
             var collapsedToZero = vm.Intray.ServerHeight.Value == 0 && vm.Intray.LocalHeight.Value == 0
                 && vm.Intray.MaskHeight.Value == 0 && vm.Intray.PreviewHeight.Value == 0;
             var flags = vm.Intray.ServerCollapsed && vm.Intray.LocalCollapsed && vm.Intray.MaskCollapsed && vm.Intray.PreviewCollapsed;
-            Console.WriteLine($"collapsed: heights0={collapsedToZero} flags={flags}");
+            Services.DesktopLog.Info("collapsed: heights0={HeightsZero} flags={Flags}", collapsedToZero, flags);
 
             // A fresh VM loads the just-persisted state (all collapsed).
             var reloaded = new MainWindowViewModel();
@@ -350,8 +358,8 @@ internal static class Program
                 && reloaded.Intray.MaskCollapsed && reloaded.Intray.PreviewCollapsed;
             reloaded.ResetLayoutCommand.Execute(null); // restore defaults so the test leaves no collapsed state behind
             var reset = !reloaded.Intray.ServerCollapsed && reloaded.Intray.MaskHeight.Value == 1.1 && reloaded.Intray.MaskHeight.IsStar;
-            Console.WriteLine($"reloaded persisted={persisted} | reset ok={reset}");
-            Console.WriteLine(collapsedToZero && flags && persisted && reset ? "OK" : "FAILED");
+            Services.DesktopLog.Info("reloaded persisted={Persisted} | reset ok={Reset}", persisted, reset);
+            Services.DesktopLog.Verdict(collapsedToZero && flags && persisted && reset);
             return;
         }
 
@@ -368,8 +376,9 @@ internal static class Program
             // replaces a selection: "abcd" with [1,3) selected + "X" -> "aXd"
             var d = Views.HighlightOverlayDrawing.InsertWordInto("abcd", 1, 3, "X", append: false);
             var ok = a == ("abXcd", 3) && b == ("ab X", 4) && c == ("X", 1) && d == ("aXd", 2);
-            Console.WriteLine($"insert: caret={a} shiftSpace={b} shiftStart={c} replaceSel={d}");
-            Console.WriteLine(ok ? "OK" : "FAILED");
+            Services.DesktopLog.Info("insert: caret={Caret} shiftSpace={ShiftSpace} shiftStart={ShiftStart} replaceSel={ReplaceSelection}",
+                a.ToString(), b.ToString(), c.ToString(), d.ToString()); // as text: a captured tuple renders as a list
+            Services.DesktopLog.Verdict(ok);
             return;
         }
 
@@ -380,8 +389,8 @@ internal static class Program
             var noteEmpty = Views.AnnotationDialog.CanSave("", isShape: false);  // false — a note needs text
             var noteText = Views.AnnotationDialog.CanSave("hi", isShape: false);  // true
             var shapeEmpty = Views.AnnotationDialog.CanSave("", isShape: true);   // true — the fix (recolour a highlight)
-            Console.WriteLine($"note-empty={noteEmpty} note-text={noteText} shape-empty={shapeEmpty}");
-            Console.WriteLine(!noteEmpty && noteText && shapeEmpty ? "OK" : "FAILED");
+            Services.DesktopLog.Info("note-empty={NoteEmpty} note-text={NoteText} shape-empty={ShapeEmpty}", noteEmpty, noteText, shapeEmpty);
+            Services.DesktopLog.Verdict(!noteEmpty && noteText && shapeEmpty);
             return;
         }
 
@@ -444,7 +453,7 @@ internal static class Program
             {
                 var path = pages.Count == 1 ? outArg : Path.Combine(Path.GetDirectoryName(outArg) ?? ".", $"{Path.GetFileNameWithoutExtension(outArg)}-{i + 1}{Path.GetExtension(outArg)}");
                 pages[i].Save(path);
-                Console.WriteLine($"page {i + 1}/{pages.Count} -> {path} ({pages[i].PixelSize})");
+                Services.DesktopLog.Info("page {Page}/{Pages} -> {Path} ({PixelSize})", i + 1, pages.Count, path, pages[i].PixelSize);
             }
 
             return;
@@ -494,8 +503,8 @@ internal static class Program
                 }
             }
 
-            Console.WriteLine($"transparent pixels: {transparent}");
-            Console.WriteLine(transparent == 0 ? "OK" : "FAILED");
+            Services.DesktopLog.Info("transparent pixels: {Transparent}", transparent);
+            Services.DesktopLog.Verdict(transparent == 0);
             return;
         }
 
@@ -596,14 +605,17 @@ internal static class Program
             vm.PreviewText = "fresh";
             var wrapResetsPerDocument = vm.PreviewWrap;
 
-            Console.WriteLine($"hits={hits} actives={actives} positionReads={positionReads} "
-                + $"scrolledDown={scrolledDown} (offset {offsetBefore:0.#} -> {scroll.Offset.Y:0.#}) secondActive={secondActive} "
-                + $"wrapDefaultsOn={wrapDefaultsOn} gutterStartsAtOne={gutterStartsAtOne} "
-                + $"measuredBeatsProportional={measuredBeatsProportional} (proportional {proportional:0.#}) "
-                + $"unwrappedOverflows={unwrappedOverflows} wrapResetsPerDocument={wrapResetsPerDocument}");
-            Console.WriteLine(hits == 2 && actives == 1 && positionReads && scrolledDown && secondActive
+            Services.DesktopLog.Info("hits={Hits} actives={Actives} positionReads={PositionReads} "
+                + "scrolledDown={ScrolledDown} (offset {OffsetBefore:0.#} -> {OffsetAfter:0.#}) secondActive={SecondActive} "
+                + "wrapDefaultsOn={WrapDefaultsOn} gutterStartsAtOne={GutterStartsAtOne} "
+                + "measuredBeatsProportional={MeasuredBeatsProportional} (proportional {Proportional:0.#}) "
+                + "unwrappedOverflows={UnwrappedOverflows} wrapResetsPerDocument={WrapResetsPerDocument}",
+                hits, actives, positionReads, scrolledDown, offsetBefore, scroll.Offset.Y, secondActive,
+                wrapDefaultsOn, gutterStartsAtOne, measuredBeatsProportional, proportional,
+                unwrappedOverflows, wrapResetsPerDocument);
+            Services.DesktopLog.Verdict(hits == 2 && actives == 1 && positionReads && scrolledDown && secondActive
                 && wrapDefaultsOn && gutterStartsAtOne && measuredBeatsProportional && unwrappedOverflows
-                && wrapResetsPerDocument ? "OK" : "FAILED");
+                && wrapResetsPerDocument);
             return;
         }
 
@@ -675,12 +687,15 @@ internal static class Program
             vm.ZoomOutCommand.Execute(null);
             var newDocumentOpensAtFitWidth = vm.Zoom == 1;
 
-            Console.WriteLine($"at fit-width the page is {vm.PageWidth:0.#}x{vm.PageWidth * aspect:0.#} in a {paneWidth}x{paneHeight} pane; fit-page zoom {fitPageZoom:0.###}");
-            Console.WriteLine($"fitsWidthByDefault={fitsWidthByDefault} tooTallByWidth={tooTallByWidth} fitPageIsBelowOne={fitPageIsBelowOne} "
-                + $"wholePageVisible={wholePageVisible} outStopsAtWholePage={outStopsAtWholePage} inStopsAtCeiling={inStopsAtCeiling} "
-                + $"newDocumentOpensAtFitWidth={newDocumentOpensAtFitWidth}");
-            Console.WriteLine(fitsWidthByDefault && tooTallByWidth && fitPageIsBelowOne && wholePageVisible
-                && outStopsAtWholePage && inStopsAtCeiling && newDocumentOpensAtFitWidth ? "OK" : "FAILED");
+            Services.DesktopLog.Info("at fit-width the page is {PageWidth:0.#}x{PageHeight:0.#} in a {PaneWidth}x{PaneHeight} pane; fit-page zoom {FitPageZoom:0.###}",
+                vm.PageWidth, vm.PageWidth * aspect, paneWidth, paneHeight, fitPageZoom);
+            Services.DesktopLog.Info("fitsWidthByDefault={FitsWidthByDefault} tooTallByWidth={TooTallByWidth} fitPageIsBelowOne={FitPageIsBelowOne} "
+                + "wholePageVisible={WholePageVisible} outStopsAtWholePage={OutStopsAtWholePage} inStopsAtCeiling={InStopsAtCeiling} "
+                + "newDocumentOpensAtFitWidth={NewDocumentOpensAtFitWidth}",
+                fitsWidthByDefault, tooTallByWidth, fitPageIsBelowOne, wholePageVisible, outStopsAtWholePage, inStopsAtCeiling,
+                newDocumentOpensAtFitWidth);
+            Services.DesktopLog.Verdict(fitsWidthByDefault && tooTallByWidth && fitPageIsBelowOne && wholePageVisible
+                && outStopsAtWholePage && inStopsAtCeiling && newDocumentOpensAtFitWidth);
             return;
         }
 
@@ -768,7 +783,7 @@ internal static class Program
             var trail = new MainWindowViewModel().BreadcrumbSelfTestAsync(args[breadcrumbIndex + 1]).GetAwaiter().GetResult();
             foreach (var step in trail)
             {
-                Console.WriteLine(step);
+                Services.DesktopLog.Info("{Step}", step);
             }
 
             return;
@@ -780,7 +795,7 @@ internal static class Program
         {
             foreach (var line in new MainWindowViewModel().RefTreeSelfTestAsync(args[refTreeIndex + 1]).GetAwaiter().GetResult())
             {
-                Console.WriteLine(line);
+                Services.DesktopLog.Info("{Line}", line);
             }
 
             return;
@@ -793,7 +808,7 @@ internal static class Program
         {
             foreach (var line in new MainWindowViewModel().TreeRefreshSelfTestAsync(args[treeRefreshIndex + 1]).GetAwaiter().GetResult())
             {
-                Console.WriteLine(line);
+                Services.DesktopLog.Info("{Line}", line);
             }
 
             return;
@@ -860,7 +875,7 @@ internal static class Program
         foreach (var (label, p) in probes)
         {
             var hit = Views.HighlightOverlayDrawing.HitTest(boxes, p, w, h);
-            Console.WriteLine($"{label}: {hit?.Text ?? "(none)"}");
+            Services.DesktopLog.Info("{Probe}: {Word}", label, hit?.Text ?? "(none)");
         }
     }
 
@@ -878,17 +893,17 @@ internal static class Program
     {
         if (Services.CardCertificates.FindModule() is not { } module)
         {
-            Console.WriteLine("no PKCS#11 module found");
+            Services.DesktopLog.Warn("no PKCS#11 module found");
             return false;
         }
 
         if (Services.CardCertificates.Read(module).FirstOrDefault() is not { } onCard)
         {
-            Console.WriteLine("no certificate on any token in a reader");
+            Services.DesktopLog.Warn("no certificate on any token in a reader");
             return false;
         }
 
-        Console.WriteLine($"card certificate : {onCard.Certificate.Subject}");
+        Services.DesktopLog.Info("card certificate : {Subject}", onCard.Certificate.Subject);
 
         var marker = $"CARD-OPENED-THROUGH-THE-FUNNEL-{DateTime.Now:HH:mm:ss}";
         var message = new MimeKit.MimeMessage { Subject = "invoice" };
@@ -924,21 +939,21 @@ internal static class Program
         message.WriteTo(wire);
         var served = wire.ToArray();
         var leaked = System.Text.Encoding.ASCII.GetString(served).Contains(marker, StringComparison.Ordinal);
-        Console.WriteLine($"envelope         : {served.Length} bytes; plaintext present: {leaked}");
+        Services.DesktopLog.Info("envelope         : {Bytes} bytes; plaintext present: {Leaked}", served.Length, leaked);
 
         try
         {
             var (bytes, contentType) = await Services.EnvelopeOpener.OpenAsync(served, "application/pkcs7-mime");
             var text = System.Text.Encoding.ASCII.GetString(bytes);
-            Console.WriteLine($"opened as        : {contentType}");
-            Console.WriteLine($"PLAINTEXT        : {text}");
-            Console.WriteLine($"MATCHES          : {text == marker}");
+            Services.DesktopLog.Info("opened as        : {ContentType}", contentType);
+            // The comparison is the proof; the decrypted text itself is not logged, as no payload is (ADR 0626).
+            Services.DesktopLog.Info("MATCHES          : {Matches}", text == marker);
 
             return !leaked && text == marker && contentType == "application/pdf";
         }
         catch (Exception e)
         {
-            Console.WriteLine($"OPENING FAILED   : {e.GetType().FullName}: {e.Message}");
+            Services.DesktopLog.Error(e, "OPENING FAILED   : {ExceptionType}: {Reason}", e.GetType().FullName, e.Message);
             return false;
         }
         finally

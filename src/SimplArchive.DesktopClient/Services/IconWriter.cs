@@ -98,7 +98,7 @@ public static class IconWriter
 
         foreach (var file in Write(directory))
         {
-            Console.WriteLine(file);
+            DesktopLog.Info("wrote {File}", file);
         }
     }
 

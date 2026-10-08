@@ -3,6 +3,7 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.VisualTree;
+using SimplArchive.DesktopClient.Services;
 using SimplArchive.DesktopClient.ViewModels;
 
 namespace SimplArchive.DesktopClient.Views;
@@ -58,14 +59,14 @@ public static class IndexScrollCheck
         // off without a way to get at it — which is exactly the bug as reported.
         var everOverflowed = false;
 
-        Console.WriteLine("fields   viewport   extent   clipped   scrolls");
+        DesktopLog.Info("fields   viewport   extent   clipped   scrolls");
         foreach (var fields in MaskLengths)
         {
             var (scroller, _) = BuildPane(fields, height: 700);
             if (scroller is null)
             {
-                Console.WriteLine("index ScrollViewer: NOT FOUND (the check cannot measure anything)");
-                Console.WriteLine("FAILED");
+                DesktopLog.Warn("index ScrollViewer: NOT FOUND (the check cannot measure anything)");
+                DesktopLog.Verdict(false);
                 return false;
             }
 
@@ -73,11 +74,11 @@ public static class IndexScrollCheck
             var clipped = scroller.Bounds.Height + 0.5 < scroller.Extent.Height;
             everOverflowed |= clipped;
 
-            Console.WriteLine($"{fields,6}   {scroller.Viewport.Height,8:F0}   {scroller.Extent.Height,6:F0}"
-                + $"   {clipped,7}   {scrolls}");
+            DesktopLog.Info("{Fields,6}   {Viewport,8:F0}   {Extent,6:F0}   {Clipped,7}   {Scrolls}",
+                fields, scroller.Viewport.Height, scroller.Extent.Height, clipped, scrolls);
             if (clipped && !scrolls)
             {
-                Console.WriteLine("  ^ CUT OFF with no way to reach it — this is the defect");
+                DesktopLog.Warn("  ^ CUT OFF with no way to reach it — this is the defect");
                 ok = false;
             }
         }
@@ -85,7 +86,7 @@ public static class IndexScrollCheck
         // Anti-vacuous: if no case was ever taller than its room, the loop above proved nothing at all.
         if (!everOverflowed)
         {
-            Console.WriteLine("no mask overflowed its room — the check measured nothing");
+            DesktopLog.Warn("no mask overflowed its room — the check measured nothing");
             ok = false;
         }
 
@@ -97,11 +98,11 @@ public static class IndexScrollCheck
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
         var grew = collapsedScroller.Viewport.Height > capped + 0.5;
-        Console.WriteLine($"collapsing the bottom half lets it fill the pane: {grew} "
-            + $"({capped:F0} -> {collapsedScroller.Viewport.Height:F0})");
+        DesktopLog.Info("collapsing the bottom half lets it fill the pane: {Grew} ({Capped:F0} -> {Filled:F0})",
+            grew, capped, collapsedScroller.Viewport.Height);
         ok &= grew;
 
-        Console.WriteLine(ok ? "OK" : "FAILED");
+        DesktopLog.Verdict(ok);
         return ok;
     }
 

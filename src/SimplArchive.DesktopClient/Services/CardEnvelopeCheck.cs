@@ -19,18 +19,18 @@ internal static class CardEnvelopeCheck
     internal static void Run(string envelopePath)
     {
         var raw = File.ReadAllBytes(envelopePath);
-        Console.WriteLine($"envelope: {raw.Length} bytes from {envelopePath}");
+        DesktopLog.Info("envelope: {Bytes} bytes from {EnvelopePath}", raw.Length, envelopePath);
 
         // THE KEY-AGREEMENT DETAIL IS PRINTED LATER, once the recipient is known. It used to be read here,
         // at position 0 — which throws on a mixed envelope whose first recipient is a key-transport one, and
         // threw before a single line of diagnosis had been printed (#1500).
         if (CardCertificates.FindModule() is not { } modulePath)
         {
-            Console.WriteLine("REFUSED: no PKCS#11 module found.");
+            DesktopLog.Warn("REFUSED: no PKCS#11 module found.");
             return;
         }
 
-        Console.WriteLine($"  module           : {modulePath}");
+        DesktopLog.Info("  module           : {Module}", modulePath);
 
         using var library = new Pkcs11Library(new Pkcs11Options { ModulePath = modulePath });
 
@@ -40,10 +40,10 @@ internal static class CardEnvelopeCheck
         // three private keys, took the first, and an ECDH derive against an RSA key threw
         // CKR_KEY_TYPE_INCONSISTENT as an unhandled exception — a crash where a diagnostic is the whole point.
         var recipients = EnvelopeRecipients.Of(raw);
-        Console.WriteLine($"  addressed to     : {recipients.Count} recipient(s)");
+        DesktopLog.Info("  addressed to     : {Recipients} recipient(s)", recipients.Count);
 
         var onCard = CardCertificates.ReadFromLibrary(library);
-        Console.WriteLine($"  certificates     : {onCard.Count} across every slot with a token");
+        DesktopLog.Info("  certificates     : {Certificates} across every slot with a token", onCard.Count);
 
         // THE CARD THIS CHECK CAN EXERCISE, which is not simply the first that matches. An envelope may
         // address a reader's whole certificate set (ADR 0842) — here a nano by key TRANSPORT and a 5C by key
@@ -59,39 +59,42 @@ internal static class CardEnvelopeCheck
 
         if (agreeing.Count == 0)
         {
-            Console.WriteLine("REFUSED: no certificate on any inserted card is one of this envelope's "
-                + "recipients. Cards seen: "
-                + string.Join(", ", onCard.Select(c => $"{c.TokenSerial}/{c.ObjectLabel}")));
+            DesktopLog.Warn("REFUSED: no certificate on any inserted card is one of this envelope's "
+                + "recipients. Cards seen: {CardsSeen}",
+                string.Join(", ", onCard.Select(c => $"{c.TokenSerial}/{c.ObjectLabel}")));
             return;
         }
 
         foreach (var (card, index) in agreeing)
         {
-            Console.WriteLine($"  candidate        : {card.TokenSerial} → recipient #{index} "
-                + $"({envelope.RecipientInfos[index].GetType().Name})");
+            DesktopLog.Info("  candidate        : {TokenSerial} → recipient #{Index} ({RecipientKind})",
+                card.TokenSerial, index, envelope.RecipientInfos[index].GetType().Name);
         }
 
         if (agreeing.FirstOrDefault(m =>
                 envelope.RecipientInfos[m.Index] is System.Security.Cryptography.Pkcs.KeyAgreeRecipientInfo)
             is not { Index: >= 0 } chosen)
         {
-            Console.WriteLine("REFUSED: every matching card's recipient is key TRANSPORT (RSA), which this "
+            DesktopLog.Warn("REFUSED: every matching card's recipient is key TRANSPORT (RSA), which this "
                 + "check does not cover — use --card-open-test for that path.");
             return;
         }
 
         var addressed = chosen.Card;
 
-        Console.WriteLine($"  matched          : {addressed.TokenSerial} / {addressed.ObjectLabel}");
-        Console.WriteLine($"  subject          : {addressed.Certificate.Subject}");
+        DesktopLog.Info("  matched          : {TokenSerial} / {ObjectLabel}", addressed.TokenSerial, addressed.ObjectLabel);
+        DesktopLog.Info("  subject          : {Subject}", addressed.Certificate.Subject);
 
         if (OpenOn(library, addressed, raw, chosen.Index) is not { } opened)
         {
             return;
         }
 
-        Console.WriteLine($"OPENED: {opened.Length} bytes");
-        Console.WriteLine($"content: {System.Text.Encoding.UTF8.GetString(opened).TrimEnd()}");
+        DesktopLog.Info("OPENED: {Bytes} bytes", opened.Length);
+        // The proof that the unwrap was RIGHT, not merely that it did not throw: the digest of what came out, to compare
+        // with `sha256sum` of the file the independent producer enveloped. Never the content: it would land in the
+        // rolling log file, and a log holds no payload body (ADR 0626).
+        DesktopLog.Info("content SHA-256: {Sha256}", Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(opened)));
     }
 
     /// <summary>Logs into the matched card and opens the envelope with the key that certificate names.</summary>
@@ -113,7 +116,7 @@ internal static class CardEnvelopeCheck
             using var login = session.Login(Environment.GetEnvironmentVariable("CARD_PIN") ?? string.Empty);
 
             var keys = session.FindObjects(CK_OBJECT_CLASS.CKO_PRIVATE_KEY);
-            Console.WriteLine($"  private keys     : {keys.Count} on this card");
+            DesktopLog.Info("  private keys     : {Keys} on this card", keys.Count);
 
             // BY CKA_ID, not the first — a PIV token has four key slots, and on the nano the first is not the
             // key-management one. The certificate names its key; ask it.
@@ -132,21 +135,26 @@ internal static class CardEnvelopeCheck
                 })
                 : -1;
 
-            Console.WriteLine(index >= 0
-                ? $"  key              : matched by CKA_ID at {index}"
-                : "  key              : no CKA_ID match, using the first");
+            if (index >= 0)
+            {
+                DesktopLog.Info("  key              : matched by CKA_ID at {Index}", index);
+            }
+            else
+            {
+                DesktopLog.Info("  key              : no CKA_ID match, using the first");
+            }
 
             var (point, ukm, kdfScheme, wrapOid) = CardEnvelopeOpener.ReadKeyAgreement(raw, mine);
-            Console.WriteLine($"  originator point : {point.Length} bytes, first byte 0x{point[0]:X2}");
-            Console.WriteLine($"  user keying mat. : {(ukm is null ? "(absent)" : $"{ukm.Length} bytes")}");
-            Console.WriteLine($"  kdf scheme       : {kdfScheme}");
-            Console.WriteLine($"  key wrap         : {wrapOid}");
+            DesktopLog.Info("  originator point : {Bytes} bytes, first byte 0x{FirstByte:X2}", point.Length, point[0]);
+            DesktopLog.Info("  user keying mat. : {UserKeyingMaterial}", ukm is null ? "(absent)" : $"{ukm.Length} bytes");
+            DesktopLog.Info("  kdf scheme       : {KdfScheme}", kdfScheme);
+            DesktopLog.Info("  key wrap         : {KeyWrap}", wrapOid);
 
             return CardEnvelopeOpener.OpenWithAgreement(
                 raw, point => session.DeriveEcdhSecret(point, keys[index >= 0 ? index : 0]), mine);
         }
 
-        Console.WriteLine($"REFUSED: the matched card ({addressed.TokenSerial}) is no longer in a reader.");
+        DesktopLog.Warn("REFUSED: the matched card ({TokenSerial}) is no longer in a reader.", addressed.TokenSerial);
         return null;
     }
 }

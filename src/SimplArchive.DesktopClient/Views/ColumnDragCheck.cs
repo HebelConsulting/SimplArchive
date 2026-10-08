@@ -5,6 +5,7 @@ using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using SimplArchive.DesktopClient.Services;
 using SimplArchive.DesktopClient.ViewModels;
 
 namespace SimplArchive.DesktopClient.Views;
@@ -71,12 +72,14 @@ public static class ColumnDragCheck
             var allThumbs = window.GetVisualDescendants().OfType<Thumb>().ToList();
             var list = window.GetVisualDescendants().OfType<ListBox>()
                 .FirstOrDefault(l => l.Name == "ContentsList");
-            Console.WriteLine($"DIAG window.Bounds={window.Bounds} ClientSize={window.ClientSize}");
-            Console.WriteLine($"DIAG thumbs={allThumbs.Count} tags=[{string.Join(",", allThumbs.Select(t => t.Tag?.ToString() ?? "-"))}]");
-            Console.WriteLine($"DIAG ContentsList={(list is null ? "absent" : $"present bounds={list.Bounds}")}");
-            Console.WriteLine($"DIAG visuals={window.GetVisualDescendants().Count()} scrollviewers={window.GetVisualDescendants().OfType<ScrollViewer>().Count()}");
-            Console.WriteLine("no Thumb with Tag=1 in the visual tree");
-            Console.WriteLine("FAILED");
+            DesktopLog.Debug("DIAG window.Bounds={Bounds} ClientSize={ClientSize}", window.Bounds, window.ClientSize);
+            DesktopLog.Debug("DIAG thumbs={Thumbs} tags=[{Tags}]",
+                allThumbs.Count, string.Join(",", allThumbs.Select(t => t.Tag?.ToString() ?? "-")));
+            DesktopLog.Debug("DIAG ContentsList={ContentsList}", list is null ? "absent" : $"present bounds={list.Bounds}");
+            DesktopLog.Debug("DIAG visuals={Visuals} scrollviewers={ScrollViewers}",
+                window.GetVisualDescendants().Count(), window.GetVisualDescendants().OfType<ScrollViewer>().Count());
+            DesktopLog.Warn("no Thumb with Tag=1 in the visual tree");
+            DesktopLog.Verdict(false);
             return false;
         }
 
@@ -84,8 +87,8 @@ public static class ColumnDragCheck
         var origin = thumb.TranslatePoint(new Point(bounds.Width / 2, bounds.Height / 2), window);
         if (origin is not { } centre)
         {
-            Console.WriteLine("the Thumb is not in the window's coordinate space (never arranged)");
-            Console.WriteLine("FAILED");
+            DesktopLog.Warn("the Thumb is not in the window's coordinate space (never arranged)");
+            DesktopLog.Verdict(false);
             return false;
         }
 
@@ -119,17 +122,18 @@ public static class ColumnDragCheck
 
         var widened = after > before;
 
-        Console.WriteLine($"thumb bounds={bounds} centre={centre} buttonProbe={buttonProbe?.GetType().Name ?? "null"}");
-        Console.WriteLine($"hitTest={hit?.GetType().Name ?? "null"} hitsThumb={hitsThumb}");
-        Console.WriteLine($"viewport={viewport} total={vm.ContentsTotalWidth} fills={fills}");
-        Console.WriteLine($"ColTypeWidth {before} -> {after} widened={widened}");
+        DesktopLog.Info("thumb bounds={Bounds} centre={Centre} buttonProbe={ButtonProbe}",
+            bounds, centre, buttonProbe?.GetType().Name ?? "null");
+        DesktopLog.Info("hitTest={HitTest} hitsThumb={HitsThumb}", hit?.GetType().Name ?? "null", hitsThumb);
+        DesktopLog.Info("viewport={Viewport} total={Total} fills={Fills}", viewport, vm.ContentsTotalWidth, fills);
+        DesktopLog.Info("ColTypeWidth {Before} -> {After} widened={Widened}", before, after, widened);
 
         // Leave the user's saved layout alone: this check drives the real view-model, which persists on drag
         // completion, so without this a verification run would quietly resize the developer's own columns.
         vm.ResetLayoutCommand.Execute(null);
 
         var ok = hitsThumb && widened && fills;
-        Console.WriteLine(ok ? "OK" : "FAILED");
+        DesktopLog.Verdict(ok);
         return ok;
     }
 }

@@ -33,21 +33,8 @@ public class ConsoleOutputRatchetTests
         ["src/SimplArchive.Cli/Commands/RepositoryCreateCommand.cs"] = 1,   // data output only (ADR 0906)
         ["src/SimplArchive.Cli/Commands/StandardRepositoryCommands.cs"] = 1,   // data output: the id (#1661; was an uncounted console.WriteLine)
         ["src/SimplArchive.Cli/Commands/TenantCreateCommand.cs"] = 1,   // data output only (ADR 0906)
-        ["src/SimplArchive.Client/Pages/Home.Interop.razor.cs"] = 3,
-        ["src/SimplArchive.DesktopClient/Program.cs"] = 47,
-        ["src/SimplArchive.DesktopClient/Services/ApiClientChecks.cs"] = 52,
-        ["src/SimplArchive.DesktopClient/Services/CardEnvelopeCheck.cs"] = 19,
+        // The one direct write left in the desktop client: DesktopLog's own fallback when logging cannot start.
         ["src/SimplArchive.DesktopClient/Services/DesktopLog.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/DiffViewCheck.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/IconWriter.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/ColumnDragCheck.cs"] = 13,
-        ["src/SimplArchive.DesktopClient/Views/DatePickerBindingCheck.cs"] = 3,
-        ["src/SimplArchive.DesktopClient/Views/IndexScrollCheck.cs"] = 8,
-        ["src/SimplArchive.DesktopClient/Views/ListScrollCheck.cs"] = 4,
-        ["src/SimplArchive.DesktopClient/Views/OpenShortcutCheck.cs"] = 4,
-        ["src/SimplArchive.DesktopClient/Views/ScreenshotRenderer.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/SearchFieldCheck.cs"] = 3,
-        ["src/SimplArchive.DesktopClient/Views/SortThumbnailsCheck.cs"] = 2,
         ["tests/SimplArchive.ManualCapture/DesktopCapture.cs"] = 1,
         ["tests/SimplArchive.ManualCapture/LiveDesktopCapture.cs"] = 3,
         ["tests/SimplArchive.ManualCapture/Program.cs"] = 2,

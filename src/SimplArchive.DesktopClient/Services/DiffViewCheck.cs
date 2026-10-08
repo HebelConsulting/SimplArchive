@@ -61,7 +61,15 @@ internal static class DiffViewCheck
             failures += $"expected {rows.Count * 2} cells ({rows.Count} rows × 2 sides), found {texts.Count}; ";
         }
 
-        Console.WriteLine(failures.Length == 0 ? "DIFF-TEST OK" : $"DIFF-TEST FAIL: {failures}");
+        if (failures.Length == 0)
+        {
+            DesktopLog.Info("DIFF-TEST OK");
+        }
+        else
+        {
+            DesktopLog.Warn("DIFF-TEST FAIL: {Failures}", failures);
+        }
+
         Environment.Exit(failures.Length == 0 ? 0 : 1);
     }
 }
