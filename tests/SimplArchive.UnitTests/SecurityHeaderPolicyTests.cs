@@ -109,4 +109,15 @@ public class SecurityHeaderPolicyTests
         Assert.Contains(DesktopLoopback.Origin, formAction, StringComparison.Ordinal);
         Assert.StartsWith(DesktopLoopback.Origin, DesktopLoopback.RedirectUri, StringComparison.Ordinal);
     }
+
+    // The same agreement for the mobile app's private-use scheme (ADR 0916): a redirect the policy does not name ends
+    // the sign-in in the browser, and the app never hears of it.
+    [Fact]
+    public void The_policy_lets_the_browser_reach_the_mobile_apps_scheme()
+    {
+        var formAction = SecurityHeaders.ComposePolicy(null, null).Split("; ").Single(d => d.StartsWith("form-action ", StringComparison.Ordinal));
+
+        Assert.Contains($" {MobileRedirect.SchemeSource}", formAction, StringComparison.Ordinal);
+        Assert.StartsWith(MobileRedirect.SchemeSource, MobileRedirect.RedirectUri, StringComparison.Ordinal);
+    }
 }

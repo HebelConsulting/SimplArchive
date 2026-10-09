@@ -12,11 +12,8 @@ namespace SimplArchive.Api.Provisioning;
 /// needed adding — the same reason <see cref="SaConsoleClientSeeder"/> moved out.
 /// </para>
 /// <para>
-/// <b>Healed, not merely created-if-absent.</b> A create-if-null seed gives new permissions only to deployments
-/// that never had the client, so an existing install keeps the old set for ever and the new grant is refused with
-/// <c>unauthorized_client</c> — which reads as a client bug rather than as a stale registration. Same shape as the
-/// well-known mask heal (#579) and the trap #664 recorded. The heal ADDS what is missing from
-/// <see cref="Permissions"/> and removes nothing, so a permission an operator granted by hand survives.
+/// <b>Healed, not merely created-if-absent</b>, by <see cref="PublicClientSeeder"/>, which the mobile app's client
+/// shares (ADR 0916).
 /// </para>
 /// </remarks>
 public static class DesktopClientSeeder
@@ -41,32 +38,6 @@ public static class DesktopClientSeeder
         OpenIddictConstants.Permissions.Endpoints.Revocation,
     ];
 
-    public static async Task SeedAsync(IOpenIddictApplicationManager applications, CancellationToken cancellationToken = default)
-    {
-        if (await applications.FindByClientIdAsync(ClientId, cancellationToken) is { } existing)
-        {
-            var descriptor = new OpenIddictApplicationDescriptor();
-            await applications.PopulateAsync(descriptor, existing, cancellationToken);
-
-            var missing = Permissions.Where(p => !descriptor.Permissions.Contains(p)).ToList();
-            if (missing.Count > 0)
-            {
-                descriptor.Permissions.UnionWith(missing);
-                await applications.UpdateAsync(existing, descriptor, cancellationToken);
-            }
-
-            return;
-        }
-
-        var created = new OpenIddictApplicationDescriptor
-        {
-            ClientId = ClientId,
-            ClientType = OpenIddictConstants.ClientTypes.Public,
-            ConsentType = OpenIddictConstants.ConsentTypes.Implicit,
-            RedirectUris = { new Uri(SimplArchive.Api.Security.DesktopLoopback.RedirectUri) },
-            Requirements = { OpenIddictConstants.Requirements.Features.ProofKeyForCodeExchange },
-        };
-        created.Permissions.UnionWith(Permissions);
-        await applications.CreateAsync(created, cancellationToken);
-    }
+    public static Task SeedAsync(IOpenIddictApplicationManager applications, CancellationToken cancellationToken = default) =>
+        PublicClientSeeder.SeedAsync(applications, new PublicClientRegistration(ClientId, Permissions, [SimplArchive.Api.Security.DesktopLoopback.RedirectUri]), cancellationToken);
 }

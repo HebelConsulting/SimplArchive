@@ -652,6 +652,7 @@ using (var scope = app.Services.CreateScope())
 
     // The desktop client (seeded and healed) and saconsole, each in its own file to keep this one under 1000 lines.
     await SimplArchive.Api.Provisioning.DesktopClientSeeder.SeedAsync(applicationManager);
+    await SimplArchive.Api.Provisioning.MobileClientSeeder.SeedAsync(applicationManager);
     await SimplArchive.Api.Provisioning.SaConsoleClientSeeder.SeedAsync(applicationManager);
 
     // Env-driven idempotent bootstrap of the first PlatformAdministrator — the deployment-level chicken/egg

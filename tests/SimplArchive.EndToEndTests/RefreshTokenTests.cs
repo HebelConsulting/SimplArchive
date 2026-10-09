@@ -28,12 +28,20 @@ public class RefreshTokenTests
     private const string DesktopClientId = "simplarchive-desktop";
     private const string DesktopRedirect = "http://127.0.0.1:8765/callback";
 
-    [Fact]
-    public async Task A_desktop_login_yields_a_refresh_token_that_renews_the_session()
+    /// <summary>The native apps' public clients (ADR 0916): each signs in with PKCE, renews, and revokes alike.</summary>
+    public static TheoryData<string, string> NativeClients => new()
+    {
+        { DesktopClientId, DesktopRedirect },
+        { "simplarchive-mobile", "dev.simplarchive.mobile:/oauth2redirect" },
+    };
+
+    [Theory]
+    [MemberData(nameof(NativeClients))]
+    public async Task A_native_app_login_yields_a_refresh_token_that_renews_the_session(string clientId, string redirect)
     {
         var (email, password, _) = await SeedUserAsync();
 
-        var tokens = await SignInAsync(email, password);
+        var tokens = await SignInAsync(email, password, clientId, redirect);
 
         // offline_access asked for it, and the client registration is what permits it. Before this change all
         // three were absent, so this property simply did not exist on the response.
@@ -41,7 +49,7 @@ public class RefreshTokenTests
         var refreshToken = refresh.GetString()!;
         var firstAccess = tokens.GetProperty("access_token").GetString()!;
 
-        var renewed = await RenewAsync(refreshToken);
+        var renewed = await RenewAsync(refreshToken, clientId);
         var secondAccess = renewed.GetProperty("access_token").GetString()!;
 
         // A genuinely new token, not the same one handed back.
@@ -112,11 +120,12 @@ public class RefreshTokenTests
 
     // The desktop's sign-out (ApiCore.RevokeSessionAsync): RFC 7009 revocation of both tokens, which used to be
     // nothing at all — the tokens outlived the sign-out by up to 15 minutes and 30 days.
-    [Fact]
-    public async Task Revoking_the_tokens_ends_the_desktop_session_on_the_server_at_once()
+    [Theory]
+    [MemberData(nameof(NativeClients))]
+    public async Task Revoking_the_tokens_ends_a_native_apps_session_on_the_server_at_once(string clientId, string redirect)
     {
         var (email, password, _) = await SeedUserAsync();
-        var tokens = await SignInAsync(email, password);
+        var tokens = await SignInAsync(email, password, clientId, redirect);
         var access = tokens.GetProperty("access_token").GetString()!;
         var refresh = tokens.GetProperty("refresh_token").GetString()!;
         Assert.Equal(HttpStatusCode.OK, await WhoAmIAsync(access));
@@ -128,13 +137,13 @@ public class RefreshTokenTests
             {
                 ["token"] = token,
                 ["token_type_hint"] = hint,
-                ["client_id"] = DesktopClientId,
+                ["client_id"] = clientId,
             }));
             Assert.Equal(HttpStatusCode.OK, revoked.StatusCode);
         }
 
         Assert.Equal(HttpStatusCode.Unauthorized, await WhoAmIAsync(access));
-        Assert.Equal(HttpStatusCode.BadRequest, (await PostRefreshAsync(client, refresh)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await PostRefreshAsync(client, refresh, clientId)).StatusCode);
     }
 
     // …and the other half of the owner's rule: a WEB sign-out ends the web client's sessions and leaves the same
@@ -202,24 +211,24 @@ public class RefreshTokenTests
         return (email, password, userId);
     }
 
-    private async Task<JsonElement> RenewAsync(string refreshToken)
+    private async Task<JsonElement> RenewAsync(string refreshToken, string clientId = DesktopClientId)
     {
         using var client = _factory.CreateClient();
-        var response = await PostRefreshAsync(client, refreshToken);
+        var response = await PostRefreshAsync(client, refreshToken, clientId);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.Clone();
     }
 
-    private static Task<HttpResponseMessage> PostRefreshAsync(HttpClient client, string refreshToken) =>
+    private static Task<HttpResponseMessage> PostRefreshAsync(HttpClient client, string refreshToken, string clientId = DesktopClientId) =>
         client.PostAsync("/connect/token", new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["grant_type"] = "refresh_token",
             ["refresh_token"] = refreshToken,
-            ["client_id"] = DesktopClientId,
+            ["client_id"] = clientId,
         }));
 
-    /// <summary>The desktop client's own authorization-code + PKCE flow, asking for offline_access.</summary>
-    private async Task<JsonElement> SignInAsync(string email, string password)
+    /// <summary>A native app's authorization-code + PKCE flow (the desktop's by default), asking for offline_access.</summary>
+    private async Task<JsonElement> SignInAsync(string email, string password, string clientId = DesktopClientId, string redirect = DesktopRedirect)
     {
         var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
         {
@@ -232,8 +241,8 @@ public class RefreshTokenTests
 
         var authorize = "/connect/authorize?" + string.Join('&', new[]
         {
-            $"client_id={DesktopClientId}", "response_type=code",
-            $"redirect_uri={Uri.EscapeDataString(DesktopRedirect)}",
+            $"client_id={clientId}", "response_type=code",
+            $"redirect_uri={Uri.EscapeDataString(redirect)}",
             $"scope={Uri.EscapeDataString("openid offline_access")}",
             $"code_challenge={challenge}", "code_challenge_method=S256", "state=x",
         });
@@ -272,8 +281,8 @@ public class RefreshTokenTests
         {
             ["grant_type"] = "authorization_code",
             ["code"] = code!,
-            ["redirect_uri"] = DesktopRedirect,
-            ["client_id"] = DesktopClientId,
+            ["redirect_uri"] = redirect,
+            ["client_id"] = clientId,
             ["code_verifier"] = verifier,
         }));
 

@@ -170,8 +170,8 @@ public static class SecurityHeaders
             // form-action across the redirect chain a form submission follows, so 'self' alone silently broke
             // desktop sign-in in v0.10.0 — the login POST's final hop to the loopback listener was refused, with
             // nothing wrong on the server. Taken from DesktopLoopback so this and the client registration cannot
-            // drift apart.
-            $"form-action 'self' {DesktopLoopback.Origin}",
+            // drift apart. The mobile app's private-use scheme likewise, from MobileRedirect (ADR 0916).
+            $"form-action 'self' {DesktopLoopback.Origin} {MobileRedirect.SchemeSource}",
             "frame-ancestors 'self'",
         ]);
     }
