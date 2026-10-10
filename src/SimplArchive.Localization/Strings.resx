@@ -192,6 +192,9 @@
   <data name="EpSignedInAs" xml:space="preserve">
     <value>Signed in as</value>
   </data>
+  <data name="MobKeyTest" xml:space="preserve">
+    <value>Test the hardware key</value>
+  </data>
   <data name="EpPhoto" xml:space="preserve">
     <value>Profile photo</value>
   </data>

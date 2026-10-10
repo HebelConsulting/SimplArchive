@@ -4,7 +4,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace SimplArchive.DesktopClient.Services;
+namespace SimplArchive.ApiClient;
 
 // "Is this our server?" — an unauthenticated probe of a URL's API root (ADR "Desktop server configuration",
 // issue #270). GETs `<url>/api` and confirms the response is SimplArchive's own HATEOAS discovery document
@@ -35,7 +35,7 @@ public static class ServerIdentity
     // The discovery document is our root iff it carries a `links` array with the self link to `/api` plus the
     // `repositories` and `openIdConfiguration` links — a shape generic "reachable JSON" won't have, so a foreign
     // server can't match.
-    internal static bool LooksLikeApiRoot(string json)
+    public static bool LooksLikeApiRoot(string json)
     {
         try
         {

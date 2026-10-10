@@ -260,7 +260,7 @@ public class DesktopContentAddressTests : IDisposable
             ["SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = "the impersonation token exchange; carries a BaseAddress and posts to connect/token",
             ["SimplArchive.DesktopClient/Services/ClientUpdate.cs"] = "the version manifest and the releases API — absolute, from configuration",
             ["SimplArchive.DesktopClient/Services/ServerReachability.cs"] = "the discovery document at a configured base URL",
-            ["SimplArchive.DesktopClient/Services/ServerIdentity.cs"] = "the API root at a configured base URL",
+            ["SimplArchive.ApiClient/ServerIdentity.cs"] = "the API root at a configured base URL",
         };
 
         // The desktop AND the shared API client it reads content through (ADR 0917): ApiCore moved there.

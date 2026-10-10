@@ -192,6 +192,9 @@
   <data name="EpSignedInAs" xml:space="preserve">
     <value>Accesso effettuato come</value>
   </data>
+  <data name="MobKeyTest" xml:space="preserve">
+    <value>Prova la chiave hardware</value>
+  </data>
   <data name="EpPhoto" xml:space="preserve">
     <value>Foto profilo</value>
   </data>

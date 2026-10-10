@@ -72,7 +72,7 @@ public sealed class TokenSessions : ITokenSessionStore
     /// sessions, not about the window that happens to sign in — and because MainWindowViewModel is on the
     /// standing-debt list and may only get smaller (#466).
     /// </remarks>
-    public void Record(string apiRootUrl, OidcLoopbackAuthenticator.AuthResult result) =>
+    public void Record(string apiRootUrl, AuthResult result) =>
         Set(apiRootUrl, new TokenSession(result.AccessToken, result.RefreshToken, result.ExpiresAt));
 
     /// <summary>Records a session, persisting its refresh token so the next launch starts signed in.</summary>

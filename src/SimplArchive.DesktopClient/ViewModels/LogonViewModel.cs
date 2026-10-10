@@ -14,7 +14,6 @@ namespace SimplArchive.DesktopClient.ViewModels;
 
 // A UI language the client can run in (ADR "Desktop logon window"). The chosen code is remembered and applied
 // as the UI culture at login (ADR "Desktop UI localization"), so the client runs in that language.
-public sealed record LanguageOption(string Name, string Code);
 
 // Backs the startup logon window (ADR "Desktop logon window", login redesign slice B): a username (email), a
 // server dropdown, a language dropdown, and Login. Login points the client at the chosen server's
@@ -23,8 +22,7 @@ public sealed record LanguageOption(string Name, string Code);
 public sealed partial class LogonViewModel : ObservableObject
 {
     public ObservableCollection<ServerProfile> Servers { get; } = [];
-    public IReadOnlyList<LanguageOption> Languages { get; } =
-        [new("English", "en"), new("Deutsch", "de"), new("Italiano", "it"), new("Español", "es")];
+    public IReadOnlyList<LanguageOption> Languages { get; } = SimplArchive.Localization.Languages.Supported;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(LoginCommand))]
@@ -71,7 +69,7 @@ public sealed partial class LogonViewModel : ObservableObject
     public Func<string, CancellationToken, Task<UpdateInfo?>> UpdateCheck { get; set; } = ClientUpdate.CheckAsync;
     // The first parameter is the login_hint (the entered username/email) so the browser login pre-fills it; the
     // token lets a retry cancel a stuck browser flow.
-    public Func<string?, CancellationToken, Task<OidcLoopbackAuthenticator.AuthResult?>> Authenticate { get; set; } =
+    public Func<string?, CancellationToken, Task<AuthResult?>> Authenticate { get; set; } =
         (hint, ct) => new OidcLoopbackAuthenticator().AuthenticateAsync(forceLogin: true, loginHint: hint, cancellationToken: ct);
 
     // Raised on a successful login with an authenticated api client + the resolved email; the app then opens the

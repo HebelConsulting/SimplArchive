@@ -49,8 +49,8 @@ public class DesktopLogonTests
             vm.Authenticate = (hint, _) =>
             {
                 passedHint = hint;
-                return Task.FromResult<OidcLoopbackAuthenticator.AuthResult?>(
-                    new OidcLoopbackAuthenticator.AuthResult("token", "user@example.com"));
+                return Task.FromResult<AuthResult?>(
+                    new AuthResult("token", "user@example.com"));
             };
             SimplArchiveApiClient? gotApi = null;
             string? gotEmail = null;
@@ -144,7 +144,7 @@ public class DesktopLogonTests
             {
                 try { await Task.Delay(Timeout.Infinite, ct); }
                 catch (OperationCanceledException) { firstCancelled = true; throw; }
-                return (OidcLoopbackAuthenticator.AuthResult?)null;
+                return (AuthResult?)null;
             }, CancellationToken.None);
 
             var firstLogin = ((IAsyncRelayCommand)vm.LoginCommand).ExecuteAsync(null);
@@ -158,8 +158,8 @@ public class DesktopLogonTests
             Assert.False(vm.Busy); // re-enabled without restarting the client
 
             // Retry: succeeds. It supersedes the stuck first attempt (cancelling its token).
-            vm.Authenticate = (_, _) => Task.FromResult<OidcLoopbackAuthenticator.AuthResult?>(
-                new OidcLoopbackAuthenticator.AuthResult("token2", "user@example.com"));
+            vm.Authenticate = (_, _) => Task.FromResult<AuthResult?>(
+                new AuthResult("token2", "user@example.com"));
             SimplArchiveApiClient? gotApi = null;
             vm.LoginSucceeded += (api, _) => gotApi = api;
 

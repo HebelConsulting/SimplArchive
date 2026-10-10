@@ -257,23 +257,12 @@ public sealed partial class ServerManagerViewModel : ObservableObject
     {
         var name = EditName.Trim();
         var url = EditUrl.Trim();
-        if (name.Length == 0)
+        // The rules the mobile app's server list answers identically (SimplArchive.Presentation, ADR 0917). A
+        // duplicate name other than the profile being edited is rejected: the name is the profile's identity.
+        var others = Servers.Where(t => IsAdding || !ReferenceEquals(t, Selected)).Select(t => t.Name);
+        if (SimplArchive.Presentation.ServerProfileRules.Problem(name, url, others) is { } problem)
         {
-            Error = Strings.Get("SmErrNameRequired");
-            return;
-        }
-
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
-        {
-            Error = Strings.Get("SmErrUrlInvalid");
-            return;
-        }
-
-        // A duplicate name (other than the one being edited) is rejected — the name is the profile's identity.
-        var clashesWith = Servers.FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
-        if (clashesWith is not null && !(IsAdding == false && ReferenceEquals(clashesWith, Selected)))
-        {
-            Error = Strings.Get("SmErrDuplicateName");
+            Error = Strings.Get(problem);
             return;
         }
 

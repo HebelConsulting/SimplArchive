@@ -4,6 +4,7 @@
         xmlns:svc="using:SimplArchive.DesktopClient.Services"
         xmlns:i="using:Projektanker.Icons.Avalonia"
         xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:lang="using:SimplArchive.Localization"
         x:Class="SimplArchive.DesktopClient.Views.LogonWindow"
         x:DataType="vm:LogonViewModel"
         Title="{loc:Tr LogonTitle}" Width="380" Height="430"
@@ -32,7 +33,7 @@
             <TextBlock Text="{loc:Tr LogonLanguage}" FontSize="12" Foreground="{DynamicResource WbMuted}" />
             <ComboBox ItemsSource="{Binding Languages}" SelectedItem="{Binding SelectedLanguage}" HorizontalAlignment="Stretch">
                 <ComboBox.ItemTemplate>
-                    <DataTemplate x:DataType="vm:LanguageOption"><TextBlock Text="{Binding Name}" /></DataTemplate>
+                    <DataTemplate x:DataType="lang:LanguageOption"><TextBlock Text="{Binding Name}" /></DataTemplate>
                 </ComboBox.ItemTemplate>
             </ComboBox>
         </StackPanel>

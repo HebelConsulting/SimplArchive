@@ -1,8 +1,5 @@
 using System.Net;
-using System.Net.Http.Json;
-using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 
 namespace SimplArchive.DesktopClient.Services;
 
@@ -11,56 +8,23 @@ namespace SimplArchive.DesktopClient.Services;
 // exchanges it for tokens. No client secret (a public client). See ADR "Cross-platform desktop fat client".
 public sealed class OidcLoopbackAuthenticator
 {
-    private static readonly HttpClient Http = new();
-
-    /// <param name="RefreshToken">Null when the server issued none — an older deployment, or offline_access refused.</param>
-    /// <param name="ExpiresAt">When the access token stops working, as an instant rather than a duration.</param>
-    /// <remarks>
-    /// The renewal fields default to "none, already expired" — the honest reading of a server that issued no
-    /// refresh token, and what keeps a test that only cares about the access token from having to state them.
-    /// </remarks>
-    public sealed record AuthResult(
-        string AccessToken,
-        string? Email,
-        string? RefreshToken = null,
-        DateTimeOffset ExpiresAt = default);
-
     // forceLogin adds prompt=login so the server re-authenticates even if the system browser still holds a
     // session cookie — used after a Log out, so a different tenant/user can sign in (ADR "Desktop logout").
     // loginHint (an email) is passed as the OIDC login_hint so the server login page pre-fills the address
-    // (ADR "Browser-only desktop login + login_hint").
+    // (ADR "Browser-only desktop login + login_hint"). The flow itself is the shared PkceSignIn (ADR 0917); what is
+    // the desktop's is receiving the redirect on a loopback listener.
     public async Task<AuthResult?> AuthenticateAsync(bool forceLogin = false, string? loginHint = null, CancellationToken cancellationToken = default)
     {
-        var codeVerifier = Base64Url(RandomBytes(32));
-        var codeChallenge = Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(codeVerifier)));
-        var state = Base64Url(RandomBytes(16));
-
-        // Discover the endpoints rather than hardcoding /connect/* paths.
-        //
-        // Logged because a login that fails here fails BEFORE the browser opens, which the user experiences as
-        // "nothing happened when I clicked sign in" — indistinguishable, without a log, from a browser problem
-        // or a wrong password (ADR 0613). The URL is safe to record; nothing below it is.
-        DesktopLog.Debug("Discovering the identity endpoints at {ApiBaseUrl}", DesktopClientOptions.ApiBaseUrl);
-        var discovery = await Http.GetFromJsonAsync<JsonElement>(
-            $"{DesktopClientOptions.ApiBaseUrl}/.well-known/openid-configuration", cancellationToken);
-        var authorizationEndpoint = discovery.GetProperty("authorization_endpoint").GetString()!;
-        var tokenEndpoint = discovery.GetProperty("token_endpoint").GetString()!;
+        var signIn = await PkceSignIn.StartAsync(DesktopClientOptions.ApiBaseUrl, DesktopClientOptions.ClientId,
+            DesktopClientOptions.RedirectUri, DesktopClientOptions.Scopes, forceLogin, loginHint, cancellationToken);
 
         using var listener = new HttpListener();
         listener.Prefixes.Add($"http://127.0.0.1:{DesktopClientOptions.LoopbackPort}/");
         listener.Start();
-
-        var authorizeUrl =
-            $"{authorizationEndpoint}?client_id={DesktopClientOptions.ClientId}" +
-            $"&redirect_uri={Uri.EscapeDataString(DesktopClientOptions.RedirectUri)}" +
-            $"&response_type=code&scope={Uri.EscapeDataString(DesktopClientOptions.Scopes)}" +
-            $"&code_challenge={codeChallenge}&code_challenge_method=S256&state={state}" +
-            (forceLogin ? "&prompt=login" : string.Empty) +
-            (string.IsNullOrWhiteSpace(loginHint) ? string.Empty : $"&login_hint={Uri.EscapeDataString(loginHint)}");
         // The authorize URL itself is NOT logged: it carries the PKCE challenge and the state, and a log a user
         // pastes into a support mail must not contain either (ADR 0430's rule, which is easier to break here).
         DesktopLog.Debug("Waiting for the loopback redirect on port {Port}", DesktopClientOptions.LoopbackPort);
-        SystemBrowser.Open(authorizeUrl);
+        SystemBrowser.Open(signIn.AuthorizeUrl);
 
         var context = await listener.GetContextAsync().WaitAsync(cancellationToken);
         var code = context.Request.QueryString["code"];
@@ -72,35 +36,7 @@ public sealed class OidcLoopbackAuthenticator
         await context.Response.OutputStream.WriteAsync(body, cancellationToken);
         context.Response.Close();
 
-        if (string.IsNullOrEmpty(code) || returnedState != state)
-        {
-            return null;
-        }
-
-        using var tokenResponse = await Http.PostAsync(tokenEndpoint, new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["grant_type"] = "authorization_code",
-            ["code"] = code,
-            ["redirect_uri"] = DesktopClientOptions.RedirectUri,
-            ["client_id"] = DesktopClientOptions.ClientId,
-            ["code_verifier"] = codeVerifier,
-        }), cancellationToken);
-        tokenResponse.EnsureSuccessStatusCode();
-
-        var tokens = await tokenResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-        var accessToken = tokens.GetProperty("access_token").GetString()!;
-        var email = tokens.TryGetProperty("id_token", out var idToken) ? ReadEmailFromJwt(idToken.GetString()) : null;
-        var refreshToken = tokens.TryGetProperty("refresh_token", out var refresh) ? refresh.GetString() : null;
-
-        // expires_in is seconds from NOW, so it is converted at the moment it is read. Holding the duration and
-        // converting later is how a laptop that slept for an hour ends up believing its token is still fresh.
-        // A server that sends none is treated as already expired, so the first request renews rather than
-        // gambling on a lifetime nobody stated.
-        var lifetime = tokens.TryGetProperty("expires_in", out var expires) && expires.TryGetInt32(out var seconds)
-            ? TimeSpan.FromSeconds(seconds)
-            : TimeSpan.Zero;
-
-        return new AuthResult(accessToken, email, refreshToken, DateTimeOffset.UtcNow + lifetime);
+        return await signIn.CompleteAsync(code, returnedState, cancellationToken);
     }
 
     // Opens the server-rendered passkey-management page (ADR "Desktop passkey management") in the system
@@ -148,46 +84,5 @@ public sealed class OidcLoopbackAuthenticator
         var port = ((IPEndPoint)probe.LocalEndpoint).Port;
         probe.Stop();
         return port;
-    }
-
-    private static string? ReadEmailFromJwt(string? jwt)
-    {
-        if (string.IsNullOrEmpty(jwt))
-        {
-            return null;
-        }
-
-        var parts = jwt.Split('.');
-        if (parts.Length < 2)
-        {
-            return null;
-        }
-
-        try
-        {
-            var payload = JsonSerializer.Deserialize<JsonElement>(Base64UrlDecode(parts[1]));
-            return payload.TryGetProperty("email", out var email) ? email.GetString() : null;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
-
-    private static byte[] RandomBytes(int count)
-    {
-        var bytes = new byte[count];
-        RandomNumberGenerator.Fill(bytes);
-        return bytes;
-    }
-
-    private static string Base64Url(byte[] bytes) =>
-        Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-
-    private static byte[] Base64UrlDecode(string value)
-    {
-        var padded = value.Replace('-', '+').Replace('_', '/');
-        padded = padded.PadRight(padded.Length + (4 - padded.Length % 4) % 4, '=');
-        return Convert.FromBase64String(padded);
     }
 }
