@@ -69,7 +69,34 @@ public static class TimeZoneChoices
     /// or a Windows host pre-selects a value that is not in its own picker.
     /// </para>
     /// </remarks>
-    public static string Local() => Iana(TimeZoneInfo.Local.Id);
+    /// <para>
+    /// <b>Canonical, not merely IANA.</b> Since a macOS update in October 2026, <c>/etc/localtime</c> points into
+    /// <c>/var/db/timezone/zoneinfo</c>. .NET then appears to identify the local zone by matching the file's
+    /// content, and takes the first identical one alphabetically: Berlin came back as <c>Atlantic/Jan_Mayen</c>, an
+    /// alias the picker does not list. A new appointment was then stamped with a zone its own picker could not
+    /// show (found by <c>AppointmentZoneDefaultTests</c>).
+    /// </para>
+    public static string Local() => Canonical(Iana(TimeZoneInfo.Local.Id));
+
+    /// <summary>
+    /// An IANA id the picker does not offer (an alias such as <c>Atlantic/Jan_Mayen</c>) as the canonical id of the
+    /// same zone (<c>Europe/Berlin</c>), found through the Windows zone both belong to. An id the picker offers, or
+    /// one with no such mapping, is returned unchanged.
+    /// </summary>
+    public static string Canonical(string ianaId)
+    {
+        var all = All();
+        if (all.Count == 0 || all.Contains(ianaId, StringComparer.Ordinal))
+        {
+            return ianaId;
+        }
+
+        return TimeZoneInfo.TryConvertIanaIdToWindowsId(ianaId, out var windows)
+            && TimeZoneInfo.TryConvertWindowsIdToIanaId(windows, out var canonical)
+            && all.Contains(canonical, StringComparer.Ordinal)
+                ? canonical
+                : ianaId;
+    }
 
     /// <summary>The IANA spelling of a zone id, or the id unchanged when it is already one.</summary>
     public static string Iana(string id) =>
