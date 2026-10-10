@@ -135,4 +135,40 @@ public sealed class SignInTests : ApiClientSettingsTest
 
     private static string StateOf(PkceSignIn signIn) =>
         Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(signIn.AuthorizeUrl).Query)["state"]!;
+
+    // The check says WHY (a phone with its network permission off read "No connection" while the server was fine).
+    [Fact]
+    public async Task The_check_names_found_not_simplarchive_and_unreachable()
+    {
+        using var root = new LoopbackServer((_, _, _) => (200, """{"links":[{"rel":"self","href":"/api"},{"rel":"repositories","href":"/api/repositories"},{"rel":"openIdConfiguration","href":"/.well-known/openid-configuration"}]}"""));
+        using var other = new LoopbackServer((_, _, _) => (200, """{"hello":"world"}"""));
+
+        Assert.Equal(ServerCheckOutcome.Found, (await ServerIdentity.CheckAsync(root.BaseUrl)).Outcome);
+        Assert.Equal(ServerCheckOutcome.NotSimplArchive, (await ServerIdentity.CheckAsync(other.BaseUrl)).Outcome);
+        Assert.Equal(ServerCheckOutcome.Unreachable, (await ServerIdentity.CheckAsync("http://127.0.0.1:1")).Outcome);
+    }
+
+    [Fact]
+    public void A_denied_network_is_recognised_as_a_socket_error_and_as_androids_text()
+    {
+        var socket = new HttpRequestException("send failed", new System.Net.Sockets.SocketException((int)System.Net.Sockets.SocketError.AccessDenied));
+        var android = new HttpRequestException("Connection failure", new IOException("socket failed: EACCES (Permission denied)"));
+        var refused = new HttpRequestException("refused", new System.Net.Sockets.SocketException((int)System.Net.Sockets.SocketError.ConnectionRefused));
+
+        Assert.Equal(ServerCheckOutcome.NetworkNotAllowed, ServerIdentity.Classify(socket).Outcome);
+        Assert.Equal(ServerCheckOutcome.NetworkNotAllowed, ServerIdentity.Classify(android).Outcome);
+        Assert.Equal(ServerCheckOutcome.Unreachable, ServerIdentity.Classify(refused).Outcome);
+        Assert.Equal("SmNetworkDenied", ServerIdentity.Classify(android).MessageKey);
+    }
+
+    [Fact]
+    public async Task A_failed_check_is_logged_with_its_reason()
+    {
+        var logger = new RecordingLogger();
+        ApiClientSettings.Logger = logger;
+
+        await ServerIdentity.CheckAsync("http://127.0.0.1:1");
+
+        Assert.Contains(logger.Entries, e => e.Level == Microsoft.Extensions.Logging.LogLevel.Warning && e.Message.Contains("Unreachable", StringComparison.Ordinal));
+    }
 }

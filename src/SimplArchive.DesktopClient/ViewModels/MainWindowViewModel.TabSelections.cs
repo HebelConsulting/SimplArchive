@@ -97,16 +97,8 @@ public sealed partial class MainWindowViewModel
     [CommunityToolkit.Mvvm.ComponentModel.NotifyPropertyChangedFor(nameof(WorkflowButtonLabel))]
     private string? _sysWorkflowStatus;
 
-    public string WorkflowStateDisplay => SysWorkflowStatus switch
-    {
-        null or "" => Strings.Get("WfNotStarted"),
-        "Draft" => Strings.Get("WfStateDraft"),
-        "InReview" => Strings.Get("WfStateInReview"),
-        "Approved" => Strings.Get("WfStateApproved"),
-        "Rejected" => Strings.Get("WfStateRejected"),
-        "Released" => Strings.Get("WfStateReleased"),
-        var other => other,
-    };
+    public string WorkflowStateDisplay =>
+        SimplArchive.Presentation.DocumentStateText.WorkflowKey(SysWorkflowStatus) is { } key ? Strings.Get(key) : SysWorkflowStatus ?? string.Empty;
 
     /// <summary>Labels the RIBBON's workflow button, which keeps its state-labelled affordance (#691 left the
     /// ribbon alone deliberately; only the detail pane changed).</summary>

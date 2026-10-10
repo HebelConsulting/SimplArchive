@@ -23,13 +23,7 @@ public partial class MainWindowViewModel
     internal void SetOcrStatus(string? verdict, string? makeSearchableHref)
     {
         _makeSearchableHref = makeSearchableHref;
-        SysOcrVerdictText = verdict switch
-        {
-            "ConvertibleScan" => Strings.Get("OcrVerdictConvertibleScan"),
-            "NotAScan" => Strings.Get("OcrVerdictNotAScan"),
-            "Unreadable" => Strings.Get("OcrVerdictUnreadable"),
-            _ => string.Empty,
-        };
+        SysOcrVerdictText = SimplArchive.Presentation.DocumentStateText.OcrVerdictKey(verdict) is { } key ? Strings.Get(key) : string.Empty;
         OnPropertyChanged(nameof(SysOcrVerdictText));
         OnPropertyChanged(nameof(HasOcrStatusLine));
         OnPropertyChanged(nameof(CanMakeSearchable));

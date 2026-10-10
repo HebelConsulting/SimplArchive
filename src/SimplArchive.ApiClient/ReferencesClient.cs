@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 
-namespace SimplArchive.DesktopClient.Services;
+namespace SimplArchive.ApiClient;
 
 /// <summary>
 /// References — the "shortcut" area (#518, the per-area client split): the references filed in a folder, the

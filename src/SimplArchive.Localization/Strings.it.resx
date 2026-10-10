@@ -195,6 +195,24 @@
   <data name="MobKeyTest" xml:space="preserve">
     <value>Prova la chiave hardware</value>
   </data>
+  <data name="MobManageServers" xml:space="preserve">
+    <value>Gestisci server</value>
+  </data>
+  <data name="SmChecking" xml:space="preserve">
+    <value>Verifica in corso…</value>
+  </data>
+  <data name="SmFound" xml:space="preserve">
+    <value>SimplArchive trovato</value>
+  </data>
+  <data name="SmNotSimplArchive" xml:space="preserve">
+    <value>Questo indirizzo non risponde come SimplArchive.</value>
+  </data>
+  <data name="SmUnreachable" xml:space="preserve">
+    <value>Il server non è raggiungibile.</value>
+  </data>
+  <data name="SmNetworkDenied" xml:space="preserve">
+    <value>Questa app non può usare la rete. Consentilo nelle impostazioni del telefono.</value>
+  </data>
   <data name="EpPhoto" xml:space="preserve">
     <value>Foto profilo</value>
   </data>
