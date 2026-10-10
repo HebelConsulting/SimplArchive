@@ -1,5 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- Published for the mobile app (ADR 0917): shared metadata, version stamped by the publish workflow. -->
+  <!-- Conditional: the Docker restore layer copies .csproj files only, and this carries package metadata, nothing a restore needs. -->
+  <Import Project="..\..\build\ClientPackages.props" Condition="Exists('..\..\build\ClientPackages.props')" />
+  <PropertyGroup>
+    <Description>The display rules every SimplArchive client must answer identically (ADRs 0650/0651).</Description>
+  </PropertyGroup>
+
   <!-- TargetFramework is set explicitly (not just inherited from Directory.Build.props) because the Docker
        restore layer copies only the .csproj files, not Directory.Build.props — every project does the same. -->
   <PropertyGroup>

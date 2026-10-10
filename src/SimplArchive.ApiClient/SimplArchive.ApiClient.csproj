@@ -1,5 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- Published for the mobile app (ADR 0917): shared metadata, version stamped by the publish workflow. -->
+  <!-- Conditional: the Docker restore layer copies .csproj files only, and this carries package metadata, nothing a restore needs. -->
+  <Import Project="..\..\build\ClientPackages.props" Condition="Exists('..\..\build\ClientPackages.props')" />
+  <PropertyGroup>
+    <Description>The hypermedia API client the SimplArchive desktop and mobile apps share (ADR 0917).</Description>
+  </PropertyGroup>
+
   <!-- TargetFramework is set explicitly for the Docker restore layer, as every project does. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>

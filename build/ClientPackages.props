@@ -1,0 +1,15 @@
+<Project>
+  <!-- Package metadata shared by the client libraries the mobile app consumes as packages (ADR 0917, #1687):
+       SimplArchive.ApiClient and the two leaves it references, Presentation and Localization. One file, so the
+       three cannot drift. The VERSION is not here: client-packages-publish.yml stamps <major>.0.<run number>
+       whenever one of them changes on main (owner decision 2026-10-09), and a local build stays 0.0.0-dev. -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <Authors>Hebel Consulting</Authors>
+    <Company>Hebel Consulting</Company>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/HebelConsulting/SimplArchive</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>simplarchive;dms;client</PackageTags>
+  </PropertyGroup>
+</Project>

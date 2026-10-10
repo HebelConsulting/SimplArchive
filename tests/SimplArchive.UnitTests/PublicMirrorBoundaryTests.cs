@@ -35,7 +35,7 @@ public class PublicMirrorBoundaryTests
     // name. Enumerating the tracked tree instead means a newly-added published path is in scope automatically.
     private static readonly string[] Withheld =
         ["docs/", "tools/", "publish/", ".idea/", ".claude/", "CLAUDE.md", "README.md", "=",
-         ".github/workflows/private-tools.yml", ".github/workflows/abi-publish.yml",
+         ".github/workflows/private-tools.yml", ".github/workflows/abi-publish.yml", ".github/workflows/client-packages-publish.yml",
          ".github/workflows/auto-publish.yml", ".github/dependabot.yml"];
 
     private static readonly Regex Forbidden =
