@@ -378,6 +378,33 @@ public class InstanceParityTests
             + "either store.");
     }
 
+    /// <summary>
+    /// The storage alias resolves on the stack's own DEFAULT network too, not only on edge: a presigned address names
+    /// it, and a service that joins only the default network fetches such addresses (the encryption service, which
+    /// is handed a presigned ciphertext URL on a strict tenant, ADR 0862).
+    /// </summary>
+    /// <remarks>
+    /// On the kiosk from v0.39.0 to 2026-10-10 the alias existed on edge only, so the encryption service answered
+    /// "Name does not resolve (demo-s3:8333)" and every strict-tier read through it was a 503, found by the phone.
+    /// </remarks>
+    [Theory]
+    [InlineData("tools/kiosk/docker-compose.yml")]
+    [InlineData("tools/vendor/docker-compose.yml")]
+    public void The_storage_alias_resolves_on_the_stacks_own_network_too(string file)
+    {
+        if (Withheld(file))
+        {
+            return; // the public mirror has no tools/, by design
+        }
+
+        var text = Read(file);
+        var host = System.Text.RegularExpressions.Regex.Match(text, @"ObjectStorage__ServiceUrl:\s*""http://([a-z0-9-]+):").Groups[1].Value;
+        var store = ServiceBlock(text, "seaweedfs");
+        Assert.True(System.Text.RegularExpressions.Regex.IsMatch(store, $@"\n      default:\n        aliases:\s*\[{host}\]"),
+            $"{file}: seaweedfs declares '{host}' only on edge. A service on the stack's own network (the encryption "
+            + "service) then cannot fetch the presigned addresses that name it. Declare the alias under default: too.");
+    }
+
     /// <summary>The <c>KEY: value</c> pairs under a service block's <c>environment:</c>, values unquoted.</summary>
     private static Dictionary<string, string> EnvironmentKeys(string block)
     {
