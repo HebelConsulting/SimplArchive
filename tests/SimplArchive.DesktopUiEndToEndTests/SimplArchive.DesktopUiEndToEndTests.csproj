@@ -54,4 +54,9 @@
     <ProjectReference Include="..\SimplArchive.SelfHosting\SimplArchive.SelfHosting.csproj" />
   </ItemGroup>
 
+  <!-- The shared API client's types (ADR 0917), used here as the desktop's own were. -->
+  <ItemGroup>
+    <Using Include="SimplArchive.ApiClient" />
+  </ItemGroup>
+
 </Project>

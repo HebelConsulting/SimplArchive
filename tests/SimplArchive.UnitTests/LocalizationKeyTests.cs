@@ -107,7 +107,7 @@ public class LocalizationKeyTests
         // invisible to everything — the compiler cannot see a key, and the two clients this guard did watch
         // do not contain these files. That is the same blind spot the regex widening above was written for,
         // one directory out.
-        foreach (var project in new[] { "src/SimplArchive.Client", "src/SimplArchive.DesktopClient", "src/SimplArchive.Api" })
+        foreach (var project in new[] { "src/SimplArchive.Client", "src/SimplArchive.DesktopClient", "src/SimplArchive.ApiClient", "src/SimplArchive.Api" })
         {
             var dir = Path.Combine(root, project.Replace('/', Path.DirectorySeparatorChar));
             if (!Directory.Exists(dir))

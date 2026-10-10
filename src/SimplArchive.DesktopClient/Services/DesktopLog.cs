@@ -76,6 +76,10 @@ public static class DesktopLog
                     shared: true)
                 .CreateLogger();
 
+            // The shared API client logs through ILogger (ADR 0917); this is where it reaches the same sinks.
+            SimplArchive.ApiClient.ApiClientSettings.Logger =
+                new Serilog.Extensions.Logging.SerilogLoggerFactory(_logger).CreateLogger("SimplArchive.ApiClient");
+
             if (verbose)
             {
                 Debug("Verbose console logging on (--verbose); the file at {Directory} always carries this detail", Directory);

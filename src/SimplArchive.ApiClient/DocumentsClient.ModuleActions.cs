@@ -1,7 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 
-namespace SimplArchive.DesktopClient.Services;
+namespace SimplArchive.ApiClient;
 
 // A module's pick-then-act surface (core ADR 0786) — its own file, beside DocumentsClient.GenericActions.cs
 // and for the same reason: these are one module seam rather than part of the document client's own job, and
@@ -23,7 +23,7 @@ public sealed partial class DocumentsClient
     /// <summary>One choice a module action offers.</summary>
     public sealed record ModuleActionOption(string Value, string Label, string? Detail);
 
-    internal static IReadOnlyList<ModuleActionInfo> ParseModuleActions(JsonElement json)
+    public static IReadOnlyList<ModuleActionInfo> ParseModuleActions(JsonElement json)
     {
         if (!json.TryGetProperty("moduleActions", out var actions) || actions.ValueKind != JsonValueKind.Array)
         {

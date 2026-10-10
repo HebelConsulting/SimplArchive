@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace SimplArchive.DesktopClient.Services;
+namespace SimplArchive.ApiClient;
 
 /// <summary>
 /// A resource's advertised links, as the server stated them: rel → address <b>and method</b>.

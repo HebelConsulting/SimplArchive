@@ -1,3 +1,6 @@
+using SimplArchive.ApiClient;
+using SimplArchive.DesktopClient.Services;
+
 namespace SimplArchive.DesktopClient;
 
 // Configuration for the desktop fat client — see ADR "Cross-platform desktop fat client (Avalonia)". Points
@@ -6,9 +9,23 @@ namespace SimplArchive.DesktopClient;
 // URI are seeded into OpenIddict by the Api on startup.
 public static class DesktopClientOptions
 {
+    // What the desktop supplies to the shared API client (ADR 0917), set before anything reads the address, which is
+    // also what every test does first: its client id, its envelope opener (certificate store, then card) and its
+    // session store (the OS secret store). The logger is supplied where logging is configured (DesktopLog).
+    static DesktopClientOptions()
+    {
+        ApiClientSettings.ClientId = ClientId;
+        ApiClientSettings.EnvelopeOpener = DesktopEnvelopeOpener.Instance;
+        ApiClientSettings.Sessions = TokenSessions.Current;
+    }
+
     // Settable (not const) so tests can retarget the client at a self-hosted API on an ephemeral port; defaults
-    // to the local dev/Compose endpoint.
-    public static string ApiBaseUrl { get; set; } = "http://localhost:8080";
+    // to the local dev/Compose endpoint. The shared client's setting IS this value, so the two cannot disagree.
+    public static string ApiBaseUrl
+    {
+        get => ApiClientSettings.ApiRootUrl;
+        set => ApiClientSettings.ApiRootUrl = value;
+    }
 
     public const string ClientId = "simplarchive-desktop";
 

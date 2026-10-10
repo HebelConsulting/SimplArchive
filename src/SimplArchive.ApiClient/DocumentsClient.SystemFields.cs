@@ -1,7 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 
-namespace SimplArchive.DesktopClient.Services;
+namespace SimplArchive.ApiClient;
 
 // The detail pane's system fields (#999 split this out by responsibility — the main file crossed the
 // 1000-line rule when the OCR-candidate walk widened): the current version's read-only facts, the OCR
@@ -78,12 +78,12 @@ public sealed partial class DocumentsClient
             cur.TryGetProperty("createdAt", out var ca) ? ca.GetDateTimeOffset() : default,
             Str(cur, "createdByName"),
             Str(cur, "documentDate"),
-            SimplArchiveApiClient.StrOrNull(cur, "documentTime"),
+            ApiWire.StrOrNull(cur, "documentTime"),
             tiff is not null,
             ocr,
             Str(cur, "fileExtension"),
-            ApiCore.RelHref(cur, "document-date"), SimplArchiveApiClient.StrOrNull(cur, "workflowStatus"),
-            tiff is { } tv ? SimplArchiveApiClient.StrOrNull(tv, "ocrVerdict") : null,
+            ApiCore.RelHref(cur, "document-date"), ApiWire.StrOrNull(cur, "workflowStatus"),
+            tiff is { } tv ? ApiWire.StrOrNull(tv, "ocrVerdict") : null,
             tiff is { } tl ? ApiCore.RelHref(tl, "make-searchable") : null);
     }
 

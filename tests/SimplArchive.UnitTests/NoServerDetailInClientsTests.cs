@@ -48,15 +48,15 @@ public partial class NoServerDetailInClientsTests
     private static readonly Dictionary<string, int> LicensedModuleDetailReads = new(StringComparer.Ordinal)
     {
         ["src/SimplArchive.Client/Pages/Home.Navigation.razor.cs"] = 2,
-        ["src/SimplArchive.DesktopClient/Services/ApiCore.cs"] = 1,
+        ["src/SimplArchive.ApiClient/ApiCore.cs"] = 1,
         // ADR 0769's proposal-item Detail (the second license above):
         ["src/SimplArchive.Client/Services/DetailEditor.cs"] = 1,
         ["src/SimplArchive.Client/Components/Panes/IndexDataPane.razor"] = 1,
         ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.DetailEdit.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1,
+        ["src/SimplArchive.ApiClient/DocumentsClient.cs"] = 1,
         // ADR 0786's module-action refusal: a module's own sentence, composed by ITS catalog for the request
         // culture, is the one server text a client may show — the same license the proposal Detail has.
-        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.ModuleActions.cs"] = 1,
+        ["src/SimplArchive.ApiClient/DocumentsClient.ModuleActions.cs"] = 1,
         // ADR 0786's option Detail — the same class as the proposal Detail above, not the API's problem
         // detail: it is the MODULE's sentence about one candidate ("FI(A) · offered and free"), composed by
         // its own catalog for the request culture, and only the module knows what distinguishes its choices.
@@ -139,7 +139,7 @@ public partial class NoServerDetailInClientsTests
 
     private static IEnumerable<string> ClientFiles(string root)
     {
-        foreach (var project in new[] { "src/SimplArchive.Client", "src/SimplArchive.DesktopClient" })
+        foreach (var project in new[] { "src/SimplArchive.Client", "src/SimplArchive.DesktopClient", "src/SimplArchive.ApiClient" })
         {
             var dir = Path.Combine(root, project.Replace('/', Path.DirectorySeparatorChar));
             if (!Directory.Exists(dir))

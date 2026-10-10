@@ -40,8 +40,10 @@ public class DockerfileCoversEveryProjectTests
     //                   assumption that a new src/ project "obviously" did not need a line.
     //   ConsoleLogging — the plain stderr logger of the command-line programs (saconsole, the tools, the published
     //                   test tools; ADRs 0906/0911). Checked: no project in the Api's graph references it.
+    //   ApiClient     — the hypermedia API client the desktop and the mobile app share (ADR 0917), a CLIENT of the
+    //                   Api like Cli. Checked: no project in the Api's graph references it.
     private static readonly string[] NotInTheImage =
-        ["SimplArchive.DesktopClient", "SimplArchive.Worker", "SimplArchive.Cli", "SimplArchive.ConsoleLogging"];
+        ["SimplArchive.DesktopClient", "SimplArchive.Worker", "SimplArchive.Cli", "SimplArchive.ConsoleLogging", "SimplArchive.ApiClient"];
 
     [Fact]
     public void The_restore_layer_copies_every_project_the_image_builds()

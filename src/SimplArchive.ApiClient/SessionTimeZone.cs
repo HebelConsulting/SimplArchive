@@ -1,6 +1,6 @@
 using SimplArchive.Presentation;
 
-namespace SimplArchive.DesktopClient.Services;
+namespace SimplArchive.ApiClient;
 
 /// <summary>
 /// The zone this session displays stored instants in (#1254) — the signed-in user's preference, or the

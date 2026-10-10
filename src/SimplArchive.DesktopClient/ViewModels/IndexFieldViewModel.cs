@@ -72,7 +72,7 @@ public sealed partial class IndexFieldViewModel
     /// <param name="openDocument">How to reveal a DocumentReference target, or null where this pane cannot
     /// navigate. REQUIRED rather than settable, so the compiler enumerates the call sites: a forgotten
     /// callback disables a visible link, and #854's lesson is that nothing else enumerates them for you.</param>
-    public static IndexFieldViewModel From(Services.DocumentsClient.IndexField field, Func<Guid, Task>? openDocument) => new()
+    public static IndexFieldViewModel From(SimplArchive.ApiClient.DocumentsClient.IndexField field, Func<Guid, Task>? openDocument) => new()
     {
         FieldName = field.FieldName,
         Values = string.Join(", ", field.Values.Select(v =>
@@ -94,7 +94,7 @@ public sealed partial class IndexFieldViewModel
 /// The unavailable case is drawn from the SERVER's answer, not re-derived here: no name and no address means
 /// the reader may not open it (ADR 0543), and the id it still carries is not something to show a person.
 /// </remarks>
-public sealed class IndexFieldTargetViewModel(Services.DocumentsClient.IndexFieldTarget target, bool paneCanNavigate)
+public sealed class IndexFieldTargetViewModel(SimplArchive.ApiClient.DocumentsClient.IndexFieldTarget target, bool paneCanNavigate)
 {
     public Guid Id { get; } = target.Id;
 

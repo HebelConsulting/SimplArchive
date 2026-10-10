@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- TargetFramework is set explicitly for the Docker restore layer, as every project does. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- The hypermedia API client the desktop and the mobile app share (ADR 0917): plain HttpClient/JSON over the
+       advertised rels, UI-free. What differs per host is a constructor argument or a seam (IEnvelopeOpener,
+       ILogger, the token handler), never a host type. -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.9" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SimplArchive.Localization\SimplArchive.Localization.csproj" />
+    <ProjectReference Include="..\SimplArchive.Presentation\SimplArchive.Presentation.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -180,7 +180,7 @@ public sealed partial class MainWindowViewModel
         }
     }
 
-    private readonly List<(PreviewViewModel Surface, Services.Preview Rendered)> _closedByCardRemoval = [];
+    private readonly List<(PreviewViewModel Surface, SimplArchive.ApiClient.Preview Rendered)> _closedByCardRemoval = [];
 
     /// <summary>Test seam: how many surfaces are waiting for the card to come back.</summary>
     internal int PendingCardRestoreCount => _closedByCardRemoval.Count;

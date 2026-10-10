@@ -4,7 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using SimplArchive.Localization;
 
-namespace SimplArchive.DesktopClient.Services;
+namespace SimplArchive.ApiClient;
 
 /// <summary>
 /// The workflow area (#443, tranche 5): the task inbox and the per-version approval workflow. Rides the shared authenticated <see cref="ApiCore"/> (#443).

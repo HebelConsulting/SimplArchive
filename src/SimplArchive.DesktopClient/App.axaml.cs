@@ -106,11 +106,11 @@ public partial class App : Application
 
             // And the content funnel's authenticated client goes with it: a client left behind after the
             // session ends is the drift that left tabs holding a stale API client after sign-out.
-            viewModel.LogoutRequested += () => Services.ApiCore.Authenticated = null;
+            viewModel.LogoutRequested += () => SimplArchive.ApiClient.ApiCore.Authenticated = null;
 
             // A session that ends is NOT a connectivity failure — the server is answering, it just will not
             // accept this session any more — so it gets its own modal, naming the server it happened on.
-            Services.RenewingAuthHandler.SessionEnded += Services.AppExceptions.ReportSessionEnded;
+            SimplArchive.ApiClient.RenewingAuthHandler.SessionEnded += Services.AppExceptions.ReportSessionEnded;
 
             // Background heartbeat (ADR "Desktop session reconnect"): while logged in, probe the server so an
             // idle disconnect surfaces the reconnect modal before the user's next action fails. Stopped on logout.

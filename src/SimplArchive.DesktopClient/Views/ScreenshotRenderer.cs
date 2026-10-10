@@ -395,7 +395,7 @@ internal static class ScreenshotRenderer
         {
             viewModel.SetDetailModuleActions(
             [
-                new Services.DocumentsClient.ModuleActionInfo(
+                new SimplArchive.ApiClient.DocumentsClient.ModuleActionInfo(
                     // Obviously-fake hrefs: nothing fetches them, and a realistic-looking api/ path here
                     // would read as this client composing one (ADR 0543's guard counts the shape, rightly).
                     "flight-school:hand-over", "Hand over to…",
@@ -427,7 +427,7 @@ internal static class ScreenshotRenderer
         var image = new Avalonia.Media.Imaging.Bitmap(stream);
 
         // Real boxes measured from the sample invoice's OCR layout (normalized 0..1).
-        var words = new List<Services.VersionsClient.TextLayoutBox>
+        var words = new List<SimplArchive.ApiClient.VersionsClient.TextLayoutBox>
         {
             new("Alpsteinwerk", 0.0871, 0.0490, 0.2315, 0.0251),
             new("RECHNUNG", 0.0831, 0.2668, 0.2395, 0.0257),

@@ -1,7 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 
-namespace SimplArchive.DesktopClient.Services;
+namespace SimplArchive.ApiClient;
 
 // The generic action surface (ADR 0743), split from the main DocumentsClient file by responsibility (the
 // 1000-line rule): parsing which links are actions, and executing one.
@@ -17,7 +17,7 @@ public sealed partial class DocumentsClient
     // action the server wants rendered; everything else is the navigation machinery the rel-map above
     // already serves. The label being the signal is what spares the client a known-rel list that would
     // drift the moment a module ships a rel this build has never heard of.
-    internal static IReadOnlyList<GenericActionInfo> ParseGenericActions(JsonElement json)
+    public static IReadOnlyList<GenericActionInfo> ParseGenericActions(JsonElement json)
     {
         if (!json.TryGetProperty("links", out var links) || links.ValueKind != JsonValueKind.Array)
         {

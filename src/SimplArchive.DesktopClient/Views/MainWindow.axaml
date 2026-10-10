@@ -4,6 +4,7 @@
         xmlns:v="using:SimplArchive.DesktopClient.Views"
         xmlns:conv="using:Avalonia.Data.Converters"
         xmlns:svc="using:SimplArchive.DesktopClient.Services"
+        xmlns:api="using:SimplArchive.ApiClient"
         xmlns:i="using:Projektanker.Icons.Avalonia"
         xmlns:loc="using:SimplArchive.DesktopClient.Localization"
         x:Class="SimplArchive.DesktopClient.Views.MainWindow"
@@ -492,7 +493,7 @@
                         <TextBlock Text="{loc:Tr MyWorkNothingDue}" Foreground="{DynamicResource WbMuted}" IsVisible="{Binding !DashboardReminders.Count}" />
                         <ItemsControl ItemsSource="{Binding DashboardReminders}">
                             <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="svc:RemindersClient+DashReminderInfo">
+                                <DataTemplate x:DataType="api:RemindersClient+DashReminderInfo">
                                     <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" Padding="2"
                                             Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).OpenDashboardReminderCommand}" CommandParameter="{Binding}">
                                         <StackPanel Orientation="Horizontal" Spacing="8">

@@ -72,8 +72,7 @@ public static class EnvelopeOpener
     /// agrees today: the card-removal path decides whether to discard content by asking this, so a drift between
     /// the two would either blank plaintext documents or leave a decrypted one on an unattended screen.
     /// </remarks>
-    public static bool IsEnvelope(string contentType) =>
-        contentType.Contains("pkcs7-mime", StringComparison.OrdinalIgnoreCase);
+    public static bool IsEnvelope(string contentType) => SimplArchive.ApiClient.Envelopes.IsEnvelope(contentType);
 
     public static async Task<(byte[] Bytes, string ContentType)> OpenAsync(byte[] served, string contentType)
     {
@@ -229,3 +228,12 @@ public static class EnvelopeOpener
 /// </remarks>
 public sealed class EnvelopeNotOpenedException(string message, Exception? inner = null)
     : Exception($"This document arrived encrypted and could not be opened: {message}.", inner);
+
+/// <summary>The desktop's opener as the shared content funnel sees it (ADR 0917): the certificate store, then the card.</summary>
+internal sealed class DesktopEnvelopeOpener : SimplArchive.ApiClient.IEnvelopeOpener
+{
+    public static readonly DesktopEnvelopeOpener Instance = new();
+
+    public Task<(byte[] Bytes, string ContentType)> OpenAsync(byte[] envelope, string contentType) =>
+        EnvelopeOpener.OpenAsync(envelope, contentType);
+}

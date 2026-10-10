@@ -218,7 +218,7 @@ public partial class LocalizationLiteralTests
     {
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
 
-        foreach (var project in new[] { "src/SimplArchive.Client", "src/SimplArchive.DesktopClient" })
+        foreach (var project in new[] { "src/SimplArchive.Client", "src/SimplArchive.DesktopClient", "src/SimplArchive.ApiClient" })
         {
             var dir = Path.Combine(root, project.Replace('/', Path.DirectorySeparatorChar));
             if (!Directory.Exists(dir))

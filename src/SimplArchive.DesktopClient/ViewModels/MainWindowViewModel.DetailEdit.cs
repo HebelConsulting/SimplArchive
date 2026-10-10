@@ -86,7 +86,7 @@ public sealed partial class MainWindowViewModel
             _originalDocumentDate = SysDocumentDate;
             _originalDocumentTime = SysDocumentTime;
             var (localDate, localTime) =
-                DocumentDateFormat.FieldsInZone(SysDocumentDate, SysDocumentTime, Services.SessionTimeZone.Current);
+                DocumentDateFormat.FieldsInZone(SysDocumentDate, SysDocumentTime, SimplArchive.ApiClient.SessionTimeZone.Current);
             SysDocumentDate = localDate;
             DocumentTimeEntry = localTime ?? string.Empty;
             _stagedOcrCodes = _sysOcrCodes;
@@ -212,7 +212,7 @@ public sealed partial class MainWindowViewModel
         // 00:30 entry typed in Zurich is the previous day in UTC — so both come from one conversion rather
         // than the date being sent as typed.
         var (utcDateStr, timeStr) =
-            DocumentDateFormat.FieldsInUtc(SysDocumentDate, DocumentTimeEntry, Services.SessionTimeZone.Current);
+            DocumentDateFormat.FieldsInUtc(SysDocumentDate, DocumentTimeEntry, SimplArchive.ApiClient.SessionTimeZone.Current);
         var editTags = EditTags.Select(t => t.Trim().ToLowerInvariant()).Where(t => t.Length is > 0 and <= 100).Distinct().ToList();
         var chosenLabelId = SelectedSensitivityItem?.Id;
         var newMaskId = SelectedMaskChoice?.MaskId;

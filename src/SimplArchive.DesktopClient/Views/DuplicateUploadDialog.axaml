@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="using:SimplArchive.DesktopClient.Localization"
-        xmlns:svc="using:SimplArchive.DesktopClient.Services"
+        xmlns:api="using:SimplArchive.ApiClient"
         x:Class="SimplArchive.DesktopClient.Views.DuplicateUploadDialog"
         Title="{loc:Tr DupTitle}" Width="480" SizeToContent="Height" CanResize="False"
         WindowStartupLocation="CenterOwner">
@@ -10,7 +10,7 @@
         <TextBlock x:Name="MessageBlock" TextWrapping="Wrap" />
         <ListBox x:Name="DuplicatesList" MaxHeight="200">
             <ListBox.ItemTemplate>
-                <DataTemplate x:DataType="svc:DocumentsClient+DuplicateInfo">
+                <DataTemplate x:DataType="api:DocumentsClient+DuplicateInfo">
                     <StackPanel Margin="0,2">
                         <TextBlock Text="{Binding Name}" />
                         <TextBlock Text="{Binding Path}" Foreground="{DynamicResource WbMuted}" FontSize="12" />

@@ -29,7 +29,7 @@ public sealed partial class MainWindowViewModel
     // it a viewer whose device and preference differ cannot tell which clock either row is on, which is what
     // let the wrong one go unnoticed.
     public string SysCreated => SysCreatedAt is { } at
-        ? SimplArchive.Presentation.InstantFormat.Display(at, Services.SessionTimeZone.Current)
+        ? SimplArchive.Presentation.InstantFormat.Display(at, SimplArchive.ApiClient.SessionTimeZone.Current)
         : string.Empty;
 
     // Loads the always-shown system fields for the selected document (ADR "System fields + OCR-language mask

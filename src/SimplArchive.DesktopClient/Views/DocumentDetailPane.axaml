@@ -2,7 +2,7 @@
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:i="using:Projektanker.Icons.Avalonia"
              xmlns:loc="using:SimplArchive.DesktopClient.Localization"
-             xmlns:svc="using:SimplArchive.DesktopClient.Services"
+             xmlns:api="using:SimplArchive.ApiClient"
              xmlns:v="using:SimplArchive.DesktopClient.Views"
              xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -450,7 +450,7 @@
                             <ItemsControl ItemsSource="{Binding MentionCandidates}"
                                           IsVisible="{Binding HasMentionCandidates}">
                                 <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="svc:DocumentsClient+MentionableUser">
+                                    <DataTemplate x:DataType="api:DocumentsClient+MentionableUser">
                                         <Button Classes="mention" HorizontalAlignment="Stretch" Padding="6,3" FontSize="12"
                                                 Background="Transparent" BorderThickness="0"
                                                 HorizontalContentAlignment="Left" Content="{Binding DisplayName}"

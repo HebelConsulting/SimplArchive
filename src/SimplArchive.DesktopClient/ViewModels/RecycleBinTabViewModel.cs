@@ -160,7 +160,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
             // must not read as a different day here than it did in the workbench it was deleted from.
             SysDocumentDate = fields is null
                 ? string.Empty
-                : SimplArchive.Presentation.DocumentDateFormat.Display(fields.DocumentDate, fields.DocumentTime, Services.SessionTimeZone.Current);
+                : SimplArchive.Presentation.DocumentDateFormat.Display(fields.DocumentDate, fields.DocumentTime, SimplArchive.ApiClient.SessionTimeZone.Current);
             SysOcrLanguages = fields?.OcrLanguages ?? "";
 
             await Preview.RenderAsync(await _api.Documents.GetPreviewAsync(Rel("versions")));

@@ -1,7 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 
-namespace SimplArchive.DesktopClient.Services;
+namespace SimplArchive.ApiClient;
 
 // The combined-export follow (#658), in its own partial: DocumentsClient.cs is on the 1000-line debt list
 // (#443's finale owns shrinking it), and the ceiling guard rightly refuses quiet additions to it.

@@ -28,7 +28,7 @@ internal static class TreeCreateDialogs
     /// cancels — the whole resource goes in one request, so nothing exists until Save.
     /// </summary>
     public static async Task CreateAsync(
-        Window owner, MainWindowViewModel vm, TreeNodeViewModel node, Services.CreatableChild admitted)
+        Window owner, MainWindowViewModel vm, TreeNodeViewModel node, SimplArchive.ApiClient.CreatableChild admitted)
     {
         // The folder itself, as the one place this create can land: it fixes the destination AND hides the
         // dialog's collection picker, which both clients draw only above a single target.

@@ -1,6 +1,6 @@
 using System;
 
-namespace SimplArchive.DesktopClient.Services;
+namespace SimplArchive.ApiClient;
 
 /// <summary>
 /// The session ended and could not be renewed, so the in-flight request will never succeed (#1251).

@@ -2,7 +2,7 @@ using System;
 using System.Security.Cryptography;
 using System.Text.Json;
 
-namespace SimplArchive.DesktopClient.Services;
+namespace SimplArchive.ApiClient;
 
 /// <summary>
 /// Client-side at-rest encryption for uploads (ADR 0818/B2): when a create-version response carries the
@@ -11,12 +11,12 @@ namespace SimplArchive.DesktopClient.Services;
 /// against the published KEK — the same shapes the server's decorator and the web uploader use, so all
 /// three producers meet one format.
 /// </summary>
-internal static class UploadEncryption
+public static class UploadEncryption
 {
-    internal sealed record Encrypted(byte[] Blob, string WrappedDek, string KekGeneration);
+    public sealed record Encrypted(byte[] Blob, string WrappedDek, string KekGeneration);
 
     /// <summary>Returns null when the response carries no encryption instruction (plaintext upload).</summary>
-    internal static Encrypted? EncryptIfInstructed(JsonElement createVersionResponse, byte[] plaintext)
+    public static Encrypted? EncryptIfInstructed(JsonElement createVersionResponse, byte[] plaintext)
     {
         if (!createVersionResponse.TryGetProperty("encryption", out var encryption)
             || encryption.ValueKind != JsonValueKind.Object)

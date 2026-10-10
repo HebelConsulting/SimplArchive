@@ -15,7 +15,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     private readonly Func<TreeNodeViewModel, Task<IEnumerable<TreeNodeViewModel>>>? _loadChildren;
     private bool _loaded;
 
-    public TreeNodeViewModel(Guid id, string name, bool hasSubfolders, Func<TreeNodeViewModel, Task<IEnumerable<TreeNodeViewModel>>>? loadChildren, bool isReference = false, bool isPersonal = false, string? syntheticIcon = null, string? personalKind = null, bool hasReferences = false, bool hasChildren = true, LinkMap? links = null, IReadOnlyList<Services.CreatableChild>? admits = null, string? icon = null,
+    public TreeNodeViewModel(Guid id, string name, bool hasSubfolders, Func<TreeNodeViewModel, Task<IEnumerable<TreeNodeViewModel>>>? loadChildren, bool isReference = false, bool isPersonal = false, string? syntheticIcon = null, string? personalKind = null, bool hasReferences = false, bool hasChildren = true, LinkMap? links = null, IReadOnlyList<SimplArchive.ApiClient.CreatableChild>? admits = null, string? icon = null,
         bool canDelete = false, bool canEditIndexData = false, bool canMove = false, bool canManagePermissions = false, bool canCreateChildren = false)
     {
         Id = id;
@@ -62,7 +62,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     /// the cursor. Empty for a synthetic row, and for a folder that accepts nothing — the same reading as a
     /// missing rel, so the menu shows no creates rather than offering ones the server refuses.
     /// </remarks>
-    public IReadOnlyList<Services.CreatableChild> Admits { get; }
+    public IReadOnlyList<SimplArchive.ApiClient.CreatableChild> Admits { get; }
 
     /// <summary>The mask's icon token as the server sent it, or null to keep the generic glyph.</summary>
     public string? MaskIconToken { get; }

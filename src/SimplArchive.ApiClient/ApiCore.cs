@@ -3,8 +3,9 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 
-namespace SimplArchive.DesktopClient.Services;
+namespace SimplArchive.ApiClient;
 
 /// <summary>
 /// The one authenticated HTTP core every per-area client shares (#443, tranche 1): the bearer-carrying
@@ -89,7 +90,7 @@ public sealed class ApiCore
         Uri.TryCreate(url, UriKind.Absolute, out var absolute)
             && (absolute.Scheme == Uri.UriSchemeHttp || absolute.Scheme == Uri.UriSchemeHttps)
             ? absolute
-            : new Uri(new Uri(DesktopClientOptions.ApiBaseUrl), url);
+            : new Uri(new Uri(ApiClientSettings.ApiRootUrl), url);
 
     /// <summary>Whether this resolved address is on the installation we are signed in to.</summary>
     /// <remarks>
@@ -98,7 +99,7 @@ public sealed class ApiCore
     /// point back at our own API is treated the same as the relative form that means the same thing.
     /// </remarks>
     public static bool IsOwnInstallation(Uri address) =>
-        Uri.TryCreate(DesktopClientOptions.ApiBaseUrl, UriKind.Absolute, out var installation)
+        Uri.TryCreate(ApiClientSettings.ApiRootUrl, UriKind.Absolute, out var installation)
         && Uri.Compare(address, installation, UriComponents.SchemeAndServer, UriFormat.UriEscaped,
             StringComparison.OrdinalIgnoreCase) == 0;
 
@@ -150,10 +151,14 @@ public sealed class ApiCore
         // Asked of the SERVED type, before opening: afterwards the content type is the decrypted payload's and no
         // longer says how it arrived.
         var served = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
-        var (bytes, contentType) = await EnvelopeOpener.OpenAsync(
-            await response.Content.ReadAsByteArrayAsync(cancellationToken), served);
+        var body = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+        if (!Envelopes.IsEnvelope(served))
+        {
+            return (body, served, false);
+        }
 
-        return (bytes, contentType, EnvelopeOpener.IsEnvelope(served));
+        var (bytes, contentType) = await ApiClientSettings.EnvelopeOpener.OpenAsync(body, served);
+        return (bytes, contentType, true);
     }
 
     /// <summary>The bytes alone, for a caller that already knows what it is decoding.</summary>
@@ -168,7 +173,7 @@ public sealed class ApiCore
 
     public ApiCore(string accessToken)
     {
-        _apiRootUrl = DesktopClientOptions.ApiBaseUrl;
+        _apiRootUrl = ApiClientSettings.ApiRootUrl;
 
         // Honour the token this was CONSTRUCTED with. The login path records the full session first (with its
         // refresh token) and this leaves it alone; every other caller — impersonation, and every test that
@@ -187,7 +192,7 @@ public sealed class ApiCore
         // Deliberately NOT the shared store as the live source: it is keyed by SERVER, which is right for
         // persistence and wrong for identity — two clients for different users against one server would share
         // a slot and the second would silently become the first.
-        var recorded = TokenSessions.Current.For(_apiRootUrl);
+        var recorded = ApiClientSettings.Sessions.For(_apiRootUrl);
         var session = recorded is { RefreshToken.Length: > 0 }
             && string.Equals(recorded.AccessToken, accessToken, StringComparison.Ordinal)
                 ? recorded
@@ -258,7 +263,7 @@ public sealed class ApiCore
     public async Task RevokeSessionAsync()
     {
         var session = _session.Value;
-        TokenSessions.Current.Clear(_apiRootUrl);
+        ApiClientSettings.Sessions.Clear(_apiRootUrl);
         if (session is null)
         {
             return;
@@ -279,17 +284,17 @@ public sealed class ApiCore
                     {
                         ["token"] = token,
                         ["token_type_hint"] = hint,
-                        ["client_id"] = DesktopClientOptions.ClientId,
+                        ["client_id"] = ApiClientSettings.ClientId,
                     }));
                 if (!response.IsSuccessStatusCode)
                 {
-                    DesktopLog.Warn("Sign-out could not revoke the {Hint} on the server ({Status}); it stays valid until it expires",
+                    ApiClientSettings.Logger.LogWarning("Sign-out could not revoke the {Hint} on the server ({Status}); it stays valid until it expires",
                         hint, (int)response.StatusCode);
                 }
             }
             catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
             {
-                DesktopLog.Warn("Sign-out could not reach the server to revoke the {Hint} ({Reason}); it stays valid until it expires",
+                ApiClientSettings.Logger.LogWarning("Sign-out could not reach the server to revoke the {Hint} ({Reason}); it stays valid until it expires",
                     hint, e.Message);
             }
         }
@@ -425,11 +430,11 @@ public sealed class ApiCore
 
     /// <summary>The row's advertised links, or null when it carries none.</summary>
     public static LinkMap? ParseLinks(JsonElement item) =>
-        SimplArchiveApiClient.ParseLinks(item);
+        ApiWire.ParseLinks(item);
 
     /// <summary>Maps a Problem-Details refusal to a localized <see cref="ApiActionException"/>.</summary>
     public static Task ThrowIfProblemAsync(HttpResponseMessage response, string fallback, CancellationToken cancellationToken) =>
-        SimplArchiveApiClient.ThrowIfProblemAsync(response, fallback, cancellationToken);
+        ApiWire.ThrowIfProblemAsync(response, fallback, cancellationToken);
     public async Task<byte[]?> GetPhotoAsync(string photoHref, CancellationToken cancellationToken = default)
     {
         using var response = await Http.GetAsync(photoHref, cancellationToken);

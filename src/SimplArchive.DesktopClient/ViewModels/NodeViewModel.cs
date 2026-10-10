@@ -146,7 +146,7 @@ public sealed class NodeViewModel
     // every row, because these are built in bulk by half a dozen parsers and a forgotten one would show UTC
     // beside rows showing local without failing anything.
     public string DocumentDateText =>
-        DocumentDate is { } d ? DocumentDateFormat.Display(d, DocumentTime, Services.SessionTimeZone.Current) : "";
+        DocumentDate is { } d ? DocumentDateFormat.Display(d, DocumentTime, SimplArchive.ApiClient.SessionTimeZone.Current) : "";
     public string TagsText => string.Join(", ", Tags);
 
     /// <summary>Who filed the current version, falling back to who created the document (#768).</summary>

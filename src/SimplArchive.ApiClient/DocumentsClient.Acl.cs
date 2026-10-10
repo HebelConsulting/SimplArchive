@@ -3,7 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using SimplArchive.Localization;
 
-namespace SimplArchive.DesktopClient.Services;
+namespace SimplArchive.ApiClient;
 
 // The document ACL surface — manage access (ADR "Manage-access UI for document/folder ACLs"), in its own
 // partial. DocumentsClient.cs is on the 1000-line debt list, and #877 needed the collection's grantable-rights
@@ -158,6 +158,6 @@ public sealed partial class DocumentsClient
             throw new ApiActionException(Strings.Get("MaInsufficientRights"));
         }
 
-        await SimplArchiveApiClient.ThrowIfProblemAsync(response, Strings.Get("MaLoadFailed"), cancellationToken);
+        await ApiWire.ThrowIfProblemAsync(response, Strings.Get("MaLoadFailed"), cancellationToken);
     }
 }

@@ -30,12 +30,12 @@ public partial class DisplayZoneRatchetTests
         // The fallback itself: before a session exists there is no preference to read, and the device zone is
         // the only honest default. This IS the seam every other site now goes through.
         ["Client/Services/SessionTimeZone.cs"] = "the fallback when no preference is known",
-        ["DesktopClient/Services/SessionTimeZone.cs"] = "the fallback when no preference is known",
+        ["ApiClient/SessionTimeZone.cs"] = "the fallback when no preference is known",
 
         // Reporting the device's zone TO the server as the header fallback (ADR 0801's preference → header →
         // none). Here the device zone is the subject, not an accident.
         ["Client/Program.cs"] = "the X-Time-Zone header reports the device zone",
-        ["DesktopClient/Services/ApiCore.cs"] = "the X-Time-Zone header reports the device zone",
+        ["ApiClient/ApiCore.cs"] = "the X-Time-Zone header reports the device zone",
         ["Presentation/DisplayZone.cs"] = "resolves a preference, falling back to the device",
         ["Presentation/TimeZoneChoices.cs"] = "offers the device zone as a choice",
 
@@ -82,7 +82,7 @@ public partial class DisplayZoneRatchetTests
         var root = RepoRoot();
         var offenders = new List<string>();
 
-        foreach (var dir in new[] { "src/SimplArchive.Client", "src/SimplArchive.DesktopClient", "src/SimplArchive.Presentation" })
+        foreach (var dir in new[] { "src/SimplArchive.Client", "src/SimplArchive.DesktopClient", "src/SimplArchive.ApiClient", "src/SimplArchive.Presentation" })
         {
             foreach (var file in Directory.EnumerateFiles(Path.Combine(root, dir), "*.*", SearchOption.AllDirectories))
             {

@@ -93,7 +93,7 @@ public sealed partial class MainWindowViewModel
                 await _api.Documents.UploadFileAsync(childrenHref, file.Name, bytes);
                 uploaded++;
             }
-            catch (Services.DocumentNameTakenException) when (NameConflictDialog is not null)
+            catch (SimplArchive.ApiClient.DocumentNameTakenException) when (NameConflictDialog is not null)
             {
                 // The name is taken. Reporting that and dropping the file is what made a drag-and-drop appear to
                 // do nothing, so ask what was meant instead (a new version, or a new name) and carry it out.
@@ -107,7 +107,7 @@ public sealed partial class MainWindowViewModel
                     failed++;
                 }
             }
-            catch (Services.ApiActionException e)
+            catch (SimplArchive.ApiClient.ApiActionException e)
             {
                 ReportError(e.Message);
                 failed++;
@@ -189,7 +189,7 @@ public sealed partial class MainWindowViewModel
 
                 done++;
             }
-            catch (Services.ApiActionException e)
+            catch (SimplArchive.ApiClient.ApiActionException e)
             {
                 ReportError(e.Message);
                 failed++;

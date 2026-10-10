@@ -89,7 +89,7 @@ public partial class MainWindow
     // One create for every kind the folder offered. The address, the label and — since the client cannot know
     // the mask — WHICH QUESTION TO ASK all come from the entry the server sent, so this needs no case per
     // family and a mask nobody hardcoded still works.
-    private async Task CreateAdmittedAsync(MainWindowViewModel vm, TreeNodeViewModel node, Services.CreatableChild admitted)
+    private async Task CreateAdmittedAsync(MainWindowViewModel vm, TreeNodeViewModel node, SimplArchive.ApiClient.CreatableChild admitted)
     {
         if (admitted.Prompt == "note")
         {

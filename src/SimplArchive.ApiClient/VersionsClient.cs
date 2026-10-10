@@ -3,7 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using SimplArchive.Localization;
 
-namespace SimplArchive.DesktopClient.Services;
+namespace SimplArchive.ApiClient;
 
 /// <summary>
 /// The versions area (#443, ops tranche): a document's version rows and what they advertise — restore,
@@ -216,8 +216,8 @@ public sealed class VersionsClient(ApiCore core)
                     v.TryGetProperty("createdAt", out var ca) && ca.ValueKind == JsonValueKind.String ? ca.GetDateTimeOffset() : default,
                     v.TryGetProperty("createdByName", out var cb) ? cb.GetString() ?? "" : "",
                     Comment: v.TryGetProperty("comment", out var cm) && cm.ValueKind == JsonValueKind.String ? cm.GetString() : null,
-                    Links: ApiCore.ParseLinks(v), WorkflowStatus: SimplArchiveApiClient.StrOrNull(v, "workflowStatus"),
-                    DocumentTime: SimplArchiveApiClient.StrOrNull(v, "documentTime")));
+                    Links: ApiCore.ParseLinks(v), WorkflowStatus: ApiWire.StrOrNull(v, "workflowStatus"),
+                    DocumentTime: ApiWire.StrOrNull(v, "documentTime")));
             }
         }
 
@@ -241,7 +241,7 @@ public sealed class VersionsClient(ApiCore core)
     // an external diff tool (Beyond Compare).
     public async Task<byte[]> DownloadVersionBytesAsync(string downloadUrl, CancellationToken cancellationToken = default)
     {
-        var (bytes, _) = await SimplArchiveApiClient.DownloadAsync(downloadUrl, cancellationToken);
+        var (bytes, _) = await ApiWire.DownloadAsync(downloadUrl, cancellationToken);
         return bytes;
     }
     private static string RequireHref(VersionInfo version, string rel) =>

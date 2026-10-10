@@ -14,6 +14,7 @@ public class ArchitectureTests
     private static readonly Assembly Application = typeof(SimplArchive.Application.Abstractions.ICurrentTenantAccessor).Assembly;
     private static readonly Assembly Infrastructure = typeof(SimplArchive.Infrastructure.Persistence.SimplArchiveDbContext).Assembly;
     private static readonly Assembly Api = typeof(ApiException).Assembly;
+    private static readonly Assembly ApiClient = typeof(SimplArchive.ApiClient.ApiCore).Assembly;
 
     // ---- Layer-dependency rules (dependencies point inward only) ------------------------------------------
 
@@ -55,6 +56,28 @@ public class ArchitectureTests
             .GetResult();
 
         AssertOk(result, "Infrastructure implements Application's interfaces; it must not reference Api/Auth/Client");
+    }
+
+    [Fact]
+    public void The_shared_api_client_depends_on_no_server_layer_and_no_ui()
+    {
+        // ADR 0917: the desktop and the mobile app share it, so it may know the wire and nothing on either side of it.
+        // "SimplArchive.Api." with the dot: NetArchTest matches by prefix, and the bare name would match this
+        // assembly's own namespace, SimplArchive.ApiClient.
+        var result = Types.InAssembly(ApiClient)
+            .Should().NotHaveDependencyOnAny(
+                "SimplArchive.Domain",
+                "SimplArchive.Application",
+                "SimplArchive.Infrastructure",
+                "SimplArchive.Auth",
+                "SimplArchive.Api.",
+                "SimplArchive.Client",
+                "SimplArchive.DesktopClient",
+                "Avalonia",
+                "Microsoft.Maui")
+            .GetResult();
+
+        AssertOk(result, "The shared API client is UI-free and server-free; a host supplies what differs (ApiClientSettings)");
     }
 
     // ---- Placement / naming conventions --------------------------------------------------------------------

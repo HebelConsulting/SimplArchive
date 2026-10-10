@@ -6,55 +6,6 @@ using SimplArchive.Localization;
 
 namespace SimplArchive.DesktopClient.Services;
 
-// Raised for an Api action that failed with a message worth showing the user (duplicate name, no permission).
-// Base for a real error condition surfaced by SimplArchiveApiClient — carries a user-facing message the crash
-// guard / status line displays. No longer sealed: intent-named conditions subclass it (per CLAUDE.md's
-// exception-type rule) while the existing catch(ApiActionException) surfacing still picks them up.
-public class ApiActionException(string message) : Exception(message);
-
-// Set-primary-location / promote-a-reference errors (ADR 0506) — a small family under ApiActionException so a
-// caller can catch the whole group and the status line still shows the message. Each type fixes its own message.
-public class PrimaryLocationException(string message) : ApiActionException(message);
-
-public sealed class CannotSetPrimaryLocationException()
-    : PrimaryLocationException("Can't set that folder as the primary location.");
-
-public sealed class SetPrimaryLocationForbiddenException()
-    : PrimaryLocationException("You don't have permission to change this item's primary location.");
-
-public sealed class PrimaryLocationConcurrencyException()
-    : PrimaryLocationException("This item changed since you loaded it — refresh and try again.");
-
-// A dropped file whose name is already used in the target folder. Its own type rather than the string-message
-// ApiActionException it replaces, because this one condition is RECOVERABLE — the caller asks the user what they
-// meant (a new version of what is there, or a new document under another name) instead of only reporting it.
-// Carries the name so the prompt can name the file without re-deriving it.
-public sealed class DocumentNameTakenException(string fileName)
-    : ApiActionException($"'{fileName}': a document with that name already exists here.")
-{
-    public string FileName { get; } = fileName;
-}
-
-// Raised by DeleteUserAsync when the user still holds pending review tasks and no replacement reviewer was
-// supplied (ADR "Workflow review reassignment") — the caller (Users & groups tab) prompts for a replacement
-// and retries with reassignReviewsTo.
-public sealed class ReviewerHasPendingReviewsException(string message) : Exception(message);
-
-// 409 DUPLICATE_ADDRESS_CLAIM (#703): the address is on another mailbox's list, and the message names it.
-// Its own type because it is a QUESTION, not a failure — the caller asks the admin and retries with
-// confirmDuplicateClaims rather than reporting an error.
-public sealed class DuplicateAddressClaimException(string message) : Exception(message);
-
-/// <summary>
-/// Somebody else wrote the document while this form was open — the 412 the combined detail save can now
-/// actually raise (ADR 0794), because its precondition is the tag the form was LOADED with.
-/// </summary>
-/// <remarks>
-/// Its own type rather than a bare <see cref="ApiActionException"/> so the pane can offer the one action that
-/// helps — reload and try again — instead of reporting it as a save that merely failed.
-/// </remarks>
-public sealed class DetailChangedElsewhereException(string message) : Exception(message);
-
 // Thin HTTP client over the SimplArchive Api (the same endpoints the Blazor client uses). See ADR
 // "Cross-platform desktop fat client (Avalonia)" and "Desktop workbench UI".
 public sealed class SimplArchiveApiClient
@@ -260,54 +211,8 @@ public sealed class SimplArchiveApiClient
     /// <summary>The intray's own api surface (ADR 0575) — its listing and its page operations.</summary>
     public IntrayApi Intray => _intray ??= new IntrayApi(Core);
 
-    // Turns a failed response into an ApiActionException carrying text the USER can read, in their language.
-    //
-    // Reads `errorCode`, not `detail`. The detail is English — the API's 153 exception classes carry their
-    // message as a constructor literal, so no Accept-Language handling reaches them — and this method is on the
-    // path of every failed call in the desktop, which made it the single biggest source of English in an
-    // otherwise German UI (issue #424). The code is the stable, language-neutral contract (ADR 0543), so it
-    // crosses the wire and ApiErrorText supplies the words.
-    internal static async Task ThrowIfProblemAsync(HttpResponseMessage response, string fallback, CancellationToken cancellationToken)
-    {
-        if (response.IsSuccessStatusCode)
-        {
-            return;
-        }
-
-        string? errorCode = null;
-        var offered = new List<(DateTimeOffset StartsAt, DateTimeOffset EndsAt)>();
-        try
-        {
-            var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-            if (json.TryGetProperty("errorCode", out var c) && c.GetString() is { Length: > 0 } code)
-            {
-                errorCode = code;
-            }
-
-            // The FACTS a refusal computed, never its prose (#1135 / issue #424): a booking outside the
-            // offered hours sends the hours as data, and the sentence is composed HERE in the reader's own
-            // language rather than quoted from an English exception message.
-            if (json.TryGetProperty("offered", out var windows) && windows.ValueKind == JsonValueKind.Array)
-            {
-                offered.AddRange(windows.EnumerateArray()
-                    .Where(w => w.TryGetProperty("startsAt", out _) && w.TryGetProperty("endsAt", out _))
-                    .Select(w => (w.GetProperty("startsAt").GetDateTimeOffset(), w.GetProperty("endsAt").GetDateTimeOffset())));
-            }
-        }
-        catch
-        {
-            // No problem body at all (a proxy error page, a connection reset) — fall back to the caller's message,
-            // which is already localised at its call site.
-            throw new ApiActionException(fallback);
-        }
-
-        var sentence = errorCode is null ? fallback : ApiErrorText.For(errorCode);
-        throw new ApiActionException(offered.Count > 0
-            ? sentence + " " + string.Format(
-                Strings.Get("ApiErrSlotNotOfferedHours"),
-                SimplArchive.Presentation.OfferedHours.Describe(offered))
-            : sentence);
-    }
+    internal static Task ThrowIfProblemAsync(HttpResponseMessage response, string fallback, CancellationToken cancellationToken) =>
+        ApiWire.ThrowIfProblemAsync(response, fallback, cancellationToken);
 
     // The always-shown system fields (ADR "System fields + OCR-language mask field"): Created/CreatedBy/
     // DocumentDate from the latest confirmed version; the OCR-language override + whether a TIFF source exists
@@ -329,18 +234,7 @@ public sealed class SimplArchiveApiClient
     }
 
 
-    // As ThrowIfProblemAsync: the machine code, never the server's English `detail` (issue #424).
-    internal static async Task<string> ErrorMessageAsync(HttpResponseMessage resp, string fallback)
-    {
-        try
-        {
-            var json = await resp.Content.ReadFromJsonAsync<JsonElement>();
-            if (json.TryGetProperty("errorCode", out var c) && c.GetString() is { Length: > 0 } code) return ApiErrorText.For(code);
-        }
-        catch { /* not a problem+json body */ }
-
-        return fallback;
-    }
+    internal static Task<string> ErrorMessageAsync(HttpResponseMessage resp, string fallback) => ApiWire.ErrorMessageAsync(resp, fallback);
 
     public sealed record DashFollowedInfo(Guid DocumentId, Guid? ParentId, string DocumentName, LinkMap? Links = null);
 
@@ -428,8 +322,7 @@ public sealed class SimplArchiveApiClient
             ParseLinks(e) is { } links && links.Href("remove") is { } removeHref ? removeHref : null);
 
 
-    internal static string? StrOrNull(JsonElement e, string name) =>
-        e.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null;
+    internal static string? StrOrNull(JsonElement e, string name) => ApiWire.StrOrNull(e, name);
 
 
     private static string? FindLink(JsonElement resource, string rel)

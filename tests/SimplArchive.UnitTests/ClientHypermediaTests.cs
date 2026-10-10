@@ -83,7 +83,7 @@ public partial class ClientHypermediaTests
         // nothing. The budget was right by coincidence and protected nothing (#862). Both are now counted for
         // what they are: the entry point is matched by EntryPointRead, and comments are not scanned at all.
         ["src/SimplArchive.Client/Services/ApiRoot.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/ApiCore.cs"] = 1,
+        ["src/SimplArchive.ApiClient/ApiCore.cs"] = 1,
         ["src/SimplArchive.Client/Services/BrowseService.cs"] = 1,
 
         // saconsole's entry point, the same single permanent exception the two clients each get: the API root
@@ -303,7 +303,7 @@ public partial class ClientHypermediaTests
         // 2026-09-26: "Even in saconsole always follow the rels. No assumed urls."
         foreach (var project in new[]
                  {
-                     "src/SimplArchive.Client", "src/SimplArchive.DesktopClient", "src/SimplArchive.Cli",
+                     "src/SimplArchive.Client", "src/SimplArchive.DesktopClient", "src/SimplArchive.ApiClient", "src/SimplArchive.Cli",
                  })
         {
             var dir = Path.Combine(root, project.Replace('/', Path.DirectorySeparatorChar));

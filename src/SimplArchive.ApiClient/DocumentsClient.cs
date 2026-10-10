@@ -6,7 +6,7 @@ using System.Text;
 using System.Text.Json;
 using SimplArchive.Localization;
 
-namespace SimplArchive.DesktopClient.Services;
+namespace SimplArchive.ApiClient;
 
 /// <summary>
 /// The documents area's client (#443, the finale): repositories/children, filing, rename/move/delete, the
@@ -24,7 +24,7 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
 
     /// <summary>For sibling extension files that carry this client's own wire choreography (the debt-list
     /// pressure valve — see <c>IndexDataWrites</c>).</summary>
-    internal ApiCore Core => _core;
+    public ApiCore Core => _core;
 
     /// <summary>A duplicate-probe hit (ADRs 0398/0686); the probe itself lives in <c>IndexDataWrites</c>.</summary>
     public sealed record DuplicateInfo(Guid Id, string Name, string Path);
@@ -216,7 +216,7 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
     /// renders. Empty for documents with no machine.</summary>
     public sealed record MachineStatusInfo(string Name, bool Satisfied, IReadOnlyList<string> Failures);
 
-    internal static IReadOnlyList<MachineStatusInfo> ParseMachineStatuses(JsonElement json)
+    public static IReadOnlyList<MachineStatusInfo> ParseMachineStatuses(JsonElement json)
     {
         if (!json.TryGetProperty("machineStatuses", out var statuses) || statuses.ValueKind != JsonValueKind.Array)
         {
@@ -310,14 +310,14 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
             {
                 history.Add(new WorkflowClient.WorkflowTransitionInfo(
                     h.GetProperty("toStatusName").GetString() ?? "",
-                    SimplArchiveApiClient.StrOrNull(h, "assignedToName"), SimplArchiveApiClient.StrOrNull(h, "performedByName"), SimplArchiveApiClient.StrOrNull(h, "rejectionReason")));
+                    ApiWire.StrOrNull(h, "assignedToName"), ApiWire.StrOrNull(h, "performedByName"), ApiWire.StrOrNull(h, "rejectionReason")));
             }
         }
 
         return new WorkflowClient.WorkflowInfo(
             json.GetProperty("status").GetInt32(),
             json.GetProperty("statusName").GetString() ?? "",
-            SimplArchiveApiClient.StrOrNull(json, "assignedToName"), history, LinkMap.FromHrefs(links));
+            ApiWire.StrOrNull(json, "assignedToName"), history, LinkMap.FromHrefs(links));
     }
 
     public async Task<bool> GetSubscriptionAsync(string subscriptionHref, CancellationToken cancellationToken = default) =>
@@ -987,7 +987,7 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
             throw new ApiActionException("This document has no downloadable version.");
         }
 
-        var (bytes, _) = await SimplArchiveApiClient.DownloadAsync(preview.DownloadUrl, cancellationToken);
+        var (bytes, _) = await ApiWire.DownloadAsync(preview.DownloadUrl, cancellationToken);
         return bytes;
     }
 

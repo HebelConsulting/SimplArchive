@@ -1,7 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 
-namespace SimplArchive.DesktopClient.Services;
+namespace SimplArchive.ApiClient;
 
 // The tag CATALOG admin surface (ADR "Tag controlled vocabulary", #416), in its own partial: create, rename,
 // recolour, retire and merge a tenant's tags, plus the two records the catalog is read into.
@@ -27,7 +27,7 @@ public sealed partial class DocumentsClient
     public async Task UpdateTagAsync(TagCatalogItem tag, string? name, string? color, CancellationToken cancellationToken = default)
     {
         var resp = await _core.Http.PutAsJsonAsync(RequireHref(tag, "self"), new { name, color }, cancellationToken);
-        if (!resp.IsSuccessStatusCode) throw new ApiActionException(await SimplArchiveApiClient.ErrorMessageAsync(resp, "Could not update the tag."));
+        if (!resp.IsSuccessStatusCode) throw new ApiActionException(await ApiWire.ErrorMessageAsync(resp, "Could not update the tag."));
     }
 
     public async Task RetireTagAsync(TagCatalogItem tag, CancellationToken cancellationToken = default) =>
@@ -37,7 +37,7 @@ public sealed partial class DocumentsClient
     public async Task MergeTagAsync(TagCatalogItem tag, Guid intoId, CancellationToken cancellationToken = default)
     {
         var resp = await _core.SendRelAsync(tag.Links, "merge", new { intoId }, cancellationToken);
-        if (!resp.IsSuccessStatusCode) throw new ApiActionException(await SimplArchiveApiClient.ErrorMessageAsync(resp, "Could not merge the tags."));
+        if (!resp.IsSuccessStatusCode) throw new ApiActionException(await ApiWire.ErrorMessageAsync(resp, "Could not merge the tags."));
     }
 
     private static string RequireHref(TagCatalogItem tag, string rel) =>
@@ -68,6 +68,6 @@ public sealed partial class DocumentsClient
     public async Task CreateTagAsync(string name, string? color, CancellationToken cancellationToken = default)
     {
         var resp = await _core.Http.PostAsJsonAsync(await _core.RootHrefAsync("tags", cancellationToken), new { name, color }, cancellationToken);
-        if (!resp.IsSuccessStatusCode) throw new ApiActionException(await SimplArchiveApiClient.ErrorMessageAsync(resp, "Could not add the tag."));
+        if (!resp.IsSuccessStatusCode) throw new ApiActionException(await ApiWire.ErrorMessageAsync(resp, "Could not add the tag."));
     }
 }

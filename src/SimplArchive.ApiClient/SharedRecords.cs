@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace SimplArchive.DesktopClient.Services;
+namespace SimplArchive.ApiClient;
 
 // The wire shapes several areas share (#443 finale): promoted to namespace level so no area client owns
 // them and nothing qualifies across owners. Node is THE listing row every tree/list surface holds.

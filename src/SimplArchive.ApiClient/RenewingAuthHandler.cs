@@ -3,7 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 
-namespace SimplArchive.DesktopClient.Services;
+namespace SimplArchive.ApiClient;
 
 /// <summary>
 /// Attaches the bearer token to every request, and renews it before — or, failing that, after — it expires.
@@ -72,7 +72,7 @@ public sealed class RenewingAuthHandler : DelegatingHandler
         if (current is not { CanRenew: true })
         {
             _session.Value = null;
-            TokenSessions.Current.Clear(_apiRootUrl);
+            ApiClientSettings.Sessions.Clear(_apiRootUrl);
             SessionEnded?.Invoke(_apiRootUrl);
 
             // THROW rather than hand the 401 back (#1251). Returning it made one ordinary expiry produce two
@@ -83,13 +83,13 @@ public sealed class RenewingAuthHandler : DelegatingHandler
             throw new SessionEndedException(_apiRootUrl);
         }
 
-        var renewed = await RenewAsync(current, cancellationToken);
+        var renewed = await RenewAsync(current, cancellationToken, rejected: current.AccessToken);
         if (renewed is null || string.IsNullOrEmpty(renewed.AccessToken))
         {
             // Renewal was possible in principle and still failed — the same ended session, reached one step
             // later. It must not return a 401 either, for exactly the reason above.
             _session.Value = null;
-            TokenSessions.Current.Clear(_apiRootUrl);
+            ApiClientSettings.Sessions.Clear(_apiRootUrl);
             SessionEnded?.Invoke(_apiRootUrl);
 
             response.Dispose();
@@ -112,7 +112,7 @@ public sealed class RenewingAuthHandler : DelegatingHandler
     }
 
     /// <summary>Exchanges the refresh token for a new pair, or ends the session when the server refuses.</summary>
-    private async Task<TokenSession?> RenewAsync(TokenSession session, CancellationToken cancellationToken)
+    private async Task<TokenSession?> RenewAsync(TokenSession session, CancellationToken cancellationToken, string? rejected = null)
     {
         await _renewGate.WaitAsync(cancellationToken);
         try
@@ -120,7 +120,11 @@ public sealed class RenewingAuthHandler : DelegatingHandler
             // Another request may have renewed while this one waited at the gate — the common case under load,
             // and the whole point of serialising. Take theirs rather than spending a second refresh token.
             var latest = _session.Value;
-            if (latest is { NeedsRenewal: false, AccessToken.Length: > 0 })
+            // …but never the token the server has just REFUSED. Without this a 401 before the clock's expiry (a server
+            // restarted, a token revoked) found the session "not due", replayed the same token and failed again,
+            // with a valid refresh token unused: the very cases renewing on a 401 exists for (found by the shared
+            // client's tests, ADR 0917).
+            if (latest is { NeedsRenewal: false, AccessToken.Length: > 0 } && !string.Equals(latest.AccessToken, rejected, StringComparison.Ordinal))
             {
                 return latest;
             }
@@ -137,7 +141,7 @@ public sealed class RenewingAuthHandler : DelegatingHandler
                 {
                     ["grant_type"] = "refresh_token",
                     ["refresh_token"] = refreshToken,
-                    ["client_id"] = DesktopClientOptions.ClientId,
+                    ["client_id"] = ApiClientSettings.ClientId,
                 }),
             };
 
@@ -150,7 +154,7 @@ public sealed class RenewingAuthHandler : DelegatingHandler
                 // deactivated. It will not start working, so the session is over and the stored token goes with
                 // it (see TokenSessions.Clear: a token kept here would fail every future launch first).
                 _session.Value = null;
-                TokenSessions.Current.Clear(_apiRootUrl);
+                ApiClientSettings.Sessions.Clear(_apiRootUrl);
                 SessionEnded?.Invoke(_apiRootUrl);
                 return null;
             }
@@ -160,7 +164,7 @@ public sealed class RenewingAuthHandler : DelegatingHandler
             if (string.IsNullOrEmpty(accessToken))
             {
                 _session.Value = null;
-                TokenSessions.Current.Clear(_apiRootUrl);
+                ApiClientSettings.Sessions.Clear(_apiRootUrl);
                 SessionEnded?.Invoke(_apiRootUrl);
                 return null;
             }
@@ -176,7 +180,7 @@ public sealed class RenewingAuthHandler : DelegatingHandler
             _session.Value = next;
 
             // The rotated refresh token is also persisted for the SERVER, so the next launch starts signed in.
-            TokenSessions.Current.Set(_apiRootUrl, next);
+            ApiClientSettings.Sessions.Set(_apiRootUrl, next);
             return next;
         }
         catch (HttpRequestException)

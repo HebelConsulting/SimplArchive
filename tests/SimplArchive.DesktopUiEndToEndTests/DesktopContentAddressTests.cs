@@ -256,26 +256,27 @@ public class DesktopContentAddressTests : IDisposable
         // authenticated one); a file appearing here that FETCHES A SERVER-SUPPLIED HREF is the bug above.
         var allowed = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["Services/ApiCore.cs"] = "the authenticated client and the anonymous content client — the one place a content address is resolved",
-            ["Services/SimplArchiveApiClient.cs"] = "the impersonation token exchange; carries a BaseAddress and posts to connect/token",
-            ["Services/ClientUpdate.cs"] = "the version manifest and the releases API — absolute, from configuration",
-            ["Services/ServerReachability.cs"] = "the discovery document at a configured base URL",
-            ["Services/ServerIdentity.cs"] = "the API root at a configured base URL",
+            ["SimplArchive.ApiClient/ApiCore.cs"] = "the authenticated client and the anonymous content client — the one place a content address is resolved",
+            ["SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = "the impersonation token exchange; carries a BaseAddress and posts to connect/token",
+            ["SimplArchive.DesktopClient/Services/ClientUpdate.cs"] = "the version manifest and the releases API — absolute, from configuration",
+            ["SimplArchive.DesktopClient/Services/ServerReachability.cs"] = "the discovery document at a configured base URL",
+            ["SimplArchive.DesktopClient/Services/ServerIdentity.cs"] = "the API root at a configured base URL",
         };
 
-        var found = Directory
-            .EnumerateFiles(Path.Combine(root, "src", "SimplArchive.DesktopClient"), "*.cs", SearchOption.AllDirectories)
+        // The desktop AND the shared API client it reads content through (ADR 0917): ApiCore moved there.
+        var found = new[] { "SimplArchive.DesktopClient", "SimplArchive.ApiClient" }
+            .SelectMany(project => Directory.EnumerateFiles(Path.Combine(root, "src", project), "*.cs", SearchOption.AllDirectories))
             .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
                 && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
             .Where(f => File.ReadAllText(f).Contains("new HttpClient", StringComparison.Ordinal))
-            .Select(f => Path.GetRelativePath(Path.Combine(root, "src", "SimplArchive.DesktopClient"), f)
+            .Select(f => Path.GetRelativePath(Path.Combine(root, "src"), f)
                 .Replace(Path.DirectorySeparatorChar, '/'))
             .OrderBy(f => f, StringComparer.Ordinal)
             .ToList();
 
         // Anti-vacuous: the scan must still see the clients that ARE there, or an allowlist check passes by
         // finding nothing at all.
-        Assert.Contains("Services/ApiCore.cs", found);
+        Assert.Contains("SimplArchive.ApiClient/ApiCore.cs", found);
 
         var unexpected = found.Where(f => !allowed.ContainsKey(f)).ToList();
         Assert.True(unexpected.Count == 0,

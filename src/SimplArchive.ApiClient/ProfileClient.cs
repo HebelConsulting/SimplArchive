@@ -3,7 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using SimplArchive.Localization;
 
-namespace SimplArchive.DesktopClient.Services;
+namespace SimplArchive.ApiClient;
 
 /// <summary>
 /// The signed-in account's own area (#443, ops tranche): the cached "me" resource and everything that
@@ -310,7 +310,7 @@ public sealed class ProfileClient(ApiCore core)
         json.TryGetProperty("port", out var pp) && pp.ValueKind == JsonValueKind.Number ? pp.GetInt32() : null,
         json.TryGetProperty("tlsPort", out var tp) && tp.ValueKind == JsonValueKind.Number ? tp.GetInt32() : null,
         json.TryGetProperty("showAllDocuments", out var sd) && sd.ValueKind == JsonValueKind.True,
-        SimplArchiveApiClient.StrOrNull(json, "password"),
+        ApiWire.StrOrNull(json, "password"),
         ApiCore.ParseLinks(json));
 
     // ---- Self-service S/MIME certificate (#1332, ADR 0816) ------------------------------------------
@@ -353,11 +353,11 @@ public sealed class ProfileClient(ApiCore core)
     private static SmimeInfo ParseSmime(JsonElement json) => new(
         json.TryGetProperty("selfService", out var ss) && ss.ValueKind == JsonValueKind.True,
         json.TryGetProperty("enabled", out var en) && en.ValueKind == JsonValueKind.True,
-        SimplArchiveApiClient.StrOrNull(json, "subject"),
+        ApiWire.StrOrNull(json, "subject"),
         json.TryGetProperty("notAfter", out var na) && na.ValueKind == JsonValueKind.String ? na.GetDateTimeOffset() : null,
-        SimplArchiveApiClient.StrOrNull(json, "pkcs12"),
-        SimplArchiveApiClient.StrOrNull(json, "mobileConfig"),
-        SimplArchiveApiClient.StrOrNull(json, "fileNameStem"),
+        ApiWire.StrOrNull(json, "pkcs12"),
+        ApiWire.StrOrNull(json, "mobileConfig"),
+        ApiWire.StrOrNull(json, "fileNameStem"),
         ApiCore.ParseLinks(json));
 
     // ---- Two-factor authentication (ADR "MFA (interactive login, TOTP)") ----------------------------

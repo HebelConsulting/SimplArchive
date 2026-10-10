@@ -58,6 +58,8 @@
     <!-- The client's own log (ADR 0613): a rolling text file beside its settings, because stderr goes nowhere in
          a packaged build. Same Serilog the server uses, so the levels mean one thing across the product. -->
     <PackageReference Include="Serilog" Version="4.2.0" />
+    <!-- Bridges the desktop's Serilog logger to the ILogger the shared API client logs through (ADR 0917). -->
+    <PackageReference Include="Serilog.Extensions.Logging" Version="9.0.2" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
     <!-- Material Design icons for the ribbon/buttons (matches the web app's Material icons). Both packages
@@ -77,6 +79,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\SimplArchive.ApiClient\SimplArchive.ApiClient.csproj" />
     <ProjectReference Include="..\SimplArchive.Localization\SimplArchive.Localization.csproj" />
     <!-- The design tokens (ADR 0578): the shipped palette for the icon art, and the loader that
          applies a custom theme at startup. -->
@@ -96,4 +99,9 @@
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
     <PackageReference Include="System.Drawing.Common" Version="10.0.12" />
   </ItemGroup>
+  <!-- The shared API client's types (ADR 0917) are used across the desktop like its own were. -->
+  <ItemGroup>
+    <Using Include="SimplArchive.ApiClient" />
+  </ItemGroup>
+
 </Project>

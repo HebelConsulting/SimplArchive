@@ -127,7 +127,7 @@ public sealed partial class MainWindowViewModel
                 await LoadFolderContentsAsync(parentId);
             }
         }
-        catch (Services.ApiActionException e) { Status = e.Message; }
+        catch (SimplArchive.ApiClient.ApiActionException e) { Status = e.Message; }
         catch (Exception e) { Status = string.Format(Strings.Get(errKey), e.Message); }
     }
 
@@ -149,7 +149,7 @@ public sealed partial class MainWindowViewModel
                 await LoadFolderContentsAsync(current);
             }
         }
-        catch (Services.ApiActionException e) { Status = e.Message; }
+        catch (SimplArchive.ApiClient.ApiActionException e) { Status = e.Message; }
         catch (Exception e) { Status = string.Format(Strings.Get("StErrRename"), e.Message); }
     }
 
@@ -173,7 +173,7 @@ public sealed partial class MainWindowViewModel
                 await LoadFolderContentsAsync(current);
             }
         }
-        catch (Services.ApiActionException e) { Status = e.Message; }
+        catch (SimplArchive.ApiClient.ApiActionException e) { Status = e.Message; }
         catch (Exception e) { Status = string.Format(Strings.Get("StErrMove"), e.Message); }
     }
 
@@ -197,7 +197,7 @@ public sealed partial class MainWindowViewModel
                 await LoadFolderContentsAsync(current);
             }
         }
-        catch (Services.ApiActionException e) { Status = e.Message; }
+        catch (SimplArchive.ApiClient.ApiActionException e) { Status = e.Message; }
         catch (Exception e) { Status = string.Format(Strings.Get("StErrPlaceRef"), e.Message); }
     }
 
@@ -222,7 +222,7 @@ public sealed partial class MainWindowViewModel
 
             await ReloadTreeAsync();
         }
-        catch (Services.ApiActionException e) { Status = e.Message; }
+        catch (SimplArchive.ApiClient.ApiActionException e) { Status = e.Message; }
         catch (Exception e) { Status = string.Format(Strings.Get("StErrDeleteMsg"), e.Message); }
     }
 
@@ -243,7 +243,7 @@ public sealed partial class MainWindowViewModel
             await _api.Documents.SetSubscriptionAsync(subscriptionHref, !following);
             Status = !following ? "Following this folder and everything in it." : "Unfollowed folder.";
         }
-        catch (Services.ApiActionException e) { Status = e.Message; }
+        catch (SimplArchive.ApiClient.ApiActionException e) { Status = e.Message; }
         catch (Exception e) { Status = string.Format(Strings.Get("StErrSubscriptionMsg"), e.Message); }
     }
 
@@ -263,7 +263,7 @@ public sealed partial class MainWindowViewModel
             Status = string.Format(Strings.Get("StRenamedTo"), newName);
             await LoadFolderContentsAsync(folderId);
         }
-        catch (Services.ApiActionException e)
+        catch (SimplArchive.ApiClient.ApiActionException e)
         {
             ReportError(e.Message);
         }
@@ -313,7 +313,7 @@ public sealed partial class MainWindowViewModel
 
             await LoadFolderContentsAsync(folderId);
         }
-        catch (Services.ApiActionException e)
+        catch (SimplArchive.ApiClient.ApiActionException e)
         {
             ReportError(e.Message);
         }
@@ -337,7 +337,7 @@ public sealed partial class MainWindowViewModel
             Status = string.Format(Strings.Get("StMoved"), node.Name);
             await LoadFolderContentsAsync(folderId);
         }
-        catch (Services.ApiActionException e)
+        catch (SimplArchive.ApiClient.ApiActionException e)
         {
             ReportError(e.Message);
         }

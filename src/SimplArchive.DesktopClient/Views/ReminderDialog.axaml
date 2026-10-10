@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="using:SimplArchive.DesktopClient.Localization"
         xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
-        xmlns:svc="using:SimplArchive.DesktopClient.Services"
+        xmlns:api="using:SimplArchive.ApiClient"
         xmlns:conv="using:Avalonia.Data.Converters"
         x:Class="SimplArchive.DesktopClient.Views.ReminderDialog"
         x:DataType="vm:ReminderDialogViewModel"
@@ -14,7 +14,7 @@
         <!-- Pending reminders (set by / targeted at the caller), each cancellable. Empty → nothing renders. -->
         <ItemsControl ItemsSource="{Binding Reminders}">
             <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="svc:RemindersClient+ReminderInfo">
+                <DataTemplate x:DataType="api:RemindersClient+ReminderInfo">
                     <Grid ColumnDefinitions="*,Auto" Margin="0,2">
                         <StackPanel Grid.Column="0">
                             <SelectableTextBlock Text="{Binding RemindAt, StringFormat='{}{0:g}'}" FontSize="12" />
@@ -45,7 +45,7 @@
             <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:Tr RemRemind}" VerticalAlignment="Center" />
             <ComboBox Grid.Row="4" Grid.Column="1" ItemsSource="{Binding Targets}" SelectedItem="{Binding SelectedTarget}" HorizontalAlignment="Stretch">
                 <ComboBox.ItemTemplate>
-                    <DataTemplate x:DataType="svc:UserOptionInfo">
+                    <DataTemplate x:DataType="api:UserOptionInfo">
                         <TextBlock Text="{Binding DisplayName}" />
                     </DataTemplate>
                 </ComboBox.ItemTemplate>

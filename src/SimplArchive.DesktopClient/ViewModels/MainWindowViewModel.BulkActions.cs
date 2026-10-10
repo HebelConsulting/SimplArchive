@@ -68,7 +68,7 @@ public sealed partial class MainWindowViewModel
             ClearDetail();
             await LoadFolderContentsAsync(folderId);
         }
-        catch (Services.ApiActionException e)
+        catch (SimplArchive.ApiClient.ApiActionException e)
         {
             ReportError(e.Message);
         }
@@ -93,7 +93,7 @@ public sealed partial class MainWindowViewModel
             Status = string.Format(Strings.Get("StPlacedRef"), node.Name);
             await LoadFolderContentsAsync(folderId);
         }
-        catch (Services.ApiActionException e)
+        catch (SimplArchive.ApiClient.ApiActionException e)
         {
             ReportError(e.Message);
         }
@@ -124,7 +124,7 @@ public sealed partial class MainWindowViewModel
             Status = string.Format(Strings.Get("StBulkResult"), result.Succeeded, verb) + (result.Skipped > 0 ? string.Format(Strings.Get("StBulkSkipped"), result.Skipped) : ".");
             await LoadFolderContentsAsync(folderId);
         }
-        catch (Services.ApiActionException e)
+        catch (SimplArchive.ApiClient.ApiActionException e)
         {
             ReportError(e.Message);
         }

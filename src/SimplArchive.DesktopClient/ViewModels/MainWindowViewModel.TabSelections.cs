@@ -80,9 +80,9 @@ public sealed partial class MainWindowViewModel
         IsLoggedIn = true;
         IsTenantAdmin = true;
         TagCatalogAdmin.Clear();
-        TagCatalogAdmin.Add(new TagCatalogRow(new Services.DocumentsClient.TagCatalogItem(Guid.NewGuid(), "contract", "#2e7d32")));
-        TagCatalogAdmin.Add(new TagCatalogRow(new Services.DocumentsClient.TagCatalogItem(Guid.NewGuid(), "invoice", "#1565c0")));
-        TagCatalogAdmin.Add(new TagCatalogRow(new Services.DocumentsClient.TagCatalogItem(Guid.NewGuid(), "urgent", null)));
+        TagCatalogAdmin.Add(new TagCatalogRow(new SimplArchive.ApiClient.DocumentsClient.TagCatalogItem(Guid.NewGuid(), "contract", "#2e7d32")));
+        TagCatalogAdmin.Add(new TagCatalogRow(new SimplArchive.ApiClient.DocumentsClient.TagCatalogItem(Guid.NewGuid(), "invoice", "#1565c0")));
+        TagCatalogAdmin.Add(new TagCatalogRow(new SimplArchive.ApiClient.DocumentsClient.TagCatalogItem(Guid.NewGuid(), "urgent", null)));
         SelectedTagRow = TagCatalogAdmin[0];
     }
 
@@ -221,7 +221,7 @@ public sealed partial class MainWindowViewModel
             // rather than a report of it. WorkflowStateDisplay is the reloaded value by this point.
             Status = string.Format(Strings.Get("StWorkflowStatus"), WorkflowStateDisplay);
         }
-        catch (Services.ApiActionException e) { Status = e.Message; }
+        catch (SimplArchive.ApiClient.ApiActionException e) { Status = e.Message; }
         catch (Exception) { Status = Strings.Get("WorkflowActionFailed"); }
     }
 
@@ -332,7 +332,7 @@ public sealed partial class MainWindowViewModel
             TenantEditingGroup = null;
             Status = Strings.Get("StTenantSaved");
         }
-        catch (Services.ApiActionException ex)
+        catch (SimplArchive.ApiClient.ApiActionException ex)
         {
             ReportError(ex.Message);
         }

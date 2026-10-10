@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/SimplArchive.Api/SimplArchive.Api.csproj" />
+    <Project Path="src/SimplArchive.ApiClient/SimplArchive.ApiClient.csproj" />
     <Project Path="src/SimplArchive.Application/SimplArchive.Application.csproj" />
     <Project Path="src/SimplArchive.Auth/SimplArchive.Auth.csproj" />
     <Project Path="src/SimplArchive.Cli/SimplArchive.Cli.csproj" />

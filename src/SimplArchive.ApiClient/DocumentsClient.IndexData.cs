@@ -1,7 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 
-namespace SimplArchive.DesktopClient.Services;
+namespace SimplArchive.ApiClient;
 
 // Reading a document's index data, split from the main DocumentsClient file by responsibility (the
 // 1000-line rule): the served field groups, and the DocumentReference targets the server resolved for them
