@@ -169,7 +169,7 @@ public sealed partial class MainWindowViewModel
         // creation for its cursor, so re-sort by name here (all pages are loaded).
         var children = await _api!.Documents.GetChildrenAsync(node.Href("children"));
         var folderNodes = children
-            .Where(c => !c.HasVersions)
+            .Where(c => c.IsFolder)
             .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
             .Select(c => new TreeNodeViewModel(c.Id, c.Name, c.HasSubfolders, LoadTreeChildrenAsync, links: c.Links, hasReferences: c.HasReferences, hasChildren: c.HasChildren, admits: c.Admits, icon: c.Icon,
                 canDelete: c.CanDelete, canEditIndexData: c.CanEditIndexData, canMove: c.CanMove, canManagePermissions: c.CanManagePermissions, canCreateChildren: c.CanCreateChildren));

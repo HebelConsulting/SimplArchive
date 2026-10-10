@@ -38,6 +38,9 @@ public record RepositorySummary
 
     public bool HasVersions { get; set; }
 
+    // The row's folder flag (#1708); a repository is always a container, null from an older server.
+    public bool? IsFolder { get; set; }
+
     public bool HasSubfolders { get; set; }
 
     /// <summary>What may be created in this repository, with the address for each (#673).</summary>

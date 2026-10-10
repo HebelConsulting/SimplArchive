@@ -47,7 +47,13 @@ public sealed class ReferencesClient(ApiCore core)
         string DocumentType = "", DateOnly? DocumentDate = null, TimeOnly? DocumentTime = null, long? SizeBytes = null,
         IReadOnlyList<string>? Tags = null, string CreatedBy = "", string SensitivityLabelName = "",
         string? SensitivityLabelColor = null, int VersionCount = 0, DateTimeOffset? VersionCreatedAt = null,
-        string? Icon = null);
+        string? Icon = null,
+        // The TARGET's folder flag from its mask (#1708); null from a server that does not send it.
+        bool? Folder = null)
+    {
+        /// <summary>Whether the target is a folder: the server's answer, else the old "has no file" inference.</summary>
+        public bool IsFolder => Folder ?? !HasVersions;
+    }
 
     // The references (shortcuts) filed in a folder — see ADR "Desktop drag-and-drop move and reference".
     public Task<List<Reference>> GetReferencesAsync(string referencesHref, CancellationToken cancellationToken = default) =>
@@ -157,5 +163,6 @@ public sealed class ReferencesClient(ApiCore core)
         item.TryGetProperty("sensitivityLabelColor", out var slc) && slc.ValueKind == JsonValueKind.String ? slc.GetString() : null,
         item.TryGetProperty("versionCount", out var vc) && vc.ValueKind == JsonValueKind.Number ? vc.GetInt32() : 0,
         item.TryGetProperty("versionCreatedAt", out var vca) && vca.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(vca.GetString(), out var vcaDt) ? vcaDt : null,
-        item.TryGetProperty("icon", out var ic) && ic.ValueKind == JsonValueKind.String ? ic.GetString() : null);
+        item.TryGetProperty("icon", out var ic) && ic.ValueKind == JsonValueKind.String ? ic.GetString() : null,
+        RowFlags.IsFolderOf(item));
 }

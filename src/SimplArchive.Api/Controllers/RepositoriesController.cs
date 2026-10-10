@@ -128,6 +128,9 @@ public class RepositoriesController : ControllerBase
 
         public bool HasVersions { get; set; }
 
+        // A repository is always a container (#1708): every row says isFolder from the server, never from "has no file".
+        public bool IsFolder { get; set; } = true;
+
         public bool HasSubfolders { get; set; }
 
         /// <summary>What a client may create in this repository, with the address for each (#673).</summary>
@@ -552,6 +555,9 @@ public class RepositoriesController : ControllerBase
 
         public bool HasVersions { get; set; }
 
+        // A folder by its mask, not by "has no file" (#1708; FolderRows).
+        public bool IsFolder { get; set; }
+
         // True when at least one DocumentReference targets this item — see ADR "References-of-an-item list".
         public bool HasReferences { get; set; }
 
@@ -624,12 +630,14 @@ public class RepositoriesController : ControllerBase
             links.Add(new Link("next", Url.Action(nameof(ListDocuments), new { repositoryId, cursor = nextCursor, limit = pageSize })!, "GET"));
         }
 
+        var rules = await _containment.ForAsync(_dbContext, _currentTenantAccessor.TenantId!.Value, cancellationToken);
         var documents = page.Select(d => new DocumentSummaryResource
         {
             Id = d.Id,
             Name = d.Name,
             HasChildren = d.HasChildren,
             HasVersions = d.HasVersions,
+            IsFolder = rules.IsFolderRow(d.MaskId, d.HasVersions),
             HasReferences = d.HasReferences,
             OnLegalHold = d.OnLegalHold,
             Links = new List<Link> { new("self", $"/api/documents/{d.Id}", "GET") },

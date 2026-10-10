@@ -704,7 +704,8 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         item.TryGetProperty("canEditIndexData", out var ce) && ce.ValueKind == JsonValueKind.True,
         item.TryGetProperty("canMove", out var cm) && cm.ValueKind == JsonValueKind.True,
         item.TryGetProperty("canManagePermissions", out var cmp) && cmp.ValueKind == JsonValueKind.True,
-        item.TryGetProperty("canCreateChildren", out var ccc) && ccc.ValueKind == JsonValueKind.True);
+        item.TryGetProperty("canCreateChildren", out var ccc) && ccc.ValueKind == JsonValueKind.True,
+        RowFlags.IsFolderOf(item));
 
     // What this folder will accept, with the address for each (#673). An absent or empty array means the
     // client offers no creates here — the same reading as a missing rel: not available to you, here, now.

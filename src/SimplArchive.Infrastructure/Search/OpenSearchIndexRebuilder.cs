@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Documents;
+using SimplArchive.Infrastructure.Masks;
 using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Infrastructure.Search;
@@ -372,7 +373,7 @@ public sealed class OpenSearchIndexRebuilder
             repositoryId,
             parentId = doc.ParentId,
             indexedVersionId = version?.Id,
-            isFolder = version is null,
+            isFolder = await _dbContext.IsFolderAsync(doc.MaskVersionId, cancellationToken),   // by mask (#1708)
             name = doc.Name,
             indexValues = string.Join(" ", indexValues),
             content,

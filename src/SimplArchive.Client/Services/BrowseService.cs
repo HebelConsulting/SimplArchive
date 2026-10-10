@@ -154,7 +154,8 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
                     ChatHref: Links.Href(c.Links, "chat"),
                     Links: Links.RelMap(c.Links),
                     Admits: c.Admits,
-                    Icon: c.Icon));
+                    Icon: c.Icon,
+                    Folder: c.IsFolder));
             }
             url = Links.Href(page?.Links, "next");
         }
@@ -175,7 +176,8 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
                     VersionCount: r.VersionCount, VersionCreatedAt: r.VersionCreatedAt,
                     ChatHref: Links.Href(r.Links, "chat"), // reference rows now carry the target's sub-resources
                     Links: Links.RelMap(r.Links),
-                    Icon: r.Icon));
+                    Icon: r.Icon,
+                    Folder: r.IsFolder));
             }
             refUrl = Links.Href(page?.Links, "next");
         }

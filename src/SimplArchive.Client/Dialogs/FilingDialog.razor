@@ -125,7 +125,7 @@
         while (url is not null)
         {
             var page = await Http.GetFromJsonAsync<ChildrenResponse>(url);
-            foreach (var c in (page?.Children ?? []).Where(c => !c.HasVersions))
+            foreach (var c in (page?.Children ?? []).Where(c => c.IsFolder ?? !c.HasVersions))
             {
                 children.Add(ToItem(new PickNode(c.Id, c.Name, c.HasSubfolders, Rel(c.Links, "children"), c.CanCreateChildren)));
             }
@@ -181,5 +181,5 @@
     private record ListResponse { public List<Repo> Repositories { get; set; } = []; public List<Link> Links { get; set; } = []; }
     private record Repo { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public bool HasSubfolders { get; set; } public bool CanCreateChildren { get; set; } public List<Link> Links { get; set; } = []; }
     private record ChildrenResponse { public List<Child> Children { get; set; } = []; public List<Link> Links { get; set; } = []; }
-    private record Child { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } public bool CanCreateChildren { get; set; } public List<Link> Links { get; set; } = []; }
+    private record Child { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public bool HasVersions { get; set; } public bool? IsFolder { get; set; } public bool HasSubfolders { get; set; } public bool CanCreateChildren { get; set; } public List<Link> Links { get; set; } = []; }
 }

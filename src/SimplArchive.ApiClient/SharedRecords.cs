@@ -71,8 +71,14 @@ public sealed record Node(Guid Id, string Name, bool HasChildren, bool HasVersio
     // May a PLAIN child — a folder, or an uploaded document — be created in this row? The successor to the
     // `create-child` rel, which addressed the same URL as `children` and differed only by method (#854,
     // ADR 0719). The rel answered the mask rule only; this answers the rights too.
-    bool CanCreateChildren = false)
+    bool CanCreateChildren = false,
+    // What the SERVER says this row is, from its mask (#1708); null when the server predates the flag.
+    bool? Folder = null)
 {
+    /// <summary>Whether the row is a folder: the server's answer from the mask (#1708), else the old inference
+    /// "has no file version", which reads a file-less record (a push key, a credential) as an empty folder.</summary>
+    public bool IsFolder => Folder ?? !HasVersions;
+
     /// <summary>The advertised href for <paramref name="rel"/>.</summary>
     /// <remarks>
     /// Throws rather than falling back to a composed path. A rel the server did not advertise means the

@@ -297,7 +297,7 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
         // Folders are always sorted alphabetically in the tree (issue #339); the contents load orders for its list
         // default, so re-sort the folder nodes by name here.
         var children = (await browse.LoadContentsAsync(node.Id, node.RepositoryId, BrowseService.ChildrenHrefOf(node), BrowseService.ReferencesHrefOf(node))).Nodes
-            .Where(c => !c.HasVersions)
+            .Where(c => c.IsFolder)   // the tree shows folders, by mask (#1708)
             .OrderBy(c => c.DisplayName, StringComparer.OrdinalIgnoreCase).Select(BrowseService.ToTreeItem).ToList();
 
         // The Personal repository nests the Intray + Check-out launcher nodes above its real subfolders,

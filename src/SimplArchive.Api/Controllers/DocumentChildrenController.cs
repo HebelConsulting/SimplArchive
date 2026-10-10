@@ -129,6 +129,10 @@ public class DocumentChildrenController : ControllerBase
 
         public bool HasVersions { get; set; }
 
+        // A folder by its MASK, not by "has no file" (#1708): a file-less record is a document. Clients open,
+        // select and draw a row by this; HasVersions only says whether content exists.
+        public bool IsFolder { get; set; }
+
         public bool HasSubfolders { get; set; }
 
         // True when at least one DocumentReference targets this item — drives the "References …" affordance.
@@ -371,6 +375,7 @@ public class DocumentChildrenController : ControllerBase
             Name = d.Name,
             HasChildren = d.HasChildren,
             HasVersions = d.HasVersions,
+            IsFolder = rules.IsFolderRow(d.MaskId, d.HasVersions),
             HasSubfolders = d.HasSubfolders,
             HasReferences = d.HasReferences,
             OnLegalHold = d.OnLegalHold,

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Controllers;
 using SimplArchive.Api.Errors.Exceptions.Documents;
 using SimplArchive.Domain.Documents;
+using SimplArchive.Infrastructure.Masks;
 using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Api.Documents;
@@ -125,8 +126,9 @@ public class DocumentDetailWriter(
             : null;
 
         // A folder is one wearing a folder MASK — the canonical test, rather than "has no versions", which is
-        // a consequence that also holds for a document whose upload never finished.
-        var isFolder = await FolderMask.IsFolderMaskAsync(dbContext, document.MaskVersionId, cancellationToken);
+        // a consequence that also holds for a document whose upload never finished. ANY folder mask, typed ones
+        // included (an address book), as every listing row now says (#1708); this used to know only "Folder".
+        var isFolder = await dbContext.IsFolderAsync(document.MaskVersionId, cancellationToken);
 
         return new Snapshot(document, currentVersion, ocrSource, tags, fields, mask?.MaskId, mask?.Name, labelName, isFolder);
     }

@@ -595,6 +595,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
                     Name = child.Name,
                     HasChildren = child.HasChildren,
                     HasVersions = child.HasVersions,
+                    Folder = child.IsFolder,
                     HasReferences = child.HasReferences,
                     OnLegalHold = child.OnLegalHold,
                     CheckedOut = child.CheckedOut,
@@ -615,37 +616,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IShellContex
             }
 
             // References (shortcuts) filed in this folder, rendered with a shortcut icon — see ADR "Desktop
-            // drag-and-drop move and reference". Id is the target, so Open/Save-as/detail act on it.
+            // drag-and-drop move and reference". The row is built where the references live (ReferenceRow).
             foreach (var reference in references)
             {
-                Items.Add(new NodeViewModel
-                {
-                    // The server advertises the same target sub-resources a children row gets (#416), so the
-                    // shortcut row is no less capable than the real row beside it.
-                    Links = reference.Links,
-                    Id = reference.TargetId,
-                    Name = reference.Name,
-                    HasChildren = reference.HasChildren,
-                    HasVersions = reference.HasVersions,
-                    HasReferences = reference.HasReferences,
-                    IsReference = true,
-                    ReferenceId = reference.ReferenceId,
-                    ReferenceDeleteHref = reference.DeleteHref,
-                    RealParentId = reference.RealParentId,
-
-                    // The target's columns, so a shortcut row reads like the real row beside it (#768).
-                    DocumentType = reference.DocumentType,
-                    DocumentDate = reference.DocumentDate,
-                    DocumentTime = reference.DocumentTime,
-                    SizeBytes = reference.SizeBytes,
-                    Tags = reference.Tags ?? [],
-                    CreatedBy = reference.CreatedBy,
-                    SensitivityLabelName = reference.SensitivityLabelName,
-                    SensitivityLabelColor = reference.SensitivityLabelColor,
-                    VersionCount = reference.VersionCount,
-                    VersionCreatedAt = reference.VersionCreatedAt,
-                    MaskIconToken = reference.Icon,
-                });
+                Items.Add(ReferenceRow(reference));
             }
 
             ApplyContentSort(); // keep the chosen column sort across folder navigation

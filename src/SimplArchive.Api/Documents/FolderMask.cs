@@ -34,10 +34,6 @@ public static class FolderMask
             .Select(mv => (Guid?)mv.Id)
             .FirstOrDefaultAsync(cancellationToken);
 
-    // Whether a mask-version id belongs to the Folder well-known mask (so finalize treats it as unclassified).
-    public static async Task<bool> IsFolderMaskAsync(SimplArchiveDbContext dbContext, Guid? maskVersionId, CancellationToken cancellationToken) =>
-        maskVersionId is { } id && await dbContext.MaskVersions.AnyAsync(mv => mv.Id == id && mv.MaskId == WellKnownMaskIds.Folder, cancellationToken);
-
     /// <summary>
     /// Whether this mask leaves the document still OPEN TO CLASSIFICATION — the generic types, not a real one.
     /// </summary>

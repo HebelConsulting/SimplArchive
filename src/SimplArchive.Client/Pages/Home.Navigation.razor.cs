@@ -379,7 +379,9 @@ public partial class Home
     {
         _bulkIds.Clear();
         _bulkAnchorId = node.Id;
-        if (node.HasVersions)
+        // A document is selected as an item, its index data shown; only a FOLDER (by its mask, #1708) is opened as
+        // the content folder. "Has no file" used to decide it, and a file-less record opened as an empty folder.
+        if (!node.IsFolder)
         {
             await SelectItemAsync(node);
         }

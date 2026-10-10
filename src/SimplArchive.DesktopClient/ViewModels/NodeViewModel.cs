@@ -169,8 +169,13 @@ public sealed class NodeViewModel
     // "Per-folder contents sort order"). Null for a folder / version-less doc.
     public DateTimeOffset? VersionCreatedAt { get; init; }
 
-    // A folder is a Document with no versions (ADR 0175); a document has versions.
-    public bool IsFolder => !HasVersions;
+    // What the SERVER says this row is, from its mask (#1708); null for a row built here or from an older server.
+    public bool? Folder { get; init; }
+
+    // A folder by its mask, as the listing says (#1708). The old inference, "a Document with no versions"
+    // (ADR 0175), remains only as the fallback: it read a file-less record (a push key, a credential) as an empty
+    // folder, opened it as the current folder, and the list kept reloading it until a real folder was opened.
+    public bool IsFolder => Folder ?? !HasVersions;
 
     // Material Design Icons glyph name for the row. References get a shortcut variant; archive rows their own.
     //

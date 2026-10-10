@@ -130,12 +130,12 @@ public sealed partial class FolderPickerViewModel : ObservableObject
     {
         var children = await _api.Documents.GetChildrenAsync(node.Href("children"));
         return children
-            .Where(c => !c.HasVersions) // folders only
-                                        // canCreateChildren must be carried explicitly (#854). While it was the `create-child` REL it rode
-                                        // inside Links, which this site already passed, so the gate worked here without anyone thinking
-                                        // about it. A flag does not ride along — it is a field, and a construction site that omits it says
-                                        // "you may not create here" in the safe direction but the wrong one. This picker's two sites are
-                                        // its own, separate from the tree's, and they are exactly the ones the conversion first missed.
+            .Where(c => c.IsFolder) // folders only, by mask (#1708)
+                                    // canCreateChildren must be carried explicitly (#854). While it was the `create-child` REL it rode
+                                    // inside Links, which this site already passed, so the gate worked here without anyone thinking
+                                    // about it. A flag does not ride along — it is a field, and a construction site that omits it says
+                                    // "you may not create here" in the safe direction but the wrong one. This picker's two sites are
+                                    // its own, separate from the tree's, and they are exactly the ones the conversion first missed.
             .Select(c => new TreeNodeViewModel(
                 c.Id, c.Name, c.HasSubfolders, LoadChildrenAsync, links: c.Links, canCreateChildren: c.CanCreateChildren));
     }

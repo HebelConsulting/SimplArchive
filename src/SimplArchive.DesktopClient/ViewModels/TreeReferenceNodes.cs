@@ -49,7 +49,7 @@ public static class TreeReferenceNodes
         // Aerodrome shortcuts in My Documents; every folder shortcut in the tree had it. The web client already
         // passed the row's links (BrowseService).
         return (await references.GetReferencesAsync(node.Href("references")))
-            .Where(r => !r.HasVersions)
+            .Where(r => r.IsFolder)
             .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
             .Select(r => new TreeNodeViewModel(
                 r.TargetId, r.Name, r.HasSubfolders, expand,

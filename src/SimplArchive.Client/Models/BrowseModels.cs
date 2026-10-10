@@ -38,6 +38,9 @@ public record DocumentSummary
     public string Name { get; set; } = string.Empty;
     public bool HasChildren { get; set; }
     public bool HasVersions { get; set; }
+
+    // The row's folder flag from its mask (#1708); null from a server that does not send it.
+    public bool? IsFolder { get; set; }
     public bool HasSubfolders { get; set; }
     public bool HasReferences { get; set; }
     public bool OnLegalHold { get; set; }
@@ -86,6 +89,9 @@ public record ReferenceSummary
     public string Name { get; set; } = string.Empty;
     public bool HasChildren { get; set; }
     public bool HasVersions { get; set; }
+
+    // The row's folder flag from its mask (#1708); null from a server that does not send it.
+    public bool? IsFolder { get; set; }
     public bool HasSubfolders { get; set; }
     public bool HasReferences { get; set; }
     public Guid? RealParentId { get; set; }

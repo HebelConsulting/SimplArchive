@@ -67,6 +67,9 @@ public class DocumentReferencesController : ControllerBase
 
         public bool HasVersions { get; set; }
 
+        // The TARGET is a folder by its mask, not by "has no file" (#1708; FolderRows).
+        public bool IsFolder { get; set; }
+
         public bool HasSubfolders { get; set; }
 
         // True when at least one other DocumentReference targets this item — see ADR "References-of-an-item
@@ -406,6 +409,7 @@ public class DocumentReferencesController : ControllerBase
             Name = row.Name,
             HasChildren = row.HasChildren,
             HasVersions = row.HasVersions,
+            IsFolder = rules.IsFolderRow(columns?.MaskId, row.HasVersions),
             HasSubfolders = row.HasSubfolders,
             HasReferences = row.HasReferences,
             RealParentId = row.RealParentId,

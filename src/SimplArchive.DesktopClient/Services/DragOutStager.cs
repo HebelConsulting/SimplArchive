@@ -113,7 +113,7 @@ public static class DragOutStager
         foreach (var child in await api.Documents.GetChildrenAsync(childrenHref, ct))
         {
             var name = Sanitize(child.Name);
-            if (!child.HasVersions)
+            if (child.IsFolder)
             {
                 await AddFolderAsync(api, child.Href("children"), prefix + name + "/", zip, ct);
                 continue;

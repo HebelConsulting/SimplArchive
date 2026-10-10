@@ -87,9 +87,13 @@ public record BrowseNode(Guid Id, string Name, bool HasChildren, bool HasVersion
     // What this row is DRAWN as — the mask's icon token, or null to keep the generic folder/document glyph.
     // A token rather than a glyph name, because the desktop draws from a different icon set; an unrecognised
     // one falls back to the same default, so an older client meeting a newer token is never worse off.
-    string? Icon = null)
+    string? Icon = null,
+    // What the SERVER says this row is, from its mask (#1708); null for a row built here or from an older server.
+    bool? Folder = null)
 {
-    public bool IsFolder => !HasVersions;
+    // A folder by its mask, as the listing says (#1708). "Has no file version" is only the fallback: it read a
+    // file-less record (a push key, a credential) as an empty folder, so its index data never showed.
+    public bool IsFolder => Folder ?? !HasVersions;
 
     // An EMPTY folder — no subfolders and no documents (ADR "Empty-folder tree icon", issue #352). The tree
     // tints its glyph so you can see at a glance which folders hold nothing, without expanding them.

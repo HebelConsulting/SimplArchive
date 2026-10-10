@@ -14,6 +14,7 @@ using SimplArchive.Api.Pagination;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Documents;
 using SimplArchive.Domain.Masks;
+using SimplArchive.Infrastructure.Masks;
 using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Api.Controllers;
@@ -267,7 +268,9 @@ public class DocumentsController : ControllerBase
             .Select(v => v.ObjectKey)
             .FirstOrDefaultAsync(cancellationToken);
 
-        var isFolder = latestKey is null;
+        // A folder by its mask, not by "has no file" (#1708): a file-less record is a document and gets a document's
+        // rels. The archive test below still reads the file, which is what it is about.
+        var isFolder = await _dbContext.IsFolderAsync(document.MaskVersionId, cancellationToken);
         var isArchive = latestKey is not null
             && Path.GetExtension(latestKey).Equals(".zip", StringComparison.OrdinalIgnoreCase);
 

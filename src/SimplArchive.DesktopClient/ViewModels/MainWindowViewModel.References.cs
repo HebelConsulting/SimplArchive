@@ -190,4 +190,35 @@ public sealed partial class MainWindowViewModel
             ReportError(e.Message);
         }
     }
+
+    // A reference (shortcut) as a contents-list row. Id is the target, so Open/Save-as/detail act on it.
+    private static NodeViewModel ReferenceRow(ReferencesClient.Reference reference) => new()
+    {
+        // The server advertises the same target sub-resources a children row gets (#416), so the
+        // shortcut row is no less capable than the real row beside it.
+        Links = reference.Links,
+        Id = reference.TargetId,
+        Name = reference.Name,
+        HasChildren = reference.HasChildren,
+        HasVersions = reference.HasVersions,
+        Folder = reference.IsFolder,
+        HasReferences = reference.HasReferences,
+        IsReference = true,
+        ReferenceId = reference.ReferenceId,
+        ReferenceDeleteHref = reference.DeleteHref,
+        RealParentId = reference.RealParentId,
+
+        // The target's columns, so a shortcut row reads like the real row beside it (#768).
+        DocumentType = reference.DocumentType,
+        DocumentDate = reference.DocumentDate,
+        DocumentTime = reference.DocumentTime,
+        SizeBytes = reference.SizeBytes,
+        Tags = reference.Tags ?? [],
+        CreatedBy = reference.CreatedBy,
+        SensitivityLabelName = reference.SensitivityLabelName,
+        SensitivityLabelColor = reference.SensitivityLabelColor,
+        VersionCount = reference.VersionCount,
+        VersionCreatedAt = reference.VersionCreatedAt,
+        MaskIconToken = reference.Icon,
+    };
 }

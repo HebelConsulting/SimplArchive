@@ -55,12 +55,15 @@ public class MetadataSearchService : ISearchService
                 d.Id,
                 d.Name,
                 d.ParentId,
-                HasVersions = _dbContext.DocumentVersions.Any(v => v.DocumentId == d.Id),
+                // A folder by its mask, never by "has no file" (#1708): a file-less record is a document.
+                IsFolder = _dbContext.MaskVersions.Where(mv => mv.Id == d.MaskVersionId)
+                    .Select(mv => _dbContext.Masks.Where(m => m.Id == mv.MaskId).Select(m => m.IsFolderMask).FirstOrDefault())
+                    .FirstOrDefault(),
             })
             .ToListAsync(cancellationToken);
 
         var hasMore = rows.Count > take;
-        var hits = rows.Take(take).Select(d => new SearchCandidate(d.Id, d.Name, !d.HasVersions, d.ParentId)).ToList();
+        var hits = rows.Take(take).Select(d => new SearchCandidate(d.Id, d.Name, d.IsFolder, d.ParentId)).ToList();
         return new SearchPage(hits, hasMore);
     }
 
