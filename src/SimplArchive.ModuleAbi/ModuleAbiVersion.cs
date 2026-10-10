@@ -91,5 +91,10 @@ public static class ModuleAbiVersion
     /// 1.13 adds <see cref="RevealedValue.ScanAddress"/>, which the core draws as a QR code (core ADR 0913). An init
     /// property only, so a 1.12 module is unaffected.
     /// </para>
-    public const int Minor = 13;
+    /// <para>
+    /// 1.14 adds <see cref="ModuleRootLink.InstallationWide"/> (a root rel every caller sees while the module is
+    /// loaded) and <see cref="ModuleUploadProtocol"/> (the upload offer a generic client follows), core ADR 0918.
+    /// An optional parameter and a new type only, so a 1.13 module is unaffected.
+    /// </para>
+    public const int Minor = 14;
 }

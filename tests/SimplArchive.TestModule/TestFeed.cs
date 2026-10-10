@@ -36,11 +36,20 @@ public sealed class TestFeedController(IModuleCredentialContext credential, IMod
 [Route("apps/test-upload")]
 public sealed class TestUploadController(IModuleArchiveFacade archive) : ControllerBase
 {
+    /// <summary>Where an upload offered without a folder files to (ABI 1.14's generic client passes none): set by a
+    /// test, read from the environment because the host loads its own copy of this module (its statics are not ours).</summary>
+    public const string UploadFolderVariable = "SIMPLARCHIVE_TESTMODULE_UPLOAD_FOLDER";
+
+    // The offer carries its commit as a link (ABI 1.14, ModuleUploadProtocol) when it knows where to file.
     [HttpPost]
-    public async Task<IActionResult> Begin([FromQuery] long maxBytes)
+    public async Task<IActionResult> Begin([FromQuery] long? maxBytes, [FromQuery] Guid? folder, [FromQuery] string? name)
     {
-        var upload = await archive.BeginUploadAsync(maxBytes);
-        return Ok(new { upload.UploadId, url = upload.Url.ToString(), upload.ExpiresAt });
+        var upload = await archive.BeginUploadAsync(maxBytes ?? 1024 * 1024);
+        var into = folder ?? (Guid.TryParse(Environment.GetEnvironmentVariable(UploadFolderVariable), out var configured) ? configured : null);
+        var links = into is { } target
+            ? new[] { new { rel = ModuleUploadProtocol.CommitRel, href = $"/apps/test-upload/{upload.UploadId}?folder={target}&name={Uri.EscapeDataString(name ?? $"Uploaded {upload.UploadId}")}", method = "POST" } }
+            : [];
+        return Ok(new { upload.UploadId, url = upload.Url.ToString(), upload.ExpiresAt, links });
     }
 
     [HttpPost("{uploadId}")]

@@ -180,12 +180,21 @@ public class RootController : ControllerBase
             resource.Links.AddRange(PlatformAdministratorLinks);
         }
 
+        // Installation-wide module rels (ABI 1.14, ADR 0918): every caller sees them while the module is loaded,
+        // anonymous included. They lead to protocol endpoints whose client holds a module credential rather than
+        // a login (a release pipeline's push key), which could never see a tenant's rels below. The endpoint
+        // still authenticates its caller.
+        resource.Links.AddRange(modules
+            .SelectMany(m => m.Module.RootLinks)
+            .Where(l => l.InstallationWide)
+            .Select(l => new Link(l.Rel, l.Path, l.Method)));
+
         // Module entry rels (ADR 0737): a loaded module's RootLinks appear only for a tenant whose
         // activation is ACTIVE — for everyone else (other tenants, anonymous callers, platform admins)
         // the module's surface does not exist, which is exactly what the gate on its routes answers too.
         if (modules.Count > 0 && tenantAccessor.TenantId is not null)
         {
-            var withRootLinks = modules.Where(m => m.Module.RootLinks.Count > 0).ToList();
+            var withRootLinks = modules.Where(m => m.Module.RootLinks.Any(l => !l.InstallationWide)).ToList();
             if (withRootLinks.Count > 0)
             {
                 var ids = withRootLinks.Select(m => m.Module.ModuleId).ToList();
@@ -199,6 +208,7 @@ public class RootController : ControllerBase
                     if (activation is not null && ModuleActivationPolicy.IsActive(activation, now))
                     {
                         resource.Links.AddRange(loaded.Module.RootLinks
+                            .Where(l => !l.InstallationWide)
                             .Select(l => new Link(l.Rel, l.Path, l.Method)));
                     }
                 }

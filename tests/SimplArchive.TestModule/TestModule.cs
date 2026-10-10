@@ -259,6 +259,10 @@ public sealed class TestModule : IIndustryModule
     [
         // The module's entry into the hypermedia graph (ADR 0737): module-prefixed rel, module-private path.
         new ModuleRootLink("test-module:status", "/api/test-module/status", "GET"),
+
+        // A protocol endpoint's entry (ABI 1.14, ADR 0918): every caller of the root sees it while the module is
+        // loaded, so a client holding only a module credential can find the upload.
+        new ModuleRootLink("test-module:upload", "/apps/test-upload", "POST", InstallationWide: true),
     ];
 
     public IReadOnlyList<ModuleReadModelSet> ReadModels { get; } = [new ModuleReadModelSet(typeof(TestReadModelContext))];

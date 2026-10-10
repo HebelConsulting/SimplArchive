@@ -124,7 +124,9 @@ public interface IIndustryModule
     /// (ADR 0737). Emitted only for tenants where the module is ACTIVE; for everyone else the module's
     /// surface simply does not exist (ADR 0543's absence semantics, which the host also enforces at the
     /// route: an inactive tenant's request to a module controller answers 404 <c>MODULE_NOT_ACTIVE</c>).
-    /// Default: none — a module may be reachable purely through its transitions and masks.
+    /// Default: none — a module may be reachable purely through its transitions and masks. A link marked
+    /// <see cref="ModuleRootLink.InstallationWide"/> is the exception: every caller sees it while the module is
+    /// loaded (ABI 1.14).
     /// </summary>
     IReadOnlyList<ModuleRootLink> RootLinks => [];
 

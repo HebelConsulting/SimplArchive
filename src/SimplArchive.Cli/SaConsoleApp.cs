@@ -153,7 +153,7 @@ public static class SaConsoleApp
             // a script, which is why the flight-school demo seeder grew its own inline copy (#1474).
             config.AddBranch("module", module =>
             {
-                module.SetDescription("Per-tenant module activation (tenant administrator).");
+                module.SetDescription("Modules: activation, settings and actions (tenant administrator), and uploads with a module credential.");
                 module.AddCommand<ModuleListCommand>("list")
                     .WithDescription("Name the installed modules, and whether each is active for this tenant.");
                 module.AddBranch("settings", moduleSettings =>
@@ -170,6 +170,8 @@ public static class SaConsoleApp
                     .WithDescription("File a vendor-signed licence and activate every module it names.");
                 module.AddCommand<ModuleActionCommand>("action")
                     .WithDescription("Invoke a module's action on a document. A value it reveals once is written to a file.");
+                module.AddCommand<ModuleUploadCommand>("upload")
+                    .WithDescription("Upload a file to a module's upload rel with a module credential (e.g. an app to the app repository).");
             });
 
             config.AddBranch("repository", repository =>

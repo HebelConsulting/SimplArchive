@@ -30,6 +30,7 @@ public class ConsoleOutputRatchetTests
     private static readonly Dictionary<string, int> Remaining = new()
     {
         ["src/SimplArchive.Cli/Commands/LoginCommand.cs"] = 2,   // data output only (ADR 0906)
+        ["src/SimplArchive.Cli/Commands/ModuleUploadCommand.cs"] = 1,   // data output only (ADR 0906): the module's filing answer
         ["src/SimplArchive.Cli/Commands/RepositoryCreateCommand.cs"] = 1,   // data output only (ADR 0906)
         ["src/SimplArchive.Cli/Commands/StandardRepositoryCommands.cs"] = 1,   // data output: the id (#1661; was an uncounted console.WriteLine)
         ["src/SimplArchive.Cli/Commands/TenantCreateCommand.cs"] = 1,   // data output only (ADR 0906)

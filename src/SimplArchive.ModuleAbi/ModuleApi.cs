@@ -113,7 +113,30 @@ public sealed record ModuleDocumentRightsAnswer(
 /// (<c>test-module:status</c>) so two modules cannot collide.</param>
 /// <param name="Path">The absolute path the rel reaches (<c>/api/test-module/status</c>).</param>
 /// <param name="Method">The HTTP method.</param>
-public sealed record ModuleRootLink(string Rel, string Path, string Method);
+/// <param name="InstallationWide">
+/// Advertised to EVERY caller of the root, anonymous included, for as long as the module is loaded, instead of
+/// to the members of a tenant where it is active (ABI 1.14, core ADR 0918). For a protocol endpoint whose
+/// client holds a module credential rather than a login — a release pipeline's push key, say — and so cannot
+/// see a tenant's rels. The endpoint still authenticates its caller; the link only says where it is, and an
+/// anonymous caller learns that the module is installed.
+/// </param>
+public sealed record ModuleRootLink(string Rel, string Path, string Method, bool InstallationWide = false);
+
+/// <summary>
+/// The shape of a module's upload offer, which <c>saconsole module upload</c> follows (ABI 1.14, core ADR 0918):
+/// a module that takes a file by presigned upload (<see cref="IModuleArchiveFacade.BeginUploadAsync"/>) answers
+/// its begin request with the upload address in <see cref="UrlField"/> and the request that files the upload as
+/// a link with <see cref="CommitRel"/> (<c>"links": [{ "rel": "commit", "href": …, "method": "POST" }]</c>), so a
+/// client follows it instead of composing an address from an upload id.
+/// </summary>
+public static class ModuleUploadProtocol
+{
+    /// <summary>The field holding the presigned address the client PUTs the file to.</summary>
+    public const string UrlField = "url";
+
+    /// <summary>The rel of the request that verifies and files the upload once the file is stored.</summary>
+    public const string CommitRel = "commit";
+}
 
 /// <summary>
 /// One offered value for a NAME a user is about to type (ABI 0.21) — what a module's name-vocabulary
