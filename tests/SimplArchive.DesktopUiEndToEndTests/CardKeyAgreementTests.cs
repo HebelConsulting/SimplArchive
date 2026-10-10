@@ -2,6 +2,7 @@ using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using SimplArchive.DesktopClient.Services;
+using SimplArchive.ApiClient;
 
 namespace SimplArchive.DesktopUiEndToEndTests;
 

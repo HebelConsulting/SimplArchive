@@ -5367,4 +5367,28 @@
   <data name="WkFieldExpectedDurationOfUse" xml:space="preserve">
     <value>Expected duration of use (years)</value>
   </data>
+  <data name="MobOpenWith" xml:space="preserve">
+    <value>Open with…</value>
+  </data>
+  <data name="MobKeyTitle" xml:space="preserve">
+    <value>Open with your key</value>
+  </data>
+  <data name="MobKeyIntro" xml:space="preserve">
+    <value>This document is sealed for you. Enter your key's PIN, then hold the key to the phone or plug it in.</value>
+  </data>
+  <data name="MobKeyPin" xml:space="preserve">
+    <value>PIN</value>
+  </data>
+  <data name="MobKeyNfc" xml:space="preserve">
+    <value>Hold to the phone (NFC)</value>
+  </data>
+  <data name="MobKeyUsb" xml:space="preserve">
+    <value>Plugged in (USB-C)</value>
+  </data>
+  <data name="MobKeyHold" xml:space="preserve">
+    <value>Hold the key to the back of the phone…</value>
+  </data>
+  <data name="MobKeyPlugged" xml:space="preserve">
+    <value>Opening the plugged-in key…</value>
+  </data>
 </root>

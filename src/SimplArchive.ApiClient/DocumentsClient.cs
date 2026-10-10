@@ -814,7 +814,9 @@ public sealed partial class DocumentsClient(ApiCore core, Func<RemindersClient> 
         return (links, response.Headers.ETag);
     }
 
-    private static string GuessContentType(string fileName) => Path.GetExtension(fileName).ToLowerInvariant() switch
+    /// <summary>A content type from a file name's extension; <c>application/octet-stream</c> when unknown. Public for
+    /// the phone's hand-off to another app, which needs a real type where storage served octet-stream.</summary>
+    public static string GuessContentType(string fileName) => Path.GetExtension(fileName).ToLowerInvariant() switch
     {
         ".txt" => "text/plain",
         ".csv" => "text/csv",

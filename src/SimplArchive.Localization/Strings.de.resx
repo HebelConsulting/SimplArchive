@@ -5367,4 +5367,28 @@
   <data name="WkFieldExpectedDurationOfUse" xml:space="preserve">
     <value>Erwartete Nutzungsdauer (Jahre)</value>
   </data>
+  <data name="MobOpenWith" xml:space="preserve">
+    <value>Öffnen mit…</value>
+  </data>
+  <data name="MobKeyTitle" xml:space="preserve">
+    <value>Mit Ihrem Schlüssel öffnen</value>
+  </data>
+  <data name="MobKeyIntro" xml:space="preserve">
+    <value>Dieses Dokument ist für Sie versiegelt. Geben Sie die PIN Ihres Schlüssels ein und halten Sie den Schlüssel dann ans Telefon oder stecken Sie ihn ein.</value>
+  </data>
+  <data name="MobKeyPin" xml:space="preserve">
+    <value>PIN</value>
+  </data>
+  <data name="MobKeyNfc" xml:space="preserve">
+    <value>Ans Telefon halten (NFC)</value>
+  </data>
+  <data name="MobKeyUsb" xml:space="preserve">
+    <value>Eingesteckt (USB-C)</value>
+  </data>
+  <data name="MobKeyHold" xml:space="preserve">
+    <value>Halten Sie den Schlüssel an die Rückseite des Telefons…</value>
+  </data>
+  <data name="MobKeyPlugged" xml:space="preserve">
+    <value>Der eingesteckte Schlüssel wird geöffnet…</value>
+  </data>
 </root>

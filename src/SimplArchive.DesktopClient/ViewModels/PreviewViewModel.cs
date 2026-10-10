@@ -5,6 +5,7 @@ using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SimplArchive.DesktopClient.Services;
+using SimplArchive.Presentation;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -358,9 +359,9 @@ public sealed partial class PreviewViewModel : ObservableObject
 
         var (bytes, contentType, enveloped) = await SimplArchiveApiClient.DownloadDetailedAsync(preview.PreviewUrl);
 
-        switch (SniffPreviewKind(bytes, contentType))
+        switch (PreviewKinds.Of(bytes, contentType))
         {
-            case PreviewMediaKind.Image:
+            case PreviewKind.Image:
                 var image = await Task.Run(() => PreviewRenderer.DecodeImage(bytes));
                 Reset(null);
                 PreviewPages.Add(new PreviewPageViewModel(image));
@@ -368,7 +369,7 @@ public sealed partial class PreviewViewModel : ObservableObject
                 await AttachOverlaysAsync(preview.TextLayoutUrl);
                 break;
 
-            case PreviewMediaKind.Pdf:
+            case PreviewKind.Pdf:
                 var pages = await Task.Run(() => PreviewRenderer.RenderPdfPages(bytes));
                 Reset(pages.Count == 0 ? "No preview available." : null);
                 foreach (var page in pages)
@@ -384,7 +385,7 @@ public sealed partial class PreviewViewModel : ObservableObject
                 await AttachOverlaysAsync(preview.TextLayoutUrl, pdfBytes: bytes);
                 break;
 
-            case PreviewMediaKind.Text:
+            case PreviewKind.Text:
                 Reset(null);
                 PreviewText = Encoding.UTF8.GetString(bytes);
                 CanFindInDocument = true; // the find bar works on text too (#1063)
@@ -399,46 +400,6 @@ public sealed partial class PreviewViewModel : ObservableObject
         // AFTER the switch, because every branch calls Reset() — which clears this, correctly: a reset means
         // nothing is on display, so nothing enveloped is on display either.
         ContentWasEnveloped = enveloped;
-    }
-
-    private enum PreviewMediaKind { Image, Pdf, Text, Unsupported }
-
-    // Determines how to render preview bytes, preferring magic bytes over the Content-Type header — stored
-    // objects are frequently served as application/octet-stream (e.g. a PDF uploaded via a presigned PUT with
-    // no content type), which the header check misclassifies as unsupported. Same reason the web preview
-    // sniffs; see ADR "Web preview pdf.js hit-overlay".
-    private static PreviewMediaKind SniffPreviewKind(byte[] b, string contentType)
-    {
-        if (b.Length >= 4 && b[0] == 0x25 && b[1] == 0x50 && b[2] == 0x44 && b[3] == 0x46) // "%PDF"
-        {
-            return PreviewMediaKind.Pdf;
-        }
-
-        if (b.Length >= 4 && ((b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47) // PNG
-                              || (b[0] == 0xFF && b[1] == 0xD8)                               // JPEG
-                              || (b[0] == 0x47 && b[1] == 0x49 && b[2] == 0x46)))             // GIF
-        {
-            return PreviewMediaKind.Image;
-        }
-
-        if (contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
-        {
-            return PreviewMediaKind.Image;
-        }
-
-        if (contentType.Contains("pdf", StringComparison.OrdinalIgnoreCase))
-        {
-            return PreviewMediaKind.Pdf;
-        }
-
-        if (contentType.StartsWith("text/", StringComparison.OrdinalIgnoreCase)
-            || contentType.Contains("json", StringComparison.OrdinalIgnoreCase)
-            || contentType.Contains("xml", StringComparison.OrdinalIgnoreCase))
-        {
-            return PreviewMediaKind.Text;
-        }
-
-        return PreviewMediaKind.Unsupported;
     }
 
     // Attaches both overlays after the pages are built: assigns each page its index, loads the search hit-overlay,

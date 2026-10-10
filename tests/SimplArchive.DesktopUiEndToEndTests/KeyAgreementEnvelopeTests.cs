@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using SimplArchive.DesktopClient.Services;
+using SimplArchive.ApiClient;
 
 namespace SimplArchive.DesktopUiEndToEndTests;
 

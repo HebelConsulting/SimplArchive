@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using MimeKit;
 using MimeKit.Cryptography;
+using SimplArchive.ApiClient;
 
 namespace SimplArchive.DesktopClient.Services;
 
@@ -81,13 +82,7 @@ public static class EnvelopeOpener
             return (served, contentType);
         }
 
-        var message = MimeMessage.Load(new MemoryStream(served));
-        if (message.Body is not ApplicationPkcs7Mime enveloped)
-        {
-            // Labelled as an envelope and shaped like something else. Refused rather than guessed at: handing
-            // the caller bytes we could not open would make a decryption failure look like a corrupt document.
-            throw new EnvelopeNotOpenedException("the response was labelled as an envelope but does not contain one");
-        }
+        var enveloped = SmimeEnvelope.Unwrap(served);
 
         // WHO IS THIS FOR — read once, from public data, before any opener reaches for a key. Both openers
         // need the answer and both used to work it out themselves, which meant decoding the same CMS twice and,
@@ -209,25 +204,9 @@ public static class EnvelopeOpener
             return null;
         }
 
-        if (decrypted is not MimePart part || part.Content is null)
-        {
-            throw new EnvelopeNotOpenedException("the envelope opened but held no document");
-        }
-
-        using var opened = new MemoryStream();
-        part.Content.DecodeTo(opened);
-        return (opened.ToArray(), part.ContentType?.MimeType ?? "application/octet-stream");
+        return SmimeEnvelope.Payload(decrypted);
     }
 }
-
-/// <summary>The envelope could not be opened — never a fall back to whatever arrived.</summary>
-/// <remarks>
-/// Its own type because the remedy differs from every other download failure: no key on this machine means
-/// enrol or insert the card, not retry. Serving the caller the undecrypted bytes would render as a corrupt
-/// document and send them looking for a damaged file.
-/// </remarks>
-public sealed class EnvelopeNotOpenedException(string message, Exception? inner = null)
-    : Exception($"This document arrived encrypted and could not be opened: {message}.", inner);
 
 /// <summary>The desktop's opener as the shared content funnel sees it (ADR 0917): the certificate store, then the card.</summary>
 internal sealed class DesktopEnvelopeOpener : SimplArchive.ApiClient.IEnvelopeOpener

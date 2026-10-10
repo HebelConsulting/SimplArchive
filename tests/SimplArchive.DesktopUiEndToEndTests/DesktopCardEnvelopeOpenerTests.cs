@@ -4,6 +4,7 @@ using System.Text;
 using MimeKit;
 using MimeKit.Cryptography;
 using SimplArchive.DesktopClient.Services;
+using SimplArchive.ApiClient;
 
 namespace SimplArchive.UiEndToEndTests;
 

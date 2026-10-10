@@ -6,6 +6,7 @@ using System.Security.Cryptography.Xml;
 using CAManagement.Pkcs11.DataStructures;
 using MimeKit;
 using MimeKit.Cryptography;
+using SimplArchive.ApiClient;
 
 namespace SimplArchive.DesktopClient.Services;
 
@@ -48,9 +49,7 @@ public static class CardEnvelopeOpener
             return null;
         }
 
-        using var cmsStream = new MemoryStream();
-        enveloped.Content.DecodeTo(cmsStream);
-        var raw = cmsStream.ToArray();
+        var raw = SmimeEnvelope.Cms(enveloped);
 
         // ONE gated critical section for everything that touches the card: reading its certificates, opening
         // the logged-in session, and the unwrap. Not three, because C_Initialize is per PROCESS and a decrypt
@@ -224,14 +223,7 @@ public static class CardEnvelopeOpener
 
         // What comes out is the inner MIME entity the server enveloped — a part with the document's real
         // content type and file name, which is the whole reason the funnel returns a type at all.
-        if (MimeEntity.Load(new MemoryStream(inner)) is not MimePart part || part.Content is null)
-        {
-            throw new EnvelopeNotOpenedException("the envelope opened but held no document");
-        }
-
-        using var opened = new MemoryStream();
-        part.Content.DecodeTo(opened);
-        return (opened.ToArray(), part.ContentType?.MimeType ?? "application/octet-stream");
+        return SmimeEnvelope.Payload(inner);
     }
 
     /// <summary>
