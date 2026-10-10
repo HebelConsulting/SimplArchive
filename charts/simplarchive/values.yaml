@@ -442,8 +442,8 @@ modules:
       sha512: "/q7jb0b1ot51hmG1xNPzyPa5KLgb/UGmqHy8TvhC8G9E+NMO7XLFUlYqVHYEQHTA+SvcEiSm0xpZTg6eT6y0VQ=="
     LICENSING:
       package: SimplArchive.Licensing
-      version: 0.3.1
-      sha512: "BaylV4QnnSQAPrFGxWQIKHsR0XFTyEyRvPlnCnX8Dr8Ch1xqrPog2ZciKFYxRXvq6H0uE4Wnqw42/F5JuDyLzA=="
+      version: 0.4.0
+      sha512: "rQmj69L8X6cMDVyEe+19KZ5XDSe0hU/y1N6pFf89O/MR7gP3wtlifueF6smfkxO5pvjgO1vOVZi8L1k92CWxjw=="
 
   # Plain alpine: a .nupkg is a zip, so the installer needs no NuGet tooling and no SDK image.
   image:
