@@ -1158,6 +1158,10 @@ also need the Module, which is where your certificates are enrolled:
 / Strict: Content is served *only* as an envelope. This is the level @encryptedreads describes, and the one
   where a missing certificate means no content at all.
 
+*Chats are never encrypted*#idx("chat, not encrypted"). At every level, Strict included, a document's chat is
+stored and shown as plain text: the levels protect a document's *content*, its files, and not the conversation
+beside it. Whatever must stay protected belongs in the document, not in its chat.
+
 Everything else these products do, including what their protection does and does not claim, is described in
 *their own manuals*: they are separate products with their own releases, and documenting them twice is how the
 two come to disagree.
@@ -1176,7 +1180,8 @@ and addressing an envelope to somebody's certificate. Those rest on RSA and elli
 sufficiently capable quantum computer breaks outright.
 
 The consequence has a name — *harvest now, decrypt later*. An adversary who copies today's wrapped keys and
-envelopes can decrypt them on the day such a machine exists. For a chat message that is academic. For an
+envelopes can decrypt them on the day such a machine exists. For something meant to last a week that is
+academic. For an
 *archive*, whose whole purpose is to keep documents readable for decades, the time the content must stay
 protected plausibly overlaps the time that machine might appear, so it is worth stating plainly rather than
 leaving in the small print.
