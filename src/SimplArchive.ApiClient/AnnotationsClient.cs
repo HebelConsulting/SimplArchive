@@ -4,7 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using SimplArchive.Localization;
 
-namespace SimplArchive.DesktopClient.Services;
+namespace SimplArchive.ApiClient;
 
 /// <summary>
 /// The annotations area (#443, tranche 5): notes and shapes on a version's pages, always addressed by the advertised annotations url. Rides the shared authenticated <see cref="ApiCore"/> (#443).

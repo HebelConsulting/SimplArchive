@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 using SimplArchive.Localization;
 using System.Net;
 
-namespace SimplArchive.DesktopClient.Services;
+namespace SimplArchive.ApiClient;
 
 /// <summary>
 /// The intray's api surface (issue #487, ADR 0575): listing what is staged, and the page operations — what an
@@ -17,7 +17,7 @@ namespace SimplArchive.DesktopClient.Services;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Its own class rather than more methods on <see cref="SimplArchiveApiClient"/>, which is on the 1000-line
+/// Its own class rather than more methods on the desktop's <c>SimplArchiveApiClient</c>, which is on the 1000-line
 /// standing-debt list and may only get smaller (issue #466). The listing moved here with the page operations
 /// rather than staying behind: they are one subject, and splitting a subject across two files to satisfy a
 /// line count is how a class ends up with no describable responsibility at all. Reached as

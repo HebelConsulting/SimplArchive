@@ -5391,4 +5391,22 @@
   <data name="MobKeyPlugged" xml:space="preserve">
     <value>Der eingesteckte Schlüssel wird geöffnet…</value>
   </data>
+  <data name="MobShareTitle" xml:space="preserve">
+    <value>In SimplArchive ablegen</value>
+  </data>
+  <data name="MobShareIntray" xml:space="preserve">
+    <value>In meinen Eingangskorb</value>
+  </data>
+  <data name="MobShareChoose" xml:space="preserve">
+    <value>Ordner wählen…</value>
+  </data>
+  <data name="MobFileHere" xml:space="preserve">
+    <value>Hier ablegen</value>
+  </data>
+  <data name="MobFiled" xml:space="preserve">
+    <value>Abgelegt.</value>
+  </data>
+  <data name="MobShareSignIn" xml:space="preserve">
+    <value>Melden Sie sich an, um das Geteilte abzulegen.</value>
+  </data>
 </root>

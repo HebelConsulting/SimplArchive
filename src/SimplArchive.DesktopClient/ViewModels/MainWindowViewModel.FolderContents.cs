@@ -1,3 +1,5 @@
+using SimplArchive.Presentation;
+
 namespace SimplArchive.DesktopClient.ViewModels;
 
 // The folder-contents pane's ordering, split out of MainWindowViewModel (the 1000-line rule / ADR "no class
@@ -12,26 +14,21 @@ public partial class MainWindowViewModel
             return;
         }
 
-        // Folders on top (always alphabetical, issue #339), then documents ordered by the active criterion (the
-        // default is DocumentDate). A column-header click is an explicit ephemeral override of the whole list.
+        // Folders on top (always alphabetical, issue #339), then documents in the folder's sort order: the shared
+        // FolderContentsOrder, which the web and the phone answer identically. A column-header click is an explicit
+        // ephemeral override of the whole list, and stays this client's.
         var folders = Items.Where(n => n.IsFolder);
         var docs = Items.Where(n => !n.IsFolder);
         var sorted = _headerSortActive
             ? HeaderSort(folders).Concat(HeaderSort(docs)).ToList()
-            : folders.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase).Concat(FolderSort(docs)).ToList();
+            : FolderContentsOrder.Arrange(Items, _folderSortOrder,
+                n => new FolderContentsOrder.Keys(n.IsFolder, n.DisplayName, n.DocumentDate, n.DocumentTime, n.VersionCreatedAt)).ToList();
         Items.Clear();
         foreach (var n in sorted)
         {
             Items.Add(n);
         }
     }
-
-    private IEnumerable<NodeViewModel> FolderSort(IEnumerable<NodeViewModel> items) => _folderSortOrder switch
-    {
-        1 => items.OrderBy(n => n.DocumentDate ?? DateOnly.MinValue).ThenBy(n => n.DocumentTime ?? TimeOnly.MinValue).ThenBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
-        2 => items.OrderBy(n => n.VersionCreatedAt ?? DateTimeOffset.MinValue).ThenBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
-        _ => items.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
-    };
 
     private IEnumerable<NodeViewModel> HeaderSort(IEnumerable<NodeViewModel> items)
     {

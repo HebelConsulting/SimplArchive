@@ -47,7 +47,7 @@ public class StringEmptyRatchetTests
         // PrincipalInfo's positional `string Email = ""` (#465) — the same CS1736 case as the records above.
         ["src/SimplArchive.DesktopClient/Services/AdminClient.cs"] = 1,
         ["src/SimplArchive.DesktopClient/Services/DragOutStager.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/IntrayApi.cs"] = 1,
+        ["src/SimplArchive.ApiClient/IntrayApi.cs"] = 1,
         ["src/SimplArchive.ApiClient/SharedRecords.cs"] = 3,
         ["src/SimplArchive.ApiClient/VersionsClient.cs"] = 1,
         ["src/SimplArchive.DesktopClient/ViewModels/PreviewPageViewModel.cs"] = 1,

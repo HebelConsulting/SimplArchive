@@ -5391,4 +5391,22 @@
   <data name="MobKeyPlugged" xml:space="preserve">
     <value>Abriendo la llave conectada…</value>
   </data>
+  <data name="MobShareTitle" xml:space="preserve">
+    <value>Archivar en SimplArchive</value>
+  </data>
+  <data name="MobShareIntray" xml:space="preserve">
+    <value>En mi entrada</value>
+  </data>
+  <data name="MobShareChoose" xml:space="preserve">
+    <value>Elegir carpeta…</value>
+  </data>
+  <data name="MobFileHere" xml:space="preserve">
+    <value>Archivar aquí</value>
+  </data>
+  <data name="MobFiled" xml:space="preserve">
+    <value>Archivado.</value>
+  </data>
+  <data name="MobShareSignIn" xml:space="preserve">
+    <value>Inicie sesión para archivar lo compartido.</value>
+  </data>
 </root>

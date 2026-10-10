@@ -5391,4 +5391,22 @@
   <data name="MobKeyPlugged" xml:space="preserve">
     <value>Opening the plugged-in key…</value>
   </data>
+  <data name="MobShareTitle" xml:space="preserve">
+    <value>File in SimplArchive</value>
+  </data>
+  <data name="MobShareIntray" xml:space="preserve">
+    <value>Into my intray</value>
+  </data>
+  <data name="MobShareChoose" xml:space="preserve">
+    <value>Choose folder…</value>
+  </data>
+  <data name="MobFileHere" xml:space="preserve">
+    <value>File here</value>
+  </data>
+  <data name="MobFiled" xml:space="preserve">
+    <value>Filed.</value>
+  </data>
+  <data name="MobShareSignIn" xml:space="preserve">
+    <value>Sign in to file what was shared.</value>
+  </data>
 </root>

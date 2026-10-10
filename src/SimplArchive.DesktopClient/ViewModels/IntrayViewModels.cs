@@ -28,7 +28,7 @@ public sealed partial class IntrayItemViewModel : ObservableObject
 
     // The row the server sent — preview / mask / file / delete follow the addresses IT advertised, each already
     // carrying the right source prefix (ADR 0543/0555). Null only for the designer-preview rows below.
-    public SimplArchive.DesktopClient.Services.IntrayApi.IntrayItemInfo? Item { get; init; }
+    public SimplArchive.ApiClient.IntrayApi.IntrayItemInfo? Item { get; init; }
 
     public bool IsOwn => GroupId is null && UserId is null;
     public string SourceQuery => GroupId is { } g ? $"?group={g}" : UserId is { } u ? $"?user={u}" : "";

@@ -279,15 +279,10 @@
         {
             return ApplyHeaderSort(folders).Concat(ApplyHeaderSort(docs));
         }
-        return folders.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase).Concat(ApplyFolderSort(docs));
+        // The shared rule (SimplArchive.Presentation.FolderContentsOrder), which the desktop and the phone answer identically.
+        return SimplArchive.Presentation.FolderContentsOrder.Arrange(rows, (int)FolderSortOrder,
+            n => new SimplArchive.Presentation.FolderContentsOrder.Keys(n.IsFolder, n.DisplayName, n.DocumentDate, n.DocumentTime, n.VersionCreatedAt));
     }
-
-    private IEnumerable<BrowseNode> ApplyFolderSort(IEnumerable<BrowseNode> items) => FolderSortOrder switch
-    {
-        FolderContentsSortOrder.DocumentDate => items.OrderBy(n => n.DocumentDate ?? DateOnly.MinValue).ThenBy(n => n.DocumentTime ?? TimeOnly.MinValue).ThenBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
-        FolderContentsSortOrder.Created => items.OrderBy(n => n.VersionCreatedAt ?? DateTimeOffset.MinValue).ThenBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
-        _ => items.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
-    };
 
     private IEnumerable<BrowseNode> ApplyHeaderSort(IEnumerable<BrowseNode> items)
     {
